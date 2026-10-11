@@ -1,0 +1,22 @@
+{
+ "id": "query_opentarget",
+ "name": "Query Opentarget",
+ "category": "data_retrieval",
+ "language": "Python",
+ "source": "Biomni",
+ "description": "Query the OpenTargets Platform API using natural language or a direct GraphQL query.",
+ "detailed_description": "Query the OpenTargets Platform API using natural language or a direct GraphQL query.",
+ "when_to_use": "When you need query opentarget analysis",
+ "parameters": {
+  "prompt": "[Required] Natural language query about targets/diseases (str)",
+  "query": "[Optional] Direct GraphQL query string",
+  "variables": "[Optional] Variables for GraphQL",
+  "verbose": "[Optional] Return detailed results (default: False)"
+ },
+ "trigger_keywords": [
+  "query_opentarget",
+  "query opentarget",
+  "opentarget"
+ ],
+ "trigger_level": "YEL"
+}

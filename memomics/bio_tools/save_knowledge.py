@@ -95,6 +95,13 @@ SCHEMA = {
                                "chemistry=化学类文章(chemistry/<类别>/，类别用 direction 传: "
                                "compounds/pharmacology/reactions/reagents/conditions)",
                 "default": "biology"
+            },
+            "evidence_chain": {
+                "type": "object",
+                "description": "证据链元数据（kb-evidence-v1）：{standard, max_level, level_distribution, "
+                               "graded_conclusions}；生物学结论用 L0-L3 分级，方法/参数类标 source_only。"
+                               "可选，写入 YAML 顶层，供知识库图谱/检索展示可信度。",
+                "default": None
             }
         },
         "required": ["name", "content"]
@@ -154,7 +161,7 @@ def canonical_species(name: str) -> str:
 
 
 def _kb_root():
-    """KB 根目录：MEMOMICS_KB_DIR → kb_search 推导 → hermes_home/skills。"""
+    """KB 根目录：MEMOMICS_KB_DIR → kb_search 推导 → memomics_home/skills。"""
     try:
         from memomics.bio_tools.kb_search import _find_kb_root
         root = _find_kb_root()
@@ -165,15 +172,49 @@ def _kb_root():
     env_dir = os.environ.get("MEMOMICS_KB_DIR")
     if env_dir and os.path.isdir(env_dir):
         return env_dir
-    # 最后兜底：hermes_home/skills（agent 实际加载的技能目录）
+    # 最后兜底：memomics_home/skills（agent 实际加载的技能目录）
     here = os.path.dirname(os.path.abspath(__file__))
     for _cand in (
-        os.path.normpath(os.path.join(here, "..", "..", "hermes_home", "skills")),
-        "<安装目录>/hermes_home/skills",
+        os.path.normpath(os.path.join(here, "..", "..", "memomics_home", "skills")),
+        "<安装目录>/memomics_home/skills",
     ):
         if os.path.isdir(_cand):
             return _cand
     return None
+
+
+def _preserve_external_fields(entry: dict, entry_path: str) -> dict:
+    """重写已有条目时保留外部补写的字段（doi/pmid 引用回填等），防止覆盖丢失。
+
+    2026-10-07 事故修复：重提炼批量重写条目时冲掉了此前「KB 引用回填」补的
+    doi/pmid 字段（38 个文件）。此后所有重写都会把旧文件里存在的、本次不产出的
+    字段原样带回（doi/pmid 放回 name 之后，其余追加末尾）。
+    """
+    try:
+        if yaml is None or not os.path.isfile(entry_path):
+            return entry
+        with open(entry_path, encoding="utf-8") as f:
+            old = yaml.safe_load(f)
+        if not isinstance(old, dict):
+            return entry
+        carried = {k: v for k, v in old.items()
+                   if k not in entry and v not in (None, "", [], {})}
+        if not carried:
+            return entry
+        out = {}
+        for k, v in entry.items():
+            out[k] = v
+            if k == "name":
+                for pk in ("doi", "pmid"):
+                    if pk in carried:
+                        out[pk] = carried.pop(pk)
+        for k, v in carried.items():
+            out[k] = v
+        logger.info("save_knowledge: 保留既有字段 %s → %s", sorted(out.keys() - entry.keys()), entry_path)
+        return out
+    except Exception as e:
+        logger.warning("save_knowledge: 保留旧字段失败（不影响写入）: %s", e)
+        return entry
 
 
 def save_knowledge(name: str = "", content: str = "", source: str = "manual",
@@ -181,7 +222,7 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
                    category: str = "bioinformatics", force: bool = False,
                    species: str = "", tissue: str = "", direction: str = "",
                    kb_category: str = "01_生物学知识", assay_type: str = "RNA",
-                   domain: str = "biology") -> str:
+                   domain: str = "biology", evidence_chain: dict = None) -> str:
     """知识入库 — 铁轨强制验证，不可绕过。
 
     domain（批O3 2026-08-16）:
@@ -243,10 +284,13 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
         }
         if evidence:
             entry["evidence"] = evidence
+        if evidence_chain:
+            entry["evidence_chain"] = evidence_chain
         if yaml is None:
             return _err("⛔ 入库失败：PyYAML 不可用，无法写 YAML 条目")
         try:
             os.makedirs(entry_dir, exist_ok=True)
+            entry = _preserve_external_fields(entry, entry_path)
             with open(entry_path, "w", encoding="utf-8") as f:
                 yaml.safe_dump(entry, f, allow_unicode=True, sort_keys=False)
         except OSError as e:
@@ -279,10 +323,13 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
         }
         if evidence:
             entry["evidence"] = evidence
+        if evidence_chain:
+            entry["evidence_chain"] = evidence_chain
         if yaml is None:
             return _err("⛔ 入库失败：PyYAML 不可用，无法写 YAML 条目")
         try:
             os.makedirs(entry_dir, exist_ok=True)
+            entry = _preserve_external_fields(entry, entry_path)
             with open(entry_path, "w", encoding="utf-8") as f:
                 yaml.safe_dump(entry, f, allow_unicode=True, sort_keys=False)
         except OSError as e:
@@ -328,10 +375,13 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
         }
         if evidence:
             entry["evidence"] = evidence
+        if evidence_chain:
+            entry["evidence_chain"] = evidence_chain
         if yaml is None:
             return _err("⛔ 入库失败：PyYAML 不可用，无法写 YAML 条目")
         try:
             os.makedirs(entry_dir, exist_ok=True)
+            entry = _preserve_external_fields(entry, entry_path)
             with open(entry_path, "w", encoding="utf-8") as f:
                 yaml.safe_dump(entry, f, allow_unicode=True, sort_keys=False)
         except OSError as e:
@@ -404,6 +454,7 @@ def _register():
             args.get("kb_category", "01_生物学知识"),
             args.get("assay_type", "RNA"),
             args.get("domain", "biology"),
+            args.get("evidence_chain"),
         ),
     )
 

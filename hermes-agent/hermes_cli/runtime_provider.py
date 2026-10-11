@@ -1976,7 +1976,7 @@ def resolve_runtime_provider(
         is_explicit = requested_provider in {"bedrock", "aws", "aws-bedrock", "amazon-bedrock", "amazon"}
         if not is_explicit and not has_aws_credentials():
             raise AuthError(
-                "No AWS credentials found for Bedrock. Configure one of:\n"
+                "No AWS credentials found for Bedrock. Configure one o/data/n"
                 "  - AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY\n"
                 "  - AWS_PROFILE (for SSO / named profiles)\n"
                 "  - IAM instance role (EC2, ECS, Lambda)\n"

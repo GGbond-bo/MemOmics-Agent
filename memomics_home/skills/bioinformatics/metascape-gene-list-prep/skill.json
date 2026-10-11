@@ -1,0 +1,30 @@
+{
+ "id": "metascape-gene-list-prep",
+ "name": "示例分析 基因列表构建",
+ "category": "user-skill",
+ "language": "Python",
+ "description": ">",
+ "starting_prompt": "使用 示例分析 基因列表构建 进行分析",
+ "source_dir": "skills/bioinformatics/metascape-gene-list-prep",
+ "memomics_module": "",
+ "chains_from": [],
+ "chains_to": [],
+ "tags": [
+  "metascape",
+  "deg",
+  "gene-list",
+  "marker",
+  "csv-formatting"
+ ],
+ "aliases": [],
+ "trigger_level": "YEL",
+ "trigger_keywords": [
+  "metascape",
+  "基因列表",
+  "top100",
+  "DEG转示例分析",
+  "按亚群取基因",
+  "合并示例分析表。"
+ ],
+ "when_to_use": "用户有 FindMarkers / DEG 结果 CSV（含 cluster、gene、avg_log2FC 列），需要构建 示例分析 导入格式的基因列表:"
+}

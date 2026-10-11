@@ -1,0 +1,20 @@
+{
+ "id": "literature-review",
+ "name": "literature-review",
+ "category": "literature",
+ "language": "R+Python",
+ "description": "Auto-generated for literature-review",
+ "tags": [],
+ "steps": [],
+ "when_to_use": "Auto-generated for literature-review",
+ "trigger_keywords": [
+  "文献综述",
+  "literature review",
+  "综述",
+  "systematic review",
+  "总结文献",
+  "查文献",
+  "evidence synthesis"
+ ],
+ "trigger_level": "RED"
+}

@@ -1,0 +1,16 @@
+{
+ "id": "genetic-variant-annotation",
+ "name": "genetic-variant-annotation",
+ "category": "GWAS/Genetics",
+ "language": "R+Python",
+ "description": "Annotate genomic variants in VCF files with functional effects, clinical significance, and pathogenicity predictions.",
+ "tags": [],
+ "steps": [],
+ "when_to_use": "Annotate genomic variants in VCF files with functional effects, clinical significance, and pathogenicity predictions.",
+ "trigger_keywords": [
+  "genetic",
+  "variant",
+  "annotation"
+ ],
+ "trigger_level": "YEL"
+}

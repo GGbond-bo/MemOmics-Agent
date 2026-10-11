@@ -1,0 +1,28 @@
+{
+  "id": "cross-contrast-deg-integration",
+  "name": "多对比 DEG 整合（交集 / 逆转 / 共享响应）",
+  "category": "scRNA",
+  "language": "R+Python",
+  "description": "多对比 DEG 结果表的整合分析——手里已有 ≥2 套算好的 DEG（多条件 × 多对比、配对供体） 要回答「共同响应基因」「干预逆转某条件的重合基因」「条件特异响应」「响应是否随条件衰减」时用本 skill。 核心是四条:交集必须方向感知（同向=加剧、反向=逆转）、原始交集数必须先减随机期望 E=/A/×/B//N 并改报 OR/Fisher/Jaccard、交集前先查各对比的功效（一边个位数则",
+  "starting_prompt": "使用 多对比 DEG 整合（交集 / 逆转 / 共享响应） 进行分析",
+  "source_dir": "skills/bioinformatics/cross-contrast-deg-integration",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "deg",
+    "gene-set-overlap",
+    "reversal-analysis",
+    "multi-contrast",
+    "enrichment",
+    "03_高级分析"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "cross",
+    "contrast",
+    "deg"
+  ],
+  "when_to_use": "多对比 DEG 结果表的整合分析——手里已有 ≥2 套算好的 DEG（多条件 × 多对比、配对供体） 要回答「共同响应基因」「干预逆转某条件的重合基因」「条件特异响应」「响应是否随条件衰减」时用本 skill。 核心是四条:交集必须方向感知（同向=加剧、反向=逆转）、原始交集数必须先减随机期望 E=/A/×/B//N 并改报 OR/Fisher/Jaccard、交集前先查各对比的功效（一边个位数则"
+}

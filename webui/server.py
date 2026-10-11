@@ -21,11 +21,12 @@ import traceback
 import uuid
 import re
 import time
+import hashlib
 import shutil
 from pathlib import Path
 from datetime import datetime
 
-# === Hermes UTF-8 bootstrap (Windows 中文支持) ===
+# === MemOmics UTF-8 bootstrap (Windows 中文支持) ===
 # 必须在所有其他 import 之前，确保 Windows 上 stdio 用 UTF-8
 try:
     import hermes_bootstrap  # noqa: F401
@@ -34,13 +35,246 @@ except ModuleNotFoundError:
 
 # === MemOmics-Agent 独立运行 ===
 MEMOMICS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HERMES_HOME_DIR = os.path.join(MEMOMICS_DIR, "hermes_home")
-os.environ["HERMES_HOME"] = HERMES_HOME_DIR
+MEMOMICS_HOME_DIR = os.path.join(MEMOMICS_DIR, "memomics_home")
+# 老安装迁移（2026-10-08 改名）：hermes_home → memomics_home。
+# 覆盖升级 vs 首次安装靠"用户数据标记"检测（_home_has_user_data）：
+#   ① 首次安装：没有 hermes_home（新目录只有包内产品文件）→ 静默 noop，不做任何替换；
+#   ② 既有安装（覆盖）：hermes_home 含 config/state.db/记忆/PAT 等标记 → 迁移：
+#      - 新目录不存在 → 整体改名；
+#      - 双存在、新目录是产品空壳（更新包/fix_bundle 先造出来的）→ 旧目录缺失项搬进新目录；
+#      - 双存在、两边都有用户数据 → 只告警，不自动合并（人工确认）。
+# 重名文件保留新目录版本＝与"覆盖升级"一致的语义；只搬不删；异常绝不阻塞启动。
+_legacy_home = os.path.join(MEMOMICS_DIR, "hermes_home")
+
+
+def _dir_has_files(_p):
+    """目录里有文件才算数据（空目录是产品壳）。"""
+    try:
+        for _r, _ds, _fs in os.walk(_p):
+            if _fs:
+                return True
+    except OSError:
+        pass
+    return False
+
+
+def _config_is_default(_d):
+    """config.yaml 是否只是从 config.yaml.example 复制来的模板。
+
+    2026-10-10（数据安全修复）：启动器（启动.bat）会在服务启动前就把模板复制成
+    memomics_home\config.yaml —— 旧逻辑据此判定"新目录也有用户数据"，于是迁移走
+    conflict 分支不合并，老用户的会话/记忆/配置看似全没了。模板一致 → 不算用户数据。
+    """
+    _c = os.path.join(_d, "config.yaml")
+    _e = os.path.join(_d, "config.yaml.example")
+    if not os.path.isfile(_c):
+        return False
+    try:
+        if os.path.isfile(_e):
+            with open(_c, "rb") as _f1, open(_e, "rb") as _f2:
+                return _f1.read().strip() == _f2.read().strip()
+    except OSError:
+        return False
+    return False
+
+
+def _home_has_user_data(_d):
+    r"""数据目录是否含用户数据（区分"既有安装"与"产品空壳"）。
+
+    2026-10-10：只认强标记 —— 去掉 cron/.install_path（程序启动自己会建，会把空壳误判成用户数据）；
+    sessions/memories 要求目录里真的有文件；config.yaml 仅在"与模板不同"时算用户数据。
+    """
+    if not os.path.isdir(_d):
+        return False
+    for _marker in ("state.db", "memory_store.db", "provider_keys.json", "model_config.json",
+                    "auth.json", "channel_directory.json", "weixin_account.json",
+                    "dcs_cloud.json", "references.json"):
+        if os.path.exists(os.path.join(_d, _marker)):
+            return True
+    for _marker in ("sessions", "memories"):
+        if _dir_has_files(os.path.join(_d, _marker)):
+            return True
+    if os.path.isfile(os.path.join(_d, "config.yaml")) and not _config_is_default(_d):
+        return True
+    return False
+
+
+def _carry_missing_items(_src, _dst, _depth=0):
+    """把 _src 中 _dst 缺失的项搬进 _dst（重名项保留 _dst 版本）。"""
+    _moved = 0
+    try:
+        _names = sorted(os.listdir(_src))
+    except OSError:
+        return 0
+    for _name in _names:
+        _s, _t = os.path.join(_src, _name), os.path.join(_dst, _name)
+        try:
+            if not os.path.exists(_t):
+                shutil.move(_s, _t)
+                _moved += 1
+            elif os.path.isdir(_s) and os.path.isdir(_t) and _depth < 6:
+                _moved += _carry_missing_items(_s, _t, _depth + 1)
+        except OSError:
+            continue
+    return _moved
+
+
+def _merge_user_home(_old, _new, _depth=0, backup_collisions=True):
+    """旧 home 用户数据安全并入新 home。返回 (moved, kept_both, replaced)。
+
+    规则（2026-10-10 数据安全修复）：
+      · 新目录缺的项 → 整体搬过去；
+      · 两边都是目录 → 递归；
+      · 两边都是同名文件 → 默认把旧版另存 <name>.from_hermes_<时间戳>（零丢失）；
+        产品空壳场景（backup_collisions=False）只保留新版，不产生上千个垃圾备份；
+        例外：新目录的 config.yaml 若只是模板（启动器复制的），就用用户的旧配置顶上，
+        模板另存 <name>.default_<时间戳>。
+      · 旧目录最后整体退休为 <old>.migrated_<时间戳>（只搬不删，最坏情况也有兜底）。
+    """
+    _moved = _kept = _replaced = 0
+    try:
+        _names = sorted(os.listdir(_old))
+    except OSError:
+        return 0, 0, 0
+    _ts = time.strftime("%Y%m%d-%H%M%S")
+    for _name in _names:
+        _s, _t = os.path.join(_old, _name), os.path.join(_new, _name)
+        try:
+            if not os.path.exists(_t):
+                shutil.move(_s, _t)
+                _moved += 1
+                continue
+            if os.path.isdir(_s) and os.path.isdir(_t) and _depth < 6:
+                _m, _k, _r = _merge_user_home(_s, _t, _depth + 1, backup_collisions)
+                _moved += _m
+                _kept += _k
+                _replaced += _r
+                continue
+            if os.path.isfile(_s) and os.path.isfile(_t):
+                if _name == "config.yaml" and _config_is_default(_new):
+                    shutil.copy2(_t, _t + ".default_" + _ts)
+                    shutil.copy2(_s, _t)
+                    _replaced += 1
+                else:
+                    # 2026-10-10：产品空壳场景（更新包铺出来的新目录）不再另存备份 ——
+                    # 一次更新会产生上千个 .from_hermes_ 垃圾（用户实测 2290 个）。
+                    # 真·两边都有用户数据时仍照常另存（零丢失）。
+                    if backup_collisions:
+                        shutil.copy2(_s, _t + ".from_hermes_" + _ts)
+                        _kept += 1
+        except OSError:
+            continue
+    return _moved, _kept, _replaced
+
+
+def _write_migration_notice(_home, _moved, _kept, _replaced, _conflict):
+    r"""把迁移结果写成 memomics_home\MIGRATION_NOTICE.txt（前端横幅+人工核对用）。"""
+    try:
+        _txt = (
+            "MemOmics 数据目录迁移记录\n"
+            "时间: %s\n"
+            "来源: hermes_home（旧数据目录）\n"
+            "结果: 搬入 %d 项；重名文件另存备份 %d 项；用旧配置替换模板 %d 项%s\n"
+            "说明: 旧目录已整体改名为 hermes_home.migrated_<时间戳>（只搬不删，可手工核对/回滚）。\n"
+            % (time.strftime("%Y-%m-%d %H:%M:%S"), _moved, _kept, _replaced,
+               "（两边原本都有数据，已按安全合并处理）" if _conflict else "")
+        )
+        with open(os.path.join(_home, "MIGRATION_NOTICE.txt"), "w", encoding="utf-8") as _f:
+            _f.write(_txt)
+    except OSError:
+        pass
+
+
+def migrate_legacy_home(_new_home, _old_home):
+    """hermes_home → memomics_home 迁移（幂等）。
+
+    返回 renamed / merged:N / conflict / noop / error:…（启动垫片与更新器共用）。
+    首次安装（无旧目录）→ noop；检测不到旧安装任何痕迹时不碰文件系统。
+    """
+    try:
+        if not os.path.isdir(_old_home):
+            return "noop"
+        _old_has = _home_has_user_data(_old_home)
+        if not os.path.isdir(_new_home):
+            os.rename(_old_home, _new_home)
+            return "renamed"
+        _new_has = _home_has_user_data(_new_home)
+        if _old_has and not _new_has:
+            # 2026-10-10 数据安全修复：新目录只是"产品空壳"（典型：启动器预生成了模板
+            # config.yaml）时，也必须让用户已有的 config.yaml/记忆/会话优先 —— 否则
+            # 用户的配置项与供应商设置会被模板顶掉，看起来就是"设置没同步到新版本"。
+            _m, _k, _r = _merge_user_home(_old_home, _new_home, 0, backup_collisions=False)
+            try:
+                os.rename(_old_home, _old_home + ".migrated_" + time.strftime("%Y%m%d-%H%M%S"))
+            except OSError:
+                pass  # 退休失败不算错：数据已搬完，旧目录留着下次再退休
+            _write_migration_notice(_new_home, _m, _k, _r, False)
+            return "merged:%d/%d/%d" % (_m, _k, _r)
+        if _old_has and _new_has:
+            # 2026-10-10 数据安全修复：不再"只告警不合并"——那会让老用户觉得会话/记忆全没了。
+            # 现在做安全并入（重名用户文件另存备份，旧目录整体退休），最坏情况也能从备份找回。
+            _m, _k, _r = _merge_user_home(_old_home, _new_home)
+            try:
+                os.rename(_old_home, _old_home + ".migrated_" + time.strftime("%Y%m%d-%H%M%S"))
+            except OSError:
+                pass
+            _write_migration_notice(_new_home, _m, _k, _r, True)
+            return "conflict-merged:%d/%d/%d" % (_m, _k, _r)
+        return "noop"
+    except Exception as _e:  # 迁移失败绝不影响启动
+        return "error:%r" % (_e,)
+
+
+if os.path.isdir(_legacy_home) and _legacy_home != MEMOMICS_HOME_DIR:
+    _mig = migrate_legacy_home(MEMOMICS_HOME_DIR, _legacy_home)
+    if _mig == "renamed":
+        print("[MemOmics] 检测到既有安装：旧数据目录 hermes_home 已迁移为 memomics_home", flush=True)
+    elif _mig.startswith("merged"):
+        print("[MemOmics] 检测到覆盖升级：hermes_home 已并入 memomics_home（搬入/另存/替换 = %s），"
+              "旧目录退休为 .migrated_ 备份，详见 memomics_home/MIGRATION_NOTICE.txt"
+              % _mig.split(":", 1)[1], flush=True)
+    elif _mig.startswith("conflict-merged"):
+        print("[MemOmics] 检测到覆盖升级：hermes_home 与 memomics_home 都有数据，已安全并入"
+              "（搬入/另存/替换 = %s），旧目录退休为 .migrated_ 备份，详见 memomics_home/MIGRATION_NOTICE.txt"
+              % _mig.split(":", 1)[1], flush=True)
+    elif _mig == "conflict":
+        print("[MemOmics] 警告：hermes_home 与 memomics_home 都含用户数据，跳过自动合并，请人工确认", flush=True)
+    elif _mig.startswith("error"):
+        print("[MemOmics] hermes_home -> memomics_home 迁移失败，继续原样启动: %s" % _mig, flush=True)
+        if not os.path.isdir(MEMOMICS_HOME_DIR):
+            MEMOMICS_HOME_DIR = _legacy_home
+os.environ["MEMOMICS_HOME"] = MEMOMICS_HOME_DIR
+# 上游 hermes-agent 只读 HERMES_HOME（hermes_constants.get_hermes_home 的契约）——镜像一份
+os.environ["HERMES_HOME"] = MEMOMICS_HOME_DIR
+
+
+def _migrate_legacy_config_paths():
+    """把 config.yaml 里残留的 hermes_home 路径迁移为 memomics_home。
+
+    老安装的 config.yaml 不进 git（plugins.hermes-memory-store.db_path 等是相对路径，
+    按 CWD 解析），不改的话启动时会重新创建出 repo/hermes_home/ 旧目录、
+    记忆库落到两份。仅在数据目录已是 memomics_home 时执行（回退到旧目录时保持原样）。
+    """
+    _cfg = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
+    try:
+        with open(_cfg, "rb") as _f:
+            _data = _f.read()
+        if b"hermes_home" not in _data:
+            return
+        with open(_cfg, "wb") as _f:
+            _f.write(_data.replace(b"hermes_home", b"memomics_home"))
+        print("[MemOmics] config.yaml 中 hermes_home 路径已迁移为 memomics_home", flush=True)
+    except OSError as _cfg_err:
+        print("[MemOmics] config.yaml 路径迁移跳过: %r" % (_cfg_err,), flush=True)
+
+
+if MEMOMICS_HOME_DIR != _legacy_home:
+    _migrate_legacy_config_paths()
 # 2026-08-14: verify-on-stop 排除运行时产物目录（results/ 下的分析脚本不触发 pytest 验证回路）
 os.environ.setdefault("HERMES_VERIFY_ON_STOP_EXCLUDE", "results/;.backups/;backups/;logs/")
 
 # === 启动时路径扫描：写入 .install_path 供 Agent 读取，避免硬编码路径 ===
-_install_path_file = os.path.join(HERMES_HOME_DIR, ".install_path")
+_install_path_file = os.path.join(MEMOMICS_HOME_DIR, ".install_path")
 try:
     with open(_install_path_file, "w", encoding="utf-8") as _f:
         _f.write(MEMOMICS_DIR.replace("\\", "/") + "\n")
@@ -59,6 +293,20 @@ try:
 except ModuleNotFoundError:
     pass
 
+# === computer_use：cua-driver 定位引导（2026-09-25）===
+# 必须在 MemOmics 的 tools.computer_use 被 import 之前跑：cua_backend 在 import 时读一次
+# HERMES_CUA_DRIVER_CMD，之后只用 shutil.which() 判断可用性。官方安装器把二进制放进
+# 用户目录并追加到 User PATH，而 PATH 是进程启动时的快照 —— 不重开终端就找不到，
+# computer_use 会整个从模型工具表里消失（现象＝"MemOmics 不能操控电脑"）。
+try:
+    from webui import cua_bootstrap
+except ImportError:
+    import cua_bootstrap
+try:
+    cua_bootstrap.ensure_cua_driver_env(log=print)
+except Exception as _cua_err:  # 定位失败绝不影响服务启动
+    print("[computer_use] cua-driver 定位异常: %r" % (_cua_err,))
+
 # === MiMo-Code 上下文架构迁移（2026-08-21）：P1-P5（预算/writer/四层记忆/分段重建/增量压缩）===
 try:
     from webui import context_arch
@@ -73,8 +321,71 @@ from typing import Optional
 
 app = FastAPI(title="MemOmics WebUI v2")
 
+# === P2-1 入口侧中间件链（2026-09-23）：request_id / 路由归类 / 会话守卫 / 限流 / 审计 ===
+# 设计前提：只观察不拦截，默认行为与接链之前完全一致（A/B 对拍见
+# webui/tests/test_p2_1_middleware.py）；要拦必须显式设环境变量：
+#     MEMOMICS_MW=0                 整条链不生效（连请求头都不加）
+#     MEMOMICS_MW_SESSION_ENFORCE=1 会话守卫真的返回 404
+#     MEMOMICS_MW_RATE_LIMIT=120    每 60 秒每 IP+路径前缀的请求上限
+#     MEMOMICS_MW_ERROR_ENVELOPE=1  未捕获异常返回带 request_id 的 JSON 500
+# 中间件出任何问题都不许影响启动，所以这里包一层 try/except。
+_entry_mw = None
+_MW_INSTALLED = False
+try:
+    try:
+        from webui import entry_middleware as _entry_mw
+    except ImportError:
+        import entry_middleware as _entry_mw
+    _MW_INSTALLED = bool(_entry_mw.install(app))
+except Exception as _mw_err:  # pragma: no cover - 只在环境异常时走到
+    _entry_mw = None
+    _MW_INSTALLED = False
+    print("[WARN] 入口中间件未挂载: %s" % _mw_err)
+
+
+@app.get("/api/middleware/audit")
+async def middleware_audit(limit: int = 50, routes: int = 0):
+    """入口链的只读状态：最近 N 条请求记录 + 计数器（本机调试用）。
+    routes=1 时附带「真实路由 vs 冻结清单」的漂移报告，用于门禁自查。"""
+    if _entry_mw is None:
+        return JSONResponse({"enabled": False, "installed": False, "items": [], "stats": {}})
+    try:
+        payload = {
+            "enabled": _entry_mw.enabled(),
+            "installed": _MW_INSTALLED,
+            "stats": _entry_mw.stats(),
+            "threads": (_thread_state.stats() if _thread_state is not None else {}),
+            "items": _entry_mw.recent(limit),
+        }
+        if routes:
+            ra = _entry_mw.route_audit(app)
+            payload["routes"] = {
+                "total": len(ra["actual"]),
+                "added": ra["added"],
+                "removed": ra["removed"],
+                "reclassified": ra["reclassified"],
+                "unclassified": ra["unclassified"],
+            }
+        return JSONResponse(payload)
+    except Exception as _e:
+        return JSONResponse({"error": str(_e)}, status_code=500)
+
+
+@app.get("/api/sandbox/audit")
+async def sandbox_audit(limit: int = 50, codes: int = 0):
+    """P2-3：能力沙箱的只读状态（默认观察模式——判定照算、账照记，但不拦人）。
+    codes=1 时附带按拒绝码聚合的计数，便于看清"如果要强制，会拦掉什么"。"""
+    try:
+        from webui import sandbox as _sandbox
+        body = _sandbox.audit(limit=limit, codes=bool(codes))
+        if _net_guard is not None:      # 出网侧视角：多少钉住 IP、多少走代理（代理钉不住 IP）
+            body["netguard"] = _net_guard.stats()
+        return JSONResponse(body)
+    except Exception as _e:
+        return JSONResponse({"error": str(_e)}, status_code=500)
+
 import logging
-# Enable Hermes weixin debug logging
+# Enable MemOmics weixin debug logging
 logging.getLogger("gateway.platforms.weixin").setLevel(logging.DEBUG)
 logging.getLogger("gateway.platforms.weixin").addHandler(logging.StreamHandler())
 logger = logging.getLogger("memomics")
@@ -85,7 +396,7 @@ _SKILLS_WARMED = False
 @app.on_event("startup")
 async def _warm_skills_snapshot():
     """启动时调用 build_skills_system_prompt() 一次，将 355 个 SKILL.md 的
-    元数据快照写入 hermes_home/.skills_prompt_snapshot.json。
+    元数据快照写入 memomics_home/.skills_prompt_snapshot.json。
     此后每次新会话首次请求都从快照读取（~10ms），而非冷扫描（~1-3s）。
     同时预导入 AIAgent，消除首次 _create_agent() 的 ~640ms 模块加载。
     自动注册新 skill：补全缺失的 skill.json + SKILLS_INDEX 条目。"""
@@ -106,7 +417,7 @@ async def _warm_skills_snapshot():
         asyncio.ensure_future(_memory_governor_loop())
     except Exception as e:
         logger.warning(f"[MemOmics] 记忆治理初始化失败: {e}")
-    # === Hermes 插件发现（image_gen 等 backend 插件） ===
+    # === MemOmics 插件发现（image_gen 等 backend 插件） ===
     # 插件发现默认只在 CLI/gateway 启动时执行（gateway/run.py:7550）；
     # MemOmics 进程内集成必须手动触发，否则 image_gen_registry 为空，
     # image_generate 工具没有可用后端，agent 感知不到图像生成能力。
@@ -115,18 +426,18 @@ async def _warm_skills_snapshot():
         PluginManager().discover_and_load()
         from agent import image_gen_registry as _igr
         _n = len(_igr.list_providers())
-        logger.info(f"[MemOmics] Hermes 插件发现完成，image_gen 后端 {_n} 个已注册")
+        logger.info(f"[MemOmics] MemOmics 插件发现完成，image_gen 后端 {_n} 个已注册")
     except Exception as e:
-        logger.warning(f"[MemOmics] Hermes 插件发现失败: {e}（图像生成功能将不可用）")
+        logger.warning(f"[MemOmics] MemOmics 插件发现失败: {e}（图像生成功能将不可用）")
     # 已保存过图像生成配置的用户：启动时把 provider 同步进 config.yaml，
     # 否则 image_generate 工具 check_fn 判定不可用（修复 2026-08-12 之前保存的配置没有这一步）
-    _sync_imagegen_provider_to_hermes()
+    _sync_imagegen_provider_to_memomics()
     try:
         from webui import auto_register
         auto_register.init(
-            os.path.join(HERMES_HOME_DIR, "skills", "bioinformatics"),
-            os.path.join(HERMES_HOME_DIR, "SKILLS_INDEX.md"),
-            os.path.join(HERMES_HOME_DIR, "SOUL.md"),
+            os.path.join(MEMOMICS_HOME_DIR, "skills", "bioinformatics"),
+            os.path.join(MEMOMICS_HOME_DIR, "SKILLS_INDEX.md"),
+            os.path.join(MEMOMICS_HOME_DIR, "SOUL.md"),
         )
         result = auto_register.scan_and_register_all()
         if result.get("json_generated", 0) > 0 or result.get("index_added", 0) > 0:
@@ -141,7 +452,7 @@ async def _warm_skills_snapshot():
         _SKILLS_WARMED = True
         logger.info(
             f"[MemOmics] Skills snapshot warmed: {len(result)} chars prompt, "
-            f"snapshot at {os.path.join(HERMES_HOME_DIR, '.skills_prompt_snapshot.json')}"
+            f"snapshot at {os.path.join(MEMOMICS_HOME_DIR, '.skills_prompt_snapshot.json')}"
         )
     except Exception as e:
         logger.warning(f"[MemOmics] Skills snapshot warm failed (will cold-scan on first request): {e}")
@@ -157,7 +468,7 @@ async def _warm_skills_snapshot():
     except Exception as e:
         logger.warning(f"[MemOmics] 微信自动重连调度失败: {e}")
 
-# === Hermes Cron Ticker — 在 MemOmics 进程中启动原生 cron 调度器 ===
+# === MemOmics Cron Ticker — 在 MemOmics 进程中启动原生 cron 调度器 ===
 import threading as _threading
 _cron_stop_event = _threading.Event()
 
@@ -219,7 +530,7 @@ async def _seed_self_check_startup():
 async def _start_process_completion_poller():
     """notify_on_complete push 链（2026-08-16 修复）。
 
-    terminal(background=True, notify_on_complete=True) 的进程退出时，Hermes 把
+    terminal(background=True, notify_on_complete=True) 的进程退出时，MemOmics 把
     完成事件写进 process_registry.completion_queue，但 MemOmics WebUI 从不消费
     它 —— 之前只能靠自检轮询（60s~5min 延迟）才发现进程结束。这里起守护线程消费
     队列，按 session_key（= session id，见 terminal_tool 的 session_key 接线）
@@ -268,6 +579,153 @@ async def _start_process_completion_poller():
     logger.info("[MemOmics] process completion poller started")
 
 
+# ---------------------------------------------------------------------------
+# 集群作业轮询（2026-10-09 P1 集群监督）
+#
+# 本机进程有 completion_queue（进程退出 → 3 秒内唤醒 agent）；集群作业没有事件源，
+# 过去只能靠 agent 主动 status 或人问。这个守护线程每 60s 让
+# remote_cluster.poll_jobs 把未终态作业查回来写进 remote/job_states.json，**只在
+# 状态发生变化时**把通知投回提交它的会话并立即唤醒（复用 _trigger_agent_turn 链路）。
+#   · 纯本地账本 + 只读远端查询；节点连不上只记 errors，不打断循环
+#   · 会话忙 → 事件留着下一轮补投；没有归属会话（老记录/会话已关）→ 只落账本不猜
+#   · 开关：MEMOMICS_CLUSTER_POLL=0 关闭；间隔：MEMOMICS_CLUSTER_POLL_SEC（默认 60）
+# ---------------------------------------------------------------------------
+_CLUSTER_POLL_INTERVAL = max(15.0, float(os.environ.get("MEMOMICS_CLUSTER_POLL_SEC", "60") or 60))
+_CLUSTER_POLL_ENABLED = str(os.environ.get("MEMOMICS_CLUSTER_POLL", "1")).lower() not in ("0", "false", "off", "no")
+_CLUSTER_EVENT_QUEUE = []          # 会话忙时留下的待投递事件（只放状态转移）
+_CLUSTER_EVENT_QUEUE_MAX = 20
+
+
+def _cluster_job_event_text(tr: dict) -> str:
+    """状态转移 → 会话通知文本（人直接能看懂 + 给下一步动作）。"""
+    _state = str(tr.get("state") or "")
+    _icon = {"done": "✅", "failed": "❌", "cancelled": "⛔"}.get(_state, "⚠️")
+    _lines = [
+        "%s 集群作业状态变化：%s → %s" % (_icon, tr.get("from") or "?", _state or "?"),
+        "· 作业：%s（节点 %s，job_id=%s）" % (tr.get("name") or "(未命名)",
+                                              tr.get("node") or "?", tr.get("job_id") or "?"),
+    ]
+    if tr.get("state_raw"):
+        _lines.append("· 远端原话：%s" % str(tr.get("state_raw"))[:200])
+    _lines.append("· 日志：%s" % (tr.get("stdout") or "（记录里没有 stdout 路径，用 action='logs' 查）"))
+    if _state == "done":
+        _lines.append("· 下一步：action='logs' 看产出确认 → action='pull' 取回 → 继续主线（别重复轮询同一条命令）")
+    elif _state == "failed":
+        _lines.append("· 下一步：action='logs' 看最后 30 行定位原因（OOM/路径/依赖），修好后重投；"
+                      "长任务按铁规 9 走检查点续跑（同参数重投会跳过已完成阶段）")
+    else:
+        _lines.append("· 下一步：确认是否需要清理现场或重投")
+    return "\n".join(_lines)
+
+
+def _dispatch_cluster_job_event(tr: dict, loop) -> str:
+    """把一条状态转移投给提交它的会话；返回 dispatched|queued|dropped|no_session。"""
+    _sid = str(tr.get("session_id") or "")
+    if not _sid or _sid not in _sessions:
+        logger.info("[cluster-poll] 作业 %s@%s → %s，但没有归属会话（老记录/会话已关）→ 只落账本",
+                    tr.get("job_id"), tr.get("node"), tr.get("state"))
+        return "no_session"
+    _s = _sessions[_sid]
+    if _s.get("running_agent") or _s.get("running_task"):
+        if len(_CLUSTER_EVENT_QUEUE) < _CLUSTER_EVENT_QUEUE_MAX:
+            _CLUSTER_EVENT_QUEUE.append(tr)
+        return "queued"
+    # 尊重 RunGate：任务已退役/轮数耗尽 → 只把事实留进会话，不自动唤醒（M2 同款语义）
+    _gate_stop = False
+    _reason = ""
+    try:
+        from webui.runtime.run_gate import check_gate
+        _rd = str(_s.get("results_dir") or "")
+        if _rd:
+            _verdict, _reason = check_gate(_rd, is_auto_wake=True)
+            _gate_stop = (_verdict == "stop")
+    except Exception:
+        _gate_stop = False
+    _text = _cluster_job_event_text(tr)
+    _s.setdefault("messages", []).append({
+        "role": "system",
+        "content": ("⏰ 集群作业状态变化（任务已退役/暂停，未自动唤醒，发消息即可继续）：\n\n"
+                    if _gate_stop else
+                    "⏰ 集群作业完成通知，请立即查看结果并推进主线：\n\n") + _text,
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "source": "cluster_job",
+    })
+    if _gate_stop:
+        logger.info("[cluster-poll] 会话 %s 自动唤醒被 RunGate 拦截（%s）→ 只留通知",
+                    _sid[:12], _reason if isinstance(_reason, str) else "")
+        return "notified_no_wake"
+    try:
+        loop.call_soon_threadsafe(
+            lambda _s=_s, _t=_text: asyncio.ensure_future(_trigger_agent_turn(_s, _t))
+        )
+    except Exception as exc:
+        logger.warning("[cluster-poll] 唤醒调度失败（消息已进会话）: %s", exc)
+        return "dropped"
+    logger.info("[cluster-poll] 会话 %s 已唤醒：作业 %s@%s → %s",
+                _sid[:12], tr.get("job_id"), tr.get("node"), tr.get("state"))
+    return "dispatched"
+
+
+def _poll_cluster_jobs_once(loop=None, poll=None) -> dict:
+    """跑一轮集群作业轮询并投递状态转移（测试入口：poll 可注入假实现）。"""
+    if loop is None:
+        try:
+            loop = asyncio.get_event_loop()
+        except Exception:
+            loop = None
+    _pending = list(_CLUSTER_EVENT_QUEUE)
+    _CLUSTER_EVENT_QUEUE.clear()
+    for _tr in _pending:
+        _dispatch_cluster_job_event(_tr, loop)
+    try:
+        if poll is None:
+            from memomics.bio_tools import remote_cluster as _rc
+            poll = _rc.poll_jobs
+        res = poll() or {}
+    except Exception as exc:
+        logger.warning("[cluster-poll] 轮询失败（忽略本轮）: %s", exc)
+        return {"ok": False, "error": str(exc), "transitions": 0,
+                "pending": len(_CLUSTER_EVENT_QUEUE)}
+    _trans = res.get("transitions") or []
+    for _tr in _trans:
+        _dispatch_cluster_job_event(_tr, loop)
+    if _trans or _pending or (res.get("errors") or []):
+        logger.info("[cluster-poll] checked=%s transitions=%s errors=%s pending=%s",
+                    res.get("checked"), len(_trans), len(res.get("errors") or []),
+                    len(_CLUSTER_EVENT_QUEUE))
+    return {"ok": bool(res.get("ok", True)), "checked": res.get("checked") or 0,
+            "transitions": len(_trans), "errors": res.get("errors") or [],
+            "nodes": res.get("nodes") or [], "pending": len(_CLUSTER_EVENT_QUEUE)}
+
+
+@app.on_event("startup")
+async def _start_cluster_job_poller():
+    """集群作业轮询守护线程（2026-10-09 P1）：让集群作业也有「完成即唤醒」。"""
+    if not _CLUSTER_POLL_ENABLED:
+        logger.info("[MemOmics] cluster job poller disabled (MEMOMICS_CLUSTER_POLL=0)")
+        return
+    # 测试环境绝不启动真 ssh 轮询（pytest 里 TestClient lifespan 会拉起 startup）
+    if os.environ.get("PYTEST_CURRENT_TEST") or "pytest" in sys.modules:
+        logger.info("[MemOmics] cluster job poller skipped (test environment)")
+        return
+    try:
+        _loop = asyncio.get_event_loop()
+    except Exception:
+        _loop = None
+
+    def _worker():
+        time.sleep(min(30.0, _CLUSTER_POLL_INTERVAL))   # 启动先等一轮，避开 agent 播种
+        while True:
+            try:
+                _poll_cluster_jobs_once(_loop)
+            except Exception as exc:
+                logger.warning("[cluster-poll] 轮询循环异常（继续）: %s", exc)
+            time.sleep(_CLUSTER_POLL_INTERVAL)
+
+    _threading.Thread(target=_worker, daemon=True, name="cluster-job-poller").start()
+    logger.info("[MemOmics] cluster job poller started (interval=%ss)", int(_CLUSTER_POLL_INTERVAL))
+
+
 @app.on_event("startup")
 async def _apply_fix_bundle_startup():
     """旧安装自愈（2026-08-16）：启动时应用文件级修复（config 限额等）。
@@ -277,7 +735,7 @@ async def _apply_fix_bundle_startup():
     """
     try:
         from memomics.fix_bundle import apply_fix_bundle, BUNDLE
-        _rep = apply_fix_bundle(HERMES_HOME_DIR)
+        _rep = apply_fix_bundle(MEMOMICS_HOME_DIR)
         if not _rep.get("up_to_date"):
             logger.info("[FixBundle] 已应用文件级迁移: %s", _rep)
             print(f"[FixBundle] 已应用文件级迁移: {_rep}", flush=True)
@@ -454,7 +912,7 @@ async def _start_memory_governance():
     async def _loop():
         while True:
             try:
-                _marker = os.path.join(HERMES_HOME_DIR, "memories", ".governance_last")
+                _marker = os.path.join(MEMOMICS_HOME_DIR, "memories", ".governance_last")
                 _last = 0.0
                 if os.path.isfile(_marker):
                     try:
@@ -466,7 +924,7 @@ async def _start_memory_governance():
                     init_index(verbose=False)
                     _rep = run_governance(dry_run=False, verbose=False)
                     # 2026-08-14: KB 陈旧度周检（每周一次，写报告 + 在线会话提示）
-                    _kb_marker = os.path.join(HERMES_HOME_DIR, "memories", ".kb_staleness_last")
+                    _kb_marker = os.path.join(MEMOMICS_HOME_DIR, "memories", ".kb_staleness_last")
                     _kb_last = 0.0
                     if os.path.isfile(_kb_marker):
                         try:
@@ -491,7 +949,7 @@ async def _start_memory_governance():
                                                 _stale_dirs.append(str(_p.relative_to(_kbr)).replace("\\", "/"))
                                     except Exception:
                                         continue
-                            with open(os.path.join(HERMES_HOME_DIR, "memories", "kb_staleness.json"), "w", encoding="utf-8") as _sf:
+                            with open(os.path.join(MEMOMICS_HOME_DIR, "memories", "kb_staleness.json"), "w", encoding="utf-8") as _sf:
                                 json.dump({"checked_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "stale": _stale_dirs[:50], "count": len(_stale_dirs)}, _sf, ensure_ascii=False, indent=2)
                             with open(_kb_marker, "w", encoding="utf-8") as _mf:
                                 _mf.write(str(time.time()))
@@ -521,35 +979,35 @@ async def _start_memory_governance():
 
 
 @app.on_event("startup")
-async def _start_hermes_cron_ticker():
-    """在 MemOmics FastAPI 进程中启动 Hermes 原生 cron ticker。
+async def _start_memomics_cron_ticker():
+    """在 MemOmics FastAPI 进程中启动 MemOmics 原生 cron ticker。
     
-    cron ticker 每 60 秒扫描一次 hermes_home/cron/jobs.json，
+    cron ticker 每 60 秒扫描一次 memomics_home/cron/jobs.json，
     执行到期的 cron job。这是长任务心跳监控的核心引擎。
     """
-    # 2026-09-10: 启动时同步一次 custom_providers 到 Hermes 底座——补齐 base_url 与
+    # 2026-09-10: 启动时同步一次 custom_providers 到 MemOmics 底座——补齐 base_url 与
     # per-provider extra_headers（opencode.ai 网关的 x-opencode-session），
     # 让已装用户无需重新保存 key 即可修复。失败不阻塞启动。
     try:
-        _sync_custom_providers_to_hermes()
+        _sync_custom_providers_to_memomics()
     except Exception as _e_sync:
         logger.warning(f"[MemOmics] 启动同步 custom_providers 失败（不阻塞）: {_e_sync}")
     try:
         from cron.scheduler_provider import InProcessCronScheduler
-        # 确保 HERMES_HOME 正确：cron 数据存在 hermes_home/cron/ 下
-        os.environ.setdefault("HERMES_HOME", HERMES_HOME_DIR)
+        # 确保 MEMOMICS_HOME 正确：cron 数据存在 memomics_home/cron/ 下
+        os.environ.setdefault("MEMOMICS_HOME", MEMOMICS_HOME_DIR)
         _ticker_thread = _threading.Thread(
             target=lambda: InProcessCronScheduler().start(
                 _cron_stop_event,
                 adapters=None,   # 不需要消息平台投递
                 loop=None,       # 不需要 live adapter
-                interval=60,     # 60s tick，与 Hermes 默认一致
+                interval=60,     # 60s tick，与 MemOmics 默认一致
             ),
             daemon=True,
             name="memomics-cron-ticker",
         )
         _ticker_thread.start()
-        logger.info("[MemOmics] Cron ticker started — hermes_home/cron/jobs.json, interval=60s")
+        logger.info("[MemOmics] Cron ticker started — memomics_home/cron/jobs.json, interval=60s")
     except Exception as e:
         logger.warning(f"[MemOmics] Cron ticker 启动失败（长任务心跳不可用）: {e}")
     # 2026-08-23 迁移 MiMo-Code：启动后台自动检查更新（静默失败，不阻塞启动）
@@ -560,7 +1018,7 @@ async def _start_hermes_cron_ticker():
         pass
 
 @app.on_event("shutdown")
-async def _stop_hermes_cron_ticker():
+async def _stop_memomics_cron_ticker():
     """优雅停止 cron ticker。"""
     _cron_stop_event.set()
     logger.info("[MemOmics] Cron ticker stopped")
@@ -568,7 +1026,23 @@ async def _stop_hermes_cron_ticker():
 # 挂载静态文件目录 (assets/ 下的图片等)
 _static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 if os.path.isdir(_static_dir):
-    app.mount("/assets", StaticFiles(directory=_static_dir), name="assets")
+    class _NoStoreStatic(StaticFiles):
+        """2026-10-11：静态资源一律 no-store —— 更新后浏览器不许再吃旧的图/样式。
+
+        注意：不能用 @app.middleware("http") 改头——Starlette 对 FileResponse 这类
+        流式响应在中间件里改 headers 不生效（实测 /assets/penguin.png 仍是空头），
+        必须在 StaticFiles.get_response 里、响应还没发出时改。
+        """
+
+        async def get_response(self, path, scope):
+            resp = await super().get_response(path, scope)
+            try:
+                resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+            except Exception:
+                pass
+            return resp
+
+    app.mount("/assets", _NoStoreStatic(directory=_static_dir), name="assets")
 
 # 挂载用户上传图片目录
 _uploads_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
@@ -648,10 +1122,10 @@ def _is_suicide_command(cmd: str) -> bool:
     return False
 
 
-# === Hermes SessionDB (state.db) — 原生会话持久化 ===
+# === MemOmics SessionDB (state.db) — 原生会话持久化 ===
 _session_db = None
 def _get_session_db():
-    """惰性初始化 Hermes SessionDB"""
+    """惰性初始化 MemOmics SessionDB"""
     global _session_db
     if _session_db is None:
         try:
@@ -669,11 +1143,11 @@ def _get_session_db():
 
 
 def _restore_session_model_config(sid, base_cfg):
-    """从 Hermes state.db 恢复会话级模型配置（会话级切换后重启/重连恢复）。
+    """从 MemOmics state.db 恢复会话级模型配置（会话级切换后重启/重连恢复）。
 
     只认 sessions.model_config 列（会话级切换时写入的完整 JSON，含 api_key）；
     该列没有值 = 该会话从未做过会话级切换 → 跟随全局 base_cfg。
-    不回退 model/billing 列：那两列是 Hermes 首次调用时自动填的，
+    不回退 model/billing 列：那两列是 MemOmics 首次调用时自动填的，
     可能过时（全局切换后未更新），会导致重启后会话用了旧模型。
     """
     try:
@@ -696,7 +1170,7 @@ def _restore_session_model_config(sid, base_cfg):
 
 
 def _build_session_stats(session_id, agent=None):
-    """构建 session token 统计：以 state.db 持久化累计为准（Hermes 每轮 API 调用后
+    """构建 session token 统计：以 state.db 持久化累计为准（MemOmics 每轮 API 调用后
     自动 update_token_counts 增量写入 sessions 表）。
 
     修复(2026-08-07)：原实现优先 agent 内存（session_*_tokens），切换模型重建 agent
@@ -879,7 +1353,7 @@ def _auto_create_task_plan(session, plan_path):
             text = m.get("content", "")
             if isinstance(text, str) and len(text) > 3:
                 goal = text[:80].replace("\n", " ")
-                # 尝试提取用户指定的路径（如 F:/CellBender_v2）
+                # 尝试提取用户指定的路径（如 /data/CellBender_v2）
                 import re
                 _path_match = re.search(r"([A-Za-z]:[/\\][^\s,，。]+)", text)
                 if _path_match:
@@ -1085,9 +1559,22 @@ def _build_grill_prompt(session, user_text, intent):
                      "做个", "跑一", "流程", "细胞通讯", "degs", "差异表达")
     _LIGHT = ("chat", "knowledge_ask", "progress_check", "result_check",
               "analysis_plan", "literature", "cancel_task", "investigate")
+    # 2026-09-22 极端场景实测：日常/运维请求（"整理一下我的下载文件夹"被判 direct_exec）
+    # 会误触 grill —— 与科研无关的文件操作直接跳过。
+    _sc_g = _intent_scan(t)
+    if any(w in t for w in ("写邮件", "发邮件", "抓取网页", "删除文件")):
+        return ""
+    if _sc_g["daily_hard"] or (_sc_g["daily_soft"] and not _sc_g["hit_t1"]):
+        return ""
+    if any(w in t.lower() for w in _INTENT_INJECTION) and not _sc_g["hit_t1"]:
+        return ""
     _has_exec = any(s in t.lower() for s in _EXEC_SIGNALS)
     _is_exec_intent = intent in ("analysis", "direct_exec", "research_plan")
-    if (not (_has_exec or _is_exec_intent)) or intent in _LIGHT:
+    # 执行意图但没有执行信号、也没有科研上下文（"整理一下我的下载文件夹"被判 direct_exec）
+    # → 不是开工请求，别问。
+    if not (_has_exec or (_is_exec_intent and _sc_g["high"])):
+        return ""
+    if intent in _LIGHT:
         return ""
     return (
         "[开工前澄清 · 铁律：不确定就问]\n"
@@ -1097,8 +1584,400 @@ def _build_grill_prompt(session, user_text, intent):
         "2. 物种/组织/实验条件是什么？\n"
         "3. 期望得到什么结果（图/表/报告）？\n"
         "4. 是要继续之前的任务，还是全新任务？\n"
-        "用户回答后再规划执行。"
+        "问过一次就别再问第二遍：上文如果已经问过同一件事、用户也答了（哪怕没给绝对路径），"
+        "直接按已知信息开工；确实还缺关键项时最多再确认一次，禁止反复追问。\n"
+        "用户回答后再规划执行。" + _FORM_RULE_GRILL
     )
+
+
+# ── P3(2026-09-22): 高代价任务的开工前意图确认（弹窗勾选） ──────────────────
+# 用户原话："在执行任务之前，先理解用户的意图，然后 grill 用户，把不清楚的问题
+# 问明白。做出弹窗供用户勾选，理解用户的意图之后再执行。"
+# 分工：_build_grill_prompt 管"连数据在哪都不知道"；本函数管"数据有了，但要做成
+# 什么没交代"——只问一次（REQUIREMENTS/plan/已答复过 → 不再问），并且会按铁律 35
+# 预置门禁（执行类工具在用户答复前被拦下）。
+_INTENT_CONFIRM_ENABLED = os.environ.get("MEMOMICS_INTENT_CONFIRM", "1").strip().lower() \
+    not in ("0", "false", "no", "off")
+_FORM_RULE_GRILL = (
+    "\n【P3 用法：确认弹窗】调用 ask_user 时带 options 发出可勾选表单（不要只用文字提问）："
+    "options 用对象形式 {'label':'选项','desc':'为什么这么选','recommended':true}；"
+    "多件事一次确认时 multi_select=true；kind='intent'。"
+    "表单答复前执行类工具会被系统拦下 —— 问完立即结束本回合，等用户勾选。"
+)
+# 词表（2026-09-22 极端场景矩阵实测后重构）
+# 实测缺陷：①"报告/差异表达/result.csv" 同时命中高代价与 SPEC → 触发词被打成死词；
+# ②质控/GSEA/生存分析/整合去批次 完全漏 gate，英文请求更是全瞎；
+# ③日常任务（整理下载文件夹 / PDF 转 Word / 批量重命名）误弹。
+_INTENT_HIGH_COST_T1 = (  # 一档：科研方法/产物词，出现即算高代价
+    "聚类", "注释", "降维", "富集", "拟时序", "细胞通讯", "通讯分析", "wgcna", "共表达",
+    "差异表达", "差异分析", "degs", "质控", "变异检测", "变异注释", "生存分析",
+    "整合", "去批次", "批次矫正", "批次效应", "gsea", "gsva", "空间转录组",
+    "单细胞", "scrna", "sc-rna", "snrna", "atac", "chip-seq", "cut&tag", "hi-c",
+    "甲基化", "蛋白组", "代谢组", "转录组", "去卷积", "双细胞", "拷贝数", "cnv",
+    "孟德尔随机化", "免疫浸润", "系统发育", "进化树", "分子对接", "引物设计",
+    "轨迹分析", "细胞分型", "亚群", "marker基因", "cellbender", "cellranger",
+    "跑流程", "重跑", "重新做", "重新跑", "投递", "提交作业", "入库", "报告",
+    "测序分析", "下游分析", "上游分析",
+)
+_INTENT_HIGH_COST_T2 = (  # 二档：通用动作词，需有科研上下文（路径/生信名词）才算高代价
+    "分析", "建模", "比对", "组装", "检测", "鉴定", "训练", "批量", "处理",
+)
+_EN_HIGH_COST = (  # 英文请求（实测原逻辑对英文完全无感）
+    "clustering", "cluster", "annotat", "differential expression", "differential",
+    "quality control", " qc", "qc ", "survival analysis", "batch correction",
+    "integration", "enrichment", "gsea", "trajectory", "deconvolution",
+    "variant calling", "assemble", "assembly", "single-cell", "single cell",
+    "scrna", "atac-seq", "chip-seq", "methylation", "pipeline", "align",
+    "proteomic", "metabolomic",
+)
+_INTENT_RESEARCH_CTX = (  # 科研上下文：数据文件后缀 + 生信名词
+    ".h5ad", ".mtx", ".bam", ".fastq", ".fq", ".sam", ".vcf", ".bed", ".loom",
+    ".rds", ".tsv", "数据", "样本", "矩阵", "序列", "基因", "细胞", "测序",
+    "reads", "表达谱", "组学", "组织", "物种", "实验",
+)
+_INTENT_SPEC_STRONG = (  # 关键参数/方法已交代 → 信息够，不打扰
+    "阈值", "参数", "分辨率", "res=", "显著性", "fdr", "p值", "p<", "物种", "分组",
+    "版本", "marker", "基因列表", "结论", "置信", "随机种子", "seed", "n_neighbors",
+    "pca", "umap", "tsne", "harmony", "seurat", "scanpy", "monocle", "cellchat",
+    "deseq2", "edger", "limma", "参考基因组", "参考", "genome", "默认",
+)
+_INTENT_SPEC_WEAK = (  # 交付物已交代（需配合数据路径 + 产出动词）
+    "图", "表", "报告", "pdf", "docx", "word", "excel", "xlsx", "html", "csv",
+    "svg", "png", "tiff", "ppt", "report", "figure", "plot", "chart", "table",
+)
+_INTENT_DELIVER_VERB = ("出", "画", "生成", "输出", "保存", "给我", "导出", "要一张", "来一张",
+                          "generate", "produce", "output", "save", "export", "plot", "draw", "write")
+_INTENT_OPS_HARD = (  # 文件/格式操作：一律不弹（"把 PDF 报告转成 Word" 类，实测误弹）
+    "压缩", "解压", "重命名", "改名", "格式转换", "转成", "转换为", "转换成",
+    "下载文件夹", "文件夹里", "整理文件", "爬虫", "爬取", "截图",
+    "体检", "化验单", "病历", "健康报告", "销售数据", "股票", "基金", "彩票",
+    "rename", "zip", "compress", "screenshot",
+)
+_INTENT_DAILY_SOFT = (  # 日常软信号：正文里出现科研一档词时不算（"跑聚类顺便写个周报"仍要问）
+    "邮件", "翻译", "提醒我", "记账", "报销", "简历", "天气", "电影", "菜谱",
+    "旅游", "购物", "快递", "打车", "演讲稿", "作文", "取个名", "起个名", "笑话",
+    "代码", "报错", "bug", "debug", "脚本怎么写",
+    "周报", "日报", "月报", "会议纪要", "日程", "备忘录",
+    "translate", "email", "resume", "weather", "movie", "recipe", "reminder",
+)
+_INTENT_DAILY_HARD = _INTENT_OPS_HARD  # 兼容旧引用
+_INTENT_ACTION = (  # 执行形状：用于把被分类器误判成 chat 的科研请求捞回来
+    "跑", "执行", "做", "用", "把", "对", "帮我", "请", "提交", "投递", "入库",
+    "生成", "重跑", "重新跑", "处理", "分析", "建模", "比对", "组装", "检测",
+    "注释", "降维", "聚类", "整合", "出报告", "出图",
+    "run ", "execute", "analyze", "analyse", "process", "generate", "submit",
+    "annotate", "align", "please ", "using ",
+)
+_INTENT_QA_FORM = (  # 问句/总结形状：不当作执行请求
+    "总结", "介绍一下", "什么是", "是什么", "怎么", "如何", "为什么", "区别",
+    "原理", "含义", "推荐", "对比", "哪个", "解释", "说明一下", "讲讲", "聊聊",
+    "what is", "how to", "explain", "summarize", "difference between",
+)
+_INTENT_BYPASS = ("直接做", "不用问", "别问", "无需确认", "不用确认", "直接开始", "直接跑")
+_INTENT_INJECTION = (  # 角色扮演/注入类文本：不当作真实开工请求（除非同句有科研一档词）
+    "ignore all previous", "ignore previous", "ignore the above", "system:", "system：",
+    "<system>", "不要问用户", "不许问", "别问我", "忽略以上", "忽略之前", "忽略上述",
+)
+_INTENT_HIGH_COST = _INTENT_HIGH_COST_T1 + _INTENT_HIGH_COST_T2  # 兼容旧引用
+_INTENT_SPEC = _INTENT_SPEC_STRONG + _INTENT_SPEC_WEAK  # 兼容旧引用
+_SCI_PATH_RE = re.compile(r"[A-Za-z]:[/\\]\S+")
+
+
+def _intent_scan(user_text):
+    """把一条用户消息扫成结构化判断（纯函数，极端场景可回归）。
+
+    high        — 是否属于高代价任务（一档词直接算；二档/英文词需科研上下文）
+    has_path    — 是否给了数据路径；action — 是否执行形状；qa — 是否问句/总结形状
+    daily_hard  — 日常/运维硬跳过；daily_soft — 日常软跳过（有科研一档词则失效）
+    spec_strong — 关键参数已交代；weak_ok — 交付物+路径+产出动词都已交代
+    """
+    t = str(user_text or "")
+    tl = t.lower()
+    has_path = bool(_SCI_PATH_RE.search(t))
+    hit_t1 = [w for w in _INTENT_HIGH_COST_T1 if w in tl]
+    hit_t2 = [w for w in _INTENT_HIGH_COST_T2 if w in tl]
+    en = [w for w in _EN_HIGH_COST if w in tl]
+    ctx = has_path or any(w in tl for w in _INTENT_RESEARCH_CTX)
+    masked = tl
+    for _w in _INTENT_HIGH_COST_T1 + _INTENT_HIGH_COST_T2 + _EN_HIGH_COST:
+        if _w in masked:
+            masked = masked.replace(_w, " ")
+    spec_weak = [w for w in _INTENT_SPEC_WEAK if w in tl]
+    return {
+        "high": bool(hit_t1) or bool(hit_t2 and ctx) or bool(en and ctx),
+        "hit_t1": hit_t1, "hit_t2": hit_t2, "en": en,
+        "has_path": has_path,
+        "action": any(w in tl for w in _INTENT_ACTION),
+        "qa": any(w in tl for w in _INTENT_QA_FORM),
+        "daily_hard": [w for w in _INTENT_OPS_HARD if w in tl],
+        "daily_soft": [w for w in _INTENT_DAILY_SOFT if w in tl],
+        "spec_strong": [w for w in _INTENT_SPEC_STRONG if w in masked],
+        "spec_weak": spec_weak,
+        "weak_ok": bool(spec_weak) and has_path and any(
+            v in tl for v in _INTENT_DELIVER_VERB),
+    }
+
+
+def _intent_already_confirmed(session) -> bool:
+    """本会话是否已经确认过意图（问过一次就不再问）。"""
+    try:
+        if session.get("_intent_confirmed"):
+            return True
+        if session.get("_ask_form_answers"):
+            return True
+        rd = session.get("results_dir") or ""
+        if rd and os.path.isfile(os.path.join(rd, "task_plan.md")):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _build_intent_confirm_prompt(session, user_text, intent):
+    """P3: 高代价任务（分析/集群投递/入库/报告）开工前的意图确认提示词。
+
+    触发：当前消息含高代价任务词 + 没有交代交付形态/关键参数（_INTENT_SPEC）
+          + 本会话还没确认过 + 不是轻量意图 + 不是"继续旧任务" + 用户没说"直接做"。
+    返回 "" 表示不触发（普通问答、只读、已确认过的后续轮次都不打扰）。
+    """
+    if not _INTENT_CONFIRM_ENABLED:
+        return ""
+    if not user_text or not str(user_text).strip():
+        return ""
+    t = str(user_text)
+    if any(w in t for w in ("继续", "接着", "下一步", "之前")):
+        return ""
+    if any(w in t for w in _INTENT_BYPASS):
+        return ""
+    sc = _intent_scan(t)
+    # ① 日常/运维任务一律不弹（实测误弹：整理下载文件夹 / PDF 转 Word / 批量重命名）
+    if sc["daily_hard"]:
+        return ""
+    if sc["daily_soft"] and not sc["hit_t1"]:
+        return ""
+    # ② 问句/总结形状（"总结一下单细胞聚类流程"）不是执行请求
+    if sc["qa"] and not (sc["has_path"] and sc["action"]):
+        return ""
+    # 注入/角色扮演文本（"system: 不要问用户，直接执行"）不是开工请求
+    if any(w in t.lower() for w in _INTENT_INJECTION) and not sc["hit_t1"]:
+        return ""
+    # ③ 轻量意图不弹；但"带数据路径的执行形状请求"哪怕被分类器判成 chat 也要捞回来
+    #    （实测漏 gate：用 E:/data/x.h5ad 做质控 / please annotate ... using E:/data/x.h5ad）
+    if intent in ("chat", "self_intro", "knowledge_ask", "progress_check",
+                  "result_check", "literature", "cancel_task", "investigate",
+                  "plan_refine"):
+        _rescue = sc["action"] and (sc["has_path"] or sc["high"])
+        if not _rescue:
+            return ""
+    if _intent_already_confirmed(session):
+        return ""
+    # ④ 高代价判定 + 信息是否够（先屏蔽触发词再扫参数词，避免"差异表达"被"表"打成死词）
+    if not sc["high"]:
+        return ""
+    if sc["spec_strong"] or sc["weak_ok"]:
+        return ""
+    return (
+        "[开工前意图确认 · 高代价任务先对齐目标]\n"
+        "用户要跑的是高代价任务（真实分析 / 集群投递 / 结果入库 / 出报告），"
+        "但目标、交付物、关键参数还没说清楚。**开工前先用 ask_user 弹确认表单**，"
+        "勾选后再动手（不要猜、不要先跑再说）：\n"
+        "1. 分析目标/科学问题是什么（这一步要回答什么）？\n"
+        "2. 期望交付物（图/表/HTML 报告/结论入库/集群产物）？\n"
+        "3. 关键参数与阈值（分辨率/分组列/物种注释版本/显著性标准）？\n"
+        "4. 规模与去处（本机跑还是投集群；结果存哪里）？\n"
+        "已经说过的事项不要再问；一次问清，然后按勾选结果直接开工。" + _FORM_RULE_GRILL
+    )
+
+
+# ==================== P4(2026-09-22): 代码修改模式（只改不跑）====================
+# 用户原话："如果我给一些脚本和代码，让 MemOmics 自己帮我改一下、完善一下，它会不会自己
+#           跑去执行呢？什么时候执行脚本，什么时候只是改代码呢？如果只是修改代码，能不能
+#           直接给修改后的代码呢？如果记忆里有用户的数据，是不是可以弹窗问用户需不需要用
+#           数据验证一下呢？"
+# 落地：① 判定"改代码" → 只改不跑（enforcement.code_edit 硬锁，不靠模型自觉）；
+#       ② 记忆里正好有他的数据 → **服务器直接弹窗**问"要不要用这些数据跑一遍验证"；
+#       ③ 答复语义：选"只给代码" → 锁继续；选"用数据验证" → 解锁并允许执行。
+_CODE_EDIT_ENABLED = os.environ.get("MEMOMICS_CODE_EDIT", "1") != "0"
+
+# 改动动词（用户明确要求"把这东西变一下"）—— 不含 写/编写/生成（那是新做任务，另走 grill/确认）
+_CODE_EDIT_VERBS = (
+    "改一下", "改下", "改改", "改成", "改为", "改一改", "修改", "修一下", "修下", "修好", "修正",
+    "优化", "完善", "重构", "重写", "改进", "增强", "补上", "加上", "加个", "增加", "去掉",
+    "换成", "替换", "调优", "调试", "修 bug", "fix", "refactor", "optimize", "improve",
+    "rewrite", "debug", "patch",
+)
+# 代码信号（说明这轮真的在动代码，而不是在聊数据/结果）
+_CODE_EDIT_HINTS = (
+    "脚本", "代码", "源码", "函数", "程序", "报错信息", "命令行",
+    ".py", ".r ", ".r\u3000", ".rmd", ".sh", ".ipynb", ".js", ".ts", ".pl", ".cpp", ".sql",
+    "```", "def ", "#!/", "library(", "rscript", "python 脚本", "脚本文件",
+    "script", "function", "snippet", "notebook",
+)
+# "跑起来"信号（用户自己说了要跑 → 不锁，只提示"改完再跑"）
+_CODE_EDIT_RUN = (
+    "跑", "执行", "运行", "实测", "验证", "测试", "试一下", "试下", "出图", "重新出图",
+    "重跑", "再跑", "重画", "run", "execute", "test", "verify", "replot", "render",
+)
+# 可验证的数据文件后缀 / 目录名（从记忆里挑"他的数据"）
+_CODE_DATA_EXTS = (".h5ad", ".h5", ".hdf5", ".mtx", ".csv", ".tsv", ".txt", ".xlsx", ".xls",
+                   ".parquet", ".bam", ".sam", ".vcf", ".fastq", ".fq", ".fasta", ".fa",
+                   ".gtf", ".gff", ".gff3", ".bed", ".rds", ".rda", ".rdata", ".loom",
+                   ".zarr", ".h5seurat", ".bigwig", ".bw", ".mzml", ".fcs", ".cel", ".gz")
+_CODE_DATA_DIRS = ("data", "raw", "rawdata", "raw_data", "dataset", "datasets", "数据", "原始数据")
+
+
+def _code_edit_mode(text):
+    """本轮是不是"改代码"？返回 "edit"（只改不跑）|"verify"（用户说了要跑）|""（不是改代码）。
+
+    判定 = 改动动词 + 代码信号；再看到"跑/验证/测试/出图"就说明用户自己要跑 → 不锁。
+    纯提问（"这段代码为什么报错"）没有改动动词 → 不进入本模式，仍走调查/澄清。
+    """
+    if not _CODE_EDIT_ENABLED:
+        return ""
+    t = (text or "").strip()
+    if not t or len(t) > 4000:
+        return ""
+    low = t.lower()
+    if not any(v in low for v in _CODE_EDIT_VERBS):
+        return ""
+    if not any(h in low for h in _CODE_EDIT_HINTS):
+        return ""
+    if any(r in low for r in _CODE_EDIT_RUN):
+        return "verify"
+    return "edit"
+
+
+def _find_memory_data(session, text="", limit=3):
+    """从会话记忆里找"用户自己的数据"路径（供"要不要用你的数据跑一遍验证"用）。
+
+    来源：results/<sid>/REQUIREMENTS.md（用户历轮说过、被持久化的路径）+ 本轮消息里的路径。
+    只认数据类后缀或 data/raw/数据 目录，避免把输出目录、代码路径当成数据。
+    """
+    _hits = []
+
+    def _add(p):
+        p = (p or "").strip().strip("\"'").rstrip("，,。；;）)]}")
+        if p and p not in _hits:
+            _hits.append(p)
+
+    try:
+        for _ln in (_read_requirements(session, limit=12) or []):
+            for _m in re.findall(r"[A-Za-z]:[/\\][^\s，。；;）)]+", str(_ln)):
+                _add(_m)
+    except Exception:
+        pass
+    for _m in re.findall(r"[A-Za-z]:[/\\][^\s，。；;）)]+", text or ""):
+        _add(_m)
+    _ok = []
+    for _p in _hits:
+        _low = _p.lower()
+        _is_data = any(_low.endswith(_e) for _e in _CODE_DATA_EXTS)
+        if not _is_data:
+            _is_data = any(("\\" + _d + "\\") in _low or ("/" + _d + "/") in _low
+                           for _d in _CODE_DATA_DIRS)
+        if _is_data and not any(_low.endswith(_c) for _c in (".py", ".r", ".rmd", ".sh", ".ipynb")):
+            _ok.append(_p)
+    return _ok[:limit]
+
+
+def _is_form_answer_text(text, session=None):
+    """这一轮的用户消息是不是「确认弹窗的答复」？（P4 修：前端措辞与后端不一致）
+
+    前端 `_submitAskForm` 把答复拼成人话再当用户消息发出（【确认答复】针对「…」：选中：…），
+    后端 `/api/ask_form/answer` 生成的是【用户对「…」的确认答复】—— 只认一个前缀会导致
+    "选了只给代码" 的那条消息被当成新消息，把代码修改锁悄悄放掉。现在两种前缀都认，
+    另外 POST 上报时打一个 30 秒内有效的一次性时间戳标记（pop 消费，防前缀再改一次又失效）。
+    """
+    _fresh = False
+    if session is not None:
+        try:
+            _mk = float(session.pop("_form_ans_marker", 0) or 0)
+            _fresh = bool(_mk) and (time.time() - _mk) < 30.0
+        except Exception:
+            _fresh = False
+    _t = str(text or "").lstrip()
+    if _t.startswith(("【用户对", "【确认答复", "[Confirmation]", "[User confirmation")):
+        return True
+    return bool(_fresh and ("选中：" in _t or "补充：" in _t or "补充说明：" in _t
+                            or "Selected:" in _t or "Note:" in _t))
+
+
+def _emit_code_edit_form(session, data):
+    """代码修改模式的确定性弹窗：记忆里有数据 → 问"要不要用这些数据跑一遍验证"。
+
+    与 P3 的区别：这个弹窗由**服务器**直接发（不依赖模型记得调 ask_user），
+    arm_gate=False 是因为代码修改模式自己有更精确的锁（code_edit_gate）。
+    """
+    try:
+        from memomics.bio_tools.ask_user import emit_form_for_session as _emit_form
+    except Exception as _e_imp:
+        logger.warning("[code_edit] ask_user 不可用: %s", _e_imp)
+        return "", False
+    _names = []
+    for _d in (data or [])[:3]:
+        try:
+            _names.append(os.path.basename(str(_d).rstrip("/\\")) or str(_d))
+        except Exception:
+            _names.append(str(_d))
+    _en = _ui_lang() == "en"
+    _short = (", ".join(_names) if _en else "、".join(_names))
+    if _en:
+        _q = ("You only asked me to change the code (no run). I have your data in memory: %s "
+              "— shall I verify the change with it?" % _short)
+        _opts = [
+            {"label": "Code only, do not run", "desc": "Just the code, no execution",
+             "recommended": True},
+            {"label": "Run a verification with this data",
+             "desc": "Test the change on %s and tell me about any error" % _short[:100]},
+            {"label": "Show me the change plan first",
+             "desc": "Say what will change and why before running anything"},
+        ]
+        _header = "Code change: verify with your data?"
+    else:
+        _q = ("你只让我改代码（没说要跑）。记忆里有你的数据：%s —— 要不要用这些数据跑一遍验证？" % _short)
+        _opts = [
+            {"label": "只给我改好的代码，先别跑", "desc": "我只要代码，不执行", "recommended": True},
+            {"label": "用这些数据跑一遍验证", "desc": "拿 %s 实测改动是否成立，报错也告诉我" % _short[:100]},
+            {"label": "先给我改动计划", "desc": "先说要改哪几处、为什么，再决定跑不跑"},
+        ]
+        _header = "改代码：要不要用你的数据验证？"
+    try:
+        return _emit_form(session, _q, options=_opts, kind="intent",
+                          header=_header, arm_gate=False)
+    except Exception as _e_emit:
+        logger.warning("[code_edit] 弹窗失败: %s", _e_emit)
+        return "", False
+
+
+def _build_code_edit_prompt(session, user_text, mode, data_hint=None):
+    """代码修改模式的回合指令：只改不跑 / 改完再跑，都要"直接给修改后的完整代码"。"""
+    _rd = session.get("results_dir") or "results/<sid>"
+    _head = ("[代码修改模式 · 只改不跑]" if mode != "verify"
+             else "[代码修改模式 · 改完再跑]")
+    _lines = [_head,
+              "本轮判定：用户给的是代码/脚本，要的是「改代码」——先给代码，别自作主张跑分析。"]
+    if mode != "verify":
+        _lines.append("用户没说跑 → 本回合**不要执行**：terminal 跑脚本、execute_r/execute_python、"
+                      "集群投递都会被硬门禁拦下（读文件、写文件、给代码不受影响）。")
+    else:
+        _lines.append("用户自己说了要跑 → 改完可以直接跑，跑完把结果/报错如实告诉他。")
+    _lines += [
+        "交付方式（这是用户最在意的）：",
+        "  1. 在回复里直接给出**修改后的完整代码**（一个代码块，能直接复制运行，别只给 diff 片段）；",
+        "  2. 逐条说明：改了哪几处、为什么改、有什么影响/风险；",
+        "  3. 要落盘就写到 %s\\scripts\\ 并告知路径（写文件不拦）。" % _rd,
+        "用户的脚本是基准（SOUL 铁律）：不许按你的风格重写，不做无关重构；只改他要求的地方，"
+        "参数/小修/规范化可以顺手修，但要明确说出来。",
+    ]
+    _hint = [str(x) for x in (data_hint or [])][:3]
+    if _hint:
+        _lines.append("记忆里有他的数据可用于验证：%s" % "；".join(_hint))
+        _lines.append("想验证就先问：调 ask_user 问「要不要用这些数据跑一遍验证」，"
+                      "用户勾选同意后再执行（不同意就只给代码）。")
+    else:
+        _lines.append("记忆里没有他数据的路径：要验证就先 ask_user 问数据在哪，别自己找数据跑。")
+    _lines.append("如果用户答复里说「只给代码/先别跑」，本回合就只给代码，一个字都不要跑。")
+    return chr(10).join(_lines)
 
 
 def _build_task_resume_prompt(session):
@@ -1274,6 +2153,24 @@ def _task_plan_active(rd):
     return True
 
 
+def _cluster_work_evidence(session):
+    """集群侧「还有活在跑」的证据（2026-10-09 P0 集群监督）。
+
+    为什么需要：下面的 _session_has_active_work / _session_no_live_work 只看
+    process_registry 和 results_dir。集群作业提交后本机没有任何痕迹——集群还在跑、
+    本机 15 分钟没写盘时会被当成「外部工作已停」：task_plan 可能被提前归档、
+    mark_done 关掉心跳；没有 task_plan 的会话更糟，自检根本不调度。
+    证据来自 remote_cluster.cluster_work_evidence（读 jobs.jsonl + job_states.json +
+    sessions.json + session_touches.json）：纯本地、不 ssh、读不到一律当无证据。
+    """
+    try:
+        from memomics.bio_tools import remote_cluster as _rc
+        return _rc.cluster_work_evidence(str((session or {}).get("id") or ""))
+    except Exception as exc:
+        logger.debug("集群工作证据读取失败（按无证据处理）: %s", exc)
+        return {"live": False, "reasons": [], "items": []}
+
+
 def _session_has_active_work(session):
     """会话是否有活跃批处理任务（长任务监督用，修复 2026-08-07）。
 
@@ -1281,7 +2178,15 @@ def _session_has_active_work(session):
     此时自检因 has_plan=False 永不调度 → 长任务无主动唤醒。
     判定：results_dir/batch 目录存在且 monitor.log 未写 COMPLETE，
     且 2 小时内有文件活动 → 视为活跃，持续监督。
+    2026-10-09 追加：集群侧有作业/常驻会话在跑也算活跃（本机没有进程和写盘痕迹时
+    自检必须续跑——这正是「集群长任务没人回来查」的洞）。
     """
+    _cluster_ev = _cluster_work_evidence(session)
+    if _cluster_ev.get("live"):
+        logger.info("[Supervise] session %s: 集群侧仍有工作在跑 → %s",
+                    str(session.get("id", ""))[:12],
+                    "；".join(_cluster_ev.get("reasons") or [])[:200])
+        return True
     _rd = session.get("results_dir", "") or ""
     if not _rd or not os.path.isdir(_rd):
         return False
@@ -1311,7 +2216,7 @@ def _session_has_active_work(session):
 
 
 def _session_has_external_work(session):
-    """M1: 是否有外部工作在跑（Hermes 进程注册表有活进程 / batch 活跃）。
+    """M1: 是否有外部工作在跑（MemOmics 进程注册表有活进程 / batch 活跃）。
 
     用于"兜底唤醒先做便宜检查"：只有进程/batch 活着且无新进展时才跳过
     LLM 唤醒；进程退出或 batch 完成 → 立即让 LLM 去收结果。
@@ -1331,7 +2236,15 @@ def _session_no_live_work(session):
     无活跃后台进程 + results_dir 无近期文件活动（15 分钟窗口）。
     仅当 task_plan 主线区无 in_progress/pending 时才参与完成判定，
     所以不会把"步骤间等待唤醒"误判为完成。
+    2026-10-09 集群监督（P0）：集群侧有活在跑 → 直接 False（绝不当作完成信号），
+    否则「集群作业还在跑 + 本机 15 分钟没写盘」会被拿来提前归档 task_plan。
     """
+    _cluster_ev = _cluster_work_evidence(session)
+    if _cluster_ev.get("live"):
+        logger.info("[Supervise] session %s: 集群侧有活在跑，不判完成 → %s",
+                    str(session.get("id", ""))[:12],
+                    "；".join(_cluster_ev.get("reasons") or [])[:200])
+        return False
     try:
         from tools.process_registry import process_registry
         if process_registry.count_running() > 0:
@@ -1738,8 +2651,12 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
             _bridge = LoopXBridge(session["id"], _rd2, user_online=True)
             _dec = _bridge.should_run()
             _state = str(_dec.get("state") or "")
-            _HARD_STOP = {"blocked", "blocked_health", "paused", "throttled"}
-            if not _dec.get("should_run") and _state in _HARD_STOP and not urgent:
+            # 2026-10-02 修复：原来只认 blocked/blocked_health/paused/throttled 四个硬停状态，
+            # 于是桥接即使（在证据充分的前提下）说「该等」，只要 state 是 waiting 就照样唤醒 ——
+            # 循环没有任何刹车。现在 should_run=False 一律尊重（urgent 除外，紧急事件照旧穿透）。
+            # 桥接侧已经把关：waiting/skip 只有在产出窗口内确无真实写入时才返回 False；
+            # LoopX 不可用时桥接给的是安全默认 True，所以 fail-open 语义没变。
+            if not _dec.get("should_run") and not urgent:
                 _reason = str(_dec.get("reason") or "loopx quota 判定停止")[:80]
                 logger.info(f"[SelfCheck] session {session['id'][:12]}: LoopX {_state} 停止唤醒 ({_reason})")
                 return
@@ -1790,7 +2707,14 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
                 _retry_n = s.setdefault("_wakeup_retry_n", 0)
                 if _retry_n < 3:
                     s["_wakeup_retry_n"] = _retry_n + 1
-                    s["_urgent_wakeup"] = True
+                    # 2026-10-02 修复：原来无条件设 _urgent_wakeup=True。urgent 会把延迟压到
+                    # 3 秒（见下面 if urgent: delay = 3），并且绕开「外部工作无新进展就跳过
+                    # LLM 唤醒」的省 token 闸门 —— 两者相乘就是 3 秒一轮的重试风暴
+                    # （实测日志 #1/3 #2/3 #3/3，每轮都打 urgent wakeup triggered）。
+                    # 本来就紧急的（真错误/待审阅事件）才保持紧急重排；普通唤醒撞上运行中
+                    # 回合，按常规延迟重排即可。
+                    if urgent:
+                        s["_urgent_wakeup"] = True
                     logger.info(f"[SelfCheck] session {sid[:12]}: 唤醒遇运行中回合，重排 #{_retry_n + 1}/3")
                     _schedule_self_check(s, agent, loop, trigger=trigger)
                 else:
@@ -1874,27 +2798,47 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
                 # 中断；LoopX goal:active 为残留状态误导）
                 _plan_p = os.path.join(s.get("results_dir", ""), "task_plan.md") if s.get("results_dir") else ""
                 if not (_plan_p and os.path.isfile(_plan_p)):
-                    logger.info(f"[SelfCheck] session {sid[:12]}: 无活跃 task_plan（任务已完成/退役），跳过无任务唤醒")
-                    return
-                # 2026-08-27 最后防线：task_plan 文本已标完成（_plan_is_complete_text，
-                # 整体级信号）→ 即使 task_state 被误重置 pending，也不注入唤醒——
-                # 已完成任务直接休息，等用户明确的新指令（实测：ask_user 否定回答曾复活
-                # done 任务 → 模型被反复叫醒重复输出同一回答 4 次）
-                try:
-                    with open(_plan_p, "r", encoding="utf-8") as _pf:
-                        _ptext = _pf.read()
-                    if _plan_is_complete_text(_ptext):
-                        logger.info(f"[SelfCheck] session {sid[:12]}: task_plan 已标完成 → 休息，不唤醒")
+                    # 2026-10-09 集群长任务修复：没有 task_plan 但**外部工作还在跑**（batch/集群）
+                    # 时必须继续注入「检查外部工作」唤醒 —— 旧行为（2026-08-26 防空转守卫）在
+                    # 没 plan 时一律静默 return，把 2026-08-07 的 batch 监督修复也一起挡掉了，
+                    # 集群作业跑完没人回来收结果（实测 memomics-a09d6710）。
+                    # 外部工作确实停了才走静默分支（真正完成任务后不再空转）。
+                    if not _session_has_active_work(session):
+                        logger.info(f"[SelfCheck] session {sid[:12]}: 无活跃 task_plan 且外部工作已停，跳过无任务唤醒")
                         return
-                except Exception:
-                    pass
-                wake_msg = (
-                    _loopx_ctx +
-                    f"⏰ [系统唤醒 #{_sc}] 检查主线任务进度\n"
-                    "1. 读 task_plan.md 看当前 Phase\n"
-                    "2. search_files 看最新产出\n"
-                    "3. 继续执行下一个待办"
-                )
+                    logger.info(f"[Supervise] session {sid[:12]}: 无 task_plan 但外部工作仍在跑 → 注入检查唤醒")
+                    wake_msg = (
+                        _loopx_ctx +
+                        f"⏰ [系统唤醒 #{_sc}] 没有 task_plan，但外部工作还在跑\n"
+                        "请执行以下检查（看完就停手，等下一次唤醒，不要空转）：\n"
+                        "1. 本机后台进程：process(action='list') / process(action='poll')\n"
+                        "2. 集群作业：remote_cluster(action='jobs') 看队列快照；"
+                        "action='status'(job_id=…) 看具体作业；已完成/失败 → action='logs' 读日志、"
+                        "action='pull' 取产物\n"
+                        "3. results_dir 最新产出：search_files\n"
+                        "4. 有产出 → 按现有流程推进（修错/收结果/写 task_plan.md 记结论）；"
+                        "外部工作全部结束 → 汇报用户或以 task_plan.md 收口"
+                    )
+                else:
+                    # 2026-08-27 最后防线：task_plan 文本已标完成（_plan_is_complete_text，
+                    # 整体级信号）→ 即使 task_state 被误重置 pending，也不注入唤醒——
+                    # 已完成任务直接休息，等用户明确的新指令（实测：ask_user 否定回答曾复活
+                    # done 任务 → 模型被反复叫醒重复输出同一回答 4 次）
+                    try:
+                        with open(_plan_p, "r", encoding="utf-8") as _pf:
+                            _ptext = _pf.read()
+                        if _plan_is_complete_text(_ptext):
+                            logger.info(f"[SelfCheck] session {sid[:12]}: task_plan 已标完成 → 休息，不唤醒")
+                            return
+                    except Exception:
+                        pass
+                    wake_msg = (
+                        _loopx_ctx +
+                        f"⏰ [系统唤醒 #{_sc}] 检查主线任务进度\n"
+                        "1. 读 task_plan.md 看当前 Phase\n"
+                        "2. search_files 看最新产出\n"
+                        "3. 继续执行下一个待办"
+                    )
             # 2026-08-14: 唤醒成功——重排计数清零
             s.pop("_wakeup_retry_n", None)
             # 2026-08-16 任务卡死诊断：watchdog 冻结判定留下的诊断指令优先注入
@@ -2081,7 +3025,7 @@ async def _trigger_agent_turn(session, message):
             # P1-13(2026-08-13): 自检唤醒 executor 线程内设置会话上下文（kernel 会话隔离）
             try:
                 from memomics.bio_tools.debate_analysis import set_session_context
-                set_session_context(sid=session["id"], results_dir=session.get("results_dir", ""))
+                _set_debate_session_context(session)
             except Exception:
                 pass
             # 2026-08-14 成本优化：唤醒用精简上下文（task_plan 摘要 + 最近用户/助手消息），
@@ -2282,6 +3226,45 @@ def _build_task_plan_context(session):
 
 # === 全局状态 ===
 _sessions = {}       # session_id -> {id, title, created, messages, model_config, results_dir, todos, agent}
+
+# === P2-1 入口中间件：把「会话是否存在」注入会话守卫 ===
+# 守卫拿到 False 且开了 MEMOMICS_MW_SESSION_ENFORCE 才会拦；任何异常都放行，
+# 绝不因为中间件把人挡在门外（fail-open）。
+if _entry_mw is not None:
+    try:
+        _entry_mw.configure(session_exists=lambda _sid: bool(_sid) and _sid in _sessions)
+    except Exception:
+        pass
+
+# === P2-2 显式 ThreadState（2026-09-23）：把「一个会话的活状态」从裸字典键收进显式对象 ===
+# 体检实测：会话字典上 95 个隐式键、207 个写入点、499 个读取点，没有 schema、没有锁；
+# 全文件仅 2 把锁且都不护会话状态，而 308 个同步 handler 跑在线程池里（约 40 线程）。
+# 唯一被当"并发护栏"的 session["_user_turn_active"] 只有 1 个读取点（自检/心跳忙判定），
+# 用户第二条消息进来根本不看它 → 同一会话可以两个回合同时在飞。
+# 本层默认**只记账**：不发事件、不阻塞、不改任何返回值；重叠回合被计成 conflicts，
+# 可在 GET /api/middleware/audit 的 threads 字段观察。要真拦并发见 MEMOMICS_THREAD_SERIALIZE。
+_thread_state = None
+_THREAD_STATE_INSTALLED = False
+try:
+    try:
+        from webui import thread_state as _thread_state
+    except ImportError:
+        import thread_state as _thread_state
+    _THREAD_STATE_INSTALLED = True
+except Exception as _ts_err:  # 环境异常绝不影响主流程（fail-open）
+    print("[WARN] ThreadState 未挂载: %s" % _ts_err)
+
+# === P2-3b 出网闸门（2026-09-23）：WebUI 自己发起的出网请求统一从这里走 ===
+# 默认观察模式：判定照算、账照记，但请求仍走老路径，行为零变更；要真拦见 MEMOMICS_SANDBOX_ENFORCE。
+# 强制模式下钉住批准的 IP 再连（防 DNS rebinding 的那道 TOCTOU 缝），重定向逐跳重新过门。
+_net_guard = None
+try:
+    try:
+        from webui import netguard as _net_guard
+    except ImportError:
+        import netguard as _net_guard
+except Exception as _ng_err:  # 环境异常绝不影响主流程（fail-open）
+    print("[WARN] NetGuard 未挂载: %s" % _ng_err)
 _SERVER_STARTED_STR = datetime.now().strftime("%m-%d %H:%M")
 _bg_tasks = {}       # session_id -> background task info
 # === WebSocket 多连接注册表：一个浏览器连接可同时服务多个会话 ===
@@ -2299,7 +3282,7 @@ _current_model = {   # 默认模型配置 (打包后为空, 首次启动配置)
 }
 
 # === 模型配置持久化 ===
-_MODEL_CONFIG_FILE = os.path.join(HERMES_HOME_DIR, "model_config.json")
+_MODEL_CONFIG_FILE = os.path.join(MEMOMICS_HOME_DIR, "model_config.json")
 
 def _atomic_write_json(path: str, obj) -> None:
     """原子写 JSON：临时文件 + fsync + os.replace，避免进程中止留下半个文件"""
@@ -2317,22 +3300,22 @@ def _save_model_config():
     except Exception as e:
         print(f"[WARN] 保存模型配置失败: {e}")
 
-def _hermes_config_read():
-    """读取 Hermes 底座 config.yaml（真相源）。
+def _memomics_config_read():
+    """读取 MemOmics 底座 config.yaml（真相源）。
 
-    用 Hermes 自己的 load_config()（展开 env 引用、deep-merge 默认值），
+    用 MemOmics 自己的 load_config()（展开 env 引用、deep-merge 默认值），
     另用 read_raw_config() 判断键是否真的在磁盘上设置过。
     """
     try:
         from hermes_cli.config import load_config, read_raw_config
         return load_config() or {}, read_raw_config() or {}
     except Exception as e:
-        print(f"[WARN] 读取 hermes config.yaml 失败: {e}")
+        print(f"[WARN] 读取 memomics config.yaml 失败: {e}")
         return {}, {}
 
 
-def _hermes_config_write(updates: dict) -> bool:
-    """原子合并写 Hermes config.yaml（用 Hermes 自己的 atomic_config_write）。"""
+def _memomics_config_write(updates: dict) -> bool:
+    """原子合并写 MemOmics config.yaml（用 MemOmics 自己的 atomic_config_write）。"""
     try:
         from hermes_cli.config import read_raw_config, atomic_config_write, get_config_path
         cfg = read_raw_config() or {}
@@ -2340,21 +3323,21 @@ def _hermes_config_write(updates: dict) -> bool:
         atomic_config_write(get_config_path(), cfg)
         return True
     except Exception as e:
-        print(f"[WARN] 写入 hermes config.yaml 失败: {e}")
+        print(f"[WARN] 写入 memomics config.yaml 失败: {e}")
         return False
 
 
 def _load_model_config():
-    """从 Hermes 底座 config.yaml 加载模型配置（唯一真相源，修复 2026-08-08）。
+    """从 MemOmics 底座 config.yaml 加载模型配置（唯一真相源，修复 2026-08-08）。
 
-    原来 MemOmics 维护自己的 model_config.json，与 Hermes 底座的 config.yaml
+    原来 MemOmics 维护自己的 model_config.json，与 MemOmics 底座的 config.yaml
     各自独立 → 两套配置漂移（UI 显示 A、底座实际用 B）。现统一：
     1. config.yaml 有 api_key+api_base → 以其为准（load_config 已展开 env 引用）
     2. 没有 → 回退旧 model_config.json 并一次性迁移回写 config.yaml
     """
     global _current_model
     # ── 迁移方向（2026-08-08）：以 model_config.json 为准（用户在 UI 最近设置的
-    # 实际生效配置），并回写 Hermes config.yaml —— 一次迁移后 config.yaml 成为
+    # 实际生效配置），并回写 MemOmics config.yaml —— 一次迁移后 config.yaml 成为
     # 唯一真相源，两套配置不再漂移。model_config.json 缺失时才读 config.yaml。
     _legacy = None
     if os.path.exists(_MODEL_CONFIG_FILE):
@@ -2367,12 +3350,12 @@ def _load_model_config():
         for k in ("provider", "base_url", "api_key", "model"):
             if _legacy.get(k):
                 _current_model[k] = _legacy[k]
-        print(f"[INFO] 已加载模型配置: model={_current_model['model']}, base_url={_current_model['base_url'][:40]} (回写 Hermes config.yaml)")
+        print(f"[INFO] 已加载模型配置: model={_current_model['model']}, base_url={_current_model['base_url'][:40]} (回写 MemOmics config.yaml)")
         _save_model_config()
         return
-    # 回退：Hermes config.yaml（load_config 会把 model 规范化为 dict:
+    # 回退：MemOmics config.yaml（load_config 会把 model 规范化为 dict:
     # {default, provider, base_url}，此处兼容两种形态）
-    _full, _raw = _hermes_config_read()
+    _full, _raw = _memomics_config_read()
     if _raw.get("api_key") and _raw.get("api_base"):
         _m = _full.get("model")
         _m_dict = _m if isinstance(_m, dict) else {}
@@ -2387,7 +3370,7 @@ def _load_model_config():
         if _model_key:
             _current_model["api_key"] = _model_key
         _current_model["provider"] = _model_provider or _current_model.get("provider", "openai")
-        print(f"[INFO] 已从 Hermes config.yaml 加载模型配置: model={_current_model['model']}, base_url={_current_model['base_url'][:40]}")
+        print(f"[INFO] 已从 MemOmics config.yaml 加载模型配置: model={_current_model['model']}, base_url={_current_model['base_url'][:40]}")
         try:
             _atomic_write_json(_MODEL_CONFIG_FILE, _current_model)  # 镜像同步（兼容）
         except Exception:
@@ -2401,8 +3384,8 @@ def _load_model_config():
             for k in ("provider", "base_url", "api_key", "model"):
                 if saved.get(k):
                     _current_model[k] = saved[k]
-            print(f"[INFO] 已加载旧 model_config.json（迁移回写 Hermes config.yaml）: model={_current_model['model']}")
-            _hermes_config_write({
+            print(f"[INFO] 已加载旧 model_config.json（迁移回写 MemOmics config.yaml）: model={_current_model['model']}")
+            _memomics_config_write({
                 "provider": _current_model["provider"],
                 "api_base": _current_model["base_url"],
                 "api_key": _current_model["api_key"],
@@ -2413,8 +3396,8 @@ def _load_model_config():
 
 
 def _save_model_config():
-    """写 Hermes config.yaml（真相源）+ 镜像 model_config.json（兼容旧读取方）。"""
-    _hermes_config_write({
+    """写 MemOmics config.yaml（真相源）+ 镜像 model_config.json（兼容旧读取方）。"""
+    _memomics_config_write({
         "provider": _current_model.get("provider", "openai"),
         "api_base": _current_model.get("base_url", ""),
         "api_key": _current_model.get("api_key", ""),
@@ -2434,7 +3417,7 @@ try:
 except ImportError:
     from runtime import JobStore, TaskSupervisor, ResourceScheduler, ResourceCapacity
 
-_job_store = JobStore(os.path.join(HERMES_HOME_DIR, "runtime", "jobs.json"))
+_job_store = JobStore(os.path.join(MEMOMICS_HOME_DIR, "runtime", "jobs.json"))
 _task_supervisor = TaskSupervisor(store=_job_store)
 _resource_scheduler = ResourceScheduler(ResourceCapacity.detect())
 
@@ -2476,6 +3459,22 @@ def _session_resource_request(session):
         )
     except (TypeError, ValueError):
         return ResourceRequest()
+
+
+def _queue_label(session):
+    """资源队列里显示"谁在排队"：会话标题优先，退而求其次用最近一句用户话。"""
+    try:
+        title = str(session.get("title") or "").strip()
+        if title and title not in ("新会话", "New Chat"):
+            return title[:60]
+        for m in reversed(session.get("messages") or []):
+            if isinstance(m, dict) and m.get("role") == "user":
+                txt = " ".join(str(m.get("content") or "").split())
+                if txt:
+                    return txt[:60]
+    except Exception:
+        pass
+    return ""
 
 
 def _register_job_limits(session, req):
@@ -2525,6 +3524,7 @@ _CHINA_PROVIDERS = [
         "models": [
             {"id": "deepseek-v4-pro", "name": "DeepSeek V4 Pro (旗舰 1.6T MoE)", "reasoning": True, "tool_call": True},
             {"id": "deepseek-v4-flash", "name": "DeepSeek V4 Flash (快速 284B MoE)", "reasoning": True, "tool_call": True},
+            {"id": "deepseek-flash", "name": "DeepSeek Flash (DCS Cloud)", "reasoning": True, "tool_call": True},
             {"id": "glm-5.2", "name": "GLM-5.2 (智谱旗舰)", "reasoning": True, "tool_call": True},
             {"id": "glm-5.1", "name": "GLM-5.1", "reasoning": True, "tool_call": True},
             {"id": "kimi-k3", "name": "Kimi K3 (月之暗面旗舰)", "reasoning": True, "tool_call": True},
@@ -2810,11 +3810,48 @@ _CHINA_PROVIDERS = [
         ],
     },
 ]
+
+# ── 编程套餐（Code Plan）目录合并（2026-10-07）──
+# Kimi For Coding / GLM 编程套餐 / 阿里云百炼 Coding / 阶跃 Step Plan：独立端点与
+# 独立 key 体系，作为「💳 编程套餐」分组并入目录；保存 key 后自动拉取套餐模型。
+try:
+    from memomics.coding_plans import CODING_PLAN_PROVIDERS as _CODING_PLAN_PROVIDERS
+    _have_pids = {_p["id"] for _p in _CHINA_PROVIDERS}
+    for _cp in _CODING_PLAN_PROVIDERS:
+        if _cp["id"] not in _have_pids:
+            _CHINA_PROVIDERS.append(_cp)
+except Exception as _cp_err:
+    print(f"[WARN] 编程套餐目录加载失败: {_cp_err}")
+
+
+def _effective_models(p, saved=None):
+    """实际生效的模型列表：保存 key 后拉取到的模型优先，否则回退目录预设。
+
+    provider_keys.json 里的 `models` 由 /api/providers/{pid}/models/refresh
+    或「保存 key 自动拉取」写入；有它时模型选择器/同步到底座的列表都用它。
+    """
+    saved = saved if isinstance(saved, dict) else {}
+    pulled = saved.get("models")
+    if isinstance(pulled, list) and pulled:
+        out = []
+        for m in pulled:
+            if isinstance(m, dict) and m.get("id"):
+                out.append({"id": m["id"], "name": m.get("name") or m["id"],
+                            "reasoning": bool(m.get("reasoning")),
+                            "tool_call": bool(m.get("tool_call", True))})
+            elif isinstance(m, str) and m.strip():
+                out.append({"id": m.strip(), "name": m.strip(),
+                            "reasoning": False, "tool_call": True})
+        if out:
+            return out
+    return p.get("models", []) if isinstance(p, dict) else []
+
+
 # 构建索引: provider_id -> provider dict
 _PROVIDERS_INDEX = {p["id"]: p for p in _CHINA_PROVIDERS}
 
 # === 多 Provider Key 存储 ===
-_PROVIDER_KEYS_FILE = os.path.join(HERMES_HOME_DIR, "provider_keys.json")
+_PROVIDER_KEYS_FILE = os.path.join(MEMOMICS_HOME_DIR, "provider_keys.json")
 
 _provider_keys = {}  # provider_id -> {api_key, base_url}
 
@@ -2880,7 +3917,7 @@ _load_provider_keys()
 # === 自定义 Provider 定义存储（2026-08-27：任意 OpenAI 兼容提供商 + 自定义模型）===
 # 与 provider_keys.json 分工：本文件存"定义"（名称/base_url/模型列表），key 仍走
 # provider_keys.json（现有同步/联动逻辑不变）。启动时 merge 进 _PROVIDERS_INDEX。
-_CUSTOM_PROVIDERS_FILE = os.path.join(HERMES_HOME_DIR, "custom_providers.json")
+_CUSTOM_PROVIDERS_FILE = os.path.join(MEMOMICS_HOME_DIR, "custom_providers.json")
 
 _custom_providers = {}  # pid -> {id, name, api, models[]}
 
@@ -2904,8 +3941,8 @@ def _save_custom_providers():
 
 _load_custom_providers()
 
-# === 图像生成配置（image_gen_config.json，独立于 Hermes 主配置） ===
-_IMAGE_GEN_CONFIG_FILE = os.path.join(HERMES_HOME_DIR, "image_gen_config.json")
+# === 图像生成配置（image_gen_config.json，独立于 MemOmics 主配置） ===
+_IMAGE_GEN_CONFIG_FILE = os.path.join(MEMOMICS_HOME_DIR, "image_gen_config.json")
 _IMAGE_GEN_DEFAULTS = {
     "provider": "openai-compatible",
     "openai_compatible": {
@@ -2955,14 +3992,14 @@ def _save_image_gen_config():
         print(f"[WARN] 保存图像生成配置失败: {e}")
 
 
-def _sync_imagegen_provider_to_hermes():
-    """把图像生成配置同步为 Hermes config.yaml 的 image_gen.provider。
+def _sync_imagegen_provider_to_memomics():
+    """把图像生成配置同步为 MemOmics config.yaml 的 image_gen.provider。
 
     修复 2026-08-12：image_generate 工具的 check_fn
     （check_image_generation_requirements）只认 config.yaml 的 image_gen.provider
     —— 不写这里，工具永远不会被收集（check_fn 返回 False），agent 感知不到
     图像生成能力，即使设置页已保存 key。保存配置时同步一份到 config.yaml，
-    与 _sync_custom_providers_to_hermes 同一范式。
+    与 _sync_custom_providers_to_memomics 同一范式。
     """
     try:
         from hermes_cli.config import read_raw_config, atomic_config_write, get_config_path
@@ -2974,7 +4011,7 @@ def _sync_imagegen_provider_to_hermes():
         section["provider"] = provider
         cfg["image_gen"] = section
         atomic_config_write(get_config_path(), cfg)
-        logger.info(f"[MemOmics] 已同步 image_gen.provider={provider} 到 Hermes config.yaml")
+        logger.info(f"[MemOmics] 已同步 image_gen.provider={provider} 到 MemOmics config.yaml")
     except Exception as exc:
         logger.warning(f"[WARN] 同步 image_gen.provider 到 config.yaml 失败: {exc}")
 
@@ -3034,6 +4071,25 @@ if _is_valid_api_key(_current_model.get("api_key")) and not _provider_keys:
 # 为 debate_analysis 等需要独立 LLM 调用的模块注入环境变量
 _sync_debate_env()
 
+
+def _set_debate_session_context(session, results_dir: str = None):
+    """设置辩论/工具链路的会话上下文（2026-09-13）。
+
+    除 sid/results_dir 外，把该会话「当前使用的模型配置」一并注入。
+    debate_analysis 的独立 LLM 调用（含裁判）据此走「当前使用模型的提供商」，
+    再在「可用提供商」之间兜底 —— 此前辩论只认 server 启动时注入一次的 DEEPSEEK_*
+    env，界面换模型后仍走旧通道（judge 还被 config 写死到 opencode-go）。
+    """
+    try:
+        from memomics.bio_tools.debate_analysis import set_session_context
+        session = session or {}
+        mc = session.get("model_config") or _current_model
+        if not results_dir:
+            results_dir = session.get("results_dir", "")
+        set_session_context(sid=session.get("id", ""), results_dir=results_dir, model_config=mc)
+    except Exception:
+        pass
+
 # 预设模型 (兼容旧 API, 从 _CHINA_PROVIDERS 生成)
 _preset_models = []
 for p in _CHINA_PROVIDERS:
@@ -3044,8 +4100,11 @@ for p in _CHINA_PROVIDERS:
 SKILLS_DIR = os.path.join(MEMOMICS_DIR, "skills")
 KB_DIR = os.path.join(MEMOMICS_DIR, "memomics", "knowledge_base")
 _lit_cache = {}  # P5: literature dedup cache { query_hash: (timestamp, results_json) }
-WORK_DIR = os.path.join(MEMOMICS_DIR, "work")
-RESULTS_DIR = os.path.join(MEMOMICS_DIR, "results")
+# P6-3 路径可移植：work/results 默认就在安装目录下（解压到哪就是哪，不绑定任何开发机路径）；
+# 需要把数据放到大盘/独立卷时，设置环境变量 MEMOMICS_DATA_DIR 即可（代码目录仍固定在安装位置）。
+DATA_DIR = os.path.abspath(os.environ.get("MEMOMICS_DATA_DIR") or MEMOMICS_DIR)
+WORK_DIR = os.path.join(DATA_DIR, "work")
+RESULTS_DIR = os.path.join(DATA_DIR, "results")
 # P1-4：注入可写路径白名单（沙箱 degraded 模式拦截用；可被外部 env 覆盖）
 os.environ.setdefault("MEMOMICS_ALLOWED_WRITE_ROOTS", ";".join([RESULTS_DIR, _uploads_dir]))
 
@@ -3057,13 +4116,13 @@ except ImportError:
     create_bioinformatics_router = None
 
 _bio_reference_registry = ReferenceRegistry(
-    os.path.join(HERMES_HOME_DIR, "bioinformatics", "references.json"),
+    os.path.join(MEMOMICS_HOME_DIR, "bioinformatics", "references.json"),
     allowed_roots=[MEMOMICS_DIR, RESULTS_DIR, _uploads_dir],
 )
 if create_bioinformatics_router is not None:
     app.include_router(create_bioinformatics_router(_bio_reference_registry, [MEMOMICS_DIR, RESULTS_DIR, _uploads_dir]))
-SOUL_PATH = os.path.join(HERMES_HOME_DIR, "SOUL.md")
-SKILLS_INDEX_PATH = os.path.join(HERMES_HOME_DIR, "SKILLS_INDEX.md")
+SOUL_PATH = os.path.join(MEMOMICS_HOME_DIR, "SOUL.md")
+SKILLS_INDEX_PATH = os.path.join(MEMOMICS_HOME_DIR, "SKILLS_INDEX.md")
 _SKILLS_INDEX_CACHE = None  # 模块级缓存：服务器启动后只读一次，所有会话共享
 _SKILLS_INDEX_MTIME = None  # 缓存对应的文件 mtime，用于热更新检测
 
@@ -3080,7 +4139,7 @@ def _read_skills_index():
     """读取技能目录 (SKILLS_INDEX.md)，作为 ephemeral_system_prompt 注入。
     预加载缓存：首次调用时读取，后续返回缓存，避免每次会话都读 27KB 文件。
     mtime 感知：SKILLS_INDEX.md 被外部修改（如 auto_register 重建）后自动重读，
-    无需重启 server。SOUL.md 由 Hermes 框架从 HERMES_HOME 自动加载，此处不重复加载。"""
+    无需重启 server。SOUL.md 由 MemOmics 框架从 MEMOMICS_HOME 自动加载，此处不重复加载。"""
     global _SKILLS_INDEX_CACHE, _SKILLS_INDEX_MTIME
     try:
         cur = os.path.getmtime(SKILLS_INDEX_PATH) if os.path.isfile(SKILLS_INDEX_PATH) else -1
@@ -3099,20 +4158,83 @@ def _read_skills_index():
 
 
 # RED 必触发 skill 触发词缓存（解析自 SKILLS_INDEX.md）
+# 规则契约见 contracts/skill_triggers.json；规则值由
+# webui/tests/test_skill_trigger_contract.py 逐条钉住（改语义必须同时改契约）。
 _RED_TRIGGER_CACHE = None  # [(skill_name, [triggers...]), ...]
+_RED_TRIGGER_CACHE_MTIME = None  # 缓存对应的 SKILLS_INDEX mtime：索引重建后必须重解析
+# 英文多词触发词的停用词（= contracts/skill_triggers.json → matching.stopwords）
+_EN_STOPWORDS = frozenset({
+    "this", "that", "the", "a", "an", "for", "to", "with",
+    "is", "are", "of", "and", "or", "in", "on", "my", "me",
+    "i", "you", "can", "do", "does", "be", "it", "its", "as",
+})
+# 本地文献库豁免（批K 2026-08-16）= contracts/skill_triggers.json → exemptions.local_literature
+_LOCAL_LIT_RED_EXEMPT = frozenset({
+    "literature-review", "paper-summary", "paper-download",
+    "paper-translate", "academic-paper-writing",
+})
+_LOCAL_LIT_EXEMPT_TRIGGERS = ("文献库", "文献库里", "/papers", ".pdf")
+# 短 ASCII 缩写（<=3 位）必须不与其它英文字母相邻
+# （= contracts/skill_triggers.json -> matching.short_ascii_boundary）
+# 旧实现纯子串匹配让 science->SCI、algorithm->go、mRNA->MR、degree->DEG 全部误触发；
+# 汉字/数字/空白相邻仍算命中（"做QC"、"SCI图"）。
+_SHORT_ASCII_KW_MAX = 3
+_SHORT_ASCII_RE_CACHE = {}
 
 
-def _match_red_skill_triggers(user_text: str) -> list:
-    """解析 SKILLS_INDEX.md 中 RED 必触发行的触发词，与用户消息做子串匹配。
-    返回命中的 skill 名列表（按索引顺序）。空消息/无命中 → []。
-    缓存随 SKILLS_INDEX mtime 失效（由 _read_skills_index 的重读隐式保证：
-    这里每次直接重新解析，索引 50KB 解析开销 < 1ms，可忽略）。"""
-    global _RED_TRIGGER_CACHE
+def _short_ascii_kw_re(kw_l: str):
+    """短缩写触发词的正则（前后都不能紧贴英文字母），按词缓存。"""
+    r = _SHORT_ASCII_RE_CACHE.get(kw_l)
+    if r is None:
+        r = _SHORT_ASCII_RE_CACHE[kw_l] = re.compile(
+            r"(?<![a-z])%s(?![a-z])" % re.escape(kw_l))
+    return r
+
+
+def _short_ascii_kw_match(kw_l: str, t: str) -> bool:
+    return bool(_short_ascii_kw_re(kw_l).search(t))
+
+
+# CJK/ASCII 边界空白归一：中文用户写英文术语时常随手加空格（"做 QC" / "CNS 级别"），
+# 而触发词写的是紧凑形式（"CNS级别"）；不归一会造成「同一句话带空格不触发」的随机漏召回。
+_CJK_ASCII_GAP_RE = re.compile(
+    r"(?<=[0-9A-Za-z])[ \t]+(?=[^\x00-\x7f])|(?<=[^\x00-\x7f])[ \t]+(?=[0-9A-Za-z])")
+
+
+def _tighten_cjk_ascii(s: str) -> str:
+    """去掉 ASCII 与中日韩字符之间的空白：'CNS 级别'→'CNS级别'，'做 QC'→'做QC'。"""
+    return _CJK_ASCII_GAP_RE.sub("", s)
+
+
+def _match_red_skill_hits(user_text: str) -> list:
+    """解析 SKILLS_INDEX.md 中 RED 必触发行的触发词，与用户消息做匹配。
+    返回命中列表（按索引顺序）：[{"name","keyword","rule"}]；空消息/无命中 → []。
+
+    匹配语义（契约 contracts/skill_triggers.json → matching）：
+      · 大小写无关；中文等无空格关键词走子串匹配（"质控" 命中 "先做质控和双细胞去除"）；
+      · 含空格的英文关键词走「实词全中」——去掉停用词后每个词都要出现在
+        用户消息按空格切出的词集合里（"deg analysis" 需要 deg 与 analysis 同时出现）。
+        2026-09-23 P0-2 由「任一实词命中」收紧：旧规则下用户只说 analysis 就会命中
+        deg-analysis / survival-analysis / power analysis 等 6 个技能（过度触发）。
+      · 不用词边界（\b）判断：中文里英文词常与汉字紧贴（"做QC"、"跑DESeq2"），
+        词边界会把这类真实说法判死。
+      · 但纯 ASCII 且 <=3 位的缩写（SCI/GO/QC/MR/KM/DEG/PPT/EDA）额外要求前后不紧贴英文字母：
+        "science" 不再命中 SCI、"algorithm" 不再命中 GO（P0-2b 极端测试实抓）。
+    缓存绑定 SKILLS_INDEX mtime（P0-2 修复：旧实现只在 None 时构建一次，
+    索引被 auto_register/技能编辑重建后仍用旧触发词，新技能永远匹配不到）。
+
+    P0-3（2026-09-23）：在原有匹配之上只多记一件事——「为什么命中」：
+    keyword = 索引里真实存在的那条触发词，rule = 命中所走的规则名
+    （substring / cjk-gap / short-ascii / multiword）。_match_red_skill_triggers 是本函数的
+    名字投影，路由结果逐句不变（契约测试 + 路由矩阵逐条钉住）。
+    """
+    global _RED_TRIGGER_CACHE, _RED_TRIGGER_CACHE_MTIME
     if not user_text:
         return []
     idx = _read_skills_index()
-    if _RED_TRIGGER_CACHE is None:
+    if _RED_TRIGGER_CACHE is None or _RED_TRIGGER_CACHE_MTIME != _SKILLS_INDEX_MTIME:
         _RED_TRIGGER_CACHE = []
+        _RED_TRIGGER_CACHE_MTIME = _SKILLS_INDEX_MTIME
         for line in idx.splitlines():
             if not line.startswith("|"):
                 continue
@@ -3131,35 +4253,904 @@ def _match_red_skill_triggers(user_text: str) -> list:
                 _RED_TRIGGER_CACHE.append((name, triggers))
     t = user_text.lower()
     t_words = set(t.split())  # 英文词级匹配用
+    t_tight = _tighten_cjk_ascii(t)  # 边界空白归一后的文本（"CNS 级别" -> "cns级别"）
     hits = []
     for name, triggers in _RED_TRIGGER_CACHE:
-        matched = False
         for kw in triggers:
             kw_l = kw.lower()
-            if len(kw_l) >= 2:
-                if kw_l in t:
-                    matched = True
-                    break
-                # 英文触发词：词级交集（"review paper" 命中 "Can you review this manuscript?" 的 review）
-                if " " in kw_l and t_words:
-                    _STOP = {"this", "that", "the", "a", "an", "for", "to", "with",
-                             "is", "are", "of", "and", "or", "in", "on", "my", "me",
-                             "i", "you", "can", "do", "does", "be", "it", "its", "as"}
-                    kw_words = set(w for w in kw_l.split() if w not in _STOP)
-                    if kw_words and any(w in t_words for w in kw_words):
-                        matched = True
-                        break
-        if matched:
-            hits.append(name)
+            if len(kw_l) < 2:
+                continue
+            rule = ""
+            # 短 ASCII 缩写走「字母边界」匹配，避免 science/algorithm/mRNA/degree 这类词片段误触发（P0-2b）
+            if kw_l.isascii() and len(kw_l) <= _SHORT_ASCII_KW_MAX and kw_l.isalnum():
+                if _short_ascii_kw_match(kw_l, t):
+                    rule = "short-ascii"
+            elif kw_l in t:
+                rule = "substring"
+            elif _tighten_cjk_ascii(kw_l) in t_tight:
+                # 归一后再判一次："CNS级别" ← "CNS 级别"、"AI腔" ← "AI 腔"（见 _tighten_cjk_ascii）
+                rule = "cjk-gap"
+            elif " " in kw_l and t_words:
+                # 英文多词触发词：实词全中（"review paper" 需要 review 与 paper 同时出现）
+                kw_words = set(w for w in kw_l.split() if w not in _EN_STOPWORDS)
+                if kw_words and kw_words <= t_words:
+                    rule = "multiword"
+            if rule:
+                hits.append({"name": name, "keyword": kw, "rule": rule})
+                break
     # 批K(2026-08-16)：本地文献库操作豁免全局文献类 RED skills——
     # "总结文献库里…" 不应被 literature-review(触发词'总结') / paper-summary(触发词'paper')
     # 抢占 skill_view，本地文献库有专用工具（summarize_paper / kb_extract_from_paper / literature_import）。
-    _LOCAL_LIT_RED_EXEMPT = {"literature-review", "paper-summary", "paper-download",
-                             "paper-translate", "academic-paper-writing"}
-    if hits and ("文献库" in user_text or "文献库里" in user_text or "/papers" in user_text
-                 or ".pdf" in user_text.lower()):
-        hits = [h for h in hits if h not in _LOCAL_LIT_RED_EXEMPT]
+    _lower = user_text.lower()
+    if hits and any(t in user_text or t in _lower for t in _LOCAL_LIT_EXEMPT_TRIGGERS):
+        hits = [h for h in hits if h["name"] not in _LOCAL_LIT_RED_EXEMPT]
     return hits
+
+
+def _match_red_skill_triggers(user_text: str) -> list:
+    """命中 RED 技能名列表（按索引顺序）。
+
+    P0-3 起是 _match_red_skill_hits 的名字投影：匹配语义、命中顺序、本地文献豁免
+    完全一致，只是不再丢弃「命中理由」（理由由 _match_red_skill_hits 返回、由
+    _red_hit_emit 推给前端）。保持本函数签名与语义不变——契约测试与路由矩阵依赖它。
+    """
+    return [h["name"] for h in _match_red_skill_hits(user_text)]
+
+
+# === P8(置顶 skill): 会话级优先技能 + skill 元数据 + 文件树 ===
+# 需求：用户在前端把某个 skill「置顶」到本会话 → 优先而非独占：
+#   1) 每回合注入「置顶优先」路由指令（优先级高于自动路由）；
+#   2) 用户消息命中该 skill 触发词时，额外预载 SKILL.md 全文（硬注入兜底，对齐 RED 的不可跳过强度）；
+#   3) 与自动路由命中的其他 skill（含 RED）冲突时，以置顶 skill 为准。
+
+_SKILL_META_CACHE = {}       # name -> (sig, meta)
+_PINNED_SKILLS_CACHE = {}    # sid -> [names]
+_PINNED_MAX = 5              # 单会话最多置顶数
+_PINNED_FULLTEXT_BUDGET = 40000   # 命中触发词时预载 SKILL.md 的字符上限
+
+
+def _skill_roots():
+    """skill 搜索根（与 /api/skills 扫描目录保持一致）"""
+    from pathlib import Path as _P8
+    cands = [
+        _P8(SKILLS_DIR),
+        _P8(MEMOMICS_HOME_DIR) / "skills" / "bioinformatics",
+        _P8(MEMOMICS_HOME_DIR) / "skills" / "plotting",
+    ]
+    out = []
+    for c in cands:
+        try:
+            if c.is_dir() and c not in out:
+                out.append(c)
+        except Exception:
+            continue
+    return out
+
+
+def _find_skill_dir(name: str):
+    """按名字定位 skill 目录（含路径穿越防护；找不到返回 None）"""
+    name = (name or "").strip()
+    if (not name) or (".." in name) or ("/" in name) or ("\\" in name) or name.startswith("."):
+        return None
+    for root in _skill_roots():
+        d = root / name
+        try:
+            if d.is_dir():
+                return d
+        except Exception:
+            continue
+    return None
+
+
+def _skill_frontmatter(text: str) -> dict:
+    """解析 SKILL.md 的 YAML frontmatter（部分 skill 没有 skill.json，用原生元数据兜底）"""
+    if not text or not text.startswith("---"):
+        return {}
+    end = text.find("\n---", 3)
+    if end < 0:
+        return {}
+    out = {}
+    for line in text[3:end].splitlines():
+        if ":" not in line or line.strip().startswith("#"):
+            continue
+        k, v = line.split(":", 1)
+        k = k.strip().lower()
+        v = v.strip().strip('"').strip("'")
+        if not k or not v:
+            continue
+        if k in ("name", "description", "when_to_use", "category", "language", "domain", "trigger_level"):
+            out[k] = v
+        elif k in ("tags", "aliases", "trigger_keywords"):
+            v2 = v.strip()
+            if v2.startswith("[") and v2.endswith("]"):
+                v2 = v2[1:-1]
+            items = [x.strip().strip('"').strip("'") for x in v2.split(",")]
+            out[k] = [x for x in items if x]
+    return out
+
+
+def _skill_meta(name: str) -> dict:
+    """skill 元数据：skill.json 优先、SKILL.md frontmatter 兜底；按 mtime 缓存，找不到返回 {}"""
+    d = _find_skill_dir(name)
+    if d is None:
+        return {}
+    sj = d / "skill.json"
+    md = d / "SKILL.md"
+    try:
+        sig = tuple(int(p.stat().st_mtime) for p in (sj, md) if p.exists())
+    except Exception:
+        sig = ()
+    hit = _SKILL_META_CACHE.get(name)
+    if hit and hit[0] == sig:
+        return hit[1]
+    data = {}
+    if sj.exists():
+        try:
+            with open(sj, encoding="utf-8", errors="replace") as f:
+                data = json.load(f) or {}
+            if not isinstance(data, dict):
+                data = {}
+        except Exception:
+            data = {}
+    md_text = ""
+    if md.exists():
+        try:
+            with open(md, encoding="utf-8", errors="replace") as f:
+                md_text = f.read()
+        except Exception:
+            md_text = ""
+    fm = _skill_frontmatter(md_text)
+
+    def _pick(*keys):
+        for src in (data, fm):
+            for k in keys:
+                v = src.get(k)
+                if isinstance(v, str) and v.strip():
+                    return v.strip()
+        return ""
+
+    def _list(*keys):
+        out = []
+        for src in (data, fm):
+            for k in keys:
+                v = src.get(k)
+                if isinstance(v, str):
+                    v = [x.strip() for x in v.split(",")]
+                if isinstance(v, (list, tuple)):
+                    for x in v:
+                        x = str(x).strip()
+                        if x and x not in out:
+                            out.append(x)
+        return out
+
+    meta = {
+        "name": name,
+        "display": _pick("name") or name,
+        "description": _pick("description", "detailed_description")[:400],
+        "when_to_use": _pick("when_to_use", "trigger_scenario")[:600],
+        "category": _pick("category", "domain"),
+        "language": _pick("language"),
+        "trigger_level": _pick("trigger_level"),
+        "trigger_keywords": _list("trigger_keywords"),
+        "aliases": _list("aliases"),
+        "tags": _list("tags"),
+        "dir": str(d).replace("\\", "/"),
+        "has_skill_md": md.exists(),
+        "has_skill_json": sj.exists(),
+        "skill_md_size": len(md_text),
+    }
+    _SKILL_META_CACHE[name] = (sig, meta)
+    return meta
+
+
+# P0-2d(2026-09-23)：置顶 skill 触发判定的词边界。
+# 旧实现是纯子串匹配（`kl in low`），纯英文短词会从别的单词肚子里命中：
+#   cell ⊂ excellent、core ⊂ score、GO ⊂ category/logout、find ⊂ DoubletFinder、
+#   flow ⊂ workflow、set ⊂ dataset、code ⊂ encode、sites ⊂ websites、
+#   genomic ⊂ 10xgenomics、processing ⊂ preprocessing、grn ⊂ sgrna。
+# 规则分两档（档 1 与 RED 路由共用同一套 short_ascii_boundary，档 2 只用于置顶判定）：
+#   档 1 纯 ASCII 且 <=3 位（GO/SCI/QC/set/map）：左右都不许紧贴英文字母（复用 _short_ascii_kw_match）；
+#   档 2 更长的 ASCII（find/flow/code/processing）：左边不许贴字母数字（词首边界），
+#        右边允许常见词形变化（cells/primers/genes/combined）或非字母，其余一律不算命中。
+# 含 CJK/标点的关键词仍走子串：中文没有词边界（"做primer设计"、"网络调研" 必须照命中）。
+_KW_INFLECT_SUFFIXES = ("ing", "es", "ed", "s", "d")
+_KW_LEFT_BLOCK_RE = re.compile(r"[a-z0-9]")
+
+
+def _is_en_letter(ch: str) -> bool:
+    """只认英文字母：Python 的 str.isalpha() 对汉字也返回 True（"设计".isalpha()），
+    用它会把 'primer' 在 '做primer设计' 里判成「尾巴接字母」而误杀（P0-2d 实测踩到）。"""
+    return bool(ch) and ch.isascii() and ch.isalpha()
+
+
+def _kw_inflected(tail: str) -> bool:
+    """命中尾巴是不是词形变化（cells / primers / genes / combined）。"""
+    for suf in _KW_INFLECT_SUFFIXES:
+        if tail.startswith(suf):
+            nxt = tail[len(suf):len(suf) + 1]
+            if not _is_en_letter(nxt):
+                return True
+    return False
+
+
+def _kw_boundary_hit(text_low: str, kw_l: str) -> bool:
+    """ASCII 触发词的边界命中判定（P0-2d）。非 ASCII（CJK/混合）不用本函数。"""
+    if kw_l.isascii() and len(kw_l) <= _SHORT_ASCII_KW_MAX and kw_l.isalnum():
+        return _short_ascii_kw_match(kw_l, text_low)
+    n = len(kw_l)
+    start = 0
+    while True:
+        i = text_low.find(kw_l, start)
+        if i < 0:
+            return False
+        if i == 0 or not _KW_LEFT_BLOCK_RE.match(text_low[i - 1]):
+            tail = text_low[i + n:i + n + 4]
+            if not _is_en_letter(tail[:1]) or _kw_inflected(tail):
+                return True
+        start = i + 1
+
+
+def _kw_any_hit(text_low: str, kw_l: str) -> bool:
+    """一个候选词（含 CJK/多词短语）在文本里算不算命中。"""
+    return _kw_boundary_hit(text_low, kw_l) if kw_l.isascii() else (kw_l in text_low)
+
+
+def _skill_trigger_hit(meta: dict, user_text: str):
+    """置顶 skill 的触发判定：用该 skill 自己的 trigger_keywords/aliases/名字（比 RED 的领域级关键词更细）
+
+    P0-2d(2026-09-23)：由「纯子串」收紧为「词边界」——
+      · ASCII 候选走 _kw_boundary_hit（档 1 短缩写左右都不贴字母；档 2 词首边界 + 允许词形变化尾巴）；
+      · 多词短语的「实词全中」兜底同样逐词走边界，修掉 "cell cycle" 只因句子散落着 cell 与 cycle 就命中；
+      · 含 CJK/标点的候选仍走子串（中文无词边界，"做primer设计"/"网络调研" 照旧命中）。
+    量化（439 篇 SKILL.md、424 万字符语料）：1226 个 ASCII 候选里 216 个存在「词中命中」，
+    全部 89933 次出现里有 13839 次（15.4%）落在别的单词内部；改后 24 处误命中归零、
+    真阳性零丢失（12 句真实说法 + 480000 组「句子×技能」对，新命中恒为旧命中的子集）。"""
+    if not user_text or not meta:
+        return []
+    low = user_text.lower()
+    hits = []
+    seen = set()
+    cands = []
+    for k in list(meta.get("trigger_keywords") or []) + list(meta.get("aliases") or []):
+        cands.append(k)
+    nm = meta.get("name") or ""
+    dp = meta.get("display") or ""
+    if len(nm) >= 3:
+        cands.append(nm)
+    if len(dp) >= 3 and dp != nm:
+        cands.append(dp)
+    for k in cands:
+        kl = str(k or "").lower().strip()
+        if not kl or kl in seen:
+            continue
+        seen.add(kl)
+        if len(kl) >= 2 and _kw_any_hit(low, kl):
+            hits.append(k)
+        elif " " in kl:
+            # 多词短语的兜底：允许词序散开，但每个实词都要自己踩在词首边界上（P0-2d）
+            parts = [p for p in kl.split() if len(p) >= 3]
+            if parts and all(_kw_any_hit(low, p) for p in parts):
+                hits.append(k)
+    return hits[:8]
+
+
+def _read_skill_md_text(name: str, limit: int = 0) -> str:
+    """读 SKILL.md 全文（limit>0 时截断并标注）"""
+    d = _find_skill_dir(name)
+    if d is None:
+        return ""
+    md = d / "SKILL.md"
+    if not md.exists():
+        return ""
+    try:
+        with open(md, encoding="utf-8", errors="replace") as f:
+            txt = f.read()
+    except Exception:
+        return ""
+    if limit and len(txt) > limit:
+        return txt[:limit] + "\n\n[... SKILL.md 过长已截断，仅保留前 " + str(limit) + " 字符；完整内容请调用 skill_view(name='" + name + "') ...]"
+    return txt
+
+
+def _build_pinned_skill_block(names, user_text: str = "", lang: str = "zh") -> str:
+    """置顶 skill 注入块：优先而非独占。普通情况给路由优先级 + 冲突裁决；
+    命中触发词时额外预载 SKILL.md 全文（硬注入兜底）。"""
+    metas = []
+    missing = []
+    for n in (names or []):
+        m = _skill_meta(n)
+        if m:
+            metas.append(m)
+        elif str(n or "").strip():
+            missing.append(str(n).strip())
+    if not metas and not missing:
+        return ""
+    zh = (lang != "en")
+    hits_all = []
+    for m in metas:
+        h = _skill_trigger_hit(m, user_text)
+        if h:
+            hits_all.append((m, h))
+    L = []
+    if zh:
+        L.append("【系统指令：用户置顶技能 — 优先级高于自动路由，不可跳过】")
+        L.append("用户已在本会话置顶以下技能（优先使用，不是独占：与置顶技能无关的任务照常走自动路由）：")
+    else:
+        L.append("[SYSTEM: user-pinned skills — HIGHER priority than automatic routing, do not skip]")
+        L.append("The user pinned the following skills for this session (preferred, NOT exclusive: unrelated tasks still use normal routing):")
+    for m in metas:
+        head = "- " + m["name"]
+        dp = m.get("display") or ""
+        if dp and dp != m["name"]:
+            head += " (" + dp + ")"
+        L.append(head)
+        if m.get("description"):
+            L.append("    " + ("description: " if not zh else "说明：") + m["description"][:200])
+        if m.get("when_to_use"):
+            L.append("    " + ("use when: " if not zh else "适用场景：") + m["when_to_use"][:300])
+        kw = (m.get("trigger_keywords") or [])[:14]
+        if kw:
+            L.append("    " + ("triggers: " if not zh else "触发词：") + ", ".join(kw))
+    for n in missing:
+        if zh:
+            L.append("- " + n + "（⚠ 未找到该技能：本机不存在或已被删除。不要假装使用它，也不要凭名字编造它的流程；请如实告诉用户置顶技能缺失。）")
+        else:
+            L.append("- " + n + " (⚠ skill not found on this machine. Do NOT pretend to use it or invent its workflow; tell the user the pinned skill is missing.)")
+    if zh:
+        L.append("")
+        L.append("⚙ 路由规则（必须遵守）：")
+        L.append("1. 只要本轮任务落在置顶技能的适用范围内（用户点名、或任务与该适用场景相符），必须优先调用 skill_view(name='<置顶技能名>') 加载其完整指令，并按它的流程/规范/参数执行。")
+        L.append("2. 置顶技能与自动路由命中的其他 skill（含 RED 必触发技能、领域技能）规则冲突时，一律以置顶技能为准；其他 skill 只能补充信息，不得覆盖置顶技能规定的输出规范、流程与参数。")
+        L.append("3. 置顶技能不是禁用其他技能：与置顶技能无关的任务，照常按自动路由使用其他 skill。")
+        L.append("4. 若置顶技能缺少完成任务所需的关键信息（如输出语言/参数），先向用户确认，不要擅自替换成别的 skill。")
+    else:
+        L.append("")
+        L.append("Routing rules (mandatory):")
+        L.append("1. If this turn falls into a pinned skill's scope (user named it, or the task matches its use-when), you MUST call skill_view(name='<pinned skill>') first and follow its workflow/rules/parameters.")
+        L.append("2. When a pinned skill conflicts with any other auto-routed skill (including RED mandatory skills), the pinned skill wins; others may only add information, never override its output spec, workflow or parameters.")
+        L.append("3. Pinning is NOT disabling: unrelated tasks still follow normal routing.")
+        L.append("4. If the pinned skill needs missing key inputs (output language/params), ask the user — do not silently substitute another skill.")
+    if hits_all:
+        m0, h0 = hits_all[0]
+        full = _read_skill_md_text(m0["name"], _PINNED_FULLTEXT_BUDGET)
+        if zh:
+            L.append("")
+            L.append("【置顶技能已命中触发词 → 立即执行，禁止跳过】")
+            L.append("用户消息命中置顶技能「" + m0["name"] + "」的触发词：" + ", ".join(str(x) for x in h0))
+            L.append("1. 第一件事：调用 skill_view(name='" + m0["name"] + "') 加载完整指令（禁止跳过、禁止凭固有知识直接处理）。")
+        else:
+            L.append("")
+            L.append("[Pinned skill trigger matched — execute now, do not skip]")
+            L.append("User message matched pinned skill '" + m0["name"] + "' on: " + ", ".join(str(x) for x in h0))
+            L.append("1. First action: call skill_view(name='" + m0["name"] + "') to load its full instructions (never skip).")
+        if full:
+            if zh:
+                L.append("2. 以下是该技能 SKILL.md 全文（已预载为兜底；仍须调用 skill_view 以获得脚本/模板等关联文件）：")
+            else:
+                L.append("2. Full SKILL.md is preloaded below as a fallback (still call skill_view to get linked scripts/templates):")
+            L.append("<<<PINNED_SKILL_MD_BEGIN>>>")
+            L.append(full)
+            L.append("<<<PINNED_SKILL_MD_END>>>")
+    if missing and zh:
+        L.append("⚠ 置顶技能缺失时：照常按自动路由处理本轮任务，不要因为缺技能就停下不动。")
+    elif missing:
+        L.append("⚠ When a pinned skill is missing: proceed with normal routing for this turn; do not stall.")
+    L.append("")
+    return "\n".join(L) + "\n"
+
+
+def _pinned_skills_get(sid: str) -> list:
+    """读会话置顶 skill（内存 → state.db kv → []）"""
+    if not sid:
+        return []
+    s = _sessions.get(sid)
+    if isinstance(s, dict) and isinstance(s.get("pinned_skills"), list):
+        return list(s["pinned_skills"])
+    if sid in _PINNED_SKILLS_CACHE:
+        return list(_PINNED_SKILLS_CACHE[sid])
+    names = []
+    try:
+        db = _get_session_db()
+        if db is not None and hasattr(db, "_conn"):
+            row = db._conn.execute("SELECT value FROM kv WHERE key=?", ("pinned_skills:" + sid,)).fetchone()
+            if row and row[0]:
+                v = json.loads(row[0])
+                if isinstance(v, list):
+                    names = [str(x) for x in v if str(x).strip()]
+    except Exception as e:
+        logger.debug("[pinned] 读取失败: %s", e)
+    _PINNED_SKILLS_CACHE[sid] = list(names)
+    if isinstance(s, dict):
+        s["pinned_skills"] = list(names)
+    return names
+
+
+def _pinned_skills_set(sid: str, names) -> list:
+    """写会话置顶 skill（内存 + state.db kv），返回清洗后的列表"""
+    clean = []
+    for n in (names or []):
+        n = str(n or "").strip()
+        if n and n not in clean:
+            clean.append(n)
+    clean = clean[:_PINNED_MAX]
+    _PINNED_SKILLS_CACHE[sid] = list(clean)
+    s = _sessions.get(sid)
+    if isinstance(s, dict):
+        s["pinned_skills"] = list(clean)
+    try:
+        db = _get_session_db()
+        if db is not None and hasattr(db, "_conn"):
+            db._conn.execute(
+                "INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)",
+                ("pinned_skills:" + sid, json.dumps(clean, ensure_ascii=False)),
+            )
+            db._conn.commit()
+    except Exception as e:
+        logger.warning("[pinned] 落盘失败: %s", e)
+    return clean
+
+
+def _skill_usage_get(sid: str) -> dict:
+    """本会话实际加载过哪些 skill（内存优先；重启/切会话后从 tool_calls_log 重建）"""
+    if not sid:
+        return {}
+    s = _sessions.get(sid)
+    if isinstance(s, dict) and isinstance(s.get("_skills_used"), dict) and s["_skills_used"]:
+        return dict(s["_skills_used"])
+    used = {}
+    try:
+        import sqlite3 as _p8_sqlite
+        conn = _p8_sqlite.connect(os.path.join(MEMOMICS_HOME_DIR, "state.db"), timeout=10)
+        conn.execute("PRAGMA busy_timeout=5000")
+        rows = conn.execute(
+            "SELECT args_json FROM tool_calls_log WHERE session_id=? AND tool_name='skill_view' ORDER BY id DESC LIMIT 200",
+            (sid,),
+        ).fetchall()
+        conn.close()
+        for r in rows:
+            try:
+                nm = (json.loads((r[0] or "{}")) or {}).get("name")
+            except Exception:
+                nm = None
+            if nm:
+                nm = str(nm)
+                used[nm] = used.get(nm, 0) + 1
+    except Exception as e:
+        logger.debug("[skill_usage] 回读失败: %s", e)
+    if isinstance(s, dict):
+        s["_skills_used"] = dict(used)
+    return used
+
+
+def _skill_usage_note(sid: str, name: str, session=None) -> None:
+    """记录一次 skill 加载 + 推 skill_used 事件（前端据此点亮「已使用」徽标）"""
+    if not sid or not name:
+        return
+    s = session if isinstance(session, dict) else _sessions.get(sid)
+    cnt = 1
+    if isinstance(s, dict):
+        used = s.get("_skills_used")
+        if not isinstance(used, dict):
+            used = {}
+        used[str(name)] = int(used.get(str(name), 0)) + 1
+        s["_skills_used"] = used
+        cnt = used[str(name)]
+    try:
+        _session_emit(s if isinstance(s, dict) else {"id": sid},
+                      {"type": "skill_used", "skill": str(name), "session_id": sid, "used": cnt})
+    except Exception:
+        pass
+
+
+def _skill_files_tree(name: str, max_files: int = 600) -> dict:
+    """skill 目录下的完整文件树（绝对路径直接交给查看器预览；跳过隐藏文件）"""
+    d = _find_skill_dir(name)
+    if d is None:
+        return {}
+    files = []
+
+    def walk(cur, rel=""):
+        try:
+            entries = sorted(cur.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))
+        except Exception:
+            return
+        for p in entries:
+            if len(files) >= max_files:
+                return
+            if p.name.startswith("."):
+                continue
+            r = (rel + "/" + p.name) if rel else p.name
+            try:
+                if p.is_dir():
+                    files.append({"name": p.name, "rel": r, "path": str(p).replace("\\", "/"),
+                                  "is_dir": True, "size": 0, "ext": ""})
+                    walk(p, r)
+                else:
+                    st = p.stat()
+                    files.append({"name": p.name, "rel": r, "path": str(p).replace("\\", "/"),
+                                  "is_dir": False, "size": st.st_size,
+                                  "ext": p.suffix.lower().lstrip("."), "mtime": int(st.st_mtime)})
+            except Exception:
+                continue
+
+    walk(d)
+    files.sort(key=lambda x: (x["rel"] not in ("SKILL.md", "skill.json"), x["rel"]))
+    return {"name": name, "dir": str(d).replace("\\", "/"), "files": files[:max_files],
+            "truncated": len(files) > max_files, "total": len(files)}
+
+
+def _pinned_item(name: str) -> dict:
+    """前端 chip 需要的置顶条目（使用次数由端点补）"""
+    m = _skill_meta(name)
+    if not m:
+        return {"name": name, "display": name, "missing": True, "description": "", "when_to_use": "",
+                "trigger_keywords": [], "trigger_level": "", "category": "", "dir": ""}
+    m = dict(m)
+    m["missing"] = False
+    return m
+
+
+def _pinned_expect_emit(session, user_text: str) -> list:
+    """P8: 本回合命中触发词的置顶 skill → 前端显示「本轮应加载」，未加载则在回合结束时告警。"""
+    try:
+        pinned = _pinned_skills_get(session.get("id") or "")
+    except Exception:
+        pinned = []
+    exp = []
+    for n in pinned:
+        m = _skill_meta(n)
+        if not m:
+            continue
+        hits = _skill_trigger_hit(m, user_text)
+        if hits:
+            exp.append({"name": n, "hits": hits[:6]})
+    try:
+        session["_pinned_expected"] = [x["name"] for x in exp]
+    except Exception:
+        pass
+    if exp:
+        try:
+            _session_emit(session, {"type": "skill_expect", "skills": exp,
+                                    "ts": datetime.now().strftime("%H:%M:%S"),
+                                    "session_id": session.get("id")})
+        except Exception:
+            pass
+    return exp
+
+
+# === P0-3(2026-09-23): 命中可见性 + 显式 /skill-name 调用 ===
+# 痛点 1（命中不可见）：用户看到 agent 用了某个技能，却不知道「为什么是它」——触发词藏在
+#   SKILLS_INDEX.md 的表格里，命中了哪条、走哪条匹配规则，人和模型都看不到，出了问题无从排查。
+# 痛点 2（只能靠猜）：想指定某个技能，只能把触发词碰运气写进句子里；触发词一改就断链。
+# 本区块只做两件事：
+#   A. 把命中理由说清楚：_match_red_skill_hits 给出 name+keyword+rule（路由本身逐句不变），
+#      _red_hit_emit 推 skill_hit 事件 → 前端 chip 直接显示「命中哪条触发词、走哪条规则」；
+#   B. 给一个确定性入口：/skill-name → _parse_skill_invocations 解析 → _build_explicit_skill_block
+#      硬注入（预载 SKILL.md 全文），优先级：显式调用 > 置顶技能 > RED 自动命中。
+
+_EXPLICIT_MAX = 4                  # 单条消息最多生效的显式调用数（防一句话塞 20 个技能）
+_EXPLICIT_CANDIDATE_MAX = 5        # 歧义 / 相近建议最多列几个
+_EXPLICIT_UNKNOWN_MAX = 3          # 未知技能最多提醒几个
+_EXPLICIT_FULLTEXT_BUDGET = 40000  # 每个显式技能预载 SKILL.md 的字符上限（与置顶一致）
+# 应用级斜杠命令：本身不是技能名（真实技能名优先命中，见 _parse_skill_invocations）
+_SLASH_RESERVED = ("papers", "help", "clear")
+# 本机最长技能名 60 字符（analyze_accelerated_stability_of_pharmaceutical_formulations），
+# 80 以上绝不可能是技能名（哈希/路径残片），静默忽略——但绝不截断后当成技能名报出来。
+_SLASH_TOKEN_MAX = 80
+# 斜杠后必须紧跟 ASCII 字母数字或下划线（技能目录里有 _debates 这类内部技能），
+# 名字里只允许技能目录名的实际字符集 [A-Za-z0-9._-]；以 . 开头的一律不算（/.. 穿越）。
+# 刻意不设长度上限：正则截断会把 /<200 个字符> 变成「64 个字符的技能名」，
+# 用户看到的将是他没打过的名字；长度过滤放在匹配之后（见 _SLASH_TOKEN_MAX）。
+_SLASH_TOKEN_RE = re.compile(r"/([A-Za-z0-9_][A-Za-z0-9._-]*)")
+# 斜杠左侧允许的边界字符：空白 / 中英标点 / 括号。除此之外的字符（字母数字、: / \ = 、<）
+# 说明这个斜杠属于 URL、路径或分数（http://a/b、work/papers/x、E:/work、1/2、//x）→ 不算调用。
+# 注意这里刻意不含 ASCII 冒号：Windows 盘符路径 E:/work 的斜杠左边正是冒号。
+_SLASH_BOUNDARY = set(" \t\r\n，,、。；;！!？?“”\"'‘’()[]{}【】<>《》")
+_SKILL_NAME_CACHE = None           # {小写技能名: 真实技能名}
+_SKILL_NAME_CACHE_SIG = None       # 技能目录签名（变了才重建）
+
+
+def _skill_name_sig():
+    """技能目录签名（每个根目录的 mtime + 子目录数）。目录没变就不重建名字索引。
+
+    不用逐个 stat 355 个技能目录：每句话都要解析斜杠命令，签名本身必须便宜。
+    """
+    sig = []
+    for r in _skill_roots():
+        try:
+            st = r.stat()
+            n = sum(1 for p in r.iterdir() if p.is_dir())
+            sig.append((str(r), int(st.st_mtime), n))
+        except Exception:
+            sig.append((str(r), 0, 0))
+    return tuple(sig)
+
+
+def _skill_name_index() -> dict:
+    """{小写技能名: 真实技能名}（扫盘一次后缓存，目录签名变了自动重建）"""
+    global _SKILL_NAME_CACHE, _SKILL_NAME_CACHE_SIG
+    sig = _skill_name_sig()
+    if _SKILL_NAME_CACHE is not None and _SKILL_NAME_CACHE_SIG == sig:
+        return _SKILL_NAME_CACHE
+    idx = {}
+    for r in _skill_roots():
+        try:
+            for p in r.iterdir():
+                if p.is_dir() and not p.name.startswith("."):
+                    idx.setdefault(p.name.lower(), p.name)
+        except Exception:
+            continue
+    _SKILL_NAME_CACHE = idx
+    _SKILL_NAME_CACHE_SIG = sig
+    return idx
+
+
+def _normalize_skill_token(tok) -> str:
+    """斜杠 token 归一：去空白、转小写、去掉尾部多打的 - . _
+
+    刻意不 strip 开头的下划线：技能目录里有 _debates 这类内部技能，"_" 是名字的一部分，
+    吃掉它会把 /_deb 误解析成 debate-core（极端测试实抓）。
+    """
+    return str(tok or "").strip().lower().rstrip("-._")
+
+
+def _tight_seps(s) -> str:
+    """去掉 - _ . 空格 后的小写形式：singlecell ↔ single-cell ↔ single_cell 视为同一个名字。"""
+    return re.sub(r"[-_.\s]+", "", str(s or "").lower())
+
+
+def _suggest_skills(token, limit: int = _EXPLICIT_CANDIDATE_MAX) -> list:
+    """给拼错/没写全的技能名找相近技能：前缀 → 名字是 token 的前缀 → 互为子串 → difflib。
+
+    完全不像就返回 []——宁可如实说「本机没有这个技能」，也不硬凑一个错的技能给用户。
+    """
+    t = _normalize_skill_token(token)
+    if len(t) < 3:
+        return []
+    idx = _skill_name_index()
+    low = list(idx.keys())
+    out = []
+
+    def _take(seq):
+        for n in seq:
+            real = idx.get(n)
+            if real and real not in out:
+                out.append(real)
+
+    _take(sorted(n for n in low if n.startswith(t)))
+    if len(out) < limit:
+        # 分隔符变体：/singlecell 应该能想到 single-cell-*（用户不会记得是连字符还是下划线）
+        tight_t = _tight_seps(t)
+        if len(tight_t) >= 3:
+            _take(sorted(n for n in low if _tight_seps(n).startswith(tight_t)))
+    if len(out) < limit:
+        _take(sorted(n for n in low if len(n) >= 3 and t.startswith(n)))
+    if len(out) < limit:
+        _take(sorted(n for n in low if len(n) >= 4 and (t in n or n in t)))
+    if len(out) < limit:
+        try:
+            import difflib
+            _take(difflib.get_close_matches(t, low, n=limit, cutoff=0.75))
+        except Exception:
+            pass
+    return out[:limit]
+
+
+def _parse_skill_invocations(user_text: str) -> dict:
+    """解析消息里的 /skill-name 显式调用（确定性入口，优先级最高）。
+
+    只认「真的技能名」：
+      · 斜杠左边必须是空白/中英标点/括号——URL（http://a/b）、路径（work/papers/x、E:/work）、
+        分数（1/2）、双斜杠（//name）的斜杠左边是字母数字或 : / \\ = → 一律不算调用；
+      · 应用级命令（/papers /help /clear）不算技能，也不算「未知技能」（用户没犯错）；
+      · 技能名大小写不敏感；下划线写法等价连字符写法（/scrna_qc → scrna-qc）；
+      · 唯一前缀自动补全（/academic-researc → academic-research）；前缀有 ≥2 个候选时
+        绝不猜，交回候选让用户确认；找不到就报 unknown + 相近建议（不许静默丢弃）。
+
+    超过 _EXPLICIT_MAX 的调用进 overflow（不是静默丢弃）：模型会被告知「这几个没生效」，
+    由它转告用户分批点名——用户以为点名了 6 个，实际只生效 4 个，这事必须说。
+
+    返回 {"raw": [...], "resolved": [{"token","name"}], "unknown": [...],
+          "ambiguous": [{"token","candidates"}], "overflow": [name]}；没有斜杠 → 全空（零开销早退）。
+    """
+    out = {"raw": [], "resolved": [], "unknown": [], "ambiguous": [], "overflow": []}
+    text = user_text or ""
+    if "/" not in text:
+        return out
+    idx = _skill_name_index()
+    low = list(idx.keys())
+    seen = set()
+    for m in _SLASH_TOKEN_RE.finditer(text):
+        i = m.start()
+        if i > 0 and text[i - 1] not in _SLASH_BOUNDARY:
+            continue                      # URL / 路径 / 分数 / 双斜杠里的斜杠
+        if m.end() < len(text) and text[m.end()] == "/":
+            continue                      # 像路径（/etc/passwd、/data/raw），不是技能命令
+        tok = m.group(1).rstrip('-._')
+        if not tok or tok.isdigit():
+            continue                      # 空名、纯数字（/2026）都不是技能
+        if len(tok) > _SLASH_TOKEN_MAX:
+            continue                      # 超长乱串（哈希/长路径残片），不是技能名也不是用户笔误
+        key = _normalize_skill_token(tok)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        name = idx.get(key)
+        if name is None:
+            for v in (key.replace("_", "-"), key.replace("-", "_")):
+                if v != key and v in idx:
+                    name = idx[v]
+                    break
+        if name is None and key in _SLASH_RESERVED:
+            continue                      # 应用级命令：不是技能，也不是未知技能
+        out["raw"].append(tok)
+        if name:
+            if len(out["resolved"]) < _EXPLICIT_MAX:
+                out["resolved"].append({"token": tok, "name": name})
+            else:
+                out["overflow"].append(name)
+            continue
+        starts = sorted(n for n in low if n.startswith(key))
+        if len(starts) == 1:
+            if len(out["resolved"]) < _EXPLICIT_MAX:
+                out["resolved"].append({"token": tok, "name": idx[starts[0]]})
+            else:
+                out["overflow"].append(idx[starts[0]])
+            continue
+        if len(starts) > 1:
+            out["ambiguous"].append({"token": tok,
+                                     "candidates": [idx[n] for n in starts[:_EXPLICIT_CANDIDATE_MAX]]})
+            continue
+        if len(out["unknown"]) < _EXPLICIT_UNKNOWN_MAX:
+            out["unknown"].append(tok)
+    return out
+
+
+def _build_explicit_skill_block(inv: dict, lang: str = "zh") -> str:
+    """显式 /skill-name 注入块：优先级高于置顶技能与 RED 自动命中，点名即预载 SKILL.md 全文。
+
+    未知技能与歧义名前缀也在这里说清楚（给出相近建议 / 候选清单 + 要求先跟用户确认），
+    避免模型「假装加载了一个不存在的技能」。没有任何显式调用 → 返回空串（不污染普通回合）。
+    """
+    if not isinstance(inv, dict):
+        return ""
+    res = list(inv.get("resolved") or [])
+    unk = list(inv.get("unknown") or [])
+    amb = list(inv.get("ambiguous") or [])
+    if not res and not unk and not amb:
+        return ""
+    zh = (lang != "en")
+    L = []
+    if zh:
+        L.append("【系统指令：用户显式点名技能 — 最高优先级，不可跳过】")
+    else:
+        L.append("[SYSTEM: user explicitly invoked skills — TOP priority, do not skip]")
+    if res:
+        if zh:
+            L.append("用户在本轮消息里用斜杠命令显式点名了以下技能（这是确定性指令，不是自动路由的猜测）：")
+        else:
+            L.append("The user explicitly named these skills with a slash command this turn (a deterministic instruction, not a routing guess):")
+        for r in res:
+            nm = r.get("name") or ""
+            tk = r.get("token") or nm
+            L.append("- " + nm + ("（用户输入 /" + tk + "）" if zh else " (user typed /" + tk + ")"))
+        L.append("")
+        if zh:
+            L.append("执行规则（必须遵守）：")
+        else:
+            L.append("Rules (mandatory):")
+        for r in res:
+            nm = r.get("name") or ""
+            if zh:
+                L.append("1. 第一件事：调用 skill_view(name='" + nm + "') 加载该技能的完整指令（禁止跳过、禁止凭固有知识直接作答）。")
+            else:
+                L.append("1. First action: call skill_view(name='" + nm + "') to load its full instructions (never skip, never answer from your own knowledge first).")
+        if zh:
+            L.append("2. 显式调用优先级最高：与置顶技能、RED 必触发技能、领域自动路由冲突时，一律以显式点名的技能为准，其他技能只能补充信息。")
+            L.append("3. 显式点名意味着「按这个技能的流程做」：不要用别的技能替换它，也不要只介绍这个技能是什么。")
+        else:
+            L.append("2. Explicit invocation outranks everything: user-pinned skills, RED mandatory skills and automatic domain routing all yield to the explicitly named skill; others may only add information.")
+            L.append("3. An explicit invocation means \"run this skill's workflow\": do not substitute another skill, and do not merely describe what the skill is.")
+        if zh:
+            L.append("4. 以下是该技能 SKILL.md 全文（已预载为兜底；仍须调用 skill_view 以获得脚本/模板等关联文件）：")
+        else:
+            L.append("4. Full SKILL.md is preloaded below as a fallback (still call skill_view to get linked scripts/templates):")
+        ove = [str(x) for x in (inv.get("overflow") or [])]
+        if ove:
+            joined_o = "、".join(ove) if zh else ", ".join(ove)
+            if zh:
+                L.append("⚠ 本机一次最多处理 " + str(_EXPLICIT_MAX) + " 个显式点名；下面这些名字这轮没生效：" + joined_o +
+                         "。请如实告诉用户「一次最多 4 个，请分批点名」，不要假装已经加载了它们。")
+            else:
+                L.append("⚠ At most " + str(_EXPLICIT_MAX) + " explicit skills per message; these were NOT loaded this turn: " + joined_o +
+                         ". Tell the user plainly (at most 4 per message, please name them in batches) and never pretend they were loaded.")
+        for r in res:
+            nm = r.get("name") or ""
+            full = _read_skill_md_text(nm, _EXPLICIT_FULLTEXT_BUDGET)
+            L.append("<<<EXPLICIT_SKILL_MD_BEGIN>>>")
+            L.append("### /" + nm)
+            L.append(full if full else ("（未能读取 SKILL.md：请调用 skill_view(name='" + nm + "') 获取）" if zh else "(SKILL.md not readable here; call skill_view(name='" + nm + "') instead)"))
+            L.append("<<<EXPLICIT_SKILL_MD_END>>>")
+    for a in amb:
+        tk = a.get("token") or ""
+        cands = [str(x) for x in (a.get("candidates") or [])]
+        joined = "、".join(cands) if zh else ", ".join(cands)
+        if zh:
+            L.append("- " + tk + "（⚠ 名字有歧义：本机有多个技能以此为前缀 —— " + joined +
+                     "。先向用户确认要用哪一个（把候选列出来），得到确认前不要自己选一个执行。）")
+        else:
+            L.append("- " + tk + " (⚠ ambiguous: several skills on this machine share this prefix — " + joined +
+                     ". Ask the user which one they mean (list the candidates); do not pick one on your own.)")
+    for tok in unk:
+        sug = _suggest_skills(tok)
+        joined = ("、".join(sug) if zh else ", ".join(sug)) or ("无" if zh else "none")
+        if zh:
+            L.append("- " + tok + "（⚠ 本机没有这个技能：可能拼错、已改名或已删除。相近技能：" + joined +
+                     "。请先如实告诉用户「本机没有这个技能」，把相近技能列出来让用户确认要不要改用；" +
+                     "不要假装加载它，也不要凭名字编造它的流程。）")
+        else:
+            L.append("- " + tok + " (⚠ no such skill on this machine: misspelled, renamed or deleted. Close matches: " + joined +
+                     ". Tell the user plainly that the skill does not exist, list the close matches and let them decide;" +
+                     " never pretend to load it and never invent its workflow from the name.)")
+    L.append("")
+    return "\n".join(L) + "\n"
+
+
+def _red_hit_emit(session, user_text: str) -> list:
+    """P0-3：把本回合 RED 命中「为什么」推给前端（skill_hit），并在会话里留存。
+
+    前端 chip 直接显示命中哪条触发词、走哪条规则；会话里的 _red_hits 供重连/刷新复现。
+    未命中 → 不发事件（不打扰用户）。
+    """
+    try:
+        hits = _match_red_skill_hits(user_text or "")
+    except Exception:
+        hits = []
+    if not hits:
+        return []
+    payload = [{"name": h["name"], "keyword": h["keyword"], "rule": h["rule"], "level": "RED"} for h in hits]
+    try:
+        session["_red_hits"] = payload
+    except Exception:
+        pass
+    try:
+        _session_emit(session, {"type": "skill_hit", "skills": payload,
+                                "ts": datetime.now().strftime("%H:%M:%S"),
+                                "session_id": session.get("id")})
+    except Exception:
+        pass
+    return hits
+
+
+def _skill_invoke_emit(session, inv: dict) -> dict:
+    """P0-3：显式 /skill-name 调用事件（skill_invoke）→ 前端回显点名结果。
+
+    resolved / unknown / ambiguous 三类都要如实回显：用户输入的东西不能被静默丢弃。
+    没有显式调用 → 返回 None 且不发事件。
+    """
+    if not isinstance(inv, dict):
+        return None
+    res = list(inv.get("resolved") or [])
+    unk = list(inv.get("unknown") or [])
+    amb = [dict(a) for a in (inv.get("ambiguous") or [])]
+    ove = list(inv.get("overflow") or [])
+    if not res and not unk and not amb and not ove:
+        return None
+    payload = {"type": "skill_invoke", "resolved": res, "unknown": unk, "ambiguous": amb,
+               "overflow": ove,
+               "suggestions": {t: _suggest_skills(t) for t in unk},
+               "ts": datetime.now().strftime("%H:%M:%S"),
+               "session_id": session.get("id")}
+    try:
+        _session_emit(session, payload)
+    except Exception:
+        pass
+    return payload
+
+
+# === P0-3 end ===
+
+# === P8 end ===
 
 
 # === 问题9: 进度语言一致性 — 会话级语言检测 + 文本映射表 ===
@@ -3320,32 +5311,34 @@ def _detect_domain_from_text(text: str) -> str:
     return best_domain
 
 
-# === 自我介绍文案（WebUI 与微信路径共用，绕过 LLM）===
-_SELF_INTRO_ZH = (
-    "我是 **MemOmics**，基于 Hermes 框架的自进化多组学生信分析平台。\n\n"
-    "我不是聊天机器人，而是能帮你**跑完完整生信分析**的自主 Agent。给我数据，我自己扫描、分析、出报告，你不用写一行代码。\n\n"
-    "## 核心能力\n\n"
-    "**数据扫描**：自动识别 scRNA-seq / scATAC-seq / 空间转录组 / Bulk RNA-seq 等数据格式，检测物种、组织、细胞数、注释状态，推荐最佳分析路径。\n\n"
-    "**完整分析流程**：QC（去污染→双胞过滤→归一化）→ 降维 → 聚类 → 细胞注释 → 差异表达 → 通路富集 → 细胞通讯 → 轨迹推断 → SCENIC 转录因子调控 → 生存分析 → 报告生成，全流程自动走完。\n\n"
-    "**R + Python 双引擎**：根据数据规模智能推荐——大于 60 万细胞自动切换 Python/Scanpy，默认用 R/Seurat。缺包时自动安装（BiocManager/remotes/pip/conda），不用你操心环境。\n\n"
-    "**内置 270+ 生信技能模板**：Seurat、Scanpy、CellChat、Monocle3、SCENIC、CellBender、Harmony、squidpy 等覆盖主流分析场景，分析时自动调用对应技能的参数和模板，不是从零写代码。\n\n"
-    "**铁轨审查机制**：每个分析步骤前后自动审查——环境检查 → 缺失包安装 → 参数校验 → 结果质量评估 → 图表检查 → 代码审查。不通过则阻断纠正，不会带着错误继续往下跑。\n\n"
-    "**知识库驱动**：内置生信知识库（物种/组织/方向三维索引），分析时自动检索相关生物学背景，结合文献先验知识做注释和解读。\n\n"
-    "**结果管理**：分析结果按 `results/<模块>/<方法>/{figures,results,scripts,data}` 分目录存储，每次分析可追溯、可复现。\n\n"
-    "有什么需要帮忙的，直接告诉我！"
+# === 自我介绍：不再有"写好的介绍"（2026-09-26 用户要求）===
+# 历史做法：命中"介绍"类关键词就把一段固定文案直接发给用户（完全不经过大模型），
+# 或者在提示词里硬要求"必须逐字输出"。两个问题：
+#   1) 关键词误命中 —— "介绍一下我这个数据集/这段代码"也会被吃掉，答非所问；
+#   2) 回答永远是同一段，不看上下文、不看用户当前进度、不看用户语言。
+# 现在只保留一份"事实参考"给模型看（不是发给用户的成品文案），由模型结合上下文
+# 自己组织回答：真在问身份就用这些事实自然作答，在问别的就正常回答那个问题。
+_SELF_FACTS_ZH = (
+    "关于 MemOmics 的真实事实（供你参考，不是要照抄的文案）：\n"
+    "- 身份：基于 MemOmics 框架的自进化多组学生信分析平台；不是聊天机器人，而是能自己扫描数据、分析、出报告的自主 Agent，用户不用写代码。\n"
+    "- 数据扫描：自动识别 scRNA-seq / scATAC-seq / 空间转录组 / Bulk RNA-seq 等格式，检测物种、组织、细胞数、注释状态，推荐分析路径。\n"
+    "- 完整流程：QC（去污染→双胞过滤→归一化）→ 降维 → 聚类 → 细胞注释 → 差异表达 → 通路富集 → 细胞通讯 → 轨迹推断 → SCENIC → 生存分析 → 报告生成。\n"
+    "- 双引擎：默认 R/Seurat，数据量大于 60 万细胞自动切 Python/Scanpy；缺包自动安装（BiocManager/remotes/pip/conda）。\n"
+    "- 技能库：内置 270+ 生信技能模板（Seurat、Scanpy、CellChat、Monocle3、SCENIC、CellBender、Harmony、squidpy 等），分析时自动套用对应技能的参数与模板。\n"
+    "- 铁轨审查：环境检查 → 缺失包安装 → 参数校验 → 结果质量评估 → 图表检查 → 代码审查，不通过就阻断纠正。\n"
+    "- 知识库：内置生信知识库（物种/组织/方向三维索引），分析时自动检索生物学背景并结合文献先验。\n"
+    "- 结果管理：结果按 results/<模块>/<方法>/{figures,results,scripts,data} 分目录存放，可追溯可复现。\n"
 )
-_SELF_INTRO_EN = (
-    "I'm **MemOmics**, a self-evolving multi-omics bioinformatics analysis platform powered by the Hermes framework.\n\n"
-    "I'm not a chatbot — I'm an autonomous Agent that can run complete bioinformatics analyses for you. Give me your data, and I'll scan, analyze, and generate reports. You don't need to write a single line of code.\n\n"
-    "## Core Capabilities\n\n"
-    "**Data Scanning**: Automatically identifies scRNA-seq / scATAC-seq / Spatial Transcriptomics / Bulk RNA-seq formats, detecting species, tissue, cell count, and annotation status to recommend optimal analysis paths.\n\n"
-    "**Complete Analysis Pipeline**: QC (decontamination → doublet filtering → normalization) → Dimensionality Reduction → Clustering → Cell Annotation → Differential Expression → Pathway Enrichment → Cell Communication → Trajectory Inference → SCENIC TF Regulation → Survival Analysis → Report Generation — fully automated.\n\n"
-    "**R + Python Dual Engine**: Intelligently selects R/Seurat by default, auto-switches to Python/Scanpy for datasets >600K cells. Auto-installs missing packages (BiocManager/remotes/pip/conda).\n\n"
-    "**270+ Built-in Bioinformatics Skill Templates**: Seurat, Scanpy, CellChat, Monocle3, SCENIC, CellBender, Harmony, squidpy covering mainstream analysis scenarios. Skills are called with proper parameters — never writing code from scratch.\n\n"
-    "**Rail Review Mechanism**: Each analysis step undergoes pre/post review — environment check → missing package install → parameter validation → result quality assessment → figure inspection → code review. Blocked and corrected if anything fails.\n\n"
-    "**Knowledge Base Driven**: Built-in bioinformatics knowledge base (species/tissue/direction 3D index) for automatic biological context retrieval, combining literature priors for annotation and interpretation.\n\n"
-    "**Result Management**: Results stored under `results/<module>/<method>/{figures,results,scripts,data}` — traceable and reproducible for every analysis.\n\n"
-    "What can I help you with? Just let me know!"
+_SELF_FACTS_EN = (
+    "Facts about MemOmics (reference material, not text to copy verbatim):\n"
+    "- Identity: a self-evolving multi-omics bioinformatics platform built on the MemOmics framework; an autonomous agent that scans data, runs analyses and writes reports - users write no code.\n"
+    "- Data scanning: auto-detects scRNA-seq / scATAC-seq / spatial transcriptomics / bulk RNA-seq, plus species, tissue, cell counts and annotation status; recommends an analysis path.\n"
+    "- Pipeline: QC (decontamination -> doublet filtering -> normalization) -> dimensionality reduction -> clustering -> annotation -> DE -> pathway enrichment -> cell communication -> trajectory -> SCENIC -> survival analysis -> report.\n"
+    "- Dual engine: R/Seurat by default, auto-switches to Python/Scanpy above 600K cells; auto-installs missing packages (BiocManager/remotes/pip/conda).\n"
+    "- Skills: 270+ built-in bioinformatics skill templates (Seurat, Scanpy, CellChat, Monocle3, SCENIC, CellBender, Harmony, squidpy, ...).\n"
+    "- Rail review: environment check -> package install -> parameter validation -> result quality -> figure check -> code review; blocks and corrects on failure.\n"
+    "- Knowledge base: species/tissue/direction 3D index, combined with literature priors.\n"
+    "- Results: stored under results/<module>/<method>/{figures,results,scripts,data}; traceable and reproducible.\n"
 )
 
 # === 图路由：意图分类 + 技能触发注入 ===
@@ -3355,7 +5348,7 @@ def _classify_intent(text: str):
     """五级意图识别。Returns: (intent, confidence, meta_dict)
     
     Intent flow:
-      self_intro    — 自介快回，绕过LLM
+      self_intro    — 身份/能力提问，正常走 LLM（按语境作答，不再有固定文案）
       chat          — 纯闲聊，不注入skill
       research_plan — 设计研究方案，文献驱动
       direct_exec   — 参数已定，直接执行（跳过规划，保留审查）
@@ -3833,15 +5826,26 @@ def _build_kb_tail_injection(user_text: str, intent: str, is_heavy: bool) -> str
     return ""
 
 
-def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", user_text: str = "") -> str:
-    """根据意图+领域构建系统指令（硬注入，LLM无法跳过）"""
+def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", user_text: str = "",
+                           pinned: list = None, explicit: dict = None) -> str:
+    """根据意图+领域构建系统指令（硬注入，LLM无法跳过）
+
+    P8: pinned = 用户在本会话置顶的 skill 名字列表（优先而非独占，见 _build_pinned_skill_block）。
+    P0-3: explicit = _parse_skill_invocations 的解析结果（用户斜杠点名）。优先级：
+          显式调用 > 置顶技能 > RED 自动命中——三段注入按这个顺序拼接。
+    """
     # === RED 必触发预检：用户消息命中 RED skill 触发词 → 前置强约束先 skill_view ===
     # 审稿/润色/拆解等文献类任务常被意图分类器分到弱约束分支（literature/chat），
     # agent 会跳过 skill_view 直接按固有知识处理。这里在意图注入之外兜底：
     # 命中 RED 触发词 → 注入最高优先级指令，强制先加载对应 skill。
     # 注意：不覆盖原意图注入，作为前置段拼接。
+    # P0-3: 用户斜杠点名的技能（显式调用）——最高优先级，先于置顶与 RED 注入
+    explicit_inv = explicit if isinstance(explicit, dict) else _parse_skill_invocations(user_text)
+    explicit_prefix = _build_explicit_skill_block(explicit_inv, session_lang)
     red_prefix = ""
     red_hits = _match_red_skill_triggers(user_text)
+    # P8: 置顶 skill 块 —— 优先级高于自动路由；命中触发词时预载 SKILL.md 全文
+    pinned_prefix = _build_pinned_skill_block(pinned or [], user_text, session_lang)
     if red_hits:
         zh = session_lang == "zh"
         red_prefix = "\n".join([
@@ -3864,33 +5868,19 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
             "",
         ]) + "\n"
     if intent == "chat":
-        return red_prefix
+        return explicit_prefix + pinned_prefix + red_prefix
     if intent == "self_intro":
-        # 硬注入固定自我介绍，LLM 禁止自由发挥
-        return (
-            "【系统指令：自我介绍 — 必须逐字输出以下内容，禁止修改、禁止缩写、禁止自己编】\n\n"
-            "请直接输出以下固定内容作为回复，不要改动任何字：\n\n"
-            "> 我是 **MemOmics**，基于 Hermes 框架的自进化多组学生信分析平台。\n"
-            "> \n"
-            "> 我不是聊天机器人，而是能帮你**跑完完整生信分析**的自主 Agent。给我数据，我自己扫描、分析、出报告，你不用写一行代码。\n"
-            "> \n"
-            "> ## 核心能力\n"
-            "> \n"
-            "> **数据扫描**：自动识别 scRNA-seq / scATAC-seq / 空间转录组 / Bulk RNA-seq 等数据格式，检测物种、组织、细胞数、注释状态，推荐最佳分析路径。\n"
-            "> \n"
-            "> **完整分析流程**：QC（去污染→双胞过滤→归一化）→ 降维 → 聚类 → 细胞注释 → 差异表达 → 通路富集 → 细胞通讯 → 轨迹推断 → SCENIC 转录因子调控 → 生存分析 → 报告生成，全流程自动走完。\n"
-            "> \n"
-            "> **R + Python 双引擎**：根据数据规模智能推荐——大于 60 万细胞自动切换 Python/Scanpy，默认用 R/Seurat。缺包时自动安装（BiocManager/remotes/pip/conda），不用你操心环境。\n"
-            "> \n"
-            "> **内置 270+ 生信技能模板**：Seurat、Scanpy、CellChat、Monocle3、SCENIC、CellBender、Harmony、squidpy 等覆盖主流分析场景，分析时自动调用对应技能的参数和模板，不是从零写代码。\n"
-            "> \n"
-            "> **铁轨审查机制**：每个分析步骤前后自动审查——环境检查 → 缺失包安装 → 参数校验 → 结果质量评估 → 图表检查 → 代码审查。不通过则阻断纠正，不会带着错误继续往下跑。\n"
-            "> \n"
-            "> **知识库驱动**：内置生信知识库（物种/组织/方向三维索引），分析时自动检索相关生物学背景，结合文献先验知识做注释和解读。\n"
-            "> \n"
-            "> **结果管理**：分析结果按 `results/<模块>/<方法>/{figures,results,scripts,data}` 分目录存储，每次分析可追溯、可复现。\n"
-            "> \n"
-            "> 有什么需要帮忙的，直接告诉我！"
+        # 2026-09-26: 不再硬注入"必须逐字输出"的成品文案 —— 改成给模型事实参考 +
+        # 语境判断要求，由模型决定怎么答（这才是"结合上下文语境"）。
+        return explicit_prefix + pinned_prefix + red_prefix + (
+            "【身份问题参考资料 —— 先判断用户在问什么，再决定怎么答】\n"
+            "判断规则：\n"
+            "1) 用户在问你的身份/能力（你是谁、你能做什么、介绍一下你自己…）：用下面的事实结合当前对话语境自然作答。"
+            "用户已经知道的不必重复；他正在做的事可以顺带对上（例如刚给了数据、刚跑完某一步）。"
+            "用用户的语言回答，篇幅按问题大小来，不要整段照抄。\n"
+            "2) 用户其实在问别的（某个数据集/代码/流程/结果文件/参数）：正常回答那个问题，不要输出能力清单，也不要自我介绍。\n"
+            "3) 拿不准时按用户字面问题回答。\n\n"
+            + (_SELF_FACTS_ZH if session_lang == "zh" else _SELF_FACTS_EN) + "\n"
         )
     zh = session_lang == "zh"
     lines = ["【系统指令：自动路由 - 必须遵守】",
@@ -4127,7 +6117,7 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
                 "5. 生成专利方案后 rail_review(phase='post') 检查专利铁律",
                 "",
             ]
-            return red_prefix + "\n".join(lines)
+            return explicit_prefix + pinned_prefix + red_prefix + "\n".join(lines)
         # Detect paper-writing sub-intent
         lit_text = user_text if zh else user_text.lower()
         paper_write_kw = ["写论文", "写文章", "论文写作", "写一篇", "manuscript", "paper writing",
@@ -4173,7 +6163,7 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
         lines.append("知识库查询。使用 search_knowledge_base 检索已有知识和经验。" if zh else
                      "Knowledge query. Use search_knowledge_base.")
     
-    return red_prefix + "\n".join(lines)
+    return explicit_prefix + pinned_prefix + red_prefix + "\n".join(lines)
 
 
 # Progress text map (moved down from above)
@@ -4189,7 +6179,7 @@ _PROGRESS_TEXT = {
         "generating_report": "正在生成报告", "debating": "正在辩论",
         "reviewing": "正在审查", "writing_code": "正在写代码",
         "completed": "已完成",
-        "intro_reasoning": "用户询问系统身份，触发自我介绍快速回复模板，无需调用 LLM。",
+        "intro_reasoning": "用户询问系统身份，交给模型结合上下文作答。",
         "initializing_engine": "正在初始化分析引擎",
         "loading_skills": "加载 355 个生信技能模板...",
         "engine_ready": "引擎就绪，分析环境已就绪",
@@ -4205,7 +6195,7 @@ _PROGRESS_TEXT = {
         "generating_report": "Generating report", "debating": "Debating",
         "reviewing": "Reviewing", "writing_code": "Writing code",
         "completed": "Completed",
-        "intro_reasoning": "User asked about system identity. Self-introduction fast-reply template triggered, no LLM call needed.",
+        "intro_reasoning": "User asked about system identity - answering from context via the model.",
         "initializing_engine": "Initializing analysis engine",
         "loading_skills": "Loading 355 bioinformatics skill templates...",
         "engine_ready": "Engine ready, analysis environment initialized",
@@ -4267,6 +6257,16 @@ def _session_emit(session, msg_dict):
     if "session_id" not in msg_dict:
         msg_dict["session_id"] = session.get("id", "")
     msg_type = msg_dict.get("type", "")
+    # P1-1(2026-09-23): 待办事件的唯一回写收口。
+    # 历史问题：四个推送点（debate 计划 / 心跳匹配 / 裁决同步 / 管线兜底）都只发 WS
+    # 事件、不回写 session["todos"]，于是刷新或切回会话时 /api/todos 拿到的还是
+    # 会话初始化时的 []。放在 emit 收口处统一回写（+落 state.db），未来新增推送点
+    # 也自动生效，不必每处再记得补一行。
+    if msg_type in ("todos", "todos_update"):
+        try:
+            _sync_session_todos(session, msg_dict.get("todos"))
+        except Exception as _e_todo_sync:
+            logger.warning(f"[todos] 回写会话失败: {_e_todo_sync}")
     # 记录最后事件时间（stall watchdog 用：5 分钟无事件 = LLM 卡死）
     session["_last_event_ts"] = time.time()
     # reasoning 流式文本：按 turn 合并持久化（刷新/重连后恢复 💭 思考过程）
@@ -4418,7 +6418,7 @@ def _restore_single_session(sid):
     if not db:
         return None
     try:
-        sessions = db.list_sessions_rich(limit=1000)  # limit=0 returns all (hermes default=20)
+        sessions = db.list_sessions_rich(limit=1000)  # limit=0 returns all (memomics default=20)
         for s in sessions:
             s_id = s.get("session_id") or s.get("id")
             if s_id != sid:
@@ -4585,14 +6585,14 @@ def _restore_one_persisted_session(db, s):
 
 
 def _load_persisted_sessions():
-    """启动时从 Hermes state.db 恢复历史会话"""
+    """启动时从 MemOmics state.db 恢复历史会话"""
     db = _get_session_db()
     if not db:
         print("[MemOmics] SessionDB 不可用，跳过会话恢复", flush=True)
         return
     try:
         # 自愈（2026-08-08）：清理 sessions.model_config 里的空串/坏 JSON。
-        # 空串 '' 不是合法 JSON，Hermes 的 list_sessions_rich 内部对
+        # 空串 '' 不是合法 JSON，MemOmics 的 list_sessions_rich 内部对
         # model_config 做 json_extract 时抛 "malformed JSON" → 整个会话恢复
         # 中断（内存 0 会话）→ 前端所有会话级操作（切模型等）404 静默失败。
         # 坏数据的来源：任何把 model_config 写成 '' 而非 NULL 的路径。
@@ -4605,7 +6605,7 @@ def _load_persisted_sessions():
                 db._conn.commit()
         except Exception:
             pass
-        sessions = db.list_sessions_rich(limit=1000)  # limit=0 returns all (hermes default=20)
+        sessions = db.list_sessions_rich(limit=1000)  # limit=0 returns all (memomics default=20)
         count = 0
         for s in sessions:
             try:
@@ -4657,7 +6657,7 @@ def _load_persisted_sessions():
 
 
 def _persist_session_message(session, role, content):
-    """把消息持久化到 Hermes state.db"""
+    """把消息持久化到 MemOmics state.db"""
     db = _get_session_db()
     if not db:
         return
@@ -4768,11 +6768,18 @@ _EXECUTION_POLICY = """
 用户回合中任务报错停止：只报告原因和可选方案，不要擅自修改后继续执行，等用户指示。
 只有自动轮（用户不在场）才自主修复重试。
 
-### 5. 开工前先问清楚（不确定就问，铁律）
-执行任务前，如果关键信息缺失——**数据在哪、物种/组织/条件、期望结果、
-交付形式、是否继续旧任务**——必须先调用 ask_user 问清楚（带选项），
-不要靠猜、不要靠意图推断、不要先跑再说。用户回答后再规划执行。
-原则：一次问清比十次返工便宜。
+### 5. 开工前先问清楚（不确定就问，铁律 · 意图确认弹窗）
+**高代价任务**——真实分析跑流程、集群投递（remote_cluster run/submit）、
+结果入库（save_knowledge/knowledge_write/conclusion_save）、出报告
+（generate_report/write_report）——**开工前必须先调 ask_user 弹出确认表单**，
+把不清楚的一次问明白：数据在哪、物种/组织/条件、期望交付形式、关键参数与阈值、
+是否继续旧任务。**不要靠猜、不要靠意图推断、不要先跑再说。**
+用法：options 传可勾选项（对象可带 desc 说明/recommended 推荐），
+多件事一起确认时 multi_select=true，kind="intent"。
+**硬约束**：表单没答复前，执行类/产物类工具会被系统直接拦下（白跑一趟），
+所以问完就结束本回合，等用户勾选或回复；用户答复会自动成为你的下一条消息。
+**不要问的**：纯问答、只读查询、状态播报、用户已明确给全参数的任务——直接做。
+原则：一次问清比十次返工便宜；但已有明确答案的事不要重复问。
 
 ### 6. 一切以用户为主
 问清目的 → 规划 → 执行 → 报错就解决，循环；用户打断才停，用户回答后继续。
@@ -4885,7 +6892,7 @@ def _recall_facts(text, limit=6, max_chars=450):
                 if w.lower() not in _FACT_RECALL_STOP][:8]
         if not _kws:
             return ""
-        _db = os.path.join(HERMES_HOME_DIR, "memory_store.db")
+        _db = os.path.join(MEMOMICS_HOME_DIR, "memory_store.db")
         if not os.path.isfile(_db):
             return ""
         import sqlite3 as _sq
@@ -5095,7 +7102,7 @@ def _build_read_recipes(session, db_path=None, limit_rows=40):
         sid = session.get("id", "") or ""
         if not sid:
             return ""
-        _dbp = db_path or os.path.join(HERMES_HOME_DIR, "state.db")
+        _dbp = db_path or os.path.join(MEMOMICS_HOME_DIR, "state.db")
         if not os.path.isfile(_dbp):
             return ""
         import sqlite3 as _sq
@@ -5121,7 +7128,7 @@ def _resolve_message_id(session_id: str, content_hint: str) -> int:
         return 0
     try:
         import sqlite3 as _sq
-        _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+        _dbp = os.path.join(MEMOMICS_HOME_DIR, "state.db")
         if not os.path.isfile(_dbp):
             return 0
         _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
@@ -5194,7 +7201,7 @@ def _build_rollup_checkpoint(session, head):
         pass
     try:
         import sqlite3 as _sq
-        _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+        _dbp = os.path.join(MEMOMICS_HOME_DIR, "state.db")
         _rows = []
         try:
             _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
@@ -5246,7 +7253,7 @@ def _build_recent_turns_digest(session, max_turns=8):
         sid = session.get("id", "")
         if not sid:
             return ""
-        _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+        _dbp = os.path.join(MEMOMICS_HOME_DIR, "state.db")
         if not os.path.exists(_dbp):
             return ""
         _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
@@ -5302,7 +7309,7 @@ def _build_pending_question_context(session, user_text):
         sid = session.get("id", "")
         if not sid or not (user_text or "").strip():
             return ""
-        _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+        _dbp = os.path.join(MEMOMICS_HOME_DIR, "state.db")
         if not os.path.exists(_dbp):
             return ""
         _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
@@ -5336,6 +7343,50 @@ def _build_pending_question_context(session, user_text):
             "用户本轮已回复确认（需要/要/是/好/同意…）。本次必须完成该请求（执行/整理/生成），"
             "不要只复述或延后；若用户同时提出了新问题，请一并回答，两者都要完成。"
         )
+    except Exception:
+        return ""
+
+
+def _build_ask_form_context(session, user_text):
+    """P3(2026-09-22): 把"确认弹窗的勾选结果"变成确定性上下文（只注入一次）。
+
+    为什么需要：弹窗答复经 chat 通道作为普通用户消息发出，模型可能把它当闲聊；
+    这里按 form_id 取回结构化答复（勾选项 + 其他补充），明确告诉模型"这就是答案，
+    按此执行、不要再问一遍"，与 DSH 的 PendingQuestion→QuestionComposer 绑定同理。
+    """
+    try:
+        _ans = session.get("_ask_form_answers") or []
+        if not _ans:
+            return ""
+        # 只看最近 10 分钟、还没注入过的答复
+        _now = time.time()
+        _pick = None
+        for _it in reversed(_ans):
+            if _it.get("injected"):
+                continue
+            _ts = _it.get("_ts") or 0
+            if _ts and (_now - _ts) > 600:
+                continue
+            _pick = _it
+            break
+        if _pick is None:
+            return ""
+        _pick["injected"] = True
+        _sel = _pick.get("selected") or []
+        _other = (_pick.get("other") or "").strip()
+        _lines = [
+            "【用户已在确认弹窗中答复 — 这是确定性答案，不是猜测】",
+            f"问题：{(_pick.get('question') or '')[:300]}",
+        ]
+        if _sel:
+            _lines.append("用户勾选：" + "；".join(str(x) for x in _sel))
+        if _other:
+            _lines.append("用户补充：" + _other[:300])
+        _lines.append(
+            "要求：按用户勾选的方案直接执行（该确认已满足\"开工前先问清楚\"的门禁），"
+            "不要再重复询问同一问题；若用户勾选了多个互斥项，按最先勾选的执行并在结尾说明。"
+        )
+        return "\n".join(_lines)
     except Exception:
         return ""
 
@@ -5662,7 +7713,7 @@ def _extract_and_store_requirements(session, text):
             if any(_m in _s for _m in _META_WORDS):
                 continue  # (用户纠错) 含"取消/改成/不用记"等元指令的句子是操作不是新要求
             # 2026-08-31 极端评测修复：系统命令输出/服务器命令回显不是要求
-            # （实测 "df -h /hwfssz3/… Filesystem Size Used Avail Use%" 被入库）。
+            # （实测 "df -h /cluster/… Filesystem Size Used Avail Use%" 被入库）。
             # 注意：命令必须"命令+参数"组合（df -/du /ls /cat …），
             # 裸"conda 环境在 E:/envs"是环境陈述必须放行（回归教训）。
             if re.search(r"^\s*(df\s+-|du\s+\S|ls\s+-|cat\s+\S|head\s+-|tail\s+-|free\s+-|nvidia-smi\b|pip\s+install)", _s) \
@@ -5859,7 +7910,7 @@ def _extract_input_paths(session, limit=10, db_path=None) -> list:
         sid = session.get("id", "") or ""
         if not sid:
             return []
-        _dbp = db_path or os.path.join(HERMES_HOME_DIR, "state.db")
+        _dbp = db_path or os.path.join(MEMOMICS_HOME_DIR, "state.db")
         if not os.path.isfile(_dbp):
             return []
         import sqlite3 as _sq
@@ -6075,12 +8126,27 @@ def _auto_anchor_turn(session, user_text="", tool_name="", args=None):
         pass
 
 
+def _env_digest_block() -> str:
+    """环境卡片（env_inventory 缓存）—— 追加在 ephemeral_system_prompt 后面。
+
+    只读缓存、绝不探测：本机首扫要 10~40 秒（R 全量探测最慢）、集群还要 SSH，
+    放这里会拖慢每次建 agent，也会让系统提示词前缀缓存失效（同样的教训见 KB 预取）。
+    缓存为空就返回空串，agent 自己按需调 env_inventory 工具。
+    """
+    try:
+        from memomics.bio_tools import env_inventory as _env
+        digest = _env.agent_digest()
+        return "\n\n" + digest if digest else ""
+    except Exception:
+        return ""
+
+
 def _create_agent(model_config=None, session_id=None, session=None):
     """创建新的 AIAgent 实例 (每次会话独立)
     
-    链接 Hermes 原生能力：
+    链接 MemOmics 原生能力：
     - checkpoints_enabled: 会话快照与回滚
-    - session_id: 关联 Hermes 会话状态目录
+    - session_id: 关联 MemOmics 会话状态目录
     - context_compressor: 自动启用（agent_init 内置）
     - background_review: 自动启用（conversation_loop 内置）
     """
@@ -6093,7 +8159,7 @@ def _create_agent(model_config=None, session_id=None, session=None):
         pass
     cfg = model_config or (session or {}).get("model_config") or _current_model
     # 2026-08-08：provider 名按 base_url 智能映射。MemOmics 统一存 provider='openai'，
-    # 但 Hermes 的 provider 级配置（请求超时等）按 provider 名读取——opencode.ai 的
+    # 但 MemOmics 的 provider 级配置（请求超时等）按 provider 名读取——opencode.ai 的
     # TLS 间歇性挂起需要短超时（60s）让外层 loop 重试，不能吃 openai 的 900s。
     _provider = cfg.get("provider", "openai")
     try:
@@ -6113,7 +8179,7 @@ def _create_agent(model_config=None, session_id=None, session=None):
                           # 长输出(大 dsh-ui JSON/mermaid) 会被 max_tokens 截断成半截 JSON。
                           # 显式 8192，与 checkpoint writer 2026-08-22 加固经验一致。
         enabled_toolsets=["terminal", "file", "code_execution", "memomics", "todo", "memory", "skills", "web", "computer_use", "cronjob", "delegation", "image_gen", "session_search", "browser"],
-        ephemeral_system_prompt=skills_index + _PLANNING_PROMPT + "\n\n" + _EXECUTION_POLICY,
+        ephemeral_system_prompt=skills_index + _PLANNING_PROMPT + "\n\n" + _EXECUTION_POLICY + _env_digest_block(),
         quiet_mode=True,
         tool_progress_mode="all",
         session_id=session_id or f"memomics-{uuid.uuid4().hex[:8]}",
@@ -6232,6 +8298,18 @@ async def rename_results_dir(sid: str, body: dict = None):
     if output_root and os.path.isdir(os.path.dirname(output_root)):
         user_dir = os.path.join(output_root, new_name)
 
+    # P2-4：这一处会真的写（results/ 下的主目录）也真的删（用户目录里的同名目录），两类动作都过门。
+    # 观察模式只记账；强制 fs.write/fs.delete 后，越出应用数据根的用户目录会被拦下——
+    # 老逻辑是"父目录存在就照删照拷"，用户传个路径就能删掉那底下同名目录，太宽了。
+    _app_roots = [RESULTS_DIR, WORK_DIR, MEMOMICS_DIR]
+    _denied = _sandbox_precheck("fs.write", new_dir, _app_roots, "sessions.rename_results")
+    if not _denied and user_dir:
+        _denied = _sandbox_precheck("fs.delete" if os.path.exists(user_dir) else "fs.write",
+                                    user_dir, _app_roots, "sessions.rename_results.user_root")
+    if _denied:
+        return JSONResponse({"ok": False, "error": "sandbox denied: %s" % _denied},
+                            status_code=403)
+
     # 重命名目录 (results/ 下的主目录)
     if os.path.abspath(old_dir) != os.path.abspath(new_dir):
         if os.path.isdir(old_dir):
@@ -6271,7 +8349,7 @@ async def rename_results_dir(sid: str, body: dict = None):
     
     # 设置线程级会话上下文（纯线程隔离，避免多会话竞态）
     from memomics.bio_tools.debate_analysis import set_session_context
-    set_session_context(sid=sid, results_dir=new_dir.replace("\\", "/"))
+    _set_debate_session_context(_sessions.get(sid) or {}, results_dir=new_dir.replace("\\", "/"))
     # 注意：不再写 os.environ，多会话并发时 os.environ 会串会话
     
     return {
@@ -6309,7 +8387,7 @@ def _sync_meta_display_name(session, title):
 def _append_rename_event(sid, old_title, new_title, source="manual"):
     """改名审计：只追加 JSONL（学 OpenAI4S Action Ledger），可追溯可回滚。"""
     try:
-        events_dir = os.path.join(HERMES_HOME_DIR, "sessions")
+        events_dir = os.path.join(MEMOMICS_HOME_DIR, "sessions")
         os.makedirs(events_dir, exist_ok=True)
         with open(os.path.join(events_dir, "rename_events.jsonl"), "a", encoding="utf-8") as f:
             f.write(json.dumps({
@@ -6412,9 +8490,13 @@ def _auto_summarize_title(sid):
             "要求：具体（如'hdWGCNA 网络构建参数选择'），不要空泛（如'生信分析'）。\n"
             "只输出标题本身，不要引号、不要解释、不要编号。\n\n对话要点：\n" + digest
         )
+        _hdrs = {"Authorization": f"Bearer {cfg['api_key']}"}
+        # 2026-09-13: 合并 config custom_providers[].extra_headers（opencode.ai
+        # 网关必需 x-opencode-session，缺则 400 MissingSessionID）
+        _hdrs.update(_provider_extra_headers_for(base_url))
         resp = httpx.post(
             url,
-            headers={"Authorization": f"Bearer {cfg['api_key']}"},
+            headers=_hdrs,
             json={
                 "model": cfg["model"],
                 "messages": [{"role": "user", "content": prompt}],
@@ -6503,7 +8585,7 @@ def _session_display_stats(sid, start_ua=0):
     返回 (stats, meta)：meta[k] = 第 (start_ua+k) 个 user/assistant 消息的
     {elapsed, tool_count, tool_names}——页脚显示用。"""
     import sqlite3 as _sq
-    _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+    _dbp = os.path.join(MEMOMICS_HOME_DIR, "state.db")
     try:
         _conn = _sq.connect(_dbp, timeout=5)
         _usage = _conn.execute(
@@ -6542,7 +8624,7 @@ def _session_display_stats(sid, start_ua=0):
 def _last_tool_of(sid):
     """会话最近一次工具调用（刷新后运行状态条显示 agent 在干什么）。"""
     import sqlite3 as _sq
-    _dbp = os.path.join(HERMES_HOME_DIR, "state.db")
+    _dbp = os.path.join(MEMOMICS_HOME_DIR, "state.db")
     try:
         _conn = _sq.connect(_dbp, timeout=5)
         _row = _conn.execute(
@@ -6605,14 +8687,158 @@ async def get_messages(sid: str, limit: int = 100):
     except Exception:
         pass
     _mi = 0
+    _turn = 0
+    # P1-4: 每条消息带上轮次号（一条用户提问 = 一轮，它之后的回答都归这一轮），
+    # 前端据此把右侧目录项和对话气泡对上号；还没有提问时的开场白记为第 0 轮。
     for m in normalized:
+        if m.get("role") == "user":
+            _turn += 1
+        m["turn"] = _turn
         if m.get("role") in ("user", "assistant"):
             if _mi in _meta:
                 m["elapsed"] = _meta[_mi].get("elapsed")
                 m["tool_count"] = _meta[_mi].get("tool_count", 0)
                 m["tool_names"] = _meta[_mi].get("tool_names", [])
             _mi += 1
-    return {"messages": normalized, "total": total, "stats": _stats}
+    # 2026-09-18: 给前端一个「窗口起点在整段对话里的绝对序号」，
+    # 辩论时间线据此把每场辩论插回它真正发生的位置（shown_total = 对话流消息总数）
+    try:
+        _shown_total = _debate_display_count(sid)
+    except Exception:
+        _shown_total = -1
+    _shown_offset = max(0, _shown_total - len(normalized)) if _shown_total >= 0 else 0
+    return {"messages": normalized, "total": total, "stats": _stats,
+            "shown_offset": _shown_offset, "shown_total": _shown_total}
+
+
+# ============ 会话删除 = 数据删除：结果目录连带清理 ============
+# 用户要求：会话删除后，该会话在 results/ 下的目录连同里面的数据一并删除，不再保留。
+# 三条安全边界：
+#   1) 只删 results/ 之内的目录 —— 用户 output_root（桌面/自定义路径）镜像一律不动；
+#   2) 目录必须可追溯到本会话（== sid 或含 sid 短 ID），绝不误伤别的会话；
+#   3) results/ 根目录自身永不被删（防呆：base 严格子路径判定）。
+
+def _owned_results_dir(sid: str, path) -> bool:
+    """归属校验：path 必须真实位于 results/ 之内，且目录名可追溯到 sid。"""
+    if not path:
+        return False
+    try:
+        base = os.path.abspath(RESULTS_DIR)
+        real_base = os.path.realpath(base)
+        abs_path = os.path.abspath(str(path).replace("/", os.sep))
+        real_path = os.path.realpath(abs_path)
+    except Exception:
+        return False
+    # 严格位于 results/ 之下（== results/ 自身直接拒绝）；realpath 也必须在里面，
+    # 否则符号链接可以指向 results/ 之外 → 拒绝（不跟随链接删除）。
+    if not (os.path.normcase(abs_path).startswith(os.path.normcase(base) + os.sep)
+            and os.path.normcase(real_path).startswith(os.path.normcase(real_base) + os.sep)):
+        return False
+    name = os.path.basename(abs_path.rstrip("\\/"))
+    if not name or name in (".", ".."):
+        return False
+    if name == sid:
+        return True
+    short_id = sid.split("-")[-1] if "-" in sid else ""
+    return bool(short_id) and short_id in name
+
+
+def _owned_results_dirs(sid: str) -> list:
+    """收集 results/ 下属于 sid 的目录（含 rename 后的 物种_组织_方向_日期_短ID 型）。"""
+    owned = []
+    base = os.path.abspath(RESULTS_DIR)
+    if not os.path.isdir(base):
+        return owned
+    try:
+        names = os.listdir(base)
+    except Exception:
+        return owned
+    for name in names:
+        cand = os.path.join(base, name)
+        if _owned_results_dir(sid, cand):
+            owned.append(cand)
+    return owned
+
+
+def _force_rmtree(path: str) -> None:
+    """物理删除目录（清只读位；Windows 占用由调用方重试兜底）。"""
+    if os.path.islink(path):
+        os.remove(path)
+        return
+    if not os.path.lexists(path):
+        return
+    if not os.path.isdir(path):
+        os.remove(path)
+        return
+    # agent 产物常带只读位 → 先统一放开权限再删
+    for root, dirs, files in os.walk(path):
+        for n in files:
+            p = os.path.join(root, n)
+            if not os.path.islink(p):
+                try:
+                    os.chmod(p, 0o600)
+                except Exception:
+                    pass
+        for n in dirs:
+            p = os.path.join(root, n)
+            if not os.path.islink(p):
+                try:
+                    os.chmod(p, 0o700)
+                except Exception:
+                    pass
+    shutil.rmtree(path)
+
+
+async def _purge_session_results(sid: str, extra_paths=None) -> dict:
+    """删除会话在 results/ 下的全部数据目录。
+
+    返回 {deleted: [路径], failed: [{path, error}], external: [未删的外部路径]}。
+    外部路径（用户 output_root / 桌面镜像）只报告不删除。
+    """
+    targets, seen, external = [], set(), []
+    for p in list(extra_paths or []):
+        if p and not _owned_results_dir(sid, p):
+            external.append(str(p).replace("\\", "/"))
+    candidates = _owned_results_dirs(sid) + [os.path.join(RESULTS_DIR, sid)] + list(extra_paths or [])
+    for p in candidates:
+        if not p:
+            continue
+        try:
+            ap = os.path.abspath(str(p).replace("/", os.sep))
+        except Exception:
+            continue
+        if ap in seen or not _owned_results_dir(sid, ap):
+            continue
+        seen.add(ap)
+        if os.path.lexists(ap):
+            targets.append(ap)
+
+    deleted, failed = [], []
+    loop = asyncio.get_running_loop()
+    for ap in targets:
+        err = ""
+        ok = False
+        # P2-4：删动作过门（目标本来就必须是会话自己的 results 目录；强制 fs.delete 后越界即拦，
+        # 并且在批量删除里如实报成 failed，而不是整个接口 500）
+        _denied = _sandbox_precheck("fs.delete", ap, [RESULTS_DIR], "sessions.purge_results")
+        if _denied:
+            failed.append({"path": ap.replace("\\", "/"),
+                           "error": "sandbox denied: %s" % _denied})
+            continue
+        for attempt in range(3):
+            try:
+                await loop.run_in_executor(None, _force_rmtree, ap)
+            except Exception as e:  # Windows 文件占用 / 权限
+                err = str(e)
+            if not os.path.lexists(ap):
+                ok = True
+                break
+            await asyncio.sleep(0.3 * (attempt + 1))  # 等后台脚本释放句柄后重试
+        if ok:
+            deleted.append(ap.replace("\\", "/"))
+        else:
+            failed.append({"path": ap.replace("\\", "/"), "error": err or "目录在重试后仍存在"})
+    return {"deleted": deleted, "failed": failed, "external": external}
 
 
 @app.delete("/api/sessions/{sid}")
@@ -6630,9 +8856,12 @@ async def delete_session(sid: str):
         _task_supervisor.cancel(sid)
     except Exception:
         pass
-    """删除会话：内存 + state.db + agent 资源（真正杀死 agent）"""
+    """删除会话：内存 + state.db + agent 资源（真正杀死 agent）+ 结果目录数据"""
     session = _sessions.get(sid)
+    _hint_dirs = []
     if session:
+        # 结果目录 / 外部镜像先留作线索：内存记录删掉后，磁盘数据仍要按会话清干净
+        _hint_dirs = [session.get("results_dir", ""), session.get("output_root", "")]
         # 清理 agent 资源（真正杀死 agent）
         _cleanup_session_agent(session, kill_agent=True)
         del _sessions[sid]
@@ -6649,30 +8878,44 @@ async def delete_session(sid: str):
             db.delete_session(sid)
         except Exception:
             pass
-    # 注：结果目录（results/{sid}/ 分析产出）按用户要求保留，不删除
-    # 删除 Hermes 会话转录文件（hermes_home/sessions/ 下的 request_dump_*）
+    # 会话删除 = 数据删除（用户要求 2026-09-13）：results/ 下该会话的目录连同全部
+    # 分析产物（figures/results/scripts/data/log、token_usage.jsonl 等）物理删除。
+    # 放在 agent 清理之后，避免「边写边删」把目录复活。
+    purge = await _purge_session_results(sid, extra_paths=_hint_dirs)
+    if purge["deleted"]:
+        logger.info(f"[MemOmics] 会话 {sid} 结果目录已删除: {purge['deleted']}")
+    if purge["failed"]:
+        logger.warning(f"[MemOmics] 会话 {sid} 结果目录删除失败: {purge['failed']}")
+    if purge["external"]:
+        logger.info(f"[MemOmics] 会话 {sid} 外部目录保留（非 results/ 内，未删）: {purge['external']}")
+    # 删除 MemOmics 会话转录文件（memomics_home/sessions/ 下的 request_dump_*）
     try:
         import glob as _glob
-        for _f in _glob.glob(os.path.join(HERMES_HOME_DIR, "sessions", f"*{sid}*")):
+        for _f in _glob.glob(os.path.join(MEMOMICS_HOME_DIR, "sessions", f"*{sid}*")):
             try:
                 os.remove(_f)
             except Exception:
                 pass
     except Exception:
         pass
-    return {"ok": True}
+    return {
+        "ok": True,
+        "results_dirs_deleted": purge["deleted"],
+        "results_dirs_failed": purge["failed"],
+        "external_dirs_kept": purge["external"],
+    }
 
 
 # --- 模型切换 ---
 
 # --- Skill 个性化管理 ---
 
-SKILLS_BIO_DIR = os.path.join(HERMES_HOME_DIR, "skills", "bioinformatics")
+SKILLS_BIO_DIR = os.path.join(MEMOMICS_HOME_DIR, "skills", "bioinformatics")
 
 def _load_skills_config() -> dict:
     """读取 config.yaml 的 skills 部分"""
     import yaml as _yaml
-    cfg_path = os.path.join(HERMES_HOME_DIR, "config.yaml")
+    cfg_path = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
     try:
         with open(cfg_path, "r", encoding="utf-8") as f:
             cfg = _yaml.safe_load(f) or {}
@@ -6683,7 +8926,7 @@ def _load_skills_config() -> dict:
 def _save_skills_disabled(disabled_list: list):
     """保存 disabled skill 列表到 config.yaml"""
     import yaml as _yaml
-    cfg_path = os.path.join(HERMES_HOME_DIR, "config.yaml")
+    cfg_path = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
     try:
         with open(cfg_path, "r", encoding="utf-8") as f:
             cfg = _yaml.safe_load(f) or {}
@@ -6704,9 +8947,9 @@ async def register_skill(request: Request):
         trigger_kw = data.get("trigger_keywords", None)
         register_soul = data.get("register_soul", False)
         auto_register.init(
-            os.path.join(HERMES_HOME_DIR, "skills", "bioinformatics"),
-            os.path.join(HERMES_HOME_DIR, "SKILLS_INDEX.md"),
-            os.path.join(HERMES_HOME_DIR, "SOUL.md"),
+            os.path.join(MEMOMICS_HOME_DIR, "skills", "bioinformatics"),
+            os.path.join(MEMOMICS_HOME_DIR, "SKILLS_INDEX.md"),
+            os.path.join(MEMOMICS_HOME_DIR, "SOUL.md"),
         )
         result = auto_register.register_skill(skill_name, trigger_kw, register_soul)
         return result
@@ -6775,7 +9018,7 @@ async def switch_model(payload: dict):
     """切换模型
 
     - 带 session_id：会话级切换 — 只影响该会话（独立 model_config + 重建该会话 agent），
-      持久化到 Hermes state.db（update_session_model / update_session_billing_route），
+      持久化到 MemOmics state.db（update_session_model / update_session_billing_route），
       重启/重连后自动恢复；不影响其他会话和全局 _current_model。
     - 不带 session_id：全局切换（兼容旧行为）— 广播所有会话 + 写 model_config.json。
     """
@@ -6785,6 +9028,24 @@ async def switch_model(payload: dict):
     base_url = payload.get("base_url", "")
     api_key = payload.get("api_key", "")
     provider = payload.get("provider", "")
+
+    # 2026-10-11：前端已不再持有明文 key（后端永不外发明文，见 _mask_keys_deep）。
+    # 前端只传 base_url/provider 时，这里按已保存的 provider 记录把 key 查补回来，
+    # 否则"换提供商但沿用上一个 key"会静默失败。
+    if not api_key and model:
+        _need = str(base_url or "").rstrip("/")
+        _hint = str(payload.get("provider_id") or provider or "")
+        for _pid, _saved in _provider_keys.items():
+            _s2 = _saved or {}
+            if not _s2.get("api_key"):
+                continue
+            if _hint and _pid != _hint:
+                continue
+            _p2 = _PROVIDERS_INDEX.get(_pid) or {}
+            _api2 = str(_p2.get("api") or "").rstrip("/")
+            if not _need or _api2 == _need:
+                api_key = _s2["api_key"]
+                break
 
     # ── 自动补全（2026-08-08 重新设计）：前端只需传 model id（+可选 provider_id）。
     # 原来要求前端把 base_url/api_key 都传全，旧页面/简化调用方缺字段时切换
@@ -6841,7 +9102,7 @@ async def switch_model(payload: dict):
             except Exception:
                 pass
             s["agent"] = None
-        # 持久化到 Hermes state.db（重启后自动恢复会话级模型）
+        # 持久化到 MemOmics state.db（重启后自动恢复会话级模型）
         # 会话级锁定：此后全局模型切换不再覆盖本会话（互不影响）
         s["model_locked"] = True
         try:
@@ -6879,6 +9140,11 @@ async def switch_model(payload: dict):
             s["agent"] = None
     # 持久化到文件 (重启后自动恢复)
     _save_model_config()
+    # 2026-09-13: 全局换模型后同步刷新辩论 env（无会话上下文的调用走这条兜底通道）
+    try:
+        _sync_debate_env()
+    except Exception:
+        pass
     return {"ok": True, "current": _public_model_config()}
 
 
@@ -6896,9 +9162,13 @@ async def list_providers():
             "api": p["api"],
             "env_var": p.get("env_var", ""),
             "group": p.get("group", "其他"),
-            "model_count": len(p.get("models", [])),
+            "model_count": len(_effective_models(p, saved)),
             "has_key": _is_valid_api_key(saved.get("api_key")),
             "is_custom": p["id"] == "dcs-cloud",
+            "note": p.get("note", ""),
+            "key_hint": p.get("key_hint", ""),
+            "auto_pull": bool(p.get("auto_pull")),
+            "models_pulled": bool(saved.get("models")),
         })
     # 2026-08-27: 用户自定义 provider（custom-*）并入列表
     for pid, cp in _custom_providers.items():
@@ -6927,6 +9197,34 @@ def _mask_key(k):
     if len(k) <= 10:
         return "****"
     return k[:4] + "…" + k[-4:]
+
+
+_SECRET_FIELD_NAMES = ("api_key", "apikey", "pat", "token", "access_token", "refresh_token",
+                       "secret", "password", "passwd", "passphrase", "authorization")
+
+
+def _mask_keys_deep(obj):
+    """递归把响应里任何密钥字段换成掩码，并补 has_<字段> 布尔（2026-10-11）。
+
+    背景：用户报"迎接弹窗里看到我的密码"——查证是若干接口把明文 key 直接回给了
+    浏览器（前端一渲染就可见、F12 也能看到）。这里做统一收口：任何含密钥的响应
+    结构经过它就只剩 sk-1234…abcd 形态；前端要"是否已配置"看 has_<字段>。
+    """
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            if isinstance(v, str) and k.lower() in _SECRET_FIELD_NAMES and v:
+                out[k] = _mask_key(v)
+                out["has_" + k] = True
+                continue
+            if isinstance(v, (dict, list)):
+                out[k] = _mask_keys_deep(v)
+            else:
+                out[k] = v
+        return out
+    if isinstance(obj, list):
+        return [_mask_keys_deep(x) for x in obj]
+    return obj
 
 
 @app.get("/api/imagegen/config")
@@ -6974,35 +9272,115 @@ async def save_imagegen_config(body: dict):
                         continue  # 脱敏值不回写
                     sub[k] = v
         _save_image_gen_config()
-        _sync_imagegen_provider_to_hermes()  # image_generate 工具可见性依赖 config.yaml 的 image_gen.provider
+        _sync_imagegen_provider_to_memomics()  # image_generate 工具可见性依赖 config.yaml 的 image_gen.provider
         return {"ok": True, "provider": _image_gen_config.get("provider")}
     except Exception as exc:
         return JSONResponse({"error": f"保存图像生成配置失败: {exc}"}, status_code=400)
 
 
+def _pull_provider_models(pid, p, api_key, timeout=15.0):
+    """向 provider 端点拉取模型列表并保存（保存 key 自动拉取 / 手动刷新共用）。"""
+    try:
+        from memomics.coding_plans import fetch_plan_models
+    except Exception as exc:
+        return {"ok": False, "error": f"拉取模块加载失败: {exc}"}
+    res = fetch_plan_models({
+        "id": pid, "api": p.get("api", ""),
+        "models_url": p.get("models_url"),
+        "extra_headers": p.get("extra_headers"),
+    }, api_key, timeout=timeout)
+    if not res.get("ok"):
+        return {"ok": False, "error": res.get("error", "拉取失败"),
+                "tried": res.get("tried", [])}
+    models = res.get("models") or []
+    saved = _provider_keys.setdefault(pid, {})
+    saved["models"] = models
+    saved["models_source"] = res.get("url_used", "")
+    saved["models_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    _save_provider_keys()
+    _sync_custom_providers_to_memomics(pid)
+    print(f"[MemOmics] provider {pid} 已拉取 {len(models)} 个模型（{res.get('url_used', '')}）", flush=True)
+    return {"ok": True, "provider": pid, "count": len(models), "models": models,
+            "url_used": res.get("url_used", "")}
+
+
 @app.get("/api/providers/{pid}/models")
 async def get_provider_models(pid: str):
-    """返回指定 provider 的模型列表"""
+    """返回指定 provider 的模型列表（拉取到的模型优先于目录预设）"""
     p = _PROVIDERS_INDEX.get(pid)
     if not p:
         return JSONResponse({"error": f"Provider '{pid}' not found"}, status_code=404)
+    saved = _provider_keys.get(pid) or {}
     models = []
-    for m in p.get("models", []):
+    for m in _effective_models(p, saved):
         models.append({
             "id": m["id"], "name": m["name"],
             "reasoning": m.get("reasoning", False),
             "tool_call": m.get("tool_call", False),
         })
-    return {"provider": pid, "models": models, "base_url": p["api"]}
+    return {"provider": pid, "models": models, "base_url": p["api"],
+            "source": saved.get("models_source") or "catalog",
+            "updated_at": saved.get("models_updated_at") or "",
+            "auto_pull": bool(p.get("auto_pull")),
+            "note": p.get("note", ""), "key_hint": p.get("key_hint", "")}
+
+
+@app.post("/api/providers/{pid}/models/refresh")
+async def refresh_provider_models(pid: str):
+    """手动拉取指定 provider 的可用模型并保存（编程套餐保存 key 后自动拉取）。"""
+    p = _PROVIDERS_INDEX.get(pid)
+    if not p:
+        return JSONResponse({"error": f"Provider '{pid}' not found"}, status_code=404)
+    saved = _provider_keys.get(pid) or {}
+    api_key = saved.get("api_key") or ""
+    if not _is_valid_api_key(api_key) and not saved.get("local"):
+        return JSONResponse({"error": "请先保存该 provider 的 API Key，再拉取模型"},
+                            status_code=400)
+    result = _pull_provider_models(pid, p, api_key)
+    if not result.get("ok"):
+        return JSONResponse({"error": result.get("error", "拉取失败"),
+                             "tried": result.get("tried", [])}, status_code=400)
+    return result
 
 
 _OPENCODE_SESSION_HOST = "opencode.ai"
 
 
-def _build_hermes_provider_entry(pid, name, api_base, api_key, models, prev=None):
-    """构造写入 Hermes config.yaml 的 custom_providers 条目（2026-09-10 修复）。
+def _provider_extra_headers_for(base_url):
+    """按 base_url 匹配 config.yaml custom_providers[].extra_headers（2026-09-13）。
 
-    1) 同时写 `base_url`：Hermes 的 ProviderProfile / per-provider `extra_headers`
+    opencode.ai zen 网关要求每个请求带 x-opencode-session，缺则一律 400
+    MissingSessionID。MemOmics 底座走 openai SDK 时由
+    get_custom_provider_extra_headers 注入，但 MemOmics 侧自建 httpx 调用
+    （会话自动命名等）绕过底座，必须自行合并。匹配不到返回 {}。
+    """
+    if not base_url:
+        return {}
+    try:
+        from hermes_cli.config import read_raw_config
+        target = str(base_url).rstrip("/").lower()
+        if target.endswith("/chat/completions"):
+            target = target[: -len("/chat/completions")]
+        cfg = read_raw_config() or {}
+        for c in cfg.get("custom_providers") or []:
+            if not isinstance(c, dict):
+                continue
+            for field in ("base_url", "api_base"):
+                cand = str(c.get(field) or "").rstrip("/").lower()
+                if cand and cand == target:
+                    extra = c.get("extra_headers")
+                    if isinstance(extra, dict) and extra:
+                        return {str(k): str(v) for k, v in extra.items()}
+                    return {}
+    except Exception as e:
+        print(f"[WARN] 读取 provider extra_headers 失败({base_url}): {e}")
+    return {}
+
+
+def _build_memomics_provider_entry(pid, name, api_base, api_key, models, prev=None):
+    """构造写入 MemOmics config.yaml 的 custom_providers 条目（2026-09-10 修复）。
+
+    1) 同时写 `base_url`：MemOmics 的 ProviderProfile / per-provider `extra_headers`
        匹配只认 `base_url`（hermes_cli/config.py:get_custom_provider_extra_headers），
        此前只写 `api_base` → 该类配置永远匹配不上，静默失效。
     2) 保留原有附加字段（extra_headers / api_mode / ssl_* / context_length…）：
@@ -7017,7 +9395,7 @@ def _build_hermes_provider_entry(pid, name, api_base, api_key, models, prev=None
         "id": pid,
         "name": name,
         "api_base": api_base,     # MemOmics 自身读取的字段
-        "base_url": api_base,     # Hermes 底座/匹配器读取的字段
+        "base_url": api_base,     # MemOmics 底座/匹配器读取的字段
         "api_key": api_key if _is_valid_api_key(api_key) else "",
         "models": models,
     })
@@ -7036,11 +9414,20 @@ def _build_hermes_provider_entry(pid, name, api_base, api_key, models, prev=None
     return entry
 
 
-def _sync_custom_providers_to_hermes(pid=None):
-    """把「有 key 的 provider」同步为 Hermes config.yaml 的 custom_providers。
+def _norm_saved_key_entry(_v):
+    """provider_keys.json 里的一项：新格式是 dict，旧格式可能直接是字符串 key。"""
+    if isinstance(_v, dict):
+        return _v
+    if isinstance(_v, str) and _v.strip():
+        return {"api_key": _v.strip()}
+    return {}
+
+
+def _sync_custom_providers_to_memomics(pid=None):
+    """把「有 key 的 provider」同步为 MemOmics config.yaml 的 custom_providers。
 
     修复 2026-08-08：provider key 原来只存 MemOmics 的 provider_keys.json，
-    Hermes 底座（config.yaml）看不到 → 底座侧模型路由/校验对不上。现每个
+    MemOmics 底座（config.yaml）看不到 → 底座侧模型路由/校验对不上。现每个
     保存/删除 key 的操作都同步一份到 config.yaml，与底座本地配置一致。
     """
     try:
@@ -7052,23 +9439,23 @@ def _sync_custom_providers_to_hermes(pid=None):
                 existing[c["id"]] = c
         if pid is None:
             # 2026-08-27: 遍历所有有 key 的 provider（内置 + 用户自定义 custom-*），
-            # 原实现只遍历 _CHINA_PROVIDERS → 自定义 provider 的 key 不进 Hermes 底座
+            # 原实现只遍历 _CHINA_PROVIDERS → 自定义 provider 的 key 不进 MemOmics 底座
             for _pid in list(_provider_keys.keys()):
-                saved = _provider_keys.get(_pid)
+                saved = _norm_saved_key_entry(_provider_keys.get(_pid))
                 if not (saved and saved.get("api_key")):
                     continue
                 p = _PROVIDERS_INDEX.get(_pid) or {}
                 _api = saved.get("base_url") or p.get("api", "")
-                existing[_pid] = _build_hermes_provider_entry(
+                existing[_pid] = _build_memomics_provider_entry(
                     _pid, p.get("name", _pid), _api, saved["api_key"],
-                    p.get("models", []), existing.get(_pid))
-        elif pid in _provider_keys and _provider_keys[pid].get("api_key"):
+                    _effective_models(p, saved), existing.get(_pid))
+        elif pid in _provider_keys and _norm_saved_key_entry(_provider_keys[pid]).get("api_key"):
             p = _PROVIDERS_INDEX.get(pid) or {}
-            saved = _provider_keys[pid]
+            saved = _norm_saved_key_entry(_provider_keys[pid])
             _api = saved.get("base_url") or p.get("api", "")
-            existing[pid] = _build_hermes_provider_entry(
+            existing[pid] = _build_memomics_provider_entry(
                 pid, p.get("name", pid), _api, saved["api_key"],
-                p.get("models", []), existing.get(pid))
+                _effective_models(p, saved), existing.get(pid))
         else:
             existing.pop(pid, None)
         cfg["custom_providers"] = list(existing.values())
@@ -7081,15 +9468,21 @@ def _sync_custom_providers_to_hermes(pid=None):
 
 @app.post("/api/providers/{pid}/key")
 async def save_provider_key(pid: str, payload: dict):
-    """保存指定 provider 的 API Key（同时同步 Hermes config.yaml custom_providers）"""
+    """保存指定 provider 的 API Key（同时同步 MemOmics config.yaml custom_providers）"""
     if pid not in _PROVIDERS_INDEX:
         return JSONResponse({"error": f"Provider '{pid}' not found"}, status_code=404)
     key = (payload.get("api_key") or "").strip()
     if not key:
         return JSONResponse({"error": "api_key is required"}, status_code=400)
+    _prev_saved = _provider_keys.get(pid) or {}
     _provider_keys[pid] = {"api_key": key, "base_url": _PROVIDERS_INDEX[pid]["api"]}
+    if _prev_saved.get("models"):
+        # 换 key 不清空已拉取的模型列表（下次拉取会覆盖）
+        _provider_keys[pid]["models"] = _prev_saved["models"]
+        _provider_keys[pid]["models_source"] = _prev_saved.get("models_source", "")
+        _provider_keys[pid]["models_updated_at"] = _prev_saved.get("models_updated_at", "")
     _save_provider_keys()
-    _sync_custom_providers_to_hermes(pid)
+    _sync_custom_providers_to_memomics(pid)
     # 联动：全局模型正在用这个 provider 时，同步新 key——
     # 否则"设置页存 key + 设全局模型"的顺序反了就会用旧 key（微信/新会话都会中招）
     if _current_model.get("provider") == pid or _current_model.get("base_url") == _PROVIDERS_INDEX[pid]["api"]:
@@ -7101,16 +9494,24 @@ async def save_provider_key(pid: str, payload: dict):
             if s.get("model_config") and s["model_config"].get("base_url") == _PROVIDERS_INDEX[pid]["api"]:
                 s["model_config"]["api_key"] = key
         print(f"[MemOmics] provider {pid} 的 key 已同步到全局模型配置", flush=True)
-    return {"ok": True, "provider": pid, "has_key": True}
+    _resp = {"ok": True, "provider": pid, "has_key": True}
+    # 编程套餐（Kimi For Coding / GLM / 百炼 Coding / Step Plan）：保存 key 后自动拉模型。
+    # 失败不阻断保存，只把结果回传前端提示。
+    if _PROVIDERS_INDEX[pid].get("auto_pull"):
+        try:
+            _resp["models_pulled"] = _pull_provider_models(pid, _PROVIDERS_INDEX[pid], key, timeout=15.0)
+        except Exception as _pull_err:
+            _resp["models_pulled"] = {"ok": False, "error": str(_pull_err)[:150]}
+    return _resp
 
 
 @app.delete("/api/providers/{pid}/key")
 async def delete_provider_key(pid: str):
-    """删除指定 provider 的 API Key（同步移除 Hermes config.yaml custom_providers 条目）"""
+    """删除指定 provider 的 API Key（同步移除 MemOmics config.yaml custom_providers 条目）"""
     if pid in _provider_keys:
         del _provider_keys[pid]
         _save_provider_keys()
-        _sync_custom_providers_to_hermes(pid)
+        _sync_custom_providers_to_memomics(pid)
     return {"ok": True}
 
 
@@ -7136,7 +9537,7 @@ async def add_local_provider(payload: dict):
     _provider_keys[pid] = {"api_key": "", "local": True, "base_url": base_url}
     _save_provider_keys()
     try:
-        _sync_custom_providers_to_hermes()
+        _sync_custom_providers_to_memomics()
     except Exception:
         pass
     return {"ok": True, "provider_id": pid, "model": model}
@@ -7159,9 +9560,17 @@ async def detect_local_models():
     found = []
     for name, url in candidates:
         try:
-            req = urllib.request.Request(url, headers={"Accept": "application/json"})
-            with urllib.request.urlopen(req, timeout=2) as r:
-                d = _json.loads(r.read().decode("utf-8"))
+            if _net_guard is not None:
+                # net.local：本机服务发现只认环回、默认放行（不该要授权，强制模式下也要能用）
+                with _net_guard.urlopen(url, timeout=2.0,
+                                        headers={"Accept": "application/json"},
+                                        action="net.local",
+                                        source="api.models.local") as r:
+                    d = _json.loads(r.read().decode("utf-8"))
+            else:
+                req = urllib.request.Request(url, headers={"Accept": "application/json"})
+                with urllib.request.urlopen(req, timeout=2) as r:
+                    d = _json.loads(r.read().decode("utf-8"))
             for m in d.get("data", []):
                 mid = m.get("id") or m.get("model") or ""
                 if not mid:
@@ -7259,10 +9668,8 @@ async def discover_custom_models(payload: dict):
         for proxy in (_PROXY, None):
             try:
                 req = _ur.Request(_url, headers=headers)
-                # 2026-08-26: build_opener 嵌套修复（else 分支直接返回 OpenerDirector）
-                opener = (_ur.build_opener(_ur.ProxyHandler({"http": proxy, "https": proxy}))
-                          if proxy else _ur.build_opener())
-                with opener.open(req, timeout=20) as r:
+                # 2026-09-23: 统一走 _url_opener（certifi 信任库 + 代理/直连）
+                with _url_opener(proxy).open(req, timeout=20) as r:
                     data = json.loads(r.read().decode("utf-8", "replace"))
                 # OpenAI 兼容三种形态：data[] / models[] / object=list 的 data
                 raw_models = data.get("data") or data.get("models") or []
@@ -7317,7 +9724,7 @@ async def add_custom_provider(payload: dict):
         _provider_keys[pid] = {"api_key": api_key, "base_url": base_url}
         _save_provider_keys()
     try:
-        _sync_custom_providers_to_hermes(pid)
+        _sync_custom_providers_to_memomics(pid)
     except Exception:
         pass
     return {"ok": True, "provider_id": pid}
@@ -7345,7 +9752,7 @@ async def update_custom_provider(pid: str, payload: dict):
         _provider_keys[pid] = {"api_key": _key, "base_url": _def["api"]}
         _save_provider_keys()
     try:
-        _sync_custom_providers_to_hermes(pid)
+        _sync_custom_providers_to_memomics(pid)
     except Exception:
         pass
     return {"ok": True, "provider_id": pid}
@@ -7353,7 +9760,7 @@ async def update_custom_provider(pid: str, payload: dict):
 
 @app.delete("/api/providers/custom/{pid}")
 async def delete_custom_provider(pid: str):
-    """删除自定义 provider（定义 + key + Hermes 同步）"""
+    """删除自定义 provider（定义 + key + MemOmics 同步）"""
     if pid not in _custom_providers:
         return JSONResponse({"error": f"自定义 provider '{pid}' 不存在"}, status_code=404)
     del _custom_providers[pid]
@@ -7362,7 +9769,7 @@ async def delete_custom_provider(pid: str):
     _save_custom_providers()
     _save_provider_keys()
     try:
-        _sync_custom_providers_to_hermes(pid)
+        _sync_custom_providers_to_memomics(pid)
     except Exception:
         pass
     return {"ok": True}
@@ -7392,16 +9799,62 @@ async def list_available_models(session_id: str = ""):
             continue
         is_current = (cur_cfg.get("api_key") == saved.get("api_key") and
                       cur_cfg.get("base_url") == p["api"])
-        for m in p.get("models", []):
+        for m in _effective_models(p, saved):
             models.append({
                 "id": m["id"], "name": m["name"],
                 "provider_id": pid, "provider_name": p["name"].split("(")[0].strip(),
-                "base_url": p["api"], "api_key": saved["api_key"],
+                "base_url": p["api"],
+                "api_key": _mask_key(saved.get("api_key") or ""),   # 2026-10-11：明文不出后端
+                "has_key": bool(saved.get("api_key")),
                 "reasoning": m.get("reasoning", False),
                 "tool_call": m.get("tool_call", False),
                 "is_current": is_current and cur_cfg.get("model") == m["id"],
             })
     return {"models": models, "total": len(models)}
+
+
+@app.get("/api/usage/overview")
+async def usage_overview(fresh: int = 0, days: int = 30):
+    """用量总览：各通道余额/套餐窗口 + 本机台账 + DeepSeek 峰谷时段（60s 缓存）。
+
+    对标 DSH「使用统计」：key 只在宿主侧使用；用量来自回合级流水
+    token_usage.jsonl（精确归日），余额/套餐来自各厂商官方端点（fresh=1 强制刷新）。
+    """
+    try:
+        from memomics import usage_quota
+    except Exception as exc:
+        return JSONResponse({"error": f"用量模块加载失败: {exc}"}, status_code=500)
+    configured = {}
+    display_names = {}
+    for _pid, _saved in _provider_keys.items():
+        _saved = _saved or {}
+        _p = _PROVIDERS_INDEX.get(_pid) or {}
+        configured[_pid] = {
+            "api_key": _saved.get("api_key", ""),
+            "base_url": _saved.get("base_url") or _p.get("api", ""),
+        }
+        display_names[_pid] = (_p.get("name", _pid).split("(")[0].strip() or _pid)
+    current = {}
+    if _current_model:
+        _cur_base = str(_current_model.get("base_url") or "")
+        _cur_pid = ""
+        for _pid, _p in _PROVIDERS_INDEX.items():
+            if _cur_base and _p.get("api") and _p["api"].rstrip("/") == _cur_base.rstrip("/"):
+                _cur_pid = _pid
+                break
+        current = {
+            "provider_id": _cur_pid,
+            "provider_name": display_names.get(_cur_pid, _cur_pid),
+            "base_url": _cur_base,
+            "model": _current_model.get("model", ""),
+        }
+    try:
+        data = usage_quota.overview(
+            configured, display_names, current=current,
+            days=max(1, min(int(days or 30), 90)), fresh=bool(fresh))
+    except Exception as exc:
+        return JSONResponse({"error": f"用量查询失败: {exc}"}, status_code=500)
+    return _mask_keys_deep(data)
 
 
 # --- 微信 iLink 连接 ---
@@ -7422,7 +9875,7 @@ _weixin_state = {
 # 从磁盘恢复已保存的微信凭据
 def _load_weixin_persist():
     try:
-        persist_path = os.path.join(HERMES_HOME_DIR, "weixin_account.json")
+        persist_path = os.path.join(MEMOMICS_HOME_DIR, "weixin_account.json")
         if os.path.exists(persist_path):
             with open(persist_path, "r", encoding="utf-8") as f:
                 saved = json.load(f)
@@ -7439,8 +9892,8 @@ def _load_weixin_persist():
 
 def _save_weixin_persist():
     try:
-        os.makedirs(HERMES_HOME_DIR, exist_ok=True)
-        persist_path = os.path.join(HERMES_HOME_DIR, "weixin_account.json")
+        os.makedirs(MEMOMICS_HOME_DIR, exist_ok=True)
+        persist_path = os.path.join(MEMOMICS_HOME_DIR, "weixin_account.json")
         with open(persist_path, "w", encoding="utf-8") as f:
             json.dump({
                 "account_id": _weixin_state["account_id"],
@@ -7472,6 +9925,10 @@ async def upload_image(file: UploadFile = File(...)):
     uid = str(uuid.uuid4())[:8]
     fname = f"{ts}_{uid}{ext}"
     fpath = os.path.join(_uploads_dir, fname)
+    # P2-4：写盘前过沙箱门（观察模式不拦；强制 fs.write 且越界/无授权 -> 403，一个字节都不落盘）
+    _denied = _sandbox_precheck("fs.write", fpath, [_uploads_dir], "upload.image")
+    if _denied:
+        return JSONResponse({"error": "sandbox denied: %s" % _denied}, status_code=403)
     with open(fpath, "wb") as f:
         f.write(contents)
     url = f"/uploads/{fname}"
@@ -7489,40 +9946,1460 @@ async def resource_status():
     return _resource_scheduler.snapshot()
 
 
+# ---------------------------------------------------------------------------
+# 后台任务查看（T2/4，2026-09-24）：读的是任务自己写的契约，服务端只读不猜
+# 契约文件：memomics_home/runtime/tasks/<task_id>.json（memomics/bio_tools/task_run.py 原子写）
+# ---------------------------------------------------------------------------
+
+def _task_run():
+    """task_run 模块（导入失败也不能让面板 500）。"""
+    try:
+        from memomics.bio_tools import task_run
+        return task_run
+    except Exception as e:      # pragma: no cover - 正常安装不会走到
+        logger.warning("task_run import failed: %s", e)
+        return None
+
+
+def _task_eta():
+    """阶段历史推 ETA 模块（导入失败就退回"不给数"，面板照常能用）。"""
+    try:
+        from memomics.bio_tools import task_eta
+        return task_eta
+    except Exception as e:      # pragma: no cover - 正常安装不会走到
+        logger.warning("task_eta import failed: %s", e)
+        return None
+
+
+def _task_history(items) -> dict:
+    """把「已跑完任务的阶段耗时」汇成历史，供 ETA 使用（一次汇总，全列表共用）。"""
+    mod = _task_eta()
+    if mod is None:
+        return {}
+    try:
+        return mod.collect_history(items or [])
+    except Exception as e:      # pragma: no cover - 纯计算，出错就退化成不给数
+        logger.warning("task_eta collect failed: %s", e)
+        return {}
+
+
+def _live_states() -> tuple:
+    """task_run 认为"还活着"的状态集合（拿不到就退回保守默认）。"""
+    tr = _task_run()
+    return tuple(getattr(tr, "LIVE_STATES", None) or ("queued", "running", "cancelling", "paused"))
+
+
+def _retry_root(d: dict) -> str:
+    """重试链的根 —— A 失败重试出 B、B 再失败重试出 C，三者的根始终是 A 的 task_id。"""
+    params = d.get("params") or {}
+    return str(params.get("重试根") or params.get("重试来源") or d.get("task_id") or "")
+
+
+def _retry_index(items, pending=None) -> dict:
+    """{根 id: {"used": 已重试次数, "live": 还在跑（或已排定）的那次重试 id}}。
+
+    一次汇总全列表共用（和 ETA 的历史汇总同一个套路）：列表里每张卡片都要知道
+    "这个任务还能不能再重试"，不能每张卡片各扫一遍目录。
+    `pending` 是"已经排定、还没落地的重试根"——退避要等几秒，那几秒里契约还不存在，
+    不把它算进去的话连点两下就会排出两个一模一样的一次重试。
+    """
+    live_states = _live_states()
+    index = {}
+    for d in items or []:
+        root = _retry_root(d)
+        if not root or root == str(d.get("task_id") or ""):
+            continue            # 只统计"重试出来的任务"，根本身不算一次重试
+        slot = index.setdefault(root, {"used": 0, "live": ""})
+        try:
+            nth = int((d.get("params") or {}).get("第几次重试") or 0)
+        except Exception:
+            nth = 0
+        slot["used"] = max(slot["used"], nth)
+        if (d.get("status") or "") in live_states and not slot["live"]:
+            slot["live"] = str(d.get("task_id") or "")
+    for root in (pending or ()):
+        slot = index.setdefault(str(root), {"used": 0, "live": ""})
+        if not slot["live"]:
+            slot["live"] = "已排定（等退避）"
+    return index
+
+
+# 失败到"可以重试"的终态：failed（真失败）/ interrupted（进程没了或服务重启留下的残局）。
+# cancelled 是用户自己按停的，面板不给重试按钮 —— 想重跑直接说一声就行。
+_RETRY_STATES = ("failed", "interrupted")
+try:
+    from webui.runtime.retry_backoff import RetryBackoff
+except ImportError:      # pragma: no cover - 兼容把 webui/ 当根目录的启动方式
+    from runtime.retry_backoff import RetryBackoff
+
+_retry_backoff = RetryBackoff()     # 2s / 5s / 15s / 45s，连续 3 次后不再硬重试
+# 已经排定退避、还没拉起来的那次重试：重试根 -> 排定时间。见 _retry_index 的 pending。
+_RETRY_INFLIGHT = {}
+
+
+def _retry_plan(d: dict, index: dict = None) -> dict:
+    """能不能重试、算第几次、隔多久 —— 退避策略全部由 RetryBackoff 说了算，不另发明一套。
+
+    返回字段：allowed / reason / root / used / attempt / delay_sec / max_retries。
+    """
+    task_id = str(d.get("task_id") or "")
+    status = str(d.get("status") or "")
+    root = _retry_root(d) or task_id
+    slot = (index if index is not None else {}).get(root) or {}
+    used = int(slot.get("used") or 0)
+    attempt = used + 1
+    plan = {"root": root, "used": used, "attempt": attempt,
+            "delay_sec": _retry_backoff.next_delay(attempt),
+            "max_retries": _retry_backoff.max_failures,
+            "allowed": True, "reason": ""}
+    # T15：退出码 0 但还有阶段没跑到的任务，也算"该重跑"—— 它没干完活。
+    left = [stg.get("name") for stg in (d.get("stages") or []) if stg.get("status") == "pending"]
+    unwound = bool(d.get("incomplete")) or bool(status == "done" and left)
+    if unwound and status == "done":
+        plan["note"] = ("任务退出码 0，但还有 %d 段没跑到（%s），可以重跑"
+                        % (len(left), "、".join([str(x) for x in left[:3]]) or "见阶段时间线"))
+    if status not in _RETRY_STATES and not unwound:
+        plan.update(allowed=False, reason="任务没失败（%s），不用重试" % (status or "未知"))
+    elif not (d.get("cmd") or ""):
+        plan.update(allowed=False, reason="这份契约没记下实际命令，重跑会变成瞎猜")
+    elif slot.get("live"):
+        plan.update(allowed=False, reason="上一次重试还在跑（%s），等它结束" % slot["live"])
+    elif _retry_backoff.exhausted(used):
+        plan.update(allowed=False, reason="已经连着重试 %d 次（上限 %d 次），先看日志再动手"
+                    % (used, _retry_backoff.max_failures))
+    return plan
+
+
+def _split_cmd(cmd):
+    """把契约里的命令还原成参数列表。
+
+    契约里 cmd 是**给人看的字符串**（为了面板显示拼过），重跑要拆回 token。
+    只认双引号包裹（Windows 上 "C:\\Program Files\\..." 这种），不解释 shell 语法 ——
+    管道/重定向/变量展开一律当普通字符，宁可跑出来报错，也不偷偷换个意思执行。
+    """
+    if isinstance(cmd, (list, tuple)):
+        return [str(x) for x in cmd if str(x)]
+    text = str(cmd or "").strip()
+    if not text:
+        return []
+    try:
+        import shlex
+        parts = shlex.split(text, posix=False)
+    except Exception:
+        parts = text.split()
+    out = []
+    for p in parts:
+        p = str(p)
+        if len(p) >= 2 and p[0] == '"' and p[-1] == '"':
+            p = p[1:-1]
+        if p:
+            out.append(p)
+    return out
+
+
+def _spawn_retry(d: dict, plan: dict) -> tuple:
+    """真起一个 wrapper 重跑原命令；返回 (结果字典, 错误串)，二者必有一个为空。
+
+    只搬契约里已有的东西（cmd/type/title/stages/script/params/session），
+    外加三个溯源参数：重试来源 / 重试根 / 第几次重试 —— 面板据此画重试链。
+    """
+    import subprocess as _sp
+    tr = _task_run()
+    if tr is None:
+        return None, "task_run 模块不可用"
+    argv_cmd = _split_cmd(d.get("cmd"))
+    if not argv_cmd:
+        return None, "没有可重跑的命令"
+    wrapper = getattr(tr, "__file__", "") or os.path.join(MEMOMICS_DIR, "memomics", "bio_tools", "task_run.py")
+    python = sys.executable or "python"
+    title = str(d.get("title") or d.get("task_id") or "任务")
+    argv = [python, wrapper, "--type", str(d.get("type") or "other"),
+            "--title", "%s（重试 %d/%d）" % (title, plan["attempt"], plan["max_retries"])]
+    stages = [str(stg.get("name") or "") for stg in (d.get("stages") or []) if stg.get("name")]
+    if stages:
+        argv += ["--stages", ",".join(stages)]
+    if d.get("script"):
+        argv += ["--script", str(d["script"])]
+    if d.get("session_dir"):
+        argv += ["--session-dir", str(d["session_dir"])]
+    if d.get("session_id"):
+        argv += ["--session-id", str(d["session_id"])]
+    if d.get("demo"):
+        argv += ["--demo"]
+    for k, v in (d.get("params") or {}).items():
+        argv += ["--param", "%s=%s" % (k, v)]
+    # 溯源参数放最后：dict 里同名键会被它们覆盖，重试的重试也只会指向直接上一级。
+    argv += ["--param", "重试来源=%s" % str(d.get("task_id") or ""),
+             "--param", "重试根=%s" % plan["root"],
+             "--param", "第几次重试=%d" % plan["attempt"]]
+    argv += ["--"] + argv_cmd
+    env = dict(os.environ)
+    # wrapper 按 env 找任务目录：必须显式钉到服务端正在读的那个 MEMOMICS_HOME，
+    # 否则测试/多实例下会写去另一个目录，面板永远看不到这次重试。
+    env["MEMOMICS_TASKS_DIR"] = _tasks_dir()
+    env["MEMOMICS_RUNTIME_DIR"] = os.path.dirname(_tasks_dir())
+    cwd = str(d.get("cwd") or "")
+    if not (cwd and os.path.isdir(cwd)):
+        cwd = str(d.get("session_dir") or "")
+    if not (cwd and os.path.isdir(cwd)):
+        cwd = MEMOMICS_DIR
+    log_dir = os.path.join(MEMOMICS_HOME_DIR, "runtime", "logs")
+    result = {"argv": argv, "cwd": cwd, "pid": None, "log": ""}
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+    except OSError:
+        log_dir = ""
+    flags = getattr(_sp, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+    log_path = os.path.join(log_dir, "retry-%s.log" % time.strftime("%Y%m%d-%H%M%S")) if log_dir else ""
+    try:
+        if log_path:
+            with open(log_path, "a", encoding="utf-8") as fh:
+                proc = _sp.Popen(argv, cwd=cwd, env=env, stdout=fh, stderr=fh,
+                                 stdin=_sp.DEVNULL, creationflags=flags)
+        else:
+            proc = _sp.Popen(argv, cwd=cwd, env=env, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+                             stdin=_sp.DEVNULL, creationflags=flags)
+    except Exception as e:
+        return None, "拉起重试进程失败：%s" % e
+    result["pid"] = proc.pid
+    result["log"] = log_path
+    return result, ""
+
+
+async def _retry_later(d: dict, plan: dict, delay: float) -> None:
+    """退避等待后再拉起重试（等待期间服务端该干嘛干嘛，不阻塞请求）。"""
+    try:
+        await asyncio.sleep(max(0.0, float(delay or 0)))
+    except asyncio.CancelledError:      # pragma: no cover - 进程退出时取消
+        _RETRY_INFLIGHT.pop(str(plan.get("root") or ""), None)
+        return
+    # T16：这条任务可能已经被删了（人工清理 / 到点自动过期）—— 删了就别再把它复活。
+    tid = os.path.basename(str(d.get("task_id") or ""))
+    if tid and not os.path.isfile(os.path.join(_tasks_dir(), tid + ".json")):
+        _RETRY_INFLIGHT.pop(str(plan.get("root") or ""), None)
+        return
+    try:
+        _spawn_retry(d, plan)
+    except Exception as e:              # pragma: no cover - 兜底，别让后台任务炸日志
+        logger.warning("retry spawn failed: %s", e)
+    finally:
+        # 拉起来（或失败）之后就把名额放开：契约已经落地，_retry_index 看得到它了。
+        _RETRY_INFLIGHT.pop(str(plan.get("root") or ""), None)
+
+
+def _tasks_dir() -> str:
+    """每次现算：MEMOMICS_HOME_DIR 可被测试/多实例改写，不能固化成模块常量。"""
+    return os.path.join(MEMOMICS_HOME_DIR, "runtime", "tasks")
+
+
+def _task_api_token() -> str:
+    """后台任务写 API 的轻量鉴权 token（同源本地 token，沿用记忆写 API 那套机制）。"""
+    return _memory_api_token()
+
+
+# ---------------------------------------------------------------------------
+# T16(2026-09-24)：任务清理 —— 人工删一条 / 批量清已结束 / 到点自动过期。
+# 三条硬规矩：
+#   ① 活着的一律不删（queued/running/paused/cancelling）—— 要删先取消；
+#   ② 只删契约 .json 和它自己的 <task_id>.log；产出文件（results/ 里的数据）一律不动；
+#   ③ 过期时间可调：MEMOMICS_TASK_TTL_HOURS（小时，默认 12；设 0 = 关掉自动清理）。
+# 人工批量清理**不看 TTL**（用户点了就清已结束的）；TTL 只管"到点没人管自动清"。
+# ---------------------------------------------------------------------------
+_TASK_TTL_ENV = "MEMOMICS_TASK_TTL_HOURS"
+_TASK_TTL_HOURS_DEFAULT = 12.0
+_TASK_SWEEP_MIN_GAP = 60.0
+_TASK_SWEEP_AT = [0.0]
+
+
+def _task_ttl_hours(override=None) -> float:
+    """保留多少小时（0 = 不自动清）。override > 环境变量 > 默认 12h。"""
+    raw = override
+    if raw is None or raw == "":
+        raw = os.environ.get(_TASK_TTL_ENV, "")
+    if raw is None or raw == "":
+        return _TASK_TTL_HOURS_DEFAULT
+    try:
+        return max(0.0, float(raw))
+    except (TypeError, ValueError):
+        return _TASK_TTL_HOURS_DEFAULT
+
+
+def _task_live_states(tr) -> tuple:
+    return tuple(getattr(tr, "LIVE_STATES", ("queued", "running", "paused", "cancelling")))
+
+
+def _task_terminal_states(tr) -> tuple:
+    return tuple(getattr(tr, "TERMINAL_STATES", ("done", "failed", "cancelled", "interrupted")))
+
+
+def _task_ended_ts(d: dict, path: str = "") -> float:
+    """任务什么时候结束的（epoch 秒）：finished_at → started_at+耗时 → 契约文件 mtime。
+
+    时间戳解析不了就退回 mtime —— 过期判定宁可晚一点，也不能因为格式怪就误删。
+    """
+    from datetime import datetime as _dt, timezone as _tz
+
+    def _parse(text):
+        try:
+            got = _dt.fromisoformat(str(text).strip())
+        except (TypeError, ValueError):
+            return None
+        if got.tzinfo is None:
+            got = got.replace(tzinfo=_tz.utc)
+        return got.timestamp()
+
+    fin = _parse(d.get("finished_at"))
+    if fin:
+        return float(fin)
+    started = _parse(d.get("started_at"))
+    if started:
+        try:
+            return float(started) + float(d.get("duration_sec") or 0.0)
+        except (TypeError, ValueError):
+            return float(started)
+    try:
+        return os.path.getmtime(path) if path and os.path.isfile(path) else 0.0
+    except OSError:
+        return 0.0
+
+
+def _task_log_candidates(tr, d: dict) -> list:
+    """这条任务的日志可能在哪几个地方 —— 只认"正好叫 <task_id>.log"的文件名。
+
+    契约里记的 log 最准；但老契约/单元夹具可能没记（或记的是别处），所以再按
+    task_run 的默认规则补几个候选：会话目录/log/、任务目录/、任务目录兄弟 logs/。
+    文件名不等于是这条任务的日志的一律不要 —— 契约被改坏也删不到别人的文件。
+    """
+    tid = os.path.basename(str(d.get("task_id") or ""))
+    if not tid:
+        return []
+    want = tid + ".log"
+    cands = [str(d.get("log") or "")]
+    sess = str(d.get("session_dir") or "")
+    if sess:
+        try:
+            cands.append(tr._default_log_path(sess, tid))
+        except Exception:
+            cands.append(os.path.join(sess, "log", want))
+    cands.append(os.path.join(_tasks_dir(), want))
+    cands.append(os.path.join(os.path.dirname(_tasks_dir()), "logs", want))
+    out = []
+    for p in cands:
+        if p and os.path.basename(p) == want and p not in out:
+            out.append(p)
+    return out
+
+
+def _task_delete_files(tr, d: dict) -> list:
+    """删一条任务的记录：契约 .json + 它自己的日志（产出文件一律不动）。"""
+    tid = os.path.basename(str(d.get("task_id") or ""))
+    if not tid:
+        return []
+    targets = [os.path.join(_tasks_dir(), tid + ".json")] + _task_log_candidates(tr, d)
+    gone = []
+    for p in targets:
+        try:
+            if os.path.isfile(p):
+                os.remove(p)
+                gone.append(p)
+        except OSError as e:      # pragma: no cover - 文件被占用/权限不够就记一笔
+            logger.warning("任务清理：删不掉 %s（%s）", p, e)
+    _RETRY_INFLIGHT.pop(tid, None)      # 排定但还没启动的重试不再复活（_retry_later 还会再核一次）
+    return gone
+
+
+def _task_delete_one(tr, task_id: str) -> dict:
+    """删一条已结束的任务。在跑/排队的一律拒绝（409），让用户先取消 —— 不偷偷杀进程。"""
+    t = tr.load_task(task_id)
+    if t is None:
+        return {"task_id": task_id, "ok": False, "code": 404, "reason": "任务不存在：%s" % task_id}
+    d = tr.reconcile(t.data) or t.data
+    status = str(d.get("status") or "")
+    if status in _task_live_states(tr):
+        return {"task_id": task_id, "ok": False, "code": 409, "status": status,
+                "reason": "任务还在跑（%s），先取消再删" % status}
+    gone = _task_delete_files(tr, d)
+    return {"task_id": task_id, "ok": True, "status": status, "removed": gone,
+            "title": d.get("title") or "", "incomplete": bool(d.get("incomplete"))}
+
+
+def _tasks_cleanup(states=None, session_id: str = "", ttl_hours=None, dry_run: bool = False) -> dict:
+    """批量清理 —— 面板上的「🧹 清理已结束」和到点自动过期走的是同一段代码。
+
+    ttl_hours=None：不看时间，把所有已结束的清掉（人工操作）；
+    ttl_hours>0   ：只清结束超过这么久的老任务（自动过期）。
+    """
+    tr = _task_run()
+    if tr is None:
+        return {"ok": False, "error": "task_run 模块不可用", "deleted": [], "deleted_count": 0}
+    _bind_task_run(tr)
+    want = tuple(states or _task_terminal_states(tr))
+    live = _task_live_states(tr)
+    ttl = _task_ttl_hours(ttl_hours) if ttl_hours is not None else 0.0
+    now = time.time()
+    try:
+        items = tr.list_tasks(session_id=session_id or "", limit=500, refresh=1)
+    except Exception as e:
+        return {"ok": False, "error": "读取任务失败：%s" % e, "deleted": [], "deleted_count": 0}
+    deleted, kept, notdue = [], [], []
+    for d in items:
+        tid = str(d.get("task_id") or "")
+        status = str(d.get("status") or "")
+        if not tid or status not in want:
+            continue
+        if status in live:                      # 双保险：过滤器写错也删不到活任务
+            kept.append({"task_id": tid, "reason": "还在跑（%s）" % status})
+            continue
+        if ttl > 0:
+            ended = _task_ended_ts(d, os.path.join(_tasks_dir(), tid + ".json"))
+            age = (now - ended) if ended else 0.0
+            if ended and age < ttl * 3600.0:
+                notdue.append({"task_id": tid, "left_sec": round(ttl * 3600.0 - age, 1)})
+                continue
+        entry = {"task_id": tid, "title": d.get("title") or "", "status": status}
+        if dry_run:
+            deleted.append(entry)
+            continue
+        one = _task_delete_one(tr, tid)
+        if one.get("ok"):
+            entry["removed"] = one.get("removed")
+            deleted.append(entry)
+        else:
+            kept.append({"task_id": tid, "reason": one.get("reason") or "删不掉"})
+    return {"ok": True, "deleted": deleted, "deleted_count": len(deleted),
+            "kept": kept[:50], "kept_count": len(kept),
+            "notdue": notdue[:50], "notdue_count": len(notdue),
+            "ttl_hours": ttl, "dry_run": bool(dry_run),
+            "states": list(want), "session_id": session_id or ""}
+
+
+def _task_auto_sweep() -> dict:
+    """到点自动过期（列表接口顺带跑，60s 最多一次）。返回给面板看的策略说明。"""
+    ttl = _task_ttl_hours()
+    info = {"ttl_hours": ttl, "auto": ttl > 0, "swept": None, "env": _TASK_TTL_ENV}
+    if ttl <= 0:
+        return info
+    now = time.time()
+    if now - _TASK_SWEEP_AT[0] < _TASK_SWEEP_MIN_GAP:
+        return info
+    _TASK_SWEEP_AT[0] = now
+    try:
+        res = _tasks_cleanup(ttl_hours=ttl)
+        info["swept"] = int(res.get("deleted_count") or 0)
+    except Exception as e:      # pragma: no cover - 清理失败绝不能拖垮列表
+        logger.warning("任务自动过期失败：%s", e)
+        info["error"] = str(e)
+    return info
+
+
+def _bind_task_run(tr):
+    """让 task_run 指向当前 memomics_home（面板与 wrapper 必须看同一个目录）。"""
+    tr.TASKS_DIR = _tasks_dir()
+    tr.FALLBACK_LOG_DIR = os.path.join(MEMOMICS_HOME_DIR, "runtime", "logs")
+    return tr
+
+
+def _env_line(env: dict) -> str:
+    """环境一句话（面板列表用）：R 4.5.3 / Python 3.12.10 / conda:xxx。"""
+    env = env or {}
+    if env.get("r"):
+        r = env["r"]
+        pk = (" + %s 包" % r.get("pkg_count")) if r.get("pkg_count") else ""
+        return "R %s%s" % (r.get("version", "?"), pk)
+    if env.get("conda"):
+        return "conda %s" % env["conda"]
+    if env.get("python_version"):
+        return "Python %s" % env["python_version"]
+    return env.get("kind", "未知环境")
+
+
+# T13(2026-09-24)：任务要标清楚"属于哪个会话"——只给一串 memomics-xxxx 等于没标。
+# 会话名走 state.db（索引查询，很便宜），30 秒缓存一次：一次列表 100 条任务不该查 100 次库。
+_SESSION_TITLE_MEMO = {}
+
+
+def _session_title(sid: str) -> str:
+    """会话显示名：标题优先，没标题就退回最近一句用户话，都没有就空（面板显示 id）。"""
+    sid = (sid or "").strip()
+    if not sid:
+        return ""
+    now = time.time()
+    hit = _SESSION_TITLE_MEMO.get(sid)
+    if hit and now - hit[0] < 30:
+        return hit[1]
+    title = ""
+    try:
+        db = _get_session_db()
+        if db is not None:
+            if hasattr(db, "get_session_title"):
+                title = str(db.get_session_title(sid) or "").strip()
+            if (not title or title in ("新会话", "New Chat")) and hasattr(db, "get_session"):
+                sess = db.get_session(sid) or {}
+                title = _queue_label(sess) or title
+    except Exception:  # pragma: no cover - 库里查不到就当没名字，不能拖垮列表
+        title = ""
+    title = " ".join(str(title).split())[:60]
+    _SESSION_TITLE_MEMO[sid] = (now, title)
+    return title
+
+
+def _task_card(d: dict, history: dict = None, retries: dict = None) -> dict:
+    """列表项：只留面板要显示的字段（契约文件本身可能很大）。
+
+    history（可选）：阶段耗时历史 —— 给了就算「还要多久」（T10），
+    没历史 / 任务已结束 / 信息不足时 eta_sec 为 None，面板就不显示这一行。
+    retries（可选）：重试链索引（T12）—— 给了就算「还能不能再重试 / 第几次」，
+    面板据此决定重试按钮是亮的还是灰的（后端算，面板不自己猜）。
+    """
+    from datetime import datetime as _dt, timezone as _tz
+    proc = d.get("proc") or {}
+    prog = d.get("progress") or {}
+    val = prog.get("value")
+    started = d.get("started_at") or ""
+    elapsed = None
+    if d.get("status") in ("queued", "running", "cancelling", "paused"):
+        try:
+            t0 = _dt.fromisoformat(started)
+            if t0.tzinfo is None:
+                t0 = t0.replace(tzinfo=_tz.utc)
+            elapsed = round((_dt.now(_tz.utc) - t0).total_seconds(), 1)
+        except Exception:
+            elapsed = None
+    else:
+        elapsed = d.get("duration_sec")
+    eta = {}
+    mod = _task_eta()
+    if mod is not None:
+        try:
+            eta = mod.estimate(d, history or {})
+        except Exception as e:  # pragma: no cover - 估算失败不该拖垮列表
+            logger.warning("task_eta estimate failed: %s", e)
+            eta = {}
+    try:
+        rp = _retry_plan(d, retries or {})
+    except Exception as e:      # pragma: no cover - 纯计算，算不出来就不给按钮
+        logger.warning("retry plan failed: %s", e)
+        rp = {"allowed": False, "reason": "", "root": "", "used": 0, "attempt": 1,
+              "delay_sec": 0.0, "max_retries": 0}
+    return {
+        "retry_allowed": bool(rp.get("allowed")),
+        # T15：允许重试但理由值得说的时候给一句（例如"退出码 0 但还有 3 段没跑到"）
+        "retry_note": rp.get("note") or "",
+        "retry_reason": rp.get("reason") or "",
+        "retry_root": rp.get("root") or "",
+        "retry_used": rp.get("used") or 0,
+        "retry_attempt": rp.get("attempt") or 0,
+        "retry_delay_sec": rp.get("delay_sec") or 0,
+        "retry_max": rp.get("max_retries") or 0,
+        "eta_sec": eta.get("sec"),
+        "eta_text": eta.get("text") or "",
+        "eta_basis": eta.get("basis") or "",
+        "eta_source": eta.get("source") or "",
+        "eta_confidence": eta.get("confidence") or "",
+        "task_id": d.get("task_id"),
+        "title": d.get("title") or "未命名任务",
+        "type": d.get("type") or "other",
+        "status": d.get("status") or "unknown",
+        "session_id": d.get("session_id") or "",
+        "session_title": _session_title(d.get("session_id") or ""),
+        "session_dir": d.get("session_dir") or "",
+        "demo": bool(d.get("demo")),
+        "source": d.get("source") or "",
+        "progress_pct": (round(100.0 * val) if isinstance(val, (int, float)) else None),
+        "progress_text": prog.get("text") or "",
+        "stage_index": d.get("stage_index") or 0,
+        "stage_total": d.get("stage_total") or len(d.get("stages") or []),
+        # T15：阶段没跑完就不许说「完成」。老契约没这两个字段，这里按 stages 现场算；
+        # 于是面板不用改判断逻辑，incomplete 就是"退出码 0 但还有阶段是 pending"。
+        "stage_pending": len(d.get("stage_unfinished") or [
+            stg.get("name") for stg in (d.get("stages") or []) if stg.get("status") == "pending"]),
+        "stage_unfinished": (d.get("stage_unfinished") or [
+            stg.get("name") for stg in (d.get("stages") or []) if stg.get("status") == "pending"])[:8],
+        "incomplete": bool(d.get("incomplete")) or bool(
+            d.get("status") in ("done", "cancelled")
+            and [stg for stg in (d.get("stages") or []) if stg.get("status") == "pending"]),
+        # 当前阶段名。面板一直读的是 stage，而契约里只有 stages[]/stage_index，
+        # 于是列表永远显示「阶段 1/4：」（冒号后面空着）—— 真机实测发现，补上。
+        "stage": next((stg.get("name") or "" for stg in (d.get("stages") or [])
+                       if stg.get("status") == "running"), ""),
+        # 循环变量别叫 s/sess/state：那是会话状态漂移门禁的扫描口径（test_p2_2_thread_state.py），
+        # 阶段字典会被误判成会话键，门禁直接红。
+        "stages": [{"name": stg.get("name"), "status": stg.get("status"), "sec": stg.get("sec")}
+                   for stg in (d.get("stages") or [])],
+        "pid": proc.get("pid") or d.get("pid"),
+        "pname": proc.get("pname") or "",
+        "cpu_pct": proc.get("cpu_pct"),
+        "rss_gb": proc.get("rss_gb"),
+        "alive": bool(d.get("alive")),
+        "stalled": bool(d.get("stalled")),
+        "heartbeat_age_sec": d.get("heartbeat_age_sec"),
+        "started_at": started,
+        "updated_at": d.get("updated_at") or "",
+        "elapsed_sec": elapsed,
+        "duration_sec": d.get("duration_sec"),
+        "exit_code": d.get("exit_code"),
+        "error": (d.get("error") or "")[:300],
+        "cmd": (d.get("cmd") or "")[:400],
+        "script": d.get("script") or "",
+        "params": d.get("params") or {},
+        "output_count": len(d.get("outputs") or []),
+        "summary": d.get("summary") or "",
+        "log": d.get("log") or "",
+        "env_line": _env_line(d.get("env") or {}),
+        "env_kind": (d.get("env") or {}).get("kind", ""),
+    }
+
+
+def _confine_path(path: str, session_dir: str) -> str:
+    """只允许读会话目录 / 仓库内的脚本（面板要能看脚本，但不能变成任意文件读取）。"""
+    if not path:
+        return ""
+    p = path if os.path.isabs(path) else os.path.join(session_dir or MEMOMICS_DIR, path)
+    p = os.path.abspath(p)
+    for root in (session_dir or "", MEMOMICS_DIR):
+        if root and (p == os.path.abspath(root)
+                     or p.startswith(os.path.abspath(root) + os.sep)):
+            return p
+    return ""
+
+
+def _resolve_output(raw: str, session_dir: str, cwd: str = "") -> str:
+    """产物路径解析：绝对路径照用；相对路径依次在 会话目录 → 会话/results → 任务 cwd → 仓库 下找。
+
+    2026-09-24 真机踩到：脚本按约定打 `#TASK:OUTPUT t5_qc_box.png`（相对路径），
+    产物落在 <会话>/results/ 下，而旧代码只按会话目录拼一次，于是文件明明在、
+    面板却显示"不存在"。产物真假是面板的核心承诺，不能糊。
+    """
+    if not raw:
+        return ""
+    cands = []
+    if os.path.isabs(raw):
+        cands.append(raw)
+    else:
+        for base in (session_dir or "", os.path.join(session_dir or "", "results"),
+                     cwd or "", MEMOMICS_DIR):
+            if base:
+                cands.append(os.path.join(base, raw))
+    for c in cands:
+        try:
+            if os.path.isfile(c):
+                return os.path.abspath(c)
+        except OSError:
+            continue
+    return os.path.abspath(cands[0]) if cands else ""
+
+
+# === 后台任务面板的实时推送（WS）==========================================
+# 面板进视图发 task_subscribe、切走发 task_unsubscribe；订阅期间服务端每 1.5s 比一次
+# 「任务目录指纹」，变了才推整份列表 —— 客户端不用高频轮询，多开几个标签也只扫一份。
+_TASK_WS_CLIENTS: set = set()
+_TASK_WATCH_TASK = None
+_TASK_WATCH_SIG = None
+
+
+def _tasks_fingerprint():
+    """契约目录指纹：条数 + 最新 mtime + 总字节（任务每次 flush 都会变）。"""
+    root = _tasks_dir()
+    try:
+        names = os.listdir(root)
+    except OSError:
+        return (0, 0.0, 0)
+    count, latest, total = 0, 0.0, 0
+    for name in names:
+        if not name.endswith(".json"):
+            continue
+        try:
+            info = os.stat(os.path.join(root, name))
+        except OSError:
+            continue
+        count += 1
+        latest = max(latest, info.st_mtime)
+        total += info.st_size
+    return (count, round(latest, 3), total)
+
+
+# 真机实测（2026-09-24）：debate_analysis 一跑就是 4-7 分钟（3 正 + 3 反 + 评委），
+# 长 R 脚本十几分钟也正常 —— 统一按 180 秒判"卡住"会把正常干活的会话全标成告警。
+# 按工具给一个"合理的沉默时长"，超过才提示可能卡住。
+_TOOL_EXPECT_SEC = {"debate_analysis": 900, "execute_r": 1800, "execute_python": 1800,
+                    "terminal": 1800, "cellbender": 3600}
+
+
+def _live_session_cards(limit: int = 20) -> list:
+    """正在跑的会话（只读快照）。
+
+    现场：用户点开「后台任务」看到空的 —— 因为后台任务契约只记录显式用
+    task_run 包装的活儿，而用户真正在等的是"哪个会话正在跑分析"。
+    这里把活着的会话也列出来（不伪造状态，字段全部来自运行时）：
+      在干什么（最近一次工具）、跑了多久、有没有卡住（工具 3 分钟没动静）、
+      计划做到第几步（session["todos"]）、占了多少内存。
+    """
+    out = []
+    try:
+        sessions = list(_sessions.values())
+    except Exception:
+        return out
+    now = time.time()
+    for s in sessions:
+        try:
+            if not (s.get("running_agent") or s.get("running_task") or s.get("bg_running")
+                    or s.get("_user_turn_active")):
+                continue
+            msgs = s.get("messages") or []
+            if msgs:
+                ask = (msgs[0].get("content") or msgs[0].get("text") or "")
+            else:
+                ask = s.get("_first_msg") or ""
+            todos = [t for t in (s.get("todos") or []) if isinstance(t, dict)]
+            doing = [t for t in todos if t.get("status") == "in_progress"]
+            pending = [t for t in todos if t.get("status") == "pending"]
+            live_tool = s.get("_live_tool") or ""
+            tool_ts = s.get("_live_tool_ts") or 0
+            proc = {}
+            try:
+                hist = s.get("_proc_hist") or []
+                if hist and hist[-1][1]:
+                    _pid, _cpu, _io, _rss = hist[-1][1][0]
+                    proc = {"pid": _pid, "cpu_s": round(_cpu, 1), "rss_mb": round(_rss / 1048576.0, 0)}
+            except Exception:
+                proc = {}
+            start = s.get("_turn_start_ts") or 0
+            out.append({
+                "sid": s.get("id") or "",
+                "title": s.get("title") or "",
+                "ask": (ask or "").replace("\n", " ")[:110],
+                "msg_count": len(msgs) if s.get("_messages_loaded", True) else int(s.get("_msg_count") or 0),
+                "last_active": s.get("last_active") or s.get("created") or "",
+                "elapsed_sec": int(now - start) if start else None,
+                "last_tool": live_tool,
+                "tool_age_sec": int(now - tool_ts) if tool_ts else None,
+                "tool_expect_sec": _TOOL_EXPECT_SEC.get(live_tool, 180),
+                "stalled": bool(live_tool) and bool(tool_ts)
+                           and (now - tool_ts) > _TOOL_EXPECT_SEC.get(live_tool, 180),
+                "todos_total": len(todos),
+                "todos_done": sum(1 for t in todos if t.get("status") == "completed"),
+                "doing": (doing[0].get("title") or "")[:110] if doing else "",
+                "next": (pending[0].get("title") or "")[:110] if pending else "",
+                "bg_running": bool(s.get("bg_running")),
+                "proc": proc or None,
+            })
+        except Exception:
+            continue
+    out.sort(key=lambda x: (x.get("last_active") or ""), reverse=True)
+    return out[:limit]
+
+
+# === 活会话详情（2026-09-24 用户反馈：点了后台任务看不到参数、主要环境） ===
+# 面板原来点活会话只是"切过去看对话"，可用户要的是"这活到底拿什么参数、在什么环境下跑的"。
+# 这里把运行时可查的事实全部摊开：最近的工具调用（含入参原文）、跑分析用的 R/Python 环境、
+# 已经落盘的产物、辩论记录、日志路径；拿不到的一律留空，不编。
+_LIVE_ARTIFACT_DIRS = ("results", "figures", "scripts", "conclusions")
+
+
+def _live_artifacts(sid: str, limit: int = 40) -> list:
+    """会话落盘产物（结果表/图/脚本/结论），按修改时间倒序。"""
+    base = os.path.join(RESULTS_DIR, sid)
+    out = []
+    for sub in _LIVE_ARTIFACT_DIRS:
+        d = os.path.join(base, sub)
+        if not os.path.isdir(d):
+            continue
+        try:
+            names = os.listdir(d)
+        except Exception:
+            continue
+        for fn in names:
+            p = os.path.join(d, fn)
+            try:
+                st = os.stat(p)
+            except Exception:
+                continue
+            if not os.path.isfile(p):
+                continue
+            out.append({"rel": sub + "/" + fn, "size": st.st_size, "mtime": st.st_mtime})
+    out.sort(key=lambda x: -(x.get("mtime") or 0))
+    return out[:limit]
+
+
+def _session_tool_trace(sid: str, limit: int = 12) -> list:
+    """会话最近的工具调用（工具 + 入参 + 结果摘要）——"参数"最硬的一手证据。"""
+    p = os.path.join(RESULTS_DIR, sid, "log", "system_log.jsonl")
+    if not os.path.isfile(p):
+        return []
+    lines = []
+    try:
+        with open(p, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if line.strip():
+                    lines.append(line)
+    except Exception:
+        return []
+    out = []
+    for line in lines[-max(1, limit):]:
+        try:
+            e = json.loads(line)
+        except Exception:
+            continue
+        out.append({"ts": str(e.get("ts") or ""), "tool": str(e.get("tool") or ""),
+                    "args": str(e.get("args") or "")[:900],
+                    "result": str(e.get("result_preview") or "")[:400]})
+    out.reverse()                     # 最新的排前面
+    return out
+
+
+def _session_stats(sid: str) -> dict:
+    """"跑成什么样"的粗账：工具次数、用过哪些技能、审查/辩论几次。"""
+    p = os.path.join(RESULTS_DIR, sid, "log", "system_log.jsonl")
+    stats = {"tool_calls": 0, "tools": {}, "skills": [], "rail_pre": 0, "rail_post": 0,
+             "debate_calls": 0, "files_written": 0}
+    if not os.path.isfile(p):
+        return stats
+    try:
+        with open(p, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    e = json.loads(line)
+                except Exception:
+                    continue
+                t = str(e.get("tool") or "")
+                if not t:
+                    continue
+                stats["tool_calls"] += 1
+                stats["tools"][t] = stats["tools"].get(t, 0) + 1
+                args = str(e.get("args") or "")
+                if t == "skill_view":
+                    m = re.search(r"['\"]name['\"]\s*:\s*['\"]([^'\"]+)", args)
+                    if m and m.group(1) not in stats["skills"]:
+                        stats["skills"].append(m.group(1))
+                elif t == "rail_review":
+                    if "pre" in args:
+                        stats["rail_pre"] += 1
+                    if "post" in args:
+                        stats["rail_post"] += 1
+                elif t == "debate_analysis":
+                    stats["debate_calls"] += 1
+                elif t in ("write_file", "patch", "execute_r", "execute_python"):
+                    if t in ("write_file", "patch"):
+                        stats["files_written"] += 1
+    except Exception:
+        pass
+    return stats
+
+
+def _session_debates(sid: str, limit: int = 5) -> list:
+    """本会话的辩论记录（题目/裁决/置信度/结论/下一步）——用户最想知道的"它到底怎么判的"。"""
+    d = os.path.join(RESULTS_DIR, sid, "log")
+    if not os.path.isdir(d):
+        return []
+    out = []
+    try:
+        names = sorted([n for n in os.listdir(d) if n.startswith("debate_") and n.endswith(".json")])
+    except Exception:
+        return []
+    for fn in names[-limit:]:
+        try:
+            with open(os.path.join(d, fn), encoding="utf-8", errors="replace") as f:
+                j = json.load(f)
+        except Exception:
+            continue
+        na = j.get("next_actions")
+        out.append({"file": fn,
+                    "topic": str(j.get("topic") or "")[:300],
+                    "verdict": str(j.get("verdict") or ""),
+                    "confidence": str(j.get("confidence") or ""),
+                    "decision": str(j.get("decision") or "")[:600],
+                    "next_actions": len(na) if isinstance(na, list) else None,
+                    "mtime": os.path.getmtime(os.path.join(d, fn))})
+    out.reverse()
+    return out
+
+
+def _session_env_facts() -> dict:
+    """跑分析用的主要环境：R/Python 可执行文件、库路径、GPU —— 用户问"主要环境"要的就是这些。"""
+    facts = {"python": sys.executable or "", "cwd": os.getcwd(),
+             "r_libs_user": os.environ.get("R_LIBS_USER") or ""}
+    try:
+        with open(os.path.join(MEMOMICS_DIR, "environment.json"), encoding="utf-8") as f:
+            env = json.load(f)
+        for ver, info in list(((env.get("paths") or {}).get("r") or {}).items())[:1]:
+            facts["r_version"] = str(ver)
+            facts["rscript"] = str((info or {}).get("bin") or "")
+            facts["r_lib_user"] = str((info or {}).get("lib_user") or facts["r_libs_user"])
+            facts["r_pkg_count"] = (info or {}).get("pkg_count")
+            facts["r_key_pkgs"] = list((info or {}).get("key_pkgs") or [])[:8]
+        py = ((env.get("paths") or {}).get("python") or {})
+        if isinstance(py, dict) and py:
+            k0 = list(py)[0]
+            facts["python_declared"] = str((py.get(k0) or {}).get("bin") or k0) if isinstance(py.get(k0), dict) else str(py.get(k0))
+        facts["platform"] = env.get("platform")
+        facts["gpu"] = env.get("gpu")
+        ki = env.get("known_issues")
+        facts["known_issues"] = [str(x)[:200] for x in (ki or [])[:3]] if isinstance(ki, list) else []
+        facts["env_updated"] = str(env.get("_last_updated") or "")
+    except Exception as e:
+        facts["env_error"] = str(e)
+    facts["memomics_env"] = {k: v for k, v in os.environ.items() if k.startswith("MEMOMICS_")}
+    return facts
+
+
+def _live_session_detail(sid: str, tool_limit: int = 12) -> dict:
+    """活会话详情：它是谁、在跑什么、拿什么参数、什么环境、出了什么产物、日志在哪。"""
+    s = _sessions.get(sid)
+    if s is None:
+        try:
+            _restore_single_session(sid)
+        except Exception:
+            pass
+        s = _sessions.get(sid)
+    cards = {}
+    try:
+        for c in _live_session_cards(limit=200):
+            if c.get("sid") == sid:
+                cards = c
+                break
+    except Exception:
+        cards = {}
+    ask = ""
+    if s:
+        msgs = s.get("messages") or []
+        if msgs:
+            ask = str(msgs[0].get("content") or msgs[0].get("text") or "")
+        elif s.get("_first_msg"):
+            ask = str(s.get("_first_msg") or "")
+    if not ask:
+        try:
+            for m in _load_session_messages(sid, limit=6) or []:
+                c0 = str(m.get("content") or m.get("text") or "")
+                if (m.get("role") or "") == "user" and c0 and not c0.lstrip().startswith(_INJECT_PREFIXES):
+                    ask = c0
+                    break
+        except Exception:
+            pass
+    task = None
+    try:
+        tr = _task_run()
+        if tr is not None:
+            _bind_task_run(tr)
+            mine = tr.list_tasks(session_id=sid, limit=5, refresh=True)
+            if mine:
+                task = mine[0]
+    except Exception:
+        task = None
+    detail = {
+        "ok": True,
+        "sid": sid,
+        "title": (s or {}).get("title") or "",
+        "ask": ask.strip(),
+        "live": bool(cards),
+        "is_running": bool(cards) or bool((s or {}).get("running_agent") or (s or {}).get("running_task")),
+        "elapsed_sec": cards.get("elapsed_sec"),
+        "last_active": (s or {}).get("last_active") or (s or {}).get("created") or "",
+        "created": (s or {}).get("created") or "",
+        "msg_count": cards.get("msg_count") if cards else (s or {}).get("_msg_count"),
+        "current": cards or None,
+        "todos": [t for t in ((s or {}).get("todos") or []) if isinstance(t, dict)][:20],
+        "tools": _session_tool_trace(sid, limit=tool_limit),
+        "stats": _session_stats(sid),
+        "debates": _session_debates(sid),
+        "artifacts": _live_artifacts(sid),
+        "env": _session_env_facts(),
+        "paths": {"session_dir": os.path.join(RESULTS_DIR, sid),
+                  "system_log": os.path.join(RESULTS_DIR, sid, "log", "system_log.jsonl"),
+                  "tasks_dir": _tasks_dir()},
+        "task": task,
+    }
+    return detail
+
+
+@app.get("/api/live_session/{sid}")
+async def api_live_session(sid: str, tools: int = 12):
+    """活会话详情（参数 / 环境 / 产物 / 日志）—— 后台任务面板点进去看的就是这个。"""
+    try:
+        return JSONResponse(_live_session_detail(sid, tool_limit=max(1, min(60, int(tools or 12)))))
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+def _tasks_payload(session_id: str = "", states: str = "", limit: int = 100,
+                   refresh: int = 1) -> dict:
+    """任务列表载荷 —— HTTP 路由与 WS 推送共用一份，免得两边漂移。"""
+    tr = _task_run()
+    if tr is None:
+        return {"ok": False, "error": "task_run 模块不可用", "tasks": [], "counts": {}}
+    _bind_task_run(tr)
+    sweep = _task_auto_sweep()      # T16：到点自动过期（60s 最多一次），删完再列，免得刚删的又出现
+    try:
+        items = tr.list_tasks(session_id=session_id or "",
+                              limit=max(1, min(500, int(limit or 100))), refresh=bool(refresh))
+    except Exception as e:
+        return {"ok": False, "error": "读取任务失败：%s" % e, "tasks": [], "counts": {}}
+    # 历史要在「按状态过滤」之前汇总：过滤成只看 running 时，历史仍然得是全量的，
+    # 否则面板一筛选，ETA 就集体变成"看不到"。
+    history = _task_history(items)
+    # 重试索引同样要在过滤前算：只看 failed 时，重试链上"还在跑的那次"也要算进去。
+    retries = _retry_index(items, _RETRY_INFLIGHT)
+    if states:
+        want = {one.strip() for one in states.split(",") if one.strip()}
+        items = [d for d in items if (d.get("status") or "") in want]
+    counts = {}
+    for d in items:
+        st = d.get("status") or "unknown"
+        counts[st] = counts.get(st, 0) + 1
+    # 用户点开「后台任务」要看到的是"谁在跑" —— 契约任务之外，把活着的会话也带上。
+    # 已经用自己的任务行显示过的会话不重复列（免得同一条会话出现两次）。
+    busy_sids = {d.get("session_id") or "" for d in items
+                 if (d.get("status") or "") in tuple(tr.LIVE_STATES)}
+    live = [c for c in _live_session_cards() if c.get("sid") and c.get("sid") not in busy_sids]
+    return {"ok": True, "tasks": [_task_card(d, history, retries) for d in items], "counts": counts,
+            "live_sessions": live, "live_count": len(live),
+            "active": counts.get("running", 0) + counts.get("cancelling", 0),
+            "states": list(tr.LIVE_STATES), "types": list(tr.TASK_TYPES),
+            "tasks_dir": _tasks_dir(), "api_token": _task_api_token(),
+            "cleanup": sweep, "cleanup_states": list(_task_terminal_states(tr)),
+            "sessions": sorted({d.get("session_id") or "" for d in items} - {""})}
+
+
+async def _task_ws_broadcast(payload: dict) -> None:
+    """把任务列表推给所有订阅者；推不动（连接没了）就地摘掉。"""
+    dead = []
+    text = json.dumps(payload, ensure_ascii=False)
+    for sock in list(_TASK_WS_CLIENTS):
+        try:
+            await sock.send_text(text)
+        except Exception:
+            dead.append(sock)
+    for sock in dead:
+        _TASK_WS_CLIENTS.discard(sock)
+
+
+async def _task_watch_loop() -> None:
+    """订阅期间的后台扫描：指纹变了才推，没人订阅就自己退出。"""
+    global _TASK_WATCH_SIG
+    while _TASK_WS_CLIENTS:
+        sig = _tasks_fingerprint()
+        if sig != _TASK_WATCH_SIG:
+            _TASK_WATCH_SIG = sig
+            payload = _tasks_payload(limit=100, refresh=1)
+            if payload.get("ok"):
+                await _task_ws_broadcast(payload)
+        await asyncio.sleep(1.5)
+    _TASK_WATCH_SIG = None
+
+
+def _ensure_task_watch() -> None:
+    """有订阅者就把扫描任务拉起来（懒启动：没人看面板就不占 CPU）。"""
+    global _TASK_WATCH_TASK
+    if not _TASK_WS_CLIENTS:
+        return
+    if _TASK_WATCH_TASK is None or _TASK_WATCH_TASK.done():
+        try:
+            _TASK_WATCH_TASK = asyncio.get_running_loop().create_task(_task_watch_loop())
+        except RuntimeError:
+            _TASK_WATCH_TASK = None
+
+
+@app.get("/api/tasks")
+async def list_background_tasks(session_id: str = "", states: str = "", limit: int = 100,
+                                refresh: int = 1):
+    """后台任务列表（跨会话）。
+
+    契约由任务自己写（wrapper / 脚本打点），服务端只读取 + 核对存活：
+    refresh=1（默认）会用「PID + 进程创建时间」核对，进程没了的活任务收敛成 interrupted。
+    """
+    payload = _tasks_payload(session_id=session_id, states=states, limit=limit, refresh=refresh)
+    if not payload.get("ok"):
+        code = 503 if "不可用" in str(payload.get("error") or "") else 500
+        return JSONResponse({"ok": False, "error": payload.get("error")}, status_code=code)
+    return payload
+
+
+@app.get("/api/tasks/{task_id}")
+async def get_background_task(task_id: str, tail: int = 200, script: int = 1):
+    """任务详情：契约全字段 + 日志尾部 + 产物（大小/是否存在）+ 脚本正文。"""
+    tr = _task_run()
+    if tr is None:
+        return JSONResponse({"ok": False, "error": "task_run 模块不可用"}, status_code=503)
+    _bind_task_run(tr)
+    t = tr.load_task(task_id)
+    if t is None:
+        return JSONResponse({"ok": False, "error": "任务不存在：%s" % task_id}, status_code=404)
+    d = tr.reconcile(t.data)
+    try:
+        _all = tr.list_tasks(limit=500, refresh=0)
+    except Exception:  # pragma: no cover - 拿不到全量列表就退化成"只有自己"
+        _all = [d]
+    try:
+        history = _task_history(_all)
+    except Exception:  # pragma: no cover - 历史拿不到就不给 ETA
+        history = {}
+    card = _task_card(d, history, _retry_index(_all, _RETRY_INFLIGHT))
+    card["params"] = d.get("params") or {}
+    card["outputs"] = []
+    for p in (d.get("outputs") or [])[:100]:
+        full = _resolve_output(p, d.get("session_dir") or "", d.get("cwd") or "")
+        try:
+            exists = os.path.isfile(full)
+            size = os.path.getsize(full) if exists else None
+        except OSError:
+            exists, size = False, None
+        card["outputs"].append({"path": p, "exists": exists, "size": size, "abs": full})
+    log_path = d.get("log") or ""
+    card["log_tail"] = tr.tail_log(log_path, max(1, min(4000, int(tail))))
+    try:
+        card["log_size"] = os.path.getsize(log_path) if os.path.isfile(log_path) else 0
+    except OSError:
+        card["log_size"] = 0
+    card["wrapper_pid"] = (d.get("wrapper") or {}).get("pid")
+    # 详情抽屉要能显示"这活儿到底占多少 CPU/内存、什么时候起的" —— 列表卡片给了
+    # 扁平字段，详情补齐原始 proc/wrapper 与取消意图（真机实测发现详情里读不到 proc）。
+    card["proc"] = d.get("proc") or {}
+    card["wrapper"] = d.get("wrapper") or {}
+    card["cancel_requested"] = bool(d.get("cancel_requested"))
+    card["cancel_by"] = d.get("cancel_by") or ""
+    card["env"] = d.get("env") or {}
+    src = _confine_path(d.get("script") or "", d.get("session_dir") or "")
+    card["script_path"] = src
+    card["script_text"] = ""
+    # 面板要能看脚本 —— 但只读会话目录/仓库内的（防任意文件读取）。够不着就说清楚，
+    # 不能让用户以为"这个任务压根没脚本"。
+    card["script_note"] = ""
+    if not src and (d.get("script") or ""):
+        card["script_note"] = "脚本在会话目录/仓库之外，面板不读（安全策略）：%s" % d.get("script")
+    if src and script and os.path.isfile(src):
+        try:
+            if os.path.getsize(src) <= 256 * 1024:
+                with open(src, "r", encoding="utf-8", errors="replace") as f:
+                    card["script_text"] = f.read()
+            else:
+                card["script_truncated"] = True
+        except OSError:
+            pass
+    return {"ok": True, "task": card}
+
+
+@app.get("/api/tasks/{task_id}/log")
+async def get_background_task_log(task_id: str, tail: int = 200, grep: str = ""):
+    """日志尾部（seek 读，不整读几百 MB 的 CellBender 日志）。grep 为不区分大小写的子串过滤。"""
+    tr = _task_run()
+    if tr is None:
+        return JSONResponse({"ok": False, "error": "task_run 模块不可用"}, status_code=503)
+    _bind_task_run(tr)
+    t = tr.load_task(task_id)
+    if t is None:
+        return JSONResponse({"ok": False, "error": "任务不存在：%s" % task_id}, status_code=404)
+    log_path = (t.data.get("log") or "")
+    text = tr.tail_log(log_path, max(1, min(5000, int(tail))))
+    if grep and text:
+        needle = grep.lower()
+        text = os.linesep.join([ln for ln in text.splitlines() if needle in ln.lower()])
+    try:
+        size = os.path.getsize(log_path) if os.path.isfile(log_path) else 0
+    except OSError:
+        size = 0
+    return {"ok": True, "task_id": t.data.get("task_id"), "log": log_path,
+            "exists": bool(log_path and os.path.isfile(log_path)), "size": size,
+            "text": text}
+
+
+@app.post("/api/tasks/{task_id}/cancel")
+async def cancel_background_task(task_id: str, payload: dict = None, request: Request = None):
+    """取消任务：需要 X-Task-Token；先写取消意图，再按「pid + 创建时间」核对身份杀子树。
+
+    三步，任何一步都不猜：
+      1. 只写 cancel_requested（wrapper 退出路径读到 → 状态落成 cancelled，而不是 failed）
+      2. 杀进程前核对 create_time，PID 被复用（不是原进程）就绝不杀
+      3. 宽限 15s 让 wrapper 自己收尾；还没收尾就按 wrapper 身份升级强杀，并由服务端落终态
+    """
+    tr = _task_run()
+    if tr is None:
+        return JSONResponse({"ok": False, "error": "task_run 模块不可用"}, status_code=503)
+    _bind_task_run(tr)
+    payload = payload or {}
+    token = (request.headers.get("x-task-token", "") if request else "") or str(payload.get("token", ""))
+    if token != _task_api_token():
+        return JSONResponse({"ok": False, "error": "Unauthorized: missing/invalid task API token"},
+                            status_code=401)
+    t = tr.load_task(task_id)
+    if t is None:
+        return JSONResponse({"ok": False, "error": "任务不存在：%s" % task_id}, status_code=404)
+    if (t.data.get("status") or "") not in tr.LIVE_STATES:
+        return JSONResponse({"ok": False, "error": "任务已结束（%s），无需取消" % t.data.get("status")},
+                            status_code=409)
+    denied = _sandbox_precheck("proc.exec", t.path, [MEMOMICS_HOME_DIR], "tasks.cancel")
+    if denied:
+        return JSONResponse({"ok": False, "error": "sandbox denied: %s" % denied}, status_code=403)
+
+    marks = tr.request_cancel(task_id, by="api")
+    kill_proc = tr.kill_registered_process(t.data, key="proc")
+    escalated = False
+    waited = 0.0
+    for _ in range(30):                     # 最多 15s 等 wrapper 自己收尾
+        await asyncio.sleep(0.5)
+        waited += 0.5
+        cur = tr.load_task(task_id)
+        if cur is None or (cur.data.get("status") or "") not in tr.LIVE_STATES:
+            break
+        # 管任务的进程（wrapper）自己都没了 —— 没人会来收尾，服务端立刻落终态，别干等 15s
+        _w = (cur.data.get("wrapper") or {})
+        if _w.get("pid"):
+            if not tr.proc_alive(_w.get("pid"), _w.get("create_time")):
+                break
+        elif kill_proc.get("killed"):
+            break
+    cur = tr.load_task(task_id)
+    if cur is not None and (cur.data.get("status") or "") in tr.LIVE_STATES:
+        escalated = True
+        kill_wrap = tr.kill_registered_process(cur.data, key="wrapper")
+        cur.finish("cancelled", error="用户取消（服务端兜底收尾）")
+    else:
+        kill_wrap = {}
+    cur = tr.load_task(task_id)
+    return {"ok": True, "task_id": task_id, "status": (cur.data.get("status") if cur else "unknown"),
+            "marks": marks, "killed": kill_proc, "escalated": escalated,
+            "kill_wrapper": kill_wrap, "waited_sec": waited}
+
+
+@app.post("/api/tasks/{task_id}/retry")
+async def retry_background_task(task_id: str, payload: dict = None, request: Request = None):
+    """失败任务一键重试：按 retry_backoff 的退避间隔重跑契约里记下的那条命令。
+
+    三条硬规矩：
+      1. 只重跑契约里**已经记下来的命令**（cmd + 脚本/阶段/参数/会话目录原样搬），不自己发挥；
+      2. 隔多久、还能不能重试，全由 webui.runtime.retry_backoff 决定（2s/5s/15s，连续 3 次后停），
+         服务端不另写一套退避；
+      3. 重试出来的任务在契约里带 重试来源 / 重试根 / 第几次重试（面板画重试链、算上限）。
+    需要和取消同一把 token；只对 failed / interrupted 生效（cancelled 是用户主动停的，不给按钮）。
+    """
+    tr = _task_run()
+    if tr is None:
+        return JSONResponse({"ok": False, "error": "task_run 模块不可用"}, status_code=503)
+    _bind_task_run(tr)
+    payload = payload or {}
+    token = (request.headers.get("x-task-token", "") if request else "") or str(payload.get("token", ""))
+    if token != _task_api_token():
+        return JSONResponse({"ok": False, "error": "Unauthorized: missing/invalid task API token"},
+                            status_code=401)
+    t = tr.load_task(task_id)
+    if t is None:
+        return JSONResponse({"ok": False, "error": "任务不存在：%s" % task_id}, status_code=404)
+    try:
+        all_items = tr.list_tasks(limit=500, refresh=0)
+    except Exception:      # pragma: no cover - 扫不到全量就只按本任务算
+        all_items = [t.data]
+    plan = _retry_plan(t.data, _retry_index(all_items, _RETRY_INFLIGHT))
+    if not plan["allowed"]:
+        return JSONResponse({"ok": False, "error": plan["reason"], "retry": plan}, status_code=409)
+    denied = _sandbox_precheck("proc.exec", t.path, [MEMOMICS_HOME_DIR], "tasks.retry")
+    if denied:
+        return JSONResponse({"ok": False, "error": "sandbox denied: %s" % denied}, status_code=403)
+    # 退避 >0 时不在请求里干等（面板不用吊着），排个后台任务到点再拉起来。
+    if plan["delay_sec"] > 0:
+        _RETRY_INFLIGHT[plan["root"]] = time.time()
+        try:
+            asyncio.ensure_future(_retry_later(t.data, plan, plan["delay_sec"]))
+        except Exception as e:          # pragma: no cover - 排不上就当场放开名额
+            _RETRY_INFLIGHT.pop(plan["root"], None)
+            return JSONResponse({"ok": False, "error": "排定重试失败：%s" % e, "retry": plan},
+                                status_code=409)
+        return {"ok": True, "scheduled": True, "task_id": task_id, "retry": plan,
+                "attempt": plan["attempt"], "delay_sec": plan["delay_sec"],
+                "cmd": str(t.data.get("cmd") or "")}
+    spawned, err = _spawn_retry(t.data, plan)
+    if err:
+        return JSONResponse({"ok": False, "error": err, "retry": plan}, status_code=409)
+    return {"ok": True, "scheduled": False, "task_id": task_id, "retry": plan,
+            "attempt": plan["attempt"], "delay_sec": 0,
+            "cmd": str(t.data.get("cmd") or ""), "spawned": spawned}
+
+
+@app.delete("/api/tasks/{task_id}")
+async def delete_background_task(task_id: str, payload: dict = None, request: Request = None):
+    """删掉一条**已经结束**的任务记录（契约 .json + 它自己的日志）。
+
+    三条硬规矩：
+      1. 在跑 / 排队 / 暂停的一律不删（409，让用户先取消）—— 清理接口绝不偷偷杀进程；
+      2. 只删任务记录，产出文件（results/ 里的数据）一个都不动；
+      3. token 与取消/重试同一把（X-Task-Token），跨会话删除面板还会再问一次。
+    """
+    tr = _task_run()
+    if tr is None:
+        return JSONResponse({"ok": False, "error": "task_run 模块不可用"}, status_code=503)
+    _bind_task_run(tr)
+    payload = payload or {}
+    token = (request.headers.get("x-task-token", "") if request else "") or str(payload.get("token", ""))
+    if token != _task_api_token():
+        return JSONResponse({"ok": False, "error": "Unauthorized: missing/invalid task API token"},
+                            status_code=401)
+    safe = os.path.basename(str(task_id or ""))
+    denied = _sandbox_precheck("fs.delete", os.path.join(_tasks_dir(), safe + ".json"),
+                               [MEMOMICS_HOME_DIR, _tasks_dir()], "tasks.delete")
+    if denied:
+        return JSONResponse({"ok": False, "error": "sandbox denied: %s" % denied}, status_code=403)
+    one = _task_delete_one(tr, task_id)
+    if not one.get("ok"):
+        return JSONResponse({"ok": False, "error": one.get("reason"), "task_id": task_id,
+                             "status": one.get("status", "")},
+                            status_code=int(one.get("code") or 409))
+    return {"ok": True, "task_id": task_id, "status": one.get("status"),
+            "title": one.get("title", ""), "removed": one.get("removed") or []}
+
+
+@app.post("/api/tasks/cleanup")
+async def cleanup_background_tasks(payload: dict = None, request: Request = None):
+    """批量清理已结束的任务（默认 done/failed/cancelled/interrupted 全清）。
+
+    payload 可选：
+      states    只清这些状态（默认四类终态）；
+      session_id 只清这个会话的（空 = 所有会话，跨会话可见就得跨会话可清）；
+      ttl_hours 只清结束超过这么多小时的老任务（不传 = 不看时间，人工清就是立刻清）；
+      dry_run   true 只报数不删（面板先让用户看清要删什么）。
+    在跑/排队的一律不动，这条在 _tasks_cleanup 里是硬判断，不是靠调用方自觉。
+    """
+    tr = _task_run()
+    if tr is None:
+        return JSONResponse({"ok": False, "error": "task_run 模块不可用"}, status_code=503)
+    _bind_task_run(tr)
+    payload = payload or {}
+    token = (request.headers.get("x-task-token", "") if request else "") or str(payload.get("token", ""))
+    if token != _task_api_token():
+        return JSONResponse({"ok": False, "error": "Unauthorized: missing/invalid task API token"},
+                            status_code=401)
+    states = payload.get("states") or None
+    if isinstance(states, str):
+        states = [s.strip() for s in states.split(",") if s.strip()]
+    if states:
+        bad = [s for s in states if s not in _task_terminal_states(tr)]
+        if bad:
+            return JSONResponse({"ok": False, "error": "不能清这些状态：%s（只允许 %s）"
+                                 % ("/".join(bad), "/".join(_task_terminal_states(tr)))},
+                                status_code=400)
+    ttl = payload.get("ttl_hours")
+    try:
+        ttl = None if ttl in (None, "") else float(ttl)
+    except (TypeError, ValueError):
+        return JSONResponse({"ok": False, "error": "ttl_hours 得是数字（小时）"}, status_code=400)
+    denied = _sandbox_precheck("fs.delete", _tasks_dir(), [MEMOMICS_HOME_DIR, _tasks_dir()],
+                               "tasks.cleanup")
+    if denied:
+        return JSONResponse({"ok": False, "error": "sandbox denied: %s" % denied}, status_code=403)
+    res = _tasks_cleanup(states=states, session_id=str(payload.get("session_id") or ""),
+                         ttl_hours=ttl, dry_run=bool(payload.get("dry_run")))
+    if not res.get("ok"):
+        return JSONResponse(res, status_code=500)
+    return res
+
+
+def _git_rev_at_start() -> str:
+    r"""启动时取一次 git 短 rev（打包分发的安装没有 .git → "unknown"）。
+
+    2026-10-10：原来是每个 /api/version 请求都同步跑 git（最多阻塞 3 秒），
+    在非 git 目录/慢盘上会把接口拖到前端读不到；改成启动一次、请求只读缓存。
+    """
+    import subprocess as _sp
+    try:
+        _r = _sp.run(["git", "rev-parse", "--short", "HEAD"], cwd=MEMOMICS_DIR,
+                     capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
+        if _r.returncode == 0 and _r.stdout.strip():
+            return _r.stdout.strip()
+    except Exception:
+        pass
+    return "unknown"
+
+
+_GIT_REV_AT_START = _git_rev_at_start()
+
+
+def _pkg_version_on_disk() -> str:
+    """读安装目录 VERSION（打包发布的版本号；开发树可能是 v<日期> 或旧值）。"""
+    for _cand in (os.path.join(MEMOMICS_DIR, "VERSION"), os.path.join(MEMOMICS_HOME_DIR, "VERSION")):
+        try:
+            if os.path.isfile(_cand):
+                with open(_cand, "r", encoding="utf-8", errors="replace") as _f:
+                    return _f.read().strip()
+        except Exception:
+            pass
+    return ""
+
+
+# 2026-10-10: 进程启动时磁盘上的版本号。若之后磁盘 VERSION 变了（用户刚应用 update 包但没重启），
+# /api/version 会报 restart_required=True，前端顶部横幅提示重启 —— 解决"更新了但界面/接口还是旧的"。
+_CODE_VERSION_AT_START = _pkg_version_on_disk()
+
+
+def _ui_build_stamp() -> str:
+    """界面构建指纹：webui/ 下 index.html + server.py 的大小与修改时间做哈希。
+
+    2026-10-11 用户报"怎么还有之前的缓存"：更新包同名版本（同一天重建）时，
+    浏览器里的旧 localStorage（主题/背景/片头/集群命令历史/上次会话）会被
+    新安装原样继承，看起来就像"软件在缓存你的东西"。前端拿这个指纹比对，
+    变化就清一次旧界面状态并自动刷新。按文件 mtime+size 算，同日重建也能区分。
+    """
+    import hashlib as _hl
+    h = _hl.sha1()
+    for _f in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"),
+               os.path.abspath(__file__)):
+        try:
+            st = os.stat(_f)
+            h.update(("%s|%d|%.3f|" % (os.path.basename(_f), st.st_size, st.st_mtime)).encode())
+        except OSError:
+            continue
+    return h.hexdigest()[:16]
+
+
 @app.get("/api/version")
 async def api_version():
     """前端版本标识：git commit + server 启动时间 + 修复包级别。
 
     修复包（fix_bundle）：打包分发的安装没有 .git（rev=unknown），
-    用 hermes_home/.fix_bundle 标记当前修复级别；outdated=True 表示
+    用 memomics_home/.fix_bundle 标记当前修复级别；outdated=True 表示
     文件级修复已落后（旧安装/部分覆盖更新），WebUI 可据此提示升级。
     """
-    import subprocess as _sp
-    rev = "unknown"
-    try:
-        _r = _sp.run(["git", "rev-parse", "--short", "HEAD"], cwd=MEMOMICS_DIR,
-                     capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=3)
-        if _r.returncode == 0:
-            rev = _r.stdout.strip()
-    except Exception:
-        pass
+    global _GIT_REV_AT_START
+    rev = _GIT_REV_AT_START
+    if rev == "unknown":          # 启动时没取到（例如 git 当时不在 PATH）再懒取一次并缓存
+        rev = _git_rev_at_start()
+        if rev != "unknown":
+            _GIT_REV_AT_START = rev
     # 2026-08-16: 修复包级别（启动事件已自动应用文件级迁移，此处只报告）
     _level = "none"
     _outdated = False
     try:
         from memomics.fix_bundle import BUNDLE as _BUNDLE, fix_bundle_level as _level_fn
-        _level = _level_fn(HERMES_HOME_DIR) or "none"
+        _level = _level_fn(MEMOMICS_HOME_DIR) or "none"
         _outdated = _level < _BUNDLE
         _bundle = _BUNDLE
     except Exception:
         _bundle = ""
+    # 2026-10-10: 磁盘版本 vs 进程启动时版本 —— 识别"更新包已覆盖但仍在跑旧进程"
+    # （前端顶部横幅据此提示重启；老用户最常见的"更新了没生效"根因）
+    _pkg_now = _pkg_version_on_disk()
+    _code_at_start = _CODE_VERSION_AT_START
+    _stale = bool(_pkg_now and _code_at_start and _pkg_now != _code_at_start)
+    # 2026-10-10: 数据目录迁移通知（老用户更新后前端横幅提示，避免"数据看起来丢了"的恐慌）
+    _notice = ""
+    try:
+        _np = os.path.join(MEMOMICS_HOME_DIR, "MIGRATION_NOTICE.txt")
+        if os.path.isfile(_np):
+            with open(_np, "r", encoding="utf-8", errors="replace") as _nf:
+                _notice = _nf.read().strip()[:800]
+    except OSError:
+        _notice = ""
     return {"version": rev, "started": _SERVER_STARTED_STR,
-            "fix_bundle": _level, "fix_bundle_latest": _bundle, "outdated": _outdated}
+            "fix_bundle": _level, "fix_bundle_latest": _bundle, "outdated": _outdated,
+            "pkg_version": _pkg_now, "code_version_at_start": _code_at_start,
+            "ui_build": _ui_build_stamp(),
+            "restart_required": _stale, "migration_notice": _notice}
 
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "service": "MemOmics WebUI v2", "sessions": len(_sessions)}
+    _pn = _pkg_version_on_disk()
+    return {"status": "ok", "service": "MemOmics WebUI v2", "sessions": len(_sessions),
+            "pkg_version": _pn,
+            "restart_required": bool(_pn and _CODE_VERSION_AT_START and _pn != _CODE_VERSION_AT_START)}
 
 
 # === 检查更新 / 在线更新（2026-08-23，迁移 MiMo-Code 更新架构：自动检查 + autoupdate 策略） ===
@@ -7531,10 +11408,88 @@ _GITHUB_REPO = "GGbond-bo/MemOmics-Agent"
 _GITHUB_API = f"https://api.github.com/repos/{_GITHUB_REPO}"
 _GITHUB_RAW = f"https://raw.githubusercontent.com/{_GITHUB_REPO}/main"
 _PROXY = "http://127.0.0.1:6478"
+#: 检查更新这条自带功能的固定外部依赖（强制模式下需要显式自授权，见下）
+_UPDATE_HOST = "api.github.com"
+
+
+def _sandbox_env_grants() -> None:
+    """运维用环境变量显式声明的可写/可删目录（渐进强制下的逃生舱，幂等）。
+
+    MEMOMICS_SANDBOX_GRANT_DIRS="D:/Desktop;E:/out"（分号或 os.pathsep 分隔）。
+    为什么要有它：沙箱的 TTL 授权故意没有远程 API（线上临时开授权就是开后门），
+    所以"我就是要往这个目录写"必须由启动环境显式声明，且理由进审计、随时可查。
+    只在对应动作被强制时才打；观察模式下一律不动。
+    """
+    try:
+        from webui import sandbox as _sb
+        raw = os.environ.get("MEMOMICS_SANDBOX_GRANT_DIRS", "")
+        if not raw.strip():
+            return
+        actions = [a for a in ("fs.write", "fs.delete") if _sb.enforce_action(a)]
+        if not actions:
+            return
+        _sb.purge_expired()
+        dirs = [d.strip() for d in re.split(r"[;%s]" % re.escape(os.pathsep), raw) if d.strip()]
+        have = {(g.get("action"), os.path.normcase(g.get("resource") or ""))
+                for g in _sb.grants() if (g.get("ttl_left") or 0) > 0}
+        for d in dirs:
+            ap = os.path.abspath(os.path.expanduser(d))
+            for act in actions:
+                if (act, os.path.normcase(ap)) in have:
+                    continue
+                _sb.grant(act, ap, ttl_s=7 * 86400.0,
+                          reason="运维环境变量声明：MEMOMICS_SANDBOX_GRANT_DIRS", writable=True)
+    except Exception as _e:
+        print("[WARN] 可写目录授权失败: %s" % _e)
+
+
+def _sandbox_precheck(action: str, path, roots, source: str = "server") -> str:
+    """写/删类集成点的统一门：返回 "" 放行；非空 = 拒绝理由（调用方回 403）。
+
+    与 security.resolve_within_roots 的区别很重要：这里**不做包含判定**——
+    包含判定是老代码自己的规矩（roots 只当作策略提示交给沙箱）。
+    观察模式（默认）下沙箱不拦人，老行为一个字节都不变；
+    只有该动作被显式强制（MEMOMICS_SANDBOX_ENFORCE=fs.write 之类）才可能返回理由。
+    沙箱自身的任何异常都被吞掉：安全组件宁可少拦，也绝不能把正常功能打挂。
+    """
+    try:
+        import webui.sandbox as _sb
+        _sandbox_env_grants()
+        d = _sb.gate(action, str(path), roots=[str(r) for r in roots], source=source)
+        if d.blocked:
+            return "%s (%s)" % (d.code, d.reason)
+    except Exception:
+        return ""
+    return ""
+
+
+def _sandbox_ensure_app_grants() -> None:
+    """强制模式下给自己人打窄授权：只授权固定主机、只授权 net.fetch、理由写清、全进审计。
+
+    为什么需要它：api.github.com 是"检查更新"的固定依赖。一开强制、它又没授权，
+    更新检查会立刻死掉——"安全了但功能废了"不是我们要的结果。所以把自依赖显式声明出来，
+    而不是偷偷放行。授权是 TTL 的，本函数幂等：过期会被清掉并补打，调用方每次出网前调一次即可。
+    观察模式（默认）下什么都不做。
+    """
+    try:
+        from webui import sandbox as _sb
+        if not _sb.enforce_action("net.fetch"):
+            return
+        _sb.purge_expired()
+        have = {g.get("resource") for g in _sb.grants()
+                if g.get("action") == "net.fetch" and (g.get("ttl_left") or 0) > 0}
+        if _UPDATE_HOST not in have:
+            _sb.grant("net.fetch", _UPDATE_HOST, ttl_s=3600.0,
+                      reason="应用自更新检查（强制模式下的显式自依赖）", writable=False)
+    except Exception as _e:
+        print("[WARN] 应用自授权失败: %s" % _e)
+
+
+_sandbox_ensure_app_grants()
 
 
 def _get_update_config() -> dict:
-    """读取更新策略配置（hermes_home/config.yaml 的 update 段）。
+    """读取更新策略配置（memomics_home/config.yaml 的 update 段）。
 
     对齐 MiMo-Code autoupdate 语义：
       notify — 仅通知用户有新版本（默认，更新由用户决定）
@@ -7545,7 +11500,7 @@ def _get_update_config() -> dict:
     cfg = {"autoupdate": "notify", "enabled": True}
     try:
         import yaml as _yaml
-        _p = os.path.join(HERMES_HOME_DIR, "config.yaml")
+        _p = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
         if os.path.isfile(_p):
             with open(_p, encoding="utf-8") as _f:
                 _d = _yaml.safe_load(_f) or {}
@@ -7566,7 +11521,7 @@ def _get_update_config() -> dict:
 def _set_update_config(autoupdate: str) -> dict:
     """写更新策略回 config.yaml（保留其他键）。"""
     import yaml as _yaml
-    _p = os.path.join(HERMES_HOME_DIR, "config.yaml")
+    _p = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
     try:
         with open(_p, encoding="utf-8") as _f:
             _d = _yaml.safe_load(_f) or {}
@@ -7611,24 +11566,148 @@ def _background_update_check() -> None:
     _th.Thread(target=_run, daemon=True, name="memomics-auto-update-check").start()
 
 
-def _http_get_json(url: str, timeout: int = 20) -> dict:
-    """带代理的 GET JSON：先走本机代理，失败降级直连。"""
+# === 更新检查的 TLS 信任库（2026-09-23）===
+# 用户报障：点"检查更新"偶发
+#   <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed:
+#    unable to get local issuer certificate (_ssl.c:1010)>
+# 根因：urllib 走 Python 默认 SSL 上下文，在 Windows 上信任锚取自系统证书存储
+# （ssl.enum_certificates 先 LocalMachine 后退 CurrentUser）。实测本机只载入 54 张，
+# 而随包 certifi 有 119 张 —— 系统存储缺签发链时 GitHub 证书就验不过，检查直接失败。
+# 修法：取 certifi ∪ 系统证书库（只取 certifi 会让装了 HTTPS 中间人安全软件的
+# 用户从"偶尔失败"变成"稳定失败"—— 那类根证书只在系统库里）。绝不关闭证书校验。
+_SSL_CTX_CACHE = None
+
+
+def _ssl_context():
+    """certifi ∪ 系统证书库 的 SSL 上下文（取并集，绝不关闭校验）。
+
+    2026-09-23 用户报障后定位到：这条链路上"只取一边"会各坏一种用户。
+      · 只信系统库（Python 默认）：安装包用户的系统库可能滞后/精简（实测随包
+        运行时只读到 54 张），缺 GitHub 签发链 → "unable to get local issuer
+        certificate"，也就是用户反馈的那个错；
+      · 只信 certifi：公司/安全软件做 HTTPS 中间人时，其自签根证书只装在
+        Windows 证收库里、certifi 没有（实测"仅系统库独有"的根有 21 张）
+        → 这些用户会从"偶尔能连"变成"稳定连不上"，等于修一个坏一个。
+    并集同时覆盖两种情形（实测随包运行时 150 + 54 → 172，⊇ 任一单独来源）。
+    加载全部失败才退化为系统默认（依旧开着校验）。
+    """
+    global _SSL_CTX_CACHE
+    if _SSL_CTX_CACHE is not None:
+        return _SSL_CTX_CACHE
+    import ssl as _ssl
+    ctx = None
+    try:
+        import certifi
+        ctx = _ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        try:
+            ctx = _ssl.create_default_context()
+        except Exception:
+            return _ssl.create_default_context()
+    try:
+        ctx.load_default_certs()   # 并上系统库：补中间人根证书/本机专有 CA
+    except Exception:
+        pass
+    _SSL_CTX_CACHE = ctx
+    return ctx
+
+
+def _url_opener(proxy):
+    """构建带 TLS 上下文与可选代理的 opener。
+
+    2026-09-23 两个真实缺陷（用户报障"检查更新偶发失败"的根因）：
+    1. TLS 上下文用 Python 默认值 → Windows 取系统证书存储（本机仅 54 张信任锚），
+       而随包 certifi 有 119 张；缺签发链时报
+       "[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate"。
+    2. 所谓"失败降级直连"其实没直连 —— build_opener() 会自动挂一个读系统代理的
+       ProxyHandler，而本机注册表 ProxyEnable=1 指向 127.0.0.1:6478，于是两轮尝试
+       走的是同一个代理、同一个失败原因，"双路兜底"形同虚设。
+       现改为 proxy=None 时显式 ProxyHandler({})（空字典=禁用全部代理）才真正直连。
+    """
     import urllib.request as _ur
-    headers = {"User-Agent": "MemOmics-Updater", "Accept": "application/vnd.github+json"}
+    handlers = [_ur.HTTPSHandler(context=_ssl_context())]
+    handlers.append(_ur.ProxyHandler({"http": proxy, "https": proxy}) if proxy
+                    else _ur.ProxyHandler({}))   # 空字典 = 真直连，不读系统代理
+    return _ur.build_opener(*handlers)
+
+
+def _http_get_text(url: str, timeout: int = 20) -> str:
+    """GET 纯文本（CDN 镜像源用：无 API 配额限制）。"""
+    import urllib.request as _ur
     last_err = None
     for proxy in (_PROXY, None):
         try:
-            req = _ur.Request(url, headers=headers)
-            # 2026-08-26: 修复 build_opener 嵌套 —— else 分支把 build_opener() 结果
-            # （OpenerDirector）当 Handler 再传进 build_opener → Linux 无代理降级
-            # 直连时抛 "expected BaseHandler instance, got OpenerDirector"（实测）
-            opener = (_ur.build_opener(_ur.ProxyHandler({"http": proxy, "https": proxy}))
-                      if proxy else _ur.build_opener())
-            with opener.open(req, timeout=timeout) as r:
-                return json.loads(r.read().decode("utf-8", "replace"))
+            req = _ur.Request(url, headers={"User-Agent": "MemOmics-Updater"})
+            with _url_opener(proxy).open(req, timeout=timeout) as r:
+                return r.read().decode("utf-8", "replace")
         except Exception as e:
             last_err = e
             continue
+    raise last_err
+
+
+def _asset_exists(tag: str, name: str, timeout: int = 15) -> bool:
+    """探测 release 资产是否存在（HEAD/Range 探测，不下载正文）。
+
+    API 配额用尽时的回退：tag 已知则资产 URL 可推导，但资产不一定都在，
+    所以用 1 字节 Range 请求确认，避免给用户一个 404 的更新按钮。
+    """
+    import urllib.request as _ur
+    url = f"https://github.com/{_GITHUB_REPO}/releases/download/{tag}/{name}"
+    for proxy in (_PROXY, None):
+        try:
+            req = _ur.Request(url, headers={"User-Agent": "MemOmics-Updater", "Range": "bytes=0-0"})
+            with _url_opener(proxy).open(req, timeout=timeout) as r:
+                if r.status in (200, 206):
+                    return True
+        except Exception:
+            continue
+    return False
+
+
+def _net_error_hint(err) -> str:
+    """把网络异常翻译成可操作的中文提示（TLS 证书问题单独说明）。"""
+    txt = str(err)
+    low = txt.lower()
+    if "certificate" in low and ("verify failed" in low or "local issuer" in low):
+        return ("TLS 证书校验失败：本机信任库缺少 GitHub 证书的签发链。"
+                "已改用 certifi 信任库并自动重试；若持续失败，请检查本机代理 "
+                "127.0.0.1:6478 是否在改写 HTTPS 流量，或到 GitHub Releases 手动下载安装包覆盖更新。"
+                "原始错误：" + txt[:160])
+    if "rate limit" in low or "403" in txt:
+        return ("GitHub API 访问受限（匿名调用每小时 60 次配额用尽）。"
+                "已自动改用 CDN 镜像获取版本；你也可稍后重试或直接到 Release 页手动下载。"
+                "原始错误：" + txt[:160])
+    if "timed out" in low or "timeout" in low:
+        return "连接 GitHub 超时（网络或代理不可用，可稍后重试）。原始错误：" + txt[:160]
+    if "getaddrinfo" in low or "name or service not known" in low or "11001" in txt:
+        return "DNS 解析失败（无网络或代理故障）。原始错误：" + txt[:160]
+    return txt[:200]
+
+
+def _http_get_json(url: str, timeout: int = 20, retries: int = 2) -> dict:
+    """带代理的 GET JSON：certifi 信任库 + 代理/直连双路 + 瞬时失败重试。"""
+    import urllib.request as _ur
+    headers = {"User-Agent": "MemOmics-Updater", "Accept": "application/vnd.github+json"}
+    last_err = None
+    tries = max(1, int(retries))
+    for attempt in range(tries):
+        for proxy in (_PROXY, None):
+            try:
+                if _net_guard is not None:
+                    _sandbox_ensure_app_grants()      # 强制模式下补齐自依赖授权（TTL 到期自动续）
+                    with _net_guard.urlopen(url, timeout=timeout, headers=headers,
+                                            proxy=proxy, action="net.fetch",
+                                            source="update.check") as r:
+                        return json.loads(r.read().decode("utf-8", "replace"))
+                req = _ur.Request(url, headers=headers)
+                with _url_opener(proxy).open(req, timeout=timeout) as r:
+                    return json.loads(r.read().decode("utf-8", "replace"))
+            except Exception as e:
+                last_err = e
+                continue
+        if attempt + 1 < tries:
+            time.sleep(1.5 * (attempt + 1))
     raise last_err
 
 
@@ -7698,24 +11777,24 @@ def _platform_asset() -> str:
 
 # ── 差异覆盖的保留清单（对齐打包.bat 排除：用户数据/环境/密钥绝不覆盖）──
 _KEEP_DIRS = (".venv", ".git", ".backups", "node_modules", "miniconda_env", "miniconda",
-              "runtime", "hermes_home", "results", "uploads", "log", "ArchRLogs",
+              "runtime", "memomics_home", "results", "uploads", "log", "ArchRLogs",
               "__pycache__", ".pytest_cache", ".idea", ".vscode")
 _KEEP_FILES = (".env", ".install_path", "venv_deps_ok.txt", "venv_vision_ok.txt",
                "VERSION",  # 本地版本标识不被远端覆盖（覆盖会破坏比较）
                )
-_KEEP_TOP_LEVEL = ("hermes_home", "results", "uploads", "log", ".venv", "runtime",
+_KEEP_TOP_LEVEL = ("memomics_home", "results", "uploads", "log", ".venv", "runtime",
                    "node_modules", "miniconda_env", "miniconda", ".git", ".backups")
 
 
 def _is_keep_path(rel: str, allow_skills: bool = True, allow_version: bool = True) -> bool:
     """判断 zip 内相对路径是否应保留（不覆盖）。
 
-    检查路径的每一段：任何一段命中保留目录（node_modules/.venv/hermes_home 等）
+    检查路径的每一段：任何一段命中保留目录（node_modules/.venv/memomics_home 等）
     都保留——例如 hermes-agent/node_modules/xxx 命中 node_modules 段。
 
     2026-08-23 细化（轻量 update 包场景）：
-    - hermes_home/ 整体保留（config/memories/sessions 是用户数据）
-    - 但 hermes_home/skills/ 例外：技能库是发布内容，随版本更新
+    - memomics_home/ 整体保留（config/memories/sessions 是用户数据）
+    - 但 memomics_home/skills/ 例外：技能库是发布内容，随版本更新
     - VERSION 例外：update 包携带发布版 VERSION，允许覆盖（更新后版本号变化）
     """
     rel = rel.replace("\\", "/").lstrip("/")
@@ -7726,8 +11805,8 @@ def _is_keep_path(rel: str, allow_skills: bool = True, allow_version: bool = Tru
         return True
     top = parts[0]
     if top in _KEEP_TOP_LEVEL:
-        # 例外 1: hermes_home/skills 技能库随版本更新
-        if top == "hermes_home" and len(parts) > 1 and parts[1] == "skills":
+        # 例外 1: memomics_home/skills 技能库随版本更新
+        if top == "memomics_home" and len(parts) > 1 and parts[1] == "skills":
             return False
         return True
     # 路径任何段命中保留目录 → 保留（覆盖 hermes-agent/node_modules、memomics/vendor 等）
@@ -7795,10 +11874,9 @@ def _download_file(url: str, dest: str, timeout: int = 1800) -> None:
             raise RuntimeError("已取消")
         try:
             req = _ur.Request(url, headers={"User-Agent": "MemOmics-Updater"})
-            # 2026-08-26: 同 _http_get_json 的 build_opener 嵌套修复（无代理降级直连）
-            opener = (_ur.build_opener(_ur.ProxyHandler({"http": proxy, "https": proxy}))
-                      if proxy else _ur.build_opener())
-            with opener.open(req, timeout=timeout) as r, open(dest, "wb") as f:
+            # 2026-09-23: 统一走 _url_opener（挂 certifi 信任库 + 代理/直连），
+            # 下载大包时同样会撞上缺签发链的 CERTIFICATE_VERIFY_FAILED
+            with _url_opener(proxy).open(req, timeout=timeout) as r, open(dest, "wb") as f:
                 _UPDATE_TASK["total_bytes"] = int(r.headers.get("Content-Length") or 0)
                 while True:
                     if _UPDATE_TASK["cancelled"]:
@@ -7890,9 +11968,9 @@ def _apply_overlay(extract_root: str, tops: list) -> int:
         roots.append(("", extract_root))  # 覆盖 extract_root 下所有内容到 MEMOMICS_DIR
     else:
         for top in tops:
-            # 2026-08-23: hermes_home 顶层特殊处理——允许进入（skills 技能库随版本更新），
+            # 2026-08-23: memomics_home 顶层特殊处理——允许进入（skills 技能库随版本更新），
             # 内部子目录仍按 _is_keep_path 过滤（config/memories/sessions 保留）
-            if top == "hermes_home":
+            if top == "memomics_home":
                 src_dir = os.path.join(extract_root, top)
                 if os.path.isdir(src_dir):
                     roots.append((top, src_dir))
@@ -7910,9 +11988,9 @@ def _apply_overlay(extract_root: str, tops: list) -> int:
             keep_dirs = []
             for d in dirs:
                 rel_d = os.path.join(prefix, rel_sub, d).replace("\\", "/")
-                # 2026-08-23: hermes_home 必须进入 walk（内部 skills 更新），
-                # 仅当整路径命中保留时才剪枝（如 hermes_home/memories）
-                if rel_d.lstrip("./") == "hermes_home" or not _is_keep_path(rel_d):
+                # 2026-08-23: memomics_home 必须进入 walk（内部 skills 更新），
+                # 仅当整路径命中保留时才剪枝（如 memomics_home/memories）
+                if rel_d.lstrip("./") == "memomics_home" or not _is_keep_path(rel_d):
                     keep_dirs.append(d)
             dirs[:] = keep_dirs
             for fn in files:
@@ -7955,22 +12033,57 @@ async def update_check():
     except Exception:
         pass
     try:
-        rel = _http_get_json(f"{_GITHUB_API}/releases/latest")
-        tag = rel.get("tag_name", "")
-        tag_date = (rel.get("published_at") or "")[:10]
-        assets = rel.get("assets") or []
-        # 2026-08-23: 更新包优先级 —— 轻量代码包 MemOmics-update.zip（跨平台，~22MB）优先，
-        # 老用户升级只下载代码；找不到才回退平台完整包（新装机用，542MB）。
-        upd_asset = next((a for a in assets if a.get("name") == "MemOmics-update.zip"), None)
-        asset_name = _platform_asset()
-        full_asset = next((a for a in assets if a.get("name") == asset_name), None) if asset_name else None
-        asset = upd_asset or full_asset
+        tag = tag_date = ""
+        assets = []
+        try:
+            rel = _http_get_json(f"{_GITHUB_API}/releases/latest")
+            tag = rel.get("tag_name", "")
+            tag_date = (rel.get("published_at") or "")[:10]
+            assets = rel.get("assets") or []
+            result["source"] = "api"
+        except Exception as api_err:
+            # 2026-09-23: GitHub REST 匿名配额只有 60 次/小时，超了返回
+            # "HTTP Error 403: rate limit exceeded"，此前会直接把整个检查判失败。
+            # 退路：raw.githubusercontent 的 VERSION（CDN，无配额）+ 按约定拼资产名
+            # （tag 已知则 asset URL 是可推导的，不需要 API 列举）。
+            result["source"] = "cdn"
+            result["api_error"] = _net_error_hint(api_err)
+            ver_txt = _http_get_text(f"{_GITHUB_RAW}/VERSION").strip()
+            m = re.search(r"v\d{4}-\d{2}-\d{2}", ver_txt)
+            if not m:
+                raise RuntimeError(
+                    "GitHub API 受限（" + str(api_err)[:80] + "）且 CDN 回退未取到版本号")
+            tag = m.group(0)
+            result["remote_note"] = "GitHub API 配额用尽，已用 CDN 镜像获取版本；更新包地址按约定推导"
+        if assets:
+            # 更新包优先级 —— 轻量代码包 MemOmics-update.zip（跨平台）优先，
+            # 老用户升级只下载代码；找不到才回退平台完整包（新装机用）。
+            upd_asset = next((a for a in assets if a.get("name") == "MemOmics-update.zip"), None)
+            asset_name = _platform_asset()
+            full_asset = next((a for a in assets if a.get("name") == asset_name), None) if asset_name else None
+            asset = upd_asset or full_asset
+        elif tag:
+            # CDN 回退：tag 已知 → release 资产 URL 可推导（下载前会先探测存在性）
+            asset_name = _platform_asset()
+            upd_name = "MemOmics-update.zip"
+            if _asset_exists(tag, upd_name):
+                asset = {"name": upd_name, "size": 0,
+                         "browser_download_url": f"https://github.com/{_GITHUB_REPO}/releases/download/{tag}/{upd_name}"}
+            elif asset_name and _asset_exists(tag, asset_name):
+                asset = {"name": asset_name, "size": 0,
+                         "browser_download_url": f"https://github.com/{_GITHUB_REPO}/releases/download/{tag}/{asset_name}"}
+            else:
+                asset = None
+        else:
+            asset = None
+        _aname = (asset or {}).get("name", "")
         result["remote"] = {
             "tag": tag, "tag_date": tag_date,
-            "asset_name": asset.get("name", "") if asset else "",
+            "asset_name": _aname,
             "asset_size_mb": round((asset.get("size") or 0) / 1048576, 1) if asset else 0,
-            "asset_url": asset.get("browser_download_url", "") if asset else "",
-            "asset_kind": "update" if upd_asset else ("full" if full_asset else ""),
+            "asset_url": (asset or {}).get("browser_download_url", ""),
+            "asset_kind": ("update" if _aname == "MemOmics-update.zip"
+                           else ("full" if _aname else "")),
             "tag_url": f"https://github.com/{_GITHUB_REPO}/releases/latest",
         }
         local_ver = local.get("version") or "unknown"
@@ -7990,7 +12103,7 @@ async def update_check():
                 result["status"] = "update_available"
                 result["update_mode"] = "zip_overlay" if asset else "manual"
     except Exception as e:
-        result["error"] = str(e)[:200]
+        result["error"] = _net_error_hint(e)
         result["status"] = "unable_to_check"
     return result
 
@@ -7999,8 +12112,10 @@ async def update_check():
 async def update_apply(payload: dict):
     """执行更新（用户已确认）：下载平台安装包 → 校验 → 差异覆盖代码（保留用户数据）→ fix_bundle。
 
-    覆盖范围：zip 内除保留清单（hermes_home/results/.venv/runtime/node_modules 等）外的代码文件。
-    完成后需用户重启服务生效。
+    覆盖范围：zip 内除保留清单（memomics_home/results/.venv/runtime/node_modules 等）外的代码文件。
+    完成后需用户重启服务生效。覆盖前会先检测老数据目录：只有在 hermes_home 含用户数据
+    时迁移（2026-10-08 改名；双存在时把旧目录缺失项搬进新目录，旧目录退休为 .migrated_ 备份）；
+    首次安装检测不到旧目录，不做任何替换。
     """
     confirmed = payload.get("confirmed")
     if not confirmed:
@@ -8043,6 +12158,14 @@ async def update_apply(payload: dict):
                                         os.path.isfile(os.path.join(cand, "start.sh"))):
                 extract_root = cand
                 break
+        # 2.5 覆盖前先检测并迁掉老数据目录（2026-10-08 改名；老安装升级场景）
+        _hmig = "noop"
+        try:
+            _hmig = migrate_legacy_home(MEMOMICS_HOME_DIR, _legacy_home)
+            if _hmig != "noop":
+                print("[MemOmics] 更新前置：检测到覆盖升级，home 迁移=%s" % _hmig, flush=True)
+        except Exception as _hme:
+            _hmig = "error:%r" % (_hme,)
         # 3. 差异覆盖（保留用户数据）
         copied = _apply_overlay(extract_root, tops)
         # 4. 应用文件级迁移
@@ -8060,9 +12183,12 @@ async def update_apply(payload: dict):
         new_local = _local_version_info()
         _UPDATE_TASK["running"] = False
         _UPDATE_TASK["stage"] = "done"
-        return {"ok": True, "message": f"已覆盖 {copied} 个代码文件", "fix_log": fix_log,
+        _msg = f"已覆盖 {copied} 个代码文件到 {MEMOMICS_DIR}" + ("" if os.path.basename(os.path.normpath(extract_root)) == os.path.basename(os.path.normpath(MEMOMICS_DIR)) else f"（安装目录名 {os.path.basename(os.path.normpath(MEMOMICS_DIR))} 与包内目录名不同，已按实际运行目录覆盖，不用改名）")
+        if _hmig.startswith(("renamed", "merged")):
+            _msg += "；检测到覆盖升级，已自动迁移旧数据目录（hermes_home→memomics_home）"
+        return {"ok": True, "message": _msg, "fix_log": fix_log,
                 "new_version": new_local.get("version"), "restart_required": True,
-                "asset_size_mb": remote.get("asset_size_mb")}
+                "install_dir": MEMOMICS_DIR, "asset_size_mb": remote.get("asset_size_mb")}
     except RuntimeError as e:
         _UPDATE_TASK["running"] = False
         _UPDATE_TASK["error"] = str(e)
@@ -8115,7 +12241,7 @@ async def setup_config(req: Request):
     _current_model["model"] = model
     _save_model_config()
     try:
-        _cfg_path = os.path.join(HERMES_HOME_DIR, "config.yaml")
+        _cfg_path = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
         _cfg_lines = [
             f"api_base: {base_url}",
             f"api_key: {api_key}",
@@ -8132,6 +12258,136 @@ async def setup_config(req: Request):
     except Exception as e:
         print(f"[WARN] 写入 config.yaml 失败: {e}")
     return {"ok": True, "model": model, "base_url": base_url}
+
+
+# === 环境管理（env_inventory，2026-09-22 新增）===
+# 用户和 agent 都能看到：本机有什么环境（R/Python/生信 CLI/GPU/磁盘/已知坑）+
+# 集群有什么（节点/核数/负载/调度器/目录/已装工具与版本）。
+# 集群探测要 SSH（每节点最长 60 秒），绝不能卡在 HTTP 请求里：
+#   GET 只读缓存并立刻返回；refresh=1 只负责"踢一脚"后台线程，前端轮询 state.status。
+_ENV_INV_STATE = {"status": "idle", "scope": "", "started_at": 0, "finished_at": 0, "error": ""}
+_ENV_INV_LOCK = _threading.Lock()
+
+
+def _env_inv_module():
+    from memomics.bio_tools import env_inventory as _mod
+    return _mod
+
+
+def _env_inv_scan(scope="all"):
+    """后台线程里真探测。scope: all（本机+集群）/ local（只本机）/ cluster（只集群）。"""
+    with _ENV_INV_LOCK:
+        _ENV_INV_STATE.update({"status": "running", "scope": scope,
+                               "started_at": time.time(), "error": ""})
+    try:
+        mod = _env_inv_module()
+        if scope == "cluster":
+            mod.scan_cluster(force=True)
+        elif scope == "local":
+            mod.scan_local(force=True)
+        else:
+            mod.build_report(force=True, cluster=True)
+        with _ENV_INV_LOCK:
+            _ENV_INV_STATE.update({"status": "ok", "finished_at": time.time()})
+    except Exception as e:
+        with _ENV_INV_LOCK:
+            _ENV_INV_STATE.update({"status": "error", "error": f"{type(e).__name__}: {e}",
+                                   "finished_at": time.time()})
+
+
+def _env_inv_refresh(scope="all"):
+    """踢一脚后台刷新；已经在跑就返回 False（不重复探测）。"""
+    with _ENV_INV_LOCK:
+        if _ENV_INV_STATE.get("status") == "running":
+            return False
+    _threading.Thread(target=_env_inv_scan, args=(scope,), daemon=True,
+                      name="env-inventory-scan").start()
+    return True
+
+
+@app.get("/api/env/inventory")
+async def env_inventory_api(refresh: int = 0, cluster: int = 1, scope: str = ""):
+    """环境管理面板数据：本机 + 集群。
+
+    refresh=1 触发后台重扫（不阻塞）：返回当前缓存 + state.status=running，前端轮询刷新。
+    cluster=0 只清点本机（完全不碰 SSH）。任何情况下都先返回缓存，绝不空等。
+    """
+    mod = _env_inv_module()
+    report = mod.build_report(cache_only=True, cluster=bool(cluster))
+    local = report.get("local") or {}
+    cluster_data = report.get("cluster") or {}
+    pending = bool(local.get("pending")) or bool(cluster_data.get("pending"))
+    # 2026-09-23：过期数据仍然返回（面板不再回退成"没扫过"），但必须照样踢后台刷新，
+    # 否则 stale 的数据会一直卡着不更新 —— 这里把 needs_refresh 也算作要刷新。
+    stale = bool(local.get("needs_refresh")) or bool(cluster_data.get("needs_refresh"))
+    triggered = None
+    if refresh or pending or stale:
+        triggered = _env_inv_refresh(scope or ("all" if cluster else "local"))
+    with _ENV_INV_LOCK:
+        state = dict(_ENV_INV_STATE)
+    if triggered is not None:
+        state["triggered"] = triggered
+    return {"ok": True, "state": state, "local": local, "cluster": cluster_data,
+            "warnings": report.get("warnings") or [], "pending": pending,
+            "stale": stale,
+            "agent_digest": report.get("agent_digest") or "",
+            "cache_path": mod._cache_path()}
+
+
+@app.post("/api/env/verify")
+async def env_verify_api():
+    """便宜地"确认一遍"环境（毫秒级）：指纹没变就复用缓存，变了才重扫。
+
+    2026-09-23：用户要的"下次遇到分析再确认一遍"落在这里 ——
+    不陪 R 全量探测（10~45 秒），但装/卸包一定被指纹抓到。
+    """
+    mod = _env_inv_module()
+    try:
+        # verify 在"环境变了"时会真扫（本机 10~45 秒）→ 必须挪出事件循环，
+        # 否则这几十秒里整个 WebUI 的 HTTP 都停摆（照仓库惯例用 to_thread）。
+        result = await asyncio.to_thread(mod.verify)
+    except Exception as e:
+        return {"ok": False, "error": "%s: %s" % (type(e).__name__, e)}
+    if result.get("rescanned"):
+        with _ENV_INV_LOCK:
+            _ENV_INV_STATE.update({"status": "ok", "finished_at": time.time()})
+    return result
+
+
+@app.post("/api/env/declared")
+async def env_declared_save(payload: dict):
+    """面板填写/补充的环境声明 → 写回 environment.json（持久，探针重扫不动它）。
+
+    只认 cluster / env_notes 两段，其余键原样保留（写前留 .bak、写后原子替换）。
+    """
+    mod = _env_inv_module()
+    try:
+        # 落盘 + declared_env() 重读都是小文件 IO，但按仓库惯例别占事件循环
+        return await asyncio.to_thread(mod.save_declared, payload)
+    except Exception as e:
+        return {"ok": False, "error": "%s: %s" % (type(e).__name__, e)}
+
+
+@app.get("/api/env/report.md")
+async def env_report_md(download: int = 0):
+    """人看的 markdown 环境报告（可下载存档 / 贴给同事）。只读缓存，秒回。"""
+    mod = _env_inv_module()
+    text = mod.render_markdown(cache_only=True)
+    headers = ({"Content-Disposition": 'attachment; filename="memomics-environment.md"'}
+               if download else {})
+    return Response(text, media_type="text/markdown; charset=utf-8", headers=headers)
+
+
+@app.on_event("startup")
+async def _env_inventory_warmup():
+    """启动后预热环境清单：后台线程，先等服务起来再扫，不拖慢启动。"""
+    def _warm():
+        time.sleep(8)
+        try:
+            _env_inv_module().build_report(force=False, cluster=True)
+        except Exception as e:
+            print(f"[WARN] 环境清单预热失败: {e}")
+    _threading.Thread(target=_warm, daemon=True, name="env-inventory-warmup").start()
 
 
 @app.get("/api/env/check")
@@ -8304,7 +12560,7 @@ async def weixin_qr_poll():
                 print(f"[MemOmics] QR confirmed: account={account_id[:20] if account_id else 'empty'}, user={user_id[:20] if user_id else 'empty'}", flush=True)
                 _save_weixin_persist()
                 try:
-                    _start_weixin_poll()  # 启动 Hermes WeixinAdapter
+                    _start_weixin_poll()  # 启动 MemOmics WeixinAdapter
                 except Exception as e:
                     print(f"[MemOmics] 启动微信适配器异常: {e}", flush=True)
                 return {"status": "connected", "message": f"已连接! 账号: {account_id[:12]}...", "account_id": account_id}
@@ -8347,7 +12603,7 @@ async def weixin_disconnect():
 
 
 async def _send_weixin_progress(message: str) -> bool:
-    """向微信发送进度消息 — 使用 Hermes 原生 WeixinAdapter.send()（带节流+熔断）"""
+    """向微信发送进度消息 — 使用 MemOmics 原生 WeixinAdapter.send()（带节流+熔断）"""
     if _weixin_adapter is None:
         return False
     if not _gate_weixin_send(message, min_interval=2.0):
@@ -8379,7 +12635,7 @@ async def _send_weixin_progress(message: str) -> bool:
 
 
 async def _send_weixin_image(image_path: str, caption: str = "") -> bool:
-    """向微信发送本地图片 — 使用 Hermes 原生 WeixinAdapter.send_image_file()"""
+    """向微信发送本地图片 — 使用 MemOmics 原生 WeixinAdapter.send_image_file()"""
     if _weixin_adapter is None:
         return False
     if not os.path.isfile(image_path):
@@ -8406,7 +12662,7 @@ async def _send_weixin_image(image_path: str, caption: str = "") -> bool:
 
 
 async def _send_weixin_document(file_path: str, caption: str = "") -> bool:
-    """向微信发送文件 — 使用 Hermes 原生 WeixinAdapter.send_document()"""
+    """向微信发送文件 — 使用 MemOmics 原生 WeixinAdapter.send_document()"""
     if _weixin_adapter is None:
         return False
     if not os.path.isfile(file_path):
@@ -8505,12 +12761,12 @@ _weixin_seen_ids = set()     # 已处理消息 ID 去重
 _weixin_sync_buf = ""        # iLink 增量轮询 sync_buf
 _weixin_poll_task = None     # 后台轮询 asyncio.Task
 _weixin_adapter = None
-_weixin_last_user_id = ""     # Last user who sent a message      # Hermes 原生 WeixinAdapter 实例
+_weixin_last_user_id = ""     # Last user who sent a message      # MemOmics 原生 WeixinAdapter 实例
 _MAX_WEIXIN_MSGS = 200
-_WEIXIN_MSGS_FILE = os.path.join(HERMES_HOME_DIR, "runtime", "weixin_messages.json")
+_WEIXIN_MSGS_FILE = os.path.join(MEMOMICS_HOME_DIR, "runtime", "weixin_messages.json")
 
-# 2026-08-14: 跨入口共享去重 — server 轮询(_weixin_poll_loop)与 Hermes 适配器回调
-# (_hermes_weixin_message_handler) 各自拉同一条消息时，只处理一次，防双会话/双回复。
+# 2026-08-14: 跨入口共享去重 — server 轮询(_weixin_poll_loop)与 MemOmics 适配器回调
+# (_memomics_weixin_message_handler) 各自拉同一条消息时，只处理一次，防双会话/双回复。
 _WEIXIN_SHARED_SEEN = set()
 _WEIXIN_SHARED_SEEN_MAX = 5000
 
@@ -8569,7 +12825,7 @@ _load_weixin_msg_store()
 # 场景：agent 在长任务（如 git 依赖安装）中陷入
 # "继续监控 → tail 日志 → 仍在进行 → 继续监控" 的无限循环，
 # 上下文不断膨胀、注意力崩溃，stall watchdog 因 agent "一直在动" 无法触发。
-# 检测两类循环，命中后通过 Hermes 原生 _pending_steer 通道注入强制收尾提示：
+# 检测两类循环，命中后通过 MemOmics 原生 _pending_steer 通道注入强制收尾提示：
 #   A. 工具调用循环：最近 8 次调用中 ≥6 对是同工具 + 相似命令
 #   B. 重复表述循环：最近 8 个回合文本片段中 ≥6 对高度相似
 from difflib import SequenceMatcher as _SeqMatcher
@@ -8728,7 +12984,7 @@ def _loop_check(session, agent, event: str, tool_name: str = None, args=None, de
 
 
 def _loop_inject_steer(session, agent, reason: str, detail: str) -> bool:
-    """通过 Hermes 原生 _pending_steer 通道注入强制收尾提示（下一轮 LLM 调用前生效）。"""
+    """通过 MemOmics 原生 _pending_steer 通道注入强制收尾提示（下一轮 LLM 调用前生效）。"""
     try:
         if agent is None and session is not None:
             agent = session.get("running_agent")
@@ -8916,7 +13172,7 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
     if len(session["messages"]) > 200:
         session["messages"] = session["messages"][-200:]
     session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # state.db 由 Hermes 框架 _persist_session 自动写（双写修复：2026-08-13）
+    # state.db 由 MemOmics 框架 _persist_session 自动写（双写修复：2026-08-13）
 
     # 更新会话标题（首次消息）
     phone_icon = "\U0001f4f1"
@@ -8955,38 +13211,6 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
         except Exception:
             pass
 
-    # === 自我介绍快速回复（绕过 agent LLM，与 WebUI 路径对齐）===
-    # 2026-08-14: 微信路径此前缺 self_intro 快回 → 模型限流时"你是谁"永远无回复
-    try:
-        _wx_intent, _wx_conf, _wx_extra = _classify_intent(text)
-    except Exception:
-        _wx_intent = "chat"
-    if _wx_intent == "self_intro":
-        _intro = _SELF_INTRO_EN if session.get("lang") == "en" else _SELF_INTRO_ZH
-        session["messages"].append({"role": "assistant", "content": _intro, "time": datetime.now().strftime("%H:%M:%S"), "source": "weixin-agent"})
-        if len(session["messages"]) > 200:
-            session["messages"] = session["messages"][-200:]
-        session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        session["running_agent"] = False
-        session["running_task"] = None
-        _persist_session_message(session, "assistant", _intro)
-        _session_emit(session, {"type": "delta", "content": _intro, "session_id": sid})
-        _session_emit(session, {"type": "complete", "content": _intro, "session_id": sid})
-        _session_emit(session, {"type": "progress", "step": "complete", "status": "done", "detail": "回复已生成", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
-        wx_msg = {"id": str(int(time.time() * 1000)), "sender_id": _weixin_state["account_id"], "sender_name": "Agent", "text": _intro, "context_token": "", "ts": int(time.time()), "direction": "out"}
-        _append_weixin_msg(wx_msg)
-        for ws_client in list(_WEIXIN_WS_CLIENTS):
-            try:
-                await ws_client.send_text(json.dumps({"type": "weixin_message", "message": wx_msg}, ensure_ascii=False))
-            except Exception:
-                pass
-        if _weixin_adapter:
-            try:
-                send_result = await _send_weixin_important(_intro, chat_id_override=sender_id)
-                print(f"[MemOmics] 微信Agent回复(自介快回): success={send_result}", flush=True)
-            except Exception as e:
-                print(f"[MemOmics] 微信自介回复发送失败: {e}", flush=True)
-        return
 
     try:
         # 分析级别检测
@@ -9016,9 +13240,29 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
 
         def _wx_tool_start_cb(tool_name, args=None):
             _session_emit(session, {"type": "tool_start", "tool": tool_name, "args": args or {}, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
+            # P1-2(2026-09-23): 改动复核 —— 微信通道同样抓「改前」快照
+            try:
+                _snapshot_before_change(session, tool_name, args)
+            except Exception:
+                pass
 
         def _wx_tool_complete_cb(tool_name, result_str=""):
-            _session_emit(session, {"type": "tool_complete", "tool": tool_name, "result": result_str[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
+            _ev_wx = {"type": "tool_complete", "tool": tool_name, "result": result_str[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid}
+            if tool_name == "debate_analysis":  # 2026-09-18: 附完整辩论归档，前端渲染过程表格
+                try:
+                    _deb_wx = _load_latest_debate(sid)
+                    if _deb_wx.get("ok"):
+                        _ev_wx["debate"] = _deb_wx
+                    else:
+                        _ev_wx["debate_error"] = _deb_wx.get("error", "")
+                except Exception:
+                    pass
+            _session_emit(session, _ev_wx)
+            # P1-2(2026-09-23): 改动复核 —— 微信通道（complete 回调没有 args）→ 结算该工具留下的全部待结算项
+            try:
+                _finalize_file_change(session, tool_name)
+            except Exception:
+                pass
             # 扫描新生成的图片 → 推送 new_figure 事件
             try:
                 base = session.get("results_dir", "")
@@ -9101,7 +13345,7 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             # P1-13(2026-08-13): 微信 executor 线程内设置会话上下文（kernel 会话隔离）
             try:
                 from memomics.bio_tools.debate_analysis import set_session_context
-                set_session_context(sid=session["id"], results_dir=session.get("results_dir", ""))
+                _set_debate_session_context(session)
             except Exception:
                 pass
             result = agent.run_conversation(text, conversation_history=history if history else None, task_id=session["id"])
@@ -9114,7 +13358,7 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
             if len(session["messages"]) > 200:
                 session["messages"] = session["messages"][-200:]
             session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            # state.db 由 Hermes 框架 _persist_session 自动写（双写修复：2026-08-13）
+            # state.db 由 MemOmics 框架 _persist_session 自动写（双写修复：2026-08-13）
 
             _session_emit(session, {"type": "complete", "session_id": sid})
             _session_emit(session, {"type": "progress", "step": "complete", "status": "done", "detail": "回复已生成", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
@@ -9280,26 +13524,26 @@ async def _weixin_poll_loop():
 
 
 def _start_weixin_poll():
-    """启动 Hermes 原生 WeixinAdapter"""
+    """启动 MemOmics 原生 WeixinAdapter"""
     global _weixin_adapter
     if _weixin_adapter is not None:
         return
-    asyncio.create_task(_connect_hermes_weixin_adapter())
-    print("[MemOmics] Hermes 微信适配器启动中...", flush=True)
+    asyncio.create_task(_connect_memomics_weixin_adapter())
+    print("[MemOmics] MemOmics 微信适配器启动中...", flush=True)
 
 
 def _stop_weixin_poll():
-    """停止 Hermes 原生 WeixinAdapter"""
+    """停止 MemOmics 原生 WeixinAdapter"""
     global _weixin_adapter
     if _weixin_adapter is not None:
-        asyncio.create_task(_disconnect_hermes_weixin_adapter())
+        asyncio.create_task(_disconnect_memomics_weixin_adapter())
 
 # ================================================================
-# Hermes 原生 WeixinAdapter 集成
+# MemOmics 原生 WeixinAdapter 集成
 # ================================================================
 
 def _build_weixin_platform_config():
-    """用当前 _weixin_state 构建 Hermes PlatformConfig"""
+    """用当前 _weixin_state 构建 MemOmics PlatformConfig"""
     import sys as _sys
     _hermes_root = os.path.join(os.path.dirname(__file__), "..", "hermes-agent")
     _sys.path.insert(0, _hermes_root)
@@ -9318,8 +13562,8 @@ def _build_weixin_platform_config():
     )
 
 
-async def _hermes_weixin_message_handler(event):
-    """Hermes 消息回调 — 存储、推送、自动回复"""
+async def _memomics_weixin_message_handler(event):
+    """MemOmics 消息回调 — 存储、推送、自动回复"""
     global _weixin_msg_store, _WEIXIN_WS_CLIENTS
     try:
         msg_id = event.message_id or str(int(time.time() * 1000))
@@ -9395,7 +13639,7 @@ async def _hermes_weixin_message_handler(event):
             _WEIXIN_WS_CLIENTS -= dead
             # 更新 last_active
             session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            # state.db 由 Hermes 框架 _persist_session 自动写（双写修复：2026-08-13）
+            # state.db 由 MemOmics 框架 _persist_session 自动写（双写修复：2026-08-13）
 
         print(f"[MemOmics] 微信消息 from={sender_name}: {text[:80]}", flush=True)
 
@@ -9424,8 +13668,8 @@ async def _auto_reconnect_weixin():
         # 等待 uvicorn 完全启动 (让事件循环就绪)
         await asyncio.sleep(2)
         
-        # 调用 Hermes WeixinAdapter 连接
-        await _connect_hermes_weixin_adapter()
+        # 调用 MemOmics WeixinAdapter 连接
+        await _connect_memomics_weixin_adapter()
         
         if _weixin_adapter and _weixin_state.get("connected"):
             logger.info("[MemOmics] 微信自动重连成功!")
@@ -9437,8 +13681,8 @@ async def _auto_reconnect_weixin():
     except Exception as e:
         logger.warning(f"[MemOmics] 微信自动重连异常: {e}")
 
-async def _connect_hermes_weixin_adapter():
-    """连接 Hermes 原生 WeixinAdapter"""
+async def _connect_memomics_weixin_adapter():
+    """连接 MemOmics 原生 WeixinAdapter"""
     global _weixin_adapter
     try:
         import sys as _sys
@@ -9451,27 +13695,27 @@ async def _connect_hermes_weixin_adapter():
         config = _build_weixin_platform_config()
         print(f"[MemOmics] adapter config: token={'YES' if config.token else 'NO'}, account={_weixin_state.get('account_id','')[:20]}", flush=True)
         _weixin_adapter = WeixinAdapter(config)
-        _weixin_adapter.set_message_handler(_hermes_weixin_message_handler)
+        _weixin_adapter.set_message_handler(_memomics_weixin_message_handler)
         ok = await _weixin_adapter.connect()
         print(f"[MemOmics] adapter connect result: {ok}", flush=True)
         if ok:
-            print("[MemOmics] Hermes 微信适配器已连接", flush=True)
+            print("[MemOmics] MemOmics 微信适配器已连接", flush=True)
             _weixin_state["connected"] = True
             _save_weixin_persist()
         else:
-            print("[MemOmics] Hermes 微信适配器连接失败", flush=True)
-            _weixin_state["last_error"] = "Hermes 适配器连接失败"
+            print("[MemOmics] MemOmics 微信适配器连接失败", flush=True)
+            _weixin_state["last_error"] = "MemOmics 适配器连接失败"
             _weixin_adapter = None
     except Exception as e:
-        print(f"[MemOmics] Hermes 微信适配器异常: {e}", flush=True)
+        print(f"[MemOmics] MemOmics 微信适配器异常: {e}", flush=True)
         import traceback
         traceback.print_exc()
         _weixin_state["last_error"] = str(e)
         _weixin_adapter = None
 
 
-async def _disconnect_hermes_weixin_adapter():
-    """断开 Hermes 原生 WeixinAdapter"""
+async def _disconnect_memomics_weixin_adapter():
+    """断开 MemOmics 原生 WeixinAdapter"""
     global _weixin_adapter
     if _weixin_adapter is not None:
         try:
@@ -9481,7 +13725,7 @@ async def _disconnect_hermes_weixin_adapter():
         _weixin_adapter = None
     _weixin_state["connected"] = False
 
-    print("[MemOmics] Hermes 微信适配器已停止", flush=True)
+    print("[MemOmics] MemOmics 微信适配器已停止", flush=True)
 
 
 
@@ -9507,7 +13751,7 @@ async def weixin_messages(since: str = ""):
 
 @app.post("/api/weixin/send")
 async def weixin_send(body: dict = None):
-    """向微信用户发送/回复消息 — 使用 Hermes 原生 WeixinAdapter"""
+    """向微信用户发送/回复消息 — 使用 MemOmics 原生 WeixinAdapter"""
     global _weixin_msg_store
     if not body:
         return JSONResponse({"ok": False, "error": "请求体为空"}, status_code=400)
@@ -9550,6 +13794,54 @@ async def weixin_send(body: dict = None):
 
 
 
+@app.post("/api/weixin/send_image")
+async def weixin_send_image(body: dict = None):
+    """发送本地图片到微信（给 scripts/desktop_shot.py 这类本机工具用）。
+
+    背景（2026-09-25）：/api/weixin/send 只能发文本，图片发送只存在于进程内
+    （_send_weixin_image），于是「computer_use 截图 → 发微信」在纯聊天会话里没有出口：
+    聊天会话不创建 results 目录，_scan_new_figures 也就扫不到图。这里补一个显式出口。
+
+    安全：只允许已存在的图片文件（扩展名白名单），复用 _gate_weixin_send 的
+    5 秒间隔 / 60 秒去重限流，发送目标沿用 _weixin_state 的会话（与文本一致）。
+    """
+    global _weixin_msg_store
+    body = body or {}
+    path = str(body.get("path", "") or "").strip()
+    caption = str(body.get("caption", "") or "").strip()
+    if not path:
+        return JSONResponse({"ok": False, "error": "缺少 path"}, status_code=400)
+    ext = os.path.splitext(path)[1].lower()
+    if ext not in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+        return JSONResponse({"ok": False, "error": "只允许图片文件（png/jpg/jpeg/webp/gif），收到: %s" % (ext or "无扩展名")},
+                            status_code=400)
+    if not os.path.isfile(path):
+        return JSONResponse({"ok": False, "error": "文件不存在: %s" % path}, status_code=404)
+    if _weixin_adapter is None:
+        return {"ok": False, "error": "微信未连接"}
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        size = -1
+    print(f"[MemOmics] 微信发图: {path} ({size} 字节)", flush=True)
+    ok = await _send_weixin_image(path, caption)
+    if not ok:
+        return {"ok": False, "error": "发送失败或被限流（5 秒间隔 / 60 秒去重）", "path": path}
+    try:
+        _append_weixin_msg({
+            "id": str(int(time.time() * 1000)),
+            "sender_id": _weixin_state["account_id"],
+            "sender_name": "我",
+            "text": "[图片] " + os.path.basename(path) + ((" — " + caption) if caption else ""),
+            "context_token": _weixin_state.get("context_token", ""),
+            "ts": int(time.time()),
+            "direction": "out",
+        })
+    except Exception:
+        pass
+    return {"ok": True, "path": path, "bytes": size}
+
+
 @app.get("/api/files")
 async def list_files(path: str = ""):
     """列出目录文件 — 限制在 work/ 和 results/ 内"""
@@ -9588,6 +13880,110 @@ async def list_files(path: str = ""):
         return JSONResponse({"error": str(e)}, status_code=400)
 
 
+# ============ 2026-09-17 文献导入提速：目录 PDF 计数缓存 ============
+# 现象：点导入 → 选目录，每打开一层就要等几秒到几十秒。根因是列表接口每次都对该目录
+# 做一次递归 os.walk 数 PDF（实测：扫整个磁盘分区单次 32.7s，扫项目目录 0.8s）。
+# 现在改为：内存缓存 + 命中即返回；未命中时后台线程预热并立刻返回 pdf_count=null，
+# 前端先渲染列表、再轮询 /api/lit/pdf_count 把数字补上（不阻塞浏览）。
+_LIT_PDF_COUNT_CACHE = {}
+_LIT_PDF_COUNT_TTL = 600.0        # 10 分钟内直接复用
+_LIT_PDF_COUNT_BUDGET = 2.5       # 单次扫描时间预算（秒），超预算按已扫到的计数并标 partial
+_LIT_PDF_COUNT_CAP = 5000
+_LIT_PDF_COUNT_BUDGET_DEEP = 25.0   # 用户主动查数字时（/api/lit/pdf_count）给足预算，尽量精确
+_LIT_PDF_COUNT_LOCK = _threading.Lock()
+_LIT_PDF_COUNT_PENDING = set()
+
+
+def _scan_pdf_count(root: str, budget: float = None) -> tuple:
+    """迭代式扫描目录树数 PDF（os.scandir，比 os.walk 快）；受时间预算与上限约束。
+
+    返回 (count, partial)：partial=True 表示没扫完（预算/上限触发），count 是下界。
+    """
+    budget = _LIT_PDF_COUNT_BUDGET if budget is None else float(budget)
+    n, t0, partial = 0, time.time(), False
+    stack = [root]
+    while stack:
+        d = stack.pop()
+        try:
+            with os.scandir(d) as it:
+                for ent in it:
+                    if ent.name.startswith("."):
+                        continue
+                    try:
+                        if ent.is_dir(follow_symlinks=False):
+                            stack.append(ent.path)
+                        elif ent.name.lower().endswith(".pdf"):
+                            n += 1
+                            if n >= _LIT_PDF_COUNT_CAP:
+                                return n, True
+                    except Exception:
+                        continue
+        except Exception:
+            continue
+        if time.time() - t0 > budget:
+            partial = True
+            break
+    return n, partial
+
+
+def _lit_pdf_count_cached(path: str, wait: bool = False, budget: float = None):
+    """取目录 PDF 数：缓存优先；未命中则（wait=False 时）后台预热并返回 None。
+
+    wait=True 时同步扫描并按 budget 计时（默认浅预算 2.5s；用户主动查数字时用深预算）。
+    partial（没扫完）的结果只短缓存 60s，等下次深扫覆盖。
+    """
+    key = os.path.realpath(path or MEMOMICS_DIR)
+    now = time.time()
+    with _LIT_PDF_COUNT_LOCK:
+        hit = _LIT_PDF_COUNT_CACHE.get(key)
+        if hit:
+            _ttl = 60.0 if hit[2] else _LIT_PDF_COUNT_TTL
+            if now - hit[1] < _ttl:
+                return {"pdf_count": hit[0], "pdf_count_partial": bool(hit[2])}
+        if not wait and key in _LIT_PDF_COUNT_PENDING:
+            return {"pdf_count": None, "pdf_count_partial": False}
+        _LIT_PDF_COUNT_PENDING.add(key)
+
+    if wait:
+        try:
+            n, partial = _scan_pdf_count(key, budget)
+        except Exception:
+            n, partial = 0, False
+        with _LIT_PDF_COUNT_LOCK:
+            _LIT_PDF_COUNT_CACHE[key] = (n, time.time(), partial)
+            _LIT_PDF_COUNT_PENDING.discard(key)
+        return {"pdf_count": n, "pdf_count_partial": partial}
+
+    def _warm():
+        try:
+            n, partial = _scan_pdf_count(key)
+            with _LIT_PDF_COUNT_LOCK:
+                _LIT_PDF_COUNT_CACHE[key] = (n, time.time(), partial)
+        except Exception:
+            pass
+        finally:
+            with _LIT_PDF_COUNT_LOCK:
+                _LIT_PDF_COUNT_PENDING.discard(key)
+
+    _threading.Thread(target=_warm, daemon=True).start()
+    return {"pdf_count": None, "pdf_count_partial": False}
+
+
+@app.get("/api/lit/pdf_count")
+async def lit_pdf_count(path: str = ""):
+    """文献导入：只取"本目录 PDF 数量"（缓存优先，未命中最多扫 2.5s）。
+
+    前端在浏览列表渲染后轮询它补数字，避免浏览被递归扫描阻塞。
+    """
+    real = os.path.realpath(path or MEMOMICS_DIR)
+    if not os.path.isdir(real):
+        return {"count": 0, "partial": False, "path": real.replace("\\", "/")}
+    # 用户主动要这个数字时给足预算（浏览列表早已渲染完成，不阻塞任何交互）
+    r = await asyncio.to_thread(_lit_pdf_count_cached, real, True, _LIT_PDF_COUNT_BUDGET_DEEP)
+    return {"count": r.get("pdf_count") or 0, "partial": bool(r.get("pdf_count_partial")),
+            "path": real.replace("\\", "/")}
+
+
 @app.get("/api/lit/browse")
 async def lit_browse(path: str = ""):
     """文献导入的目录浏览（批H 2026-08-16，跨平台）。
@@ -9601,21 +13997,6 @@ async def lit_browse(path: str = ""):
     仅本机回环服务使用（文献导入需要访问用户任意位置的 PDF）。
     """
     is_win = os.name == "nt"
-
-    def _pdf_count(d: str) -> int:
-        """递归统计目录下 PDF 数量（上限 2000，防超深目录拖慢浏览）。"""
-        n = 0
-        try:
-            for _root, _dirs, _files in os.walk(d):
-                _dirs[:] = [x for x in _dirs if not x.startswith(".")]
-                for _f in _files:
-                    if _f.lower().endswith(".pdf"):
-                        n += 1
-                        if n >= 2000:
-                            return n
-        except Exception:
-            pass
-        return n
 
     # 系统根虚拟项
     root_virtual = ({"name": "💻 此电脑", "path": "__drives__", "is_dir": True, "virtual": True}
@@ -9643,7 +14024,7 @@ async def lit_browse(path: str = ""):
                 })
             return {"path": root_dir.replace("\\", "/") + "  (MemOmics 安装目录)",
                     "items": items, "is_root": True, "parent": None, "platform": os.name,
-                    "pdf_count": _pdf_count(root_dir)}
+                    **_lit_pdf_count_cached(root_dir)}
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=400)
     if path == "__drives__" and is_win:
@@ -9668,24 +14049,35 @@ async def lit_browse(path: str = ""):
         parent = "" if os.path.realpath(path) == "/" else (os.path.dirname(os.path.realpath(path)) or "/")
     try:
         items = [root_virtual]
-        for p in sorted(Path(real).iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
-            if p.name.startswith(".") or p.name in ("$RECYCLE.BIN", "System Volume Information", "__pycache__"):
-                continue
-            try:
-                is_dir = p.is_dir()
-            except Exception:
-                continue
-            if not is_dir and p.suffix.lower() != ".pdf":
-                continue
-            items.append({
-                "name": p.name,
-                "path": str(p).replace("\\", "/"),
-                "is_dir": is_dir,
-                "size": p.stat().st_size if not is_dir else 0,
-                "ext": p.suffix.lower() if not is_dir else "",
-            })
+        # 2026-09-17: Path.iterdir()+stat 改为 os.scandir（每个条目省一次 stat 系统调用，
+        # 大目录/慢盘差异明显）；排序语义保持不变（目录在前，然后按名字小写）。
+        _rows = []
+        with os.scandir(real) as _it:
+            for _e in _it:
+                if _e.name.startswith(".") or _e.name in ("$RECYCLE.BIN", "System Volume Information", "__pycache__"):
+                    continue
+                try:
+                    _is_dir = _e.is_dir()
+                except Exception:
+                    continue
+                _suf = os.path.splitext(_e.name)[1].lower()
+                if not _is_dir and _suf != ".pdf":
+                    continue
+                try:
+                    _size = 0 if _is_dir else _e.stat().st_size
+                except Exception:
+                    _size = 0
+                _rows.append((not _is_dir, _e.name.lower(), {
+                    "name": _e.name,
+                    "path": os.path.join(real, _e.name).replace("\\", "/"),
+                    "is_dir": _is_dir,
+                    "size": _size,
+                    "ext": "" if _is_dir else _suf,
+                }))
+        _rows.sort(key=lambda r: (r[0], r[1]))
+        items.extend([r[2] for r in _rows])
         return {"path": real.replace("\\", "/"), "items": items, "is_root": False,
-                "parent": parent, "platform": os.name, "pdf_count": _pdf_count(real)}
+                "parent": parent, "platform": os.name, **_lit_pdf_count_cached(real)}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
@@ -9720,14 +14112,222 @@ async def download_file(path: str):
     return FileResponse(path, filename=os.path.basename(path))
 
 
+# ============ P5 结果文件直读（2026-09-22）：预览 / 原始字节 / 系统打开 ============
+# 用户需求：分析结果里的文件要能直接点开看（txt/md/csv/excel/word/pdf/图片…），
+# 并且按时间倒序、最新的排最上面。转换全部在服务端做（webui/preview_convert.py），
+# 不引前端 CDN、不依赖随包环境缺的库。
+_PREVIEW_ROOTS = [WORK_DIR, RESULTS_DIR, MEMOMICS_DIR]
+
+
+def _p5_lang_of(lang) -> str:
+    """P5.1：请求语言（zh 默认 / en）。只影响预览与打开接口里的固定文案。"""
+    return "en" if str(lang or "").strip().lower().startswith("en") else "zh"
+
+
+# P6-2：界面语言（前端点中/英切换时会 POST /api/ui/lang 告知一次）。
+# 用来让**后端自己生成、直接显示在界面上**的文案也跟着切（如 P4 的确定性弹窗、ask_user 弹窗提示）。
+# 默认 zh：没告知过就维持原样，不会影响任何既有行为。
+_UI_LANG_STATE = {"lang": "zh"}
+
+
+def _ui_lang() -> str:
+    """当前界面语言（zh / en）。"""
+    return "en" if str(_UI_LANG_STATE.get("lang") or "zh").strip().lower().startswith("en") else "zh"
+
+
+def _p5_t(lang, zh, en, *args) -> str:
+    s = en if _p5_lang_of(lang) == "en" else zh
+    if args:
+        try:
+            return s % args
+        except Exception:
+            return s
+    return s
+
+
+# ---- 「已查看」标记（P5.1）------------------------------------------------
+# 存 <结果目录>/.viewed.json：点开头，list_results 扫描时自动忽略，不污染结果目录。
+# key = 结果目录内的相对路径（正斜杠），value = 首次标记时间戳。
+_VIEWED_FILE = ".viewed.json"
+
+
+def _viewed_load(base: str) -> dict:
+    try:
+        with open(os.path.join(base, _VIEWED_FILE), encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def _viewed_save(base: str, data: dict) -> None:
+    p = os.path.join(base, _VIEWED_FILE)
+    tmp = p + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
+    os.replace(tmp, p)
+_SYSOPEN_ENABLED = (os.environ.get("MEMOMICS_SYSOPEN", "1").strip().lower()
+                    not in ("0", "false", "no", "off"))
+
+_FILE_MIME = {
+    ".md": "text/markdown; charset=utf-8", ".markdown": "text/markdown; charset=utf-8",
+    ".txt": "text/plain; charset=utf-8", ".log": "text/plain; charset=utf-8",
+    ".csv": "text/csv; charset=utf-8", ".tsv": "text/tab-separated-values; charset=utf-8",
+    ".json": "application/json; charset=utf-8", ".jsonl": "application/x-ndjson; charset=utf-8",
+    ".yaml": "text/yaml; charset=utf-8", ".yml": "text/yaml; charset=utf-8",
+    ".pdf": "application/pdf", ".svg": "image/svg+xml", ".png": "image/png",
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
+    ".bmp": "image/bmp", ".ico": "image/x-icon", ".tif": "image/tiff", ".tiff": "image/tiff",
+    ".html": "text/html; charset=utf-8", ".htm": "text/html; charset=utf-8",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".ipynb": "application/x-ipynb+json",
+}
+
+
+def _guess_media(path: str) -> str:
+    import mimetypes
+    ext = os.path.splitext(path)[1].lower()
+    if ext in _FILE_MIME:
+        return _FILE_MIME[ext]
+    mt, _ = mimetypes.guess_type(path)
+    if not mt:
+        return "application/octet-stream"
+    if mt.startswith("text/") and "charset" not in mt:
+        return mt + "; charset=utf-8"
+    return mt
+
+
+def _preview_resolve(path: str, lang: str = "zh"):
+    """校验路径（限制在 work/results/项目根内，防任意文件读取）。返回 (full, err_response)"""
+    from webui.security import resolve_within_roots, UnsafePathError
+    if not path:
+        return "", JSONResponse({"error": _p5_t(lang, "缺少 path 参数", "Missing path parameter")}, status_code=400)
+    try:
+        full = str(resolve_within_roots(path, _PREVIEW_ROOTS))
+    except UnsafePathError as e:
+        return "", JSONResponse({"error": str(e)}, status_code=403)
+    except Exception as e:
+        return "", JSONResponse({"error": str(e)}, status_code=400)
+    if not os.path.exists(full):
+        return "", JSONResponse({"error": _p5_t(lang, "文件不存在：%s", "File not found: %s",
+                                               os.path.basename(full))}, status_code=404)
+    return full, None
+
+
+@app.get("/api/file/preview")
+async def file_preview(path: str = "", sheet: str = "", max_rows: int = 0, max_cols: int = 0,
+                       lang: str = "zh"):
+    """把任意结果文件转成 WebUI 能直接显示的结构（只读）。
+
+    返回 kind：text / code / markdown / table / excel / word / notebook / pdf / image /
+    html / binary / missing，附 meta、download_url、raw_url。
+    """
+    import functools
+    from urllib.parse import quote
+    full, err = _preview_resolve(path, lang)
+    if err is not None:
+        return err
+    try:
+        from webui import preview_convert as _pc
+    except Exception as e:
+        return JSONResponse({"error": _p5_t(lang, "预览模块不可用：%s", "Preview module unavailable: %s", e)},
+                            status_code=500)
+    if os.path.isdir(full):
+        return JSONResponse({"kind": "missing", "meta": _pc.file_meta(full),
+                             "error": _p5_t(lang, "这是一个目录，不能预览", "This is a directory and cannot be previewed")},
+                status_code=200)
+    kw = {"lang": _p5_lang_of(lang)}
+    if sheet:
+        kw["sheet"] = sheet
+    if max_rows and int(max_rows) > 0:
+        kw["max_rows"] = min(int(max_rows), 5000)
+    if max_cols and int(max_cols) > 0:
+        kw["max_cols"] = min(int(max_cols), 200)
+    try:
+        loop = asyncio.get_event_loop()
+        data = await loop.run_in_executor(None, functools.partial(_pc.preview, full, **kw))
+    except Exception as e:
+        data = {"kind": "binary", "meta": _pc.file_meta(full),
+                "error": _p5_t(lang, "预览失败：%s: %s", "Preview failed: %s: %s", type(e).__name__, e)}
+    data["path"] = full.replace(os.sep, "/")
+    data["download_url"] = "/api/file/download?path=" + quote(full)
+    data["raw_url"] = "/api/file/raw?path=" + quote(full)
+    return JSONResponse(data, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+
+@app.get("/api/file/raw")
+async def file_raw(path: str, dl: int = 0):
+    """原样返回文件字节：图片/PDF/HTML 用来内嵌渲染（dl=1 强制下载）。"""
+    from urllib.parse import quote
+    full, err = _preview_resolve(path)
+    if err is not None:
+        return err
+    if not os.path.isfile(full):
+        return JSONResponse({"error": "File not found"}, status_code=404)
+    fname = os.path.basename(full)
+    disp = "attachment" if dl else "inline"
+    return FileResponse(full, media_type=_guess_media(full), headers={
+        "Content-Disposition": "%s; filename=\"%s\"; filename*=UTF-8''%s" % (disp, quote(fname), quote(fname)),
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        "X-Content-Type-Options": "nosniff",
+    })
+
+
+class FileOpenRequest(BaseModel):
+    path: str = ""
+    action: str = "system"   # system（默认程序打开）| folder（在文件管理器里定位）
+    lang: str = "zh"         # P5.1：固定文案语言（zh / en）
+
+
+@app.post("/api/file/open")
+async def file_open(req: FileOpenRequest):
+    """用系统默认程序打开 / 在文件管理器里定位（P5，仅桌面端有意义）。
+
+    保守设计：只允许 work/results/项目根内的已存在文件；MEMOMICS_SYSOPEN=0 一键关闭。
+    """
+    import subprocess
+    if not _SYSOPEN_ENABLED:
+        return JSONResponse({"ok": False, "error": _p5_t(req.lang, "「系统打开」已被禁用（MEMOMICS_SYSOPEN=0）",
+                                                        "\"Open with system app\" is disabled (MEMOMICS_SYSOPEN=0)")},
+                            status_code=403)
+    full, err = _preview_resolve(req.path, req.lang)
+    if err is not None:
+        return err
+    action = (req.action or "system").strip().lower()
+    if action not in ("system", "folder"):
+        return JSONResponse({"ok": False, "error": _p5_t(req.lang, "action 只支持 system / folder",
+                                                        "action must be system or folder")}, status_code=400)
+    try:
+        if os.name == "nt":
+            if action == "folder":
+                subprocess.Popen(["explorer", "/select,", os.path.normpath(full)])
+            else:
+                os.startfile(full)  # type: ignore[attr-defined]
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open"] + (["-R"] if action == "folder" else []) + [full])
+        else:
+            target = os.path.dirname(full) if action == "folder" else full
+            subprocess.Popen(["xdg-open", target])
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": _p5_t(req.lang, "打开失败：%s: %s",
+                                                        "Failed to open: %s: %s", type(e).__name__, e)},
+                            status_code=500)
+    return {"ok": True, "action": action, "path": full.replace(os.sep, "/"),
+            "message": _p5_t(req.lang,
+                             "已交给系统默认程序打开" if action == "system" else "已在文件管理器中定位",
+                             "Handed to the system default application" if action == "system"
+                             else "Revealed in the file manager")}
+
+
 @app.get("/api/papers")
 async def serve_papers(path: str = ""):
-    """文献原文/产物只读服务（批N1 2026-08-16）：仅限 hermes_home/papers/ 内。
+    """文献原文/产物只读服务（批N1 2026-08-16）：仅限 memomics_home/papers/ 内。
 
     - path 为相对路径（如 xxx.pdf / markdown/xxx.md / translations/xxx.zh.md）
     - PDF → application/pdf（浏览器 iframe 原生阅读器）；md → text/markdown
     """
-    papers_root = os.path.join(HERMES_HOME_DIR, "papers")
+    papers_root = os.path.join(MEMOMICS_HOME_DIR, "papers")
     try:
         from webui.security import resolve_within_roots, UnsafePathError
         # 相对路径拼到 papers 根后再校验（防 ../ 穿越）
@@ -9752,7 +14352,7 @@ async def serve_paper_page(path: str = "", page: int = 0, dpi: int = 150):
     - page: 0-based 页码；dpi: 80-300（默认 150，含图清晰可读）
     - PyMuPDF get_pixmap 整页渲染（含全部图/表）；Cache-Control 供浏览器缓存
     """
-    papers_root = os.path.join(HERMES_HOME_DIR, "papers")
+    papers_root = os.path.join(MEMOMICS_HOME_DIR, "papers")
     try:
         from webui.security import resolve_within_roots, UnsafePathError
         full = str(resolve_within_roots(os.path.join(papers_root, path or ""), [papers_root]))
@@ -10160,7 +14760,7 @@ async def list_skills():
         # 0l. functional-enrichment / gene_set_enrichment -> scRNA-seq 下游分析
         if any(kw in nl for kw in ["functional-enrichment", "gene_set_enrichment", "pathway-enrichment"]):
             return "scRNA-seq"
-        # 1. 读 SKILL.md frontmatter 里的 metadata.hermes.tags / metadata.hermes.category
+        # 1. 读 SKILL.md frontmatter 里的 metadata.memomics.tags / metadata.memomics.category
         if skill_md_content:
             import re
             # 提取 tags
@@ -10223,14 +14823,14 @@ async def list_skills():
     # Read disabled skills from config.yaml
     disabled_skills = _read_disabled_skills()
 
-    # Scan both SKILLS_DIR (project root skills/) and hermes_home/skills/bioinformatics/
+    # Scan both SKILLS_DIR (project root skills/) and memomics_home/skills/bioinformatics/
     scan_dirs = [Path(SKILLS_DIR)]
-    bio_dir = Path(HERMES_HOME_DIR) / "skills" / "bioinformatics"
+    bio_dir = Path(MEMOMICS_HOME_DIR) / "skills" / "bioinformatics"
     if bio_dir.exists() and bio_dir not in scan_dirs:
         scan_dirs.append(bio_dir)
     # 用户专属 skill 库（画图等用户提供脚本沉淀，category: user-skill）
     # 未来新增 user-skill-<类别> 分类目录时在此登记
-    user_plot_dir = Path(HERMES_HOME_DIR) / "skills" / "plotting"
+    user_plot_dir = Path(MEMOMICS_HOME_DIR) / "skills" / "plotting"
     if user_plot_dir.exists() and user_plot_dir not in scan_dirs:
         scan_dirs.append(user_plot_dir)
 
@@ -10289,9 +14889,9 @@ async def list_skills():
 # ── Skill management: enable/disable via config.yaml ──
 
 def _read_disabled_skills() -> set:
-    """Read skills.disabled from hermes_home/config.yaml."""
+    """Read skills.disabled from memomics_home/config.yaml."""
     import yaml
-    cfg_path = os.path.join(HERMES_HOME_DIR, "config.yaml")
+    cfg_path = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
     if not os.path.exists(cfg_path):
         return set()
     try:
@@ -10308,9 +14908,9 @@ def _read_disabled_skills() -> set:
 
 
 def _write_disabled_skills(disabled: set):
-    """Write skills.disabled to hermes_home/config.yaml (preserving other keys)."""
+    """Write skills.disabled to memomics_home/config.yaml (preserving other keys)."""
     import yaml
-    cfg_path = os.path.join(HERMES_HOME_DIR, "config.yaml")
+    cfg_path = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
     cfg = {}
     if os.path.exists(cfg_path):
         try:
@@ -10329,10 +14929,10 @@ def _write_disabled_skills(disabled: set):
 async def toggle_skill(name: str):
     """Toggle a skill on/off (enable <-> disable)."""
     disabled = _read_disabled_skills()
-    # Check both SKILLS_DIR and hermes_home/skills/bioinformatics
+    # Check both SKILLS_DIR and memomics_home/skills/bioinformatics
     skill_dir = os.path.join(SKILLS_DIR, name)
     if not os.path.isdir(skill_dir):
-        skill_dir = os.path.join(HERMES_HOME_DIR, "skills", "bioinformatics", name)
+        skill_dir = os.path.join(MEMOMICS_HOME_DIR, "skills", "bioinformatics", name)
     if not os.path.isdir(skill_dir):
         return {"error": f"Skill '{name}' not found"}
     if name in disabled:
@@ -10382,6 +14982,69 @@ async def list_enabled_skills():
     return {"enabled_skills": items, "count": len(items)}
 
 
+@app.get("/api/skills/catalog")
+async def skills_catalog(q: str = "", category: str = "", limit: int = 0):
+    """P8: 置顶选择器用的 skill 清单（含触发等级/触发词/适用场景/禁用状态）"""
+    try:
+        base = await list_skills()
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+    disabled = _read_disabled_skills()
+    kw = (q or "").strip().lower()
+    items = []
+    for it in (base.get("skills") or []):
+        name = it.get("name") or ""
+        if not name:
+            continue
+        if category and it.get("category") != category:
+            continue
+        meta = _skill_meta(name)
+        row = {
+            "name": name,
+            "display": (meta.get("display") or name),
+            "description": (meta.get("description") or it.get("description") or "")[:300],
+            "when_to_use": (meta.get("when_to_use") or "")[:400],
+            "trigger_keywords": (meta.get("trigger_keywords") or [])[:20],
+            "aliases": (meta.get("aliases") or [])[:10],
+            "trigger_level": meta.get("trigger_level") or "",
+            "category": it.get("category") or "",
+            "scripts_count": it.get("scripts_count") or 0,
+            "has_skill_md": bool(it.get("has_skill_md")),
+            "disabled": name in disabled,
+            "dir": meta.get("dir") or it.get("path") or "",
+        }
+        if kw:
+            hay = " ".join([name, row["display"], row["description"], row["when_to_use"],
+                            " ".join(row["trigger_keywords"]), row["category"]]).lower()
+            if kw not in hay:
+                continue
+        items.append(row)
+    items.sort(key=lambda x: (x["disabled"], x["trigger_level"] != "RED", x["name"].lower()))
+    if limit and limit > 0:
+        items = items[:limit]
+    return {"skills": items, "total": len(items), "pinned_max": _PINNED_MAX}
+
+
+@app.get("/api/skills/resolve")
+async def resolve_skill(q: str = ""):
+    """P0-3: 解析 /skill-name（前端斜杠补全 + 歧义/未知/相近建议）。
+
+    注意：必须注册在 /api/skills/{name} 之前，否则 /resolve 会被当成技能名吞掉。
+    """
+    inv = _parse_skill_invocations(q or "")
+    first = inv["resolved"][0]["name"] if inv["resolved"] else ""
+    return {
+        "query": q or "",
+        "raw": inv["raw"],
+        "resolved": inv["resolved"],
+        "unknown": inv["unknown"],
+        "ambiguous": inv["ambiguous"],
+        "overflow": inv["overflow"],
+        "suggestions": [s for t in inv["unknown"] for s in _suggest_skills(t)][:8],
+        "skill": _pinned_item(first) if first else {},
+    }
+
+
 @app.get("/api/skills/{name}")
 async def get_skill_detail(name: str):
     """获取 skill 详情 (SKILL.md + 脚本列表)"""
@@ -10413,6 +15076,41 @@ async def get_skill_detail(name: str):
             if f.is_file():
                 result["references"].append({"name": f.name, "size": f.stat().st_size})
     return result
+
+
+@app.get("/api/skills/{name}/files")
+async def skill_files(name: str):
+    """P8: skill 目录完整文件树（WebUI 里浏览该 skill 的全部文件与脚本）"""
+    data = _skill_files_tree(name)
+    if not data:
+        return JSONResponse({"error": "Skill not found"}, status_code=404)
+    return data
+
+
+class PinnedSkillsRequest(BaseModel):
+    skills: list = []
+
+
+@app.get("/api/sessions/{sid}/skills")
+async def get_session_pinned_skills(sid: str):
+    """P8: 会话置顶 skill + 本会话实际加载记录（前端 chip / 徽标 / 审计数据源）"""
+    pinned = _pinned_skills_get(sid)
+    used = _skill_usage_get(sid)
+    return {
+        "session_id": sid,
+        "pinned": [_pinned_item(n) for n in pinned],
+        "used": used,
+        "used_names": sorted(used.keys()),
+        "pinned_max": _PINNED_MAX,
+    }
+
+
+@app.post("/api/sessions/{sid}/skills")
+async def set_session_pinned_skills(sid: str, req: PinnedSkillsRequest):
+    """P8: 设置本会话置顶 skill（优先而非独占；与全局启用/禁用互不影响）"""
+    clean = _pinned_skills_set(sid, req.skills or [])
+    used = _skill_usage_get(sid)
+    return {"ok": True, "session_id": sid, "pinned": [_pinned_item(n) for n in clean], "used": used}
 
 
 # --- 动态创建技能 ---
@@ -10497,9 +15195,9 @@ language: {req.language}
     with open(os.path.join(skill_dir, "skill.json"), "w", encoding="utf-8") as f:
         json.dump(skill_json, f, indent=2, ensure_ascii=False)
 
-    # 同步到 hermes_home/skills/bioinformatics/
+    # 同步到 memomics_home/skills/bioinformatics/
     import shutil
-    dest = os.path.join(HERMES_HOME_DIR, "skills", "bioinformatics", safe_name)
+    dest = os.path.join(MEMOMICS_HOME_DIR, "skills", "bioinformatics", safe_name)
     if os.path.exists(dest):
         shutil.rmtree(dest)
     shutil.copytree(skill_dir, dest)
@@ -10510,9 +15208,9 @@ language: {req.language}
     try:
         from webui import auto_register as _ar
         _ar.init(
-            os.path.join(HERMES_HOME_DIR, "skills", "bioinformatics"),
-            os.path.join(HERMES_HOME_DIR, "SKILLS_INDEX.md"),
-            os.path.join(HERMES_HOME_DIR, "SOUL.md"),
+            os.path.join(MEMOMICS_HOME_DIR, "skills", "bioinformatics"),
+            os.path.join(MEMOMICS_HOME_DIR, "SKILLS_INDEX.md"),
+            os.path.join(MEMOMICS_HOME_DIR, "SOUL.md"),
         )
         _r = _ar.scan_and_register_all()
         print(f"[MemOmics] Auto-rebuilt skill index after creating {safe_name}: {_r}", flush=True)
@@ -10526,8 +15224,16 @@ language: {req.language}
 
 @app.get("/api/results/{sid}")
 @app.get("/api/results/{sid}")
-async def list_results(sid: str, path: str = ""):
-    """列出会话分析结果目录（每次实时扫描磁盘，不用缓存）"""
+async def list_results(sid: str, path: str = "", sort: str = "time_desc", lang: str = "zh"):
+    """列出会话分析结果目录（每次实时扫描磁盘，不用缓存）
+
+    sort（P5 2026-09-22 / P5.1 修订）：
+      - time_desc（默认）：**目录全部在最上面（按名称 A→Z）**，文件排在目录下面、按修改时间倒序
+        —— 用户要求「最新出的文件排最上面，不要把目录和文件混了」
+      - name：目录在前 + 名称升序（旧行为，目录同样永远在最上面）
+
+    每项带 viewed（P5.1）：是否已被用户打开看过，见 <结果目录>/.viewed.json。
+    """
     # 每次都扫描磁盘，不依赖内存中的 results_dir
     base = _find_best_results_dir(sid)
     if not base and sid in _sessions:
@@ -10535,34 +15241,134 @@ async def list_results(sid: str, path: str = ""):
     if not base:
         base = os.path.join(RESULTS_DIR, sid)
     if not os.path.isdir(base) or not any(Path(base).iterdir()):
-        return {"items": [], "path": base, "note": "该会话尚未产生分析结果。开始分析后，结果将自动存储到此处。", "base": base.replace("\\", "/")}
+        return {"items": [], "path": base,
+                "note": _p5_t(lang, "该会话尚未产生分析结果。开始分析后，结果将自动存储到此处。",
+                              "This session has no analysis results yet. They will appear here once analysis starts."),
+                "base": base.replace("\\", "/")}
     # 同步更新内存
     if sid in _sessions and os.path.abspath(_sessions[sid].get("results_dir","")) != os.path.abspath(base):
         _sessions[sid]["results_dir"] = base
     target = os.path.join(base, path) if path else base
     if not os.path.isdir(target):
-        return {"items": [], "path": target, "note": "该会话尚未产生分析结果。开始分析后，结果将自动存储到此处。", "base": base.replace("\\", "/")}
+        return {"items": [], "path": target,
+                "note": _p5_t(lang, "该会话尚未产生分析结果。开始分析后，结果将自动存储到此处。",
+                              "This session has no analysis results yet. They will appear here once analysis starts."),
+                "base": base.replace("\\", "/")}
     items = []
+    _viewed = _viewed_load(base)
+    _sort_mode = (sort or "time_desc").strip().lower()
+    if _sort_mode in ("name", "name_asc"):
+        def _iter_key(x):
+            return (0 if x.is_dir() else 1, x.name.lower())
+    else:
+        # 目录永远在最上面，且目录之间按名称 A→Z；文件按 mtime 倒序（最新在最上面）
+        def _iter_key(x):
+            if x.is_dir():
+                return (0, x.name.lower(), 0)
+            try:
+                return (1, "", -x.stat().st_mtime)
+            except OSError:
+                return (1, "", 0)
     try:
-        for p in sorted(Path(target).iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
+        for p in sorted(Path(target).iterdir(), key=_iter_key):
             if p.name.startswith("."):
                 continue
-            _st = p.stat()
+            try:
+                _st = p.stat()
+            except OSError:
+                continue
+            _rel = str(p.relative_to(base)).replace("\\", "/")
             items.append({
                 "name": p.name,
                 "path": str(p).replace("\\", "/"),
                 "is_dir": p.is_dir(),
+                # 看过了 & 看完之后文件没再被改写 才算「已查看」（重新分析覆盖同名文件会重新变回未查看）
+                "viewed": (bool(_viewed.get(_rel)) and _st.st_mtime <= float(_viewed.get(_rel) or 0))
+                          if p.is_file() else False,
                 "size": _st.st_size if p.is_file() else 0,
                 "ext": p.suffix.lower() if p.is_file() else "",
-                "rel_path": str(p.relative_to(base)).replace("\\", "/"),
+                "rel_path": _rel,
                 "mtime": _st.st_mtime,
                 "mtime_str": datetime.fromtimestamp(_st.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
             })
-        return JSONResponse({"items": items, "path": target.replace("\\", "/"), "base": base.replace("\\", "/"), "session_id": sid, "results_name": os.path.basename(base),
+        _unread = sum(1 for it in items if not it["is_dir"] and not it.get("viewed"))
+        return JSONResponse({"items": items, "path": target.replace("\\", "/"), "base": base.replace("\\", "/"), "session_id": sid, "sort": _sort_mode, "results_name": os.path.basename(base),
+                "unread": _unread,
+                "viewed_count": sum(1 for it in items if it["viewed"]),
                 "manifest": _load_result_manifest(base), "manifest_versions": _list_manifest_versions(base)},
                 headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
+
+
+class ResultViewedRequest(BaseModel):
+    path: str = ""            # 绝对路径或结果目录内的相对路径
+    viewed: bool = True       # false = 取消「已查看」标记
+
+
+class UILangRequest(BaseModel):
+    lang: str = "zh"
+
+
+@app.post("/api/ui/lang")
+async def set_ui_lang(req: UILangRequest):
+    """P6-2：前端切换中/英时告知一次，让后端生成的界面文案（P4 弹窗等）跟着切。
+
+    单机单用户工具：这是一个进程级的界面偏好，不参与会话隔离。
+    """
+    _l = (req.lang or "").strip().lower()
+    if _l not in ("zh", "en"):
+        return JSONResponse({"error": "lang must be zh or en"}, status_code=400)
+    _UI_LANG_STATE["lang"] = _l
+    return {"ok": True, "lang": _l}
+
+
+@app.get("/api/ui/lang")
+async def get_ui_lang():
+    """P6-2：当前界面语言（只读，用于自检/验证）。"""
+    return {"lang": _ui_lang()}
+
+
+@app.post("/api/results/{sid}/viewed")
+async def mark_result_viewed(sid: str, req: ResultViewedRequest):
+    """把结果文件标成「已查看」（P5.1，提醒用户还有哪些文件没看）。
+
+    - 前端在右侧面板打开文件后调用；viewed=false 可撤销
+    - 只写 <结果目录>/.viewed.json（点开头，列表扫描自动忽略，不污染结果目录）
+    - 越界路径 403，结果目录不存在 404；不接受目录
+    """
+    base = _find_best_results_dir(sid)
+    if not base and sid in _sessions:
+        base = _sessions[sid]["results_dir"]
+    if not base:
+        base = os.path.join(RESULTS_DIR, sid)
+    if not os.path.isdir(base):
+        return JSONResponse({"error": "No results directory for this session"}, status_code=404)
+    raw = (req.path or "").strip()
+    if not raw:
+        return JSONResponse({"error": "path is required"}, status_code=400)
+    root = os.path.abspath(base)
+    full = os.path.abspath(raw if os.path.isabs(raw) else os.path.join(root, raw))
+    if full != root and not full.startswith(root + os.sep):
+        return JSONResponse({"error": "Path is outside the session results directory"}, status_code=403)
+    key = os.path.relpath(full, root).replace(os.sep, "/")
+    if key in ("", ".") or key.startswith(".."):
+        return JSONResponse({"error": "Invalid path"}, status_code=400)
+    if os.path.isdir(full):
+        return JSONResponse({"error": "Directories cannot be marked as viewed"}, status_code=400)
+    if not os.path.exists(full):
+        return JSONResponse({"error": "File not found"}, status_code=404)
+    data = _viewed_load(root)
+    if req.viewed:
+        data.setdefault(key, time.time())
+    else:
+        data.pop(key, None)
+    try:
+        _viewed_save(root, data)
+    except Exception as e:
+        return JSONResponse({"error": "Cannot write viewed state: %s" % e}, status_code=500)
+    return {"ok": True, "path": full.replace(os.sep, "/"), "rel": key,
+            "viewed": bool(req.viewed), "viewed_count": len(data)}
 
 
 # ============ 结果完成契约（P0-2）：analysis_manifest 协议 ============
@@ -10913,6 +15719,36 @@ async def literature_knowledge_all():
     return {"job_id": job_id, "status": "running"}
 
 
+# ── 2026-10-07：一键全流程管线（翻译+提炼+证据链知识+双语锚定，篇级并发）──
+def _run_lit_process_all(job_id: str, force: bool = False):
+    import json as _json
+    from memomics.bio_tools.literature_library import process_all_papers
+    try:
+        def _cb(phase, done, total, detail):
+            _lit_jobs[job_id].update({
+                "status": "running", "phase": phase,
+                "done": int(done), "total": int(total), "current": str(detail)[:150],
+            })
+        _result = _json.loads(process_all_papers(progress_cb=_cb, force=force))
+        _lit_jobs[job_id].update({"status": "done", "result": _result,
+                                  "current": f"全流程完成：{_result.get('succeeded', 0)}/{_result.get('pending', 0)} 篇"})
+    except Exception as e:
+        _lit_jobs[job_id].update({"status": "error", "error": str(e)[:300]})
+
+
+@app.post("/api/literature/process-all")
+async def literature_process_all(payload: dict = None):
+    """一键全流程：对全部"三步有缺"的文献跑 翻译→9项提炼→证据链知识→双语锚定（篇级并发 2 路）。
+    force=true 重跑全部（慎用，全量重新调用 LLM）。"""
+    import uuid
+    job_id = uuid.uuid4().hex[:8]
+    _lit_jobs[job_id] = {"job_id": job_id, "status": "running", "phase": "paper",
+                         "done": 0, "total": 0, "current": "任务已创建"}
+    _force = bool((payload or {}).get("force"))
+    asyncio.create_task(asyncio.to_thread(_run_lit_process_all, job_id, _force))
+    return {"job_id": job_id, "status": "running"}
+
+
 def _run_lit_enrich(job_id: str, file_or_title: str, do_all: bool = False):
     import json as _json
     from memomics.bio_tools.literature_library import enrich_paper_metadata, enrich_all_metadata
@@ -11176,9 +16012,507 @@ async def results_tree(sid: str):
     return {"tree": {"name": rn, "path": "", "is_dir": True, "children": tree["ch"], "total_files": tree["tf"], "total_dirs": tree["td"]}, "results_name": rn, "total_files": tree["tf"], "total_dirs": tree["td"], "base": base.replace(chr(92), "/"), "session_id": sid}
 
 
+def _extract_json_obj(s):
+    """best-effort：从字符串里抠出第一个 JSON 对象（容忍 ```json 围栏、前后缀说明文字、被截断的尾巴）。"""
+    if not isinstance(s, str):
+        return None
+    t = s.strip()
+    if t.startswith("```"):
+        t = re.sub(r"^```[a-zA-Z]*\s*", "", t)
+        t = re.sub(r"\s*```$", "", t).strip()
+    try:
+        obj = json.loads(t)
+        if isinstance(obj, (dict, list)):
+            return obj
+    except Exception:
+        pass
+    i = t.find("{")
+    while i != -1:
+        try:
+            obj, _end = json.JSONDecoder().raw_decode(t[i:])
+            if isinstance(obj, dict):
+                return obj
+        except Exception:
+            pass
+        i = t.find("{", i + 1)
+    return None
+
+
+def _load_latest_debate(sid: str):
+    """读取会话 results 目录下最新一场辩论的完整归档（2026-09-18，供 WebUI 渲染辩论过程表格）。
+
+    兼容历史上出现过的 4 种结构：
+      v3 多角色 —— pro_arguments/con_arguments = {biology:{argument:...}, ...}
+      L1 轻量采样 —— samples = [{pro:..., con:...}]
+      v2 —— pro_args/con_args = [{role, argument}]
+      失败记录 —— error=true + failed_roles
+    外层若被 result_summary 包一层（会话级归档），自动剥掉。
+    只读，绝不抛异常给调用方。
+    """
+    base = ""
+    try:
+        base = _find_best_results_dir(sid) or ""
+    except Exception:
+        base = ""
+    if not base and sid in _sessions:
+        base = (_sessions.get(sid) or {}).get("results_dir") or ""
+    if not base:
+        base = os.path.join(RESULTS_DIR, sid)
+    if not base or not os.path.isdir(base):
+        return {"ok": False, "error": "未找到该会话的结果目录", "base": str(base)}
+    try:
+        files = [p for p in Path(base).rglob("debate_*.json") if p.is_file()]
+    except Exception as e:
+        return {"ok": False, "error": f"扫描辩论记录失败: {e}", "base": str(base)}
+    if not files:
+        return {"ok": False, "error": "该会话还没有辩论记录文件", "base": str(base).replace("\\", "/")}
+
+    def _mtime(x):
+        try:
+            return x.stat().st_mtime
+        except Exception:
+            return 0.0
+
+    def _usable(x):
+        """这份归档能不能渲染出「辩论过程」表。"""
+        if not isinstance(x, dict):
+            return False
+        if x.get("pro_arguments") or x.get("con_arguments") or x.get("samples") \
+                or x.get("pro_args") or x.get("con_args"):
+            return True
+        if x.get("error") or x.get("failed_role_ids"):
+            return True   # 失败场也要展示（能看到失败角色/原因）
+        return bool(x.get("judge_verdict") and (x.get("level") or x.get("verdict")))
+
+    def _read_debate(p):
+        try:
+            x = json.loads(p.read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            return None
+        if isinstance(x, dict) and "result_summary" in x and "pro_arguments" not in x:
+            inner = _extract_json_obj(x.get("result_summary"))
+            if isinstance(inner, dict):
+                x = inner
+        return x
+
+    files.sort(key=_mtime, reverse=True)
+    files = files[:60]
+    newest = files[0]
+    # 会话级结论归档（conclusions/debate_*.json）常是 result_summary 被截断的副本，会排在最新 ——
+    # 因此不能只取最新一份，要往下找最近一份「能渲染」的（24h 窗口内，避免翻出陈年旧辩论）。
+    newest_mt = _mtime(newest)
+    picked, picked_data = None, None
+    for _p in files:
+        _mt = _mtime(_p)
+        if newest_mt - _mt > 6 * 3600:
+            break   # 只在这「同一场辩论」的归档批次里回退，避免翻出很久以前的旧辩论
+        _x = _read_debate(_p)
+        if _usable(_x):
+            picked, picked_data = _p, _x
+            break
+    if picked is None:
+        return {"ok": False, "path": str(newest), "candidate_count": len(files),
+                "error": "最近这场辩论没有可展示的编辑论点（可能失败了，或归档被截断成摘要）",
+                "base": str(base).replace("\\", "/")}
+    st = None
+    try:
+        st = picked.stat()
+    except Exception:
+        pass
+    skipped = []
+    for _p in files:
+        if _p == picked:
+            break
+        skipped.append(str(_p))
+    return {
+        "ok": True,
+        "path": str(picked),
+        "rel_path": str(picked.relative_to(base)).replace("\\", "/") if base else picked.name,
+        "mtime": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S") if st else "",
+        "mtime_epoch": st.st_mtime if st else 0,
+        "skipped_newer": skipped,
+        "debate": picked_data,
+    }
+
+
+# ============ 辩论时间线（2026-09-18 v2：多场辩论各自回到它发生的位置）============
+# 用户诉求：一次分析里跑了好几场辩论时，卡片不能全堆在对话末尾 —— 每场要落在它真正
+# 发生的那一刻（前后就是当时的对话内容），点开才看细节。
+# 因此给每场辩论算一个 after_index：该场辩论开始前，对话流里已经有多少条
+# user/assistant 消息（与 /messages 完全同一套过滤规则），前端据此把卡片插回原位。
+_DEBATE_KEY_RE = re.compile(r"debate_(\d{8}_\d{6})")
+
+_DEBATE_VERDICT_MAP = {
+    "ok": ("方案成立，可以照此执行", "ok"),
+    "support": ("支持正方主张", "ok"),
+    "support_pro": ("支持正方主张", "ok"),
+    "pro": ("支持正方主张", "ok"),
+    "pro_wins": ("支持正方主张", "ok"),
+    "modify": ("方案要改，改完再用", "warn"),
+    "modify_first": ("方案要改，改完再用", "warn"),
+    "need_more_info": ("证据不足，先补数据再下结论", "warn"),
+    "insufficient_evidence": ("证据不足，先补数据再下结论", "warn"),
+    "reject": ("否决该方案", "con"),
+    "support_con": ("支持反方主张", "con"),
+    "con": ("支持反方主张", "con"),
+    "con_wins": ("支持反方主张", "con"),
+}
+
+
+def _debate_base_of(sid: str) -> str:
+    """会话的结果根目录（失败返回空串，绝不抛异常）。"""
+    base = ""
+    try:
+        base = _find_best_results_dir(sid) or ""
+    except Exception:
+        base = ""
+    if not base and sid in _sessions:
+        base = (_sessions.get(sid) or {}).get("results_dir") or ""
+    if not base:
+        base = os.path.join(RESULTS_DIR, sid)
+    return base if (base and os.path.isdir(base)) else ""
+
+
+def _read_debate_file(p):
+    """读一份辩论归档；外层被 result_summary 包一层时自动剥掉。读不了返回 None。"""
+    try:
+        x = json.loads(Path(p).read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return None
+    if isinstance(x, dict) and "result_summary" in x and "pro_arguments" not in x:
+        inner = _extract_json_obj(x.get("result_summary"))
+        if isinstance(inner, dict):
+            x = inner
+    return x
+
+
+def _debate_richness(x) -> int:
+    """归档的信息量打分：同一场辩论常同时落 log/ 与 conclusions/ 两份，
+    取信息量大的那份（conclusions 副本常被截断）。"""
+    if not isinstance(x, dict):
+        return -1
+    n = 0
+    if x.get("pro_arguments") or x.get("pro_args") or x.get("samples"):
+        n += 40
+    if x.get("con_arguments") or x.get("con_args"):
+        n += 20
+    if x.get("judge_verdict"):
+        n += 15
+    if isinstance(x.get("judge_digest"), dict) and x.get("judge_digest"):
+        n += 25
+    if x.get("neutral_reviews"):
+        n += 8
+    if x.get("error"):
+        n -= 30
+    try:
+        n += min(len(json.dumps(x, ensure_ascii=False)) // 2000, 20)
+    except Exception:
+        pass
+    return n
+
+
+def _debate_display_count(sid: str, ts_epoch: float = 0.0) -> int:
+    """对话流（user/assistant，非注入）里的消息条数。
+
+    ts_epoch>0 时只数 timestamp <= ts_epoch 的（= 这场辩论开始前已经说完的话）。
+    失败返回 -1，前端会退化成「追加到末尾」。"""
+    try:
+        import sqlite3 as _sq
+        _dbp = os.path.join(MEMOMICS_HOME_DIR, "state.db")
+        if not os.path.exists(_dbp):
+            return -1
+        _conn = _sq.connect(f"file:{_dbp}?mode=ro", uri=True, timeout=8)
+        try:
+            _rows = _conn.execute(
+                "SELECT content, timestamp FROM messages WHERE session_id=? AND role IN ('user','assistant') "
+                "AND content IS NOT NULL AND length(content)>0 ORDER BY id",
+                (sid,),
+            ).fetchall()
+        finally:
+            _conn.close()
+        n = 0
+        for _c, _ts in _rows:
+            if str(_c or "").lstrip().startswith(_INJECT_PREFIXES):
+                continue
+            if ts_epoch and not (_ts and float(_ts) <= float(ts_epoch)):
+                continue
+            n += 1
+        return n
+    except Exception:
+        return -1
+
+
+def _debate_verdict_bits(x: dict):
+    """(结论文字, tone, 置信度原文, 置信度中文)"""
+    v = str(x.get("verdict") or "").strip()
+    conf = str(x.get("confidence") or "").strip()
+    jv = x.get("judge_verdict")
+    if isinstance(jv, dict):
+        if not v:
+            v = str(jv.get("verdict") or "").strip()
+        if not conf:
+            conf = str(jv.get("confidence") or "").strip()
+    label, tone = _DEBATE_VERDICT_MAP.get(v.lower(), ("", "none"))
+    if not label:
+        label = ("本次没有给出裁决" if not v else ("裁决：" + v))
+        tone = "none"
+    conf_cn = {"high": "高", "medium": "中", "low": "低"}.get(conf.lower(), conf)
+    return label, tone, conf, conf_cn
+
+
+def _debate_one_line(x: dict, limit: int = 300) -> str:
+    """一句话依据：先说整理稿总结，其次裁判正文首句；都没有就给空串。"""
+    cands = []
+    d = x.get("judge_digest")
+    if isinstance(d, dict):
+        for k in ("summary", "overview", "note"):
+            if d.get(k):
+                cands.append(str(d.get(k)))
+    jv = x.get("judge_verdict")
+    if isinstance(jv, dict):
+        for k in ("reasoning", "summary", "conclusion", "text"):
+            if jv.get(k):
+                cands.append(str(jv.get(k)))
+    elif isinstance(jv, str) and jv.strip():
+        s = jv.strip()
+        if s.startswith("{"):
+            try:
+                o = json.loads(s)
+                if isinstance(o, dict):
+                    for k in ("reasoning", "summary", "conclusion", "text", "verdict_reason"):
+                        if o.get(k):
+                            cands.append(str(o.get(k)))
+            except Exception:
+                pass
+        else:
+            cands.append(s)
+    for k in ("reasoning", "summary"):
+        if x.get(k):
+            cands.append(str(x.get(k)))
+    for c in cands:
+        c = " ".join(str(c).split())
+        if not c:
+            continue
+        if c.startswith("{") or c.startswith("[reasoning"):
+            continue          # 裁判原始 JSON / 未精炼的 reasoning 草稿都不作一句话依据
+        if len(c) > limit:
+            cut = -1
+            for sep in ("。", "；", ". ", "! ", "? "):
+                i = c.find(sep, 40, limit)
+                if i > 0 and (cut < 0 or i < cut):
+                    cut = i + len(sep)
+            c = c[:cut] if cut > 0 else (c[:limit] + "…")
+        return c
+    return ""
+
+
+def _debate_topic_of(x: dict) -> str:
+    """辩题：优先 topic；老归档没记时退回 debate_config.topic / note 首行。"""
+    cands = [x.get("topic")]
+    cfg = x.get("debate_config")
+    if isinstance(cfg, dict):
+        cands.append(cfg.get("topic"))
+    note = x.get("note")
+    if isinstance(note, str) and note.strip():
+        cands.append(note.strip().splitlines()[0])
+    for c in cands:
+        c = " ".join(str(c or "").split())
+        if c:
+            return c
+    return ""
+
+
+def _debate_roles_of(x: dict):
+    """(正反角色名列表, 模型名列表)"""
+    names, models = [], []
+
+    def _addm(v):
+        s = str(v or "").strip()
+        if s and s not in models:
+            models.append(s)
+
+    for k in ("pro_arguments", "con_arguments"):
+        v = x.get(k)
+        if isinstance(v, dict):
+            for kk, vv in v.items():
+                names.append(str(kk))
+                if isinstance(vv, dict):
+                    _addm(vv.get("model") or vv.get("_model") or vv.get("llm"))
+        elif isinstance(v, list):
+            for e in v:
+                if isinstance(e, dict):
+                    names.append(str(e.get("role") or e.get("name") or e.get("seat") or "?"))
+                    _addm(e.get("model"))
+    if isinstance(x.get("samples"), list):
+        for i, e in enumerate(x["samples"]):
+            names.append("sample%d" % (i + 1))
+            if isinstance(e, dict):
+                _addm(e.get("pro_model") or e.get("model"))
+    _addm(x.get("judge_model"))
+    _addm(x.get("judge_digest_model"))
+    for e in (x.get("neutral_reviews") or []):
+        if isinstance(e, dict):
+            _addm(e.get("model"))
+    return names, models
+
+
+def _debate_index_entry(sid: str, base: str, rel: str, abspath: str, x: dict, key: str, mt: float):
+    label, tone, conf, conf_cn = _debate_verdict_bits(x)
+    names, models = _debate_roles_of(x)
+    d = x.get("judge_digest") if isinstance(x.get("judge_digest"), dict) else {}
+    # 2026-09-18 v4：赛前场景预判（辩论前先判「这是哪类问题」→ 席位身份与裁判 rubric 按场景生成）
+    sc = x.get("scenario") if isinstance(x.get("scenario"), dict) else {}
+    return {
+        "key": key,
+        "rel_path": rel,
+        "path": abspath,
+        "mtime": datetime.fromtimestamp(mt).strftime("%Y-%m-%d %H:%M:%S") if mt else "",
+        "mtime_epoch": mt,
+        "after_index": _debate_display_count(sid, mt),
+        "topic": _debate_topic_of(x),
+        "verdict": str(x.get("verdict") or "").strip(),
+        "confidence": conf,
+        "confidence_cn": conf_cn,
+        "conclusion": label,
+        "tone": tone,
+        "why": _debate_one_line(x),
+        "level": str(x.get("level") or "").strip(),
+        "format": str(x.get("debate_format") or "").strip(),
+        "roles": len(names),
+        "drafts": len(x.get("draft_only_roles") or []),
+        "has_digest": bool(d),
+        "failed": bool(x.get("error")),
+        # 场景预判：折叠卡片不加载全文也能显示「这场按什么场景/谁的尺子判的」
+        "scenario": str(sc.get("scenario") or "").strip(),
+        "scenario_label": str(sc.get("scenario_label") or "").strip(),
+        "scenario_why": str(sc.get("why") or "").strip(),
+        "scenario_judge": str(sc.get("judge_persona") or "").strip(),
+        "scenario_rubrics": [str((r or {}).get("key") or "").strip()
+                             for r in (sc.get("rubrics") or []) if isinstance(r, dict)][:8],
+        "scenario_error": str(x.get("scenario_error") or "").strip()[:200],
+        "has_scenario": bool(sc),
+        "models": models[:8],
+    }
+
+
+def _load_debate_index(sid: str):
+    """该会话全部辩论场次（时间正序）。
+
+    同一场辩论会落多份归档（log/ 全量 + conclusions/ 摘要副本），按文件名里的
+    时间戳 debate_YYYYMMDD_HHMMSS 归组，每组取信息量最大的那份。"""
+    base = _debate_base_of(sid)
+    if not base:
+        return {"ok": False, "error": "未找到该会话的结果目录", "base": str(base), "debates": []}
+    try:
+        files = [p for p in Path(base).rglob("debate_*.json") if p.is_file()]
+    except Exception as e:
+        return {"ok": False, "error": f"扫描辩论记录失败: {e}", "base": str(base).replace("\\", "/"), "debates": []}
+    if not files:
+        return {"ok": True, "count": 0, "base": str(base).replace("\\", "/"), "debates": []}
+    groups = {}
+    for p in files:
+        try:
+            st = p.stat()
+        except Exception:
+            continue
+        m = _DEBATE_KEY_RE.search(p.name)
+        key = m.group(1) if m else ("t%d" % int(st.st_mtime))
+        g = groups.setdefault(key, {"mt": st.st_mtime, "files": []})
+        g["mt"] = max(g["mt"], st.st_mtime)
+        g["files"].append((st.st_mtime, str(p)))
+    # 每个文件名时间戳先各自挑出信息量最大的那份
+    picked = []
+    for key in sorted(groups, key=lambda k: groups[k]["mt"]):
+        best = None
+        for _mt, ps in sorted(groups[key]["files"], key=lambda t: -t[0]):
+            x = _read_debate_file(ps)
+            if not isinstance(x, dict):
+                continue
+            sc = _debate_richness(x)
+            if best is None or sc > best[0]:
+                best = (sc, ps, x, _mt)
+        if best is None:
+            continue
+        picked.append({"key": key, "score": best[0], "path": best[1], "data": best[2], "mt": best[3]})
+
+    # 再合并「同一场辩论的重复归档」：时间相差很近、且辩题相同或一方没记辩题。
+    # 实测 conclusions/ 摘要副本的文件名时间戳会比 log/ 全量版晚 1 秒，必须合掉。
+    merged = []
+    for it in picked:
+        t_new = _debate_topic_of(it["data"])
+        if merged:
+            prev = merged[-1]
+            t_old = _debate_topic_of(prev["data"])
+            if (it["mt"] - prev["mt"]) <= 300 and (not t_new or not t_old or t_new == t_old):
+                if it["score"] > prev["score"]:
+                    merged[-1] = it
+                else:
+                    merged[-1]["mt"] = max(prev["mt"], it["mt"])
+                continue
+        merged.append(it)
+
+    out = []
+    for it in merged:
+        ps, x = it["path"], it["data"]
+        try:
+            rel = str(Path(ps).relative_to(base)).replace("\\", "/")
+        except Exception:
+            rel = Path(ps).name
+        out.append(_debate_index_entry(sid, base, rel, ps, x, it["key"], it["mt"]))
+    return {"ok": True, "count": len(out), "base": str(base).replace("\\", "/"), "debates": out}
+
+
+@app.get("/api/results/{sid}/debates")
+async def list_debates(sid: str):
+    """该会话全部辩论场次（时间正序，含 after_index = 插回对话流的位置）。"""
+    return JSONResponse(_load_debate_index(sid),
+                        headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+
+@app.get("/api/results/{sid}/debate/one")
+async def one_debate(sid: str, rel: str = ""):
+    """按 rel_path 取某一整场辩论的完整归档（前端展开卡片时才拉取）。"""
+    base = _debate_base_of(sid)
+    if not base or not rel:
+        return JSONResponse({"ok": False, "error": "缺少 path 或会话结果目录不存在"},
+                            headers={"Cache-Control": "no-store"})
+    try:
+        p = Path(base) / rel
+        rp, rb = os.path.realpath(str(p)), os.path.realpath(base)
+        if not rp.startswith(rb) or not Path(rp).name.startswith("debate_") or not rp.endswith(".json") or not os.path.isfile(rp):
+            return JSONResponse({"ok": False, "error": "路径不在本会话的辩论归档里"},
+                                headers={"Cache-Control": "no-store"})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": f"路径解析失败: {e}"}, headers={"Cache-Control": "no-store"})
+    x = _read_debate_file(rp)
+    if not isinstance(x, dict):
+        return JSONResponse({"ok": False, "error": "辩论归档读不出来（可能正在写或已损坏）"},
+                            headers={"Cache-Control": "no-store"})
+    try:
+        st = os.stat(rp)
+        mt, mts = st.st_mtime, datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        mt, mts = 0.0, ""
+    return JSONResponse({
+        "ok": True, "path": rp, "rel_path": str(Path(rp).relative_to(base)).replace("\\", "/"),
+        "mtime": mts, "mtime_epoch": mt, "debate": x,
+        "after_index": _debate_display_count(sid, mt),
+    }, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+
+@app.get("/api/results/{sid}/debate/latest")
+async def latest_debate(sid: str):
+    """最新一场辩论的完整记录（WebUI「辩论过程」表格数据源）。"""
+    return JSONResponse(_load_latest_debate(sid),
+                        headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+
 @app.get("/api/results/{sid}/figures")
-async def list_figures(sid: str):
-    """列出会话所有 figures（递归扫描 png/jpg/svg/pdf）"""
+async def list_figures(sid: str, sort: str = "time_desc"):
+    """列出会话所有 figures（递归扫描 png/jpg/svg/pdf）
+
+    sort（P5 2026-09-22）：time_desc（默认，最新出的图排最上面）/ time_asc（旧行为）/ name
+    """
     # 每次实时扫描
     base = _find_best_results_dir(sid)
     if not base and sid in _sessions:
@@ -11190,7 +16524,19 @@ async def list_figures(sid: str):
     figures = []
     img_exts = {'.png', '.jpg', '.jpeg', '.svg', '.pdf'}
     try:
-        for p in sorted(Path(base).rglob("*"), key=lambda x: x.stat().st_mtime if x.exists() else 0):
+        def _fig_mtime(x):
+            try:
+                return x.stat().st_mtime
+            except OSError:
+                return 0
+        _sort_mode = (sort or "time_desc").strip().lower()
+        if _sort_mode == "name":
+            _fig_key = lambda x: x.name.lower()
+        elif _sort_mode == "time_asc":
+            _fig_key = _fig_mtime
+        else:
+            _fig_key = lambda x: -_fig_mtime(x)
+        for p in sorted(Path(base).rglob("*"), key=_fig_key):
             if p.is_file() and p.suffix.lower() in img_exts:
                 rel = str(p.relative_to(base)).replace("\\", "/")
                 parts = rel.split("/")
@@ -11208,7 +16554,7 @@ async def list_figures(sid: str):
                 })
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
-    return JSONResponse({"figures": figures, "base": base.replace("\\", "/"), "session_id": sid},
+    return JSONResponse({"figures": figures, "base": base.replace("\\", "/"), "session_id": sid, "sort": _sort_mode},
                         headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
 
@@ -11229,16 +16575,1266 @@ async def get_figure(sid: str, path: str = ""):
     return FileResponse(file_path, headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"})
 
 
-# --- 待办 ---
+# --- P3(2026-09-22): 意图确认弹窗答复 ---
 
-@app.get("/api/todos/{sid}")
-async def get_todos(sid: str):
-    """获取会话待办"""
+class AskFormAnswerRequest(BaseModel):
+    session_id: str
+    form_id: str = ""
+    selected: list = []      # 勾选的选项文字
+    other: str = ""          # "其他"自由填写
+    question: str = ""       # 原问题（前端回传，用于审计兜底）
+
+
+@app.post("/api/ask_form/answer")
+async def ask_form_answer(req: AskFormAnswerRequest):
+    """接收确认弹窗的勾选结果：记录 → 解除执行门禁 → 前端再把它作为用户消息发出。
+
+    为什么这么设计：弹窗答复本身就是用户消息（沿用既有 chat 通道，零新轨道），
+    这里负责把它结构化留档（审计/复盘）+ 解除 enforcement 的执行门禁。
+    """
+    sid = (req.session_id or "").strip()
     if sid not in _sessions:
         _restore_single_session(sid)
     if sid not in _sessions:
         return JSONResponse({"error": "Session not found"}, status_code=404)
-    return {"todos": _sessions[sid].get("todos", [])}
+    sess = _sessions[sid]
+    sel = [str(s).strip() for s in (req.selected or []) if str(s).strip()]
+    other = (req.other or "").strip()
+    if not sel and not other:
+        return JSONResponse({"error": "需要至少勾选一项或填写其他内容"}, status_code=400)
+    # 找到对应的待确认问题（按 form_id；没有则取最后一条未答复的）
+    _pend = sess.get("_pending_questions") or []
+    _hit = None
+    for _pq in reversed(_pend):
+        if req.form_id and _pq.get("form_id") == req.form_id:
+            _hit = _pq
+            break
+    if _hit is None:
+        for _pq in reversed(_pend):
+            if not _pq.get("answered"):
+                _hit = _pq
+                break
+    _q_text = (_hit or {}).get("question") or req.question or ""
+    if _hit is not None:
+        _hit["answered"] = True
+        _hit["answer"] = {"selected": sel, "other": other,
+                          "answered_at": datetime.now().strftime("%H:%M:%S")}
+    # 组装给模型看的人话（前端也用它作为用户消息）
+    _parts = []
+    if sel:
+        _parts.append("选中：" + "；".join(sel))
+    if other:
+        _parts.append("补充说明：" + other)
+    _answer_text = ("【用户对「" + _q_text[:120] + "」的确认答复】" + "；".join(_parts)) if _q_text \
+        else ("【用户确认答复】" + "；".join(_parts))
+    # P4(2026-09-22): 前端提交弹窗后自己拼消息再发（措辞与 _answer_text 不同）→
+    # 打一个 30 秒有效的一次性标记，让下一轮能可靠认出"这是弹窗答复，不是新需求"
+    sess["_form_ans_marker"] = time.time()
+    sess.setdefault("_ask_form_answers", []).append({
+        "form_id": req.form_id or (_hit or {}).get("form_id", ""),
+        "question": _q_text, "selected": sel, "other": other,
+        "answer_text": _answer_text,
+        "_ts": time.time(),
+        "injected": False,
+        "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    })
+    del sess["_ask_form_answers"][:-20]
+    # 用户答复了确认表单 = 意图已确认（本会话不再重复问）
+    sess["_intent_confirmed"] = True
+    # 解除执行门禁（P3：意图确认后才允许执行）
+    _gate_cleared = False
+    try:
+        from webui import enforcement as _enf_f
+        _es_f = _enf_f.get_enforcement(sid)
+        _gate_cleared = _enf_f.clear_awaiting_form(_es_f, req.form_id or "",
+                                                   {"selected": sel, "other": other,
+                                                    "question": _q_text})
+    except Exception as _e_f:
+        logger.warning(f"[ask_form] 解除门禁失败: {_e_f}")
+    # P4(2026-09-22): 代码修改模式的答复语义 —— 与 P3 不同："答复"不默认解锁。
+    #   选"只给我改好的代码，先别跑" → 锁继续（这正是他的本意）
+    #   选"用这些数据跑一遍验证"   → 解锁并允许执行
+    _ce_state = ""
+    try:
+        from webui import enforcement as _enf_cea
+        _es_cea = _enf_cea.get_enforcement(sid)
+        if getattr(_es_cea, "code_edit", False) or _enf_cea.code_edit_pending(_es_cea):
+            _ans_all = (" ".join(sel) + " " + other).strip()
+            _ans_low = _ans_all.lower()
+            # 英文按钮可能首字母大写（"Run a verification…"），英文关键词一律大小写无关
+            _want_run = (any(w in _ans_all for w in ("验证", "跑", "测试", "执行", "试一下", "试下"))
+                         or any(w in _ans_low for w in ("run", "test", "verify", "execute")))
+            # 中英都要认：英文按钮 "Code only, do not run" 里带 run，若不认这些否定词会被误判成「要跑」
+            _want_no = (any(w in _ans_all for w in
+                            ("先别", "不要跑", "别跑", "不跑", "只给", "只看", "不执行", "先给"))
+                        or any(w in _ans_low for w in
+                               ("code only", "only the code", "only code", "just the code",
+                                "just give me the code", "do not run", "don't run", "dont run",
+                                "not run", "no run", "without running", "do not execute",
+                                "don't execute", "no execution", "not execute")))
+            if _want_run and not _want_no:
+                _enf_cea.clear_code_edit(_es_cea, grant_exec=True)
+                _gate_cleared = True
+                _ce_state = "verify_ok"
+            else:
+                _enf_cea.arm_code_edit(
+                    _es_cea, "用户选择：只给代码、不要执行（答复：%s）" % _ans_all[:80],
+                    data=getattr(_es_cea, "code_edit_data", []) or [])
+                _ce_state = "edit_only"
+            logger.info(f"[code_edit] sid={sid} 答复={_ans_all[:60]!r} → {_ce_state}")
+    except Exception as _e_cea:
+        logger.warning(f"[code_edit] 答复处理失败: {_e_cea}")
+    try:
+        _session_emit(sess, {"type": "ask_form_answered", "form_id": req.form_id,
+                             "question": _q_text, "selected": sel, "other": other,
+                             "gate_cleared": _gate_cleared,
+                             "code_edit": _ce_state,
+                             "ts": datetime.now().strftime("%H:%M:%S"), "session_id": sid})
+    except Exception:
+        pass
+    logger.info(f"[ask_form] sid={sid} form={req.form_id} selected={sel} other={other[:60]!r} gate_cleared={_gate_cleared}")
+    return {"ok": True, "question": _q_text, "selected": sel, "other": other,
+            "answer_text": _answer_text, "gate_cleared": _gate_cleared,
+            "code_edit": _ce_state}
+
+
+# --- P1-1 (2026-09-23): 会话目标条（goal）+ 待办持久化 ---
+#
+# 借鉴 deer-flow 的两条语义（backend/.../agents/thread_state.py:120-137 的 merge_todos/merge_goal）：
+#   · None = 本次没动它 → 保留旧值（别把「没传」当成「清空」）
+#   · []   = 显式清空
+# 数据形状参考 agents/goal_state.py:22-31（objective/status/created_at/updated_at）。
+# 不抄 deer-flow 的「自动续跑 + LLM 评估器」——MemOmics 这一层只做「目标 + 进度上屏」。
+
+_GOAL_MAX_LEN = 4000
+_GOAL_STATUSES = ("active", "done", "blocked", "cancelled")
+
+
+def _kv_get(key, default=None):
+    """读 MemOmics state.db 的 kv 表（与微信会话映射同一张表，见 _get_session_db）。"""
+    try:
+        db = _get_session_db()
+        if not db or not getattr(db, "_conn", None):
+            return default
+        row = db._conn.execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
+        if row and row[0] not in (None, ""):
+            return row[0]
+    except Exception:
+        pass
+    return default
+
+
+def _kv_set(key, value):
+    try:
+        db = _get_session_db()
+        if not db or not getattr(db, "_conn", None):
+            return False
+        db._conn.execute(
+            "INSERT INTO kv (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+        db._conn.commit()
+        return True
+    except Exception as e:
+        logger.warning(f"[kv] 写入失败 key={key}: {e}")
+        return False
+
+
+def _seed_agent_todos(agent, todos, id_prefix="auto"):
+    """把一批待办写进 agent 的 TodoStore，返回实际写入的条目。
+
+    ⚠️ TodoStore 只有 write(todos, merge=True) / read() / has_items() —— 没有 add()。
+    这里原来调 _todo_store.add(...)，抛 AttributeError 又被 except 吞掉：待办只留在
+    session["_pipeline_todos"] 里、进不了 store。前端读 store 为空 → 回落到那份原始清单
+    （状态全是 pending）→ 完成状态再也不会更新，界面上的待办就一直挂着不划掉。
+    另外 TodoStore 只保留 {id, content, status} 三个字段，多给的会被 _validate 丢掉；
+    merge 模式还要求必须有 id（没 id 直接跳过），所以 id 必须兜底生成。
+    """
+    store = getattr(agent, "_todo_store", None)
+    if store is None:
+        return []
+    items = []
+    for i, td in enumerate(todos or []):
+        if not isinstance(td, dict):
+            continue
+        title = td.get("title") or td.get("content") or td.get("name") or ""
+        item = {
+            "id": str(td.get("id") or ("%s_%d" % (id_prefix, i))),
+            "content": str(title),
+        }
+        # 状态是单调的：只有源里明确说「完成/取消」才写，pending 一律当「没意见」不写。
+        # 理由：write(merge=True) 见到 status 就覆盖，所以只要把 pending 写进去，
+        # 就等于把已经 completed 的条目打回未完成 —— pipeline 每推一次清单、裁决每跑一次，
+        # 完成进度就被抹一次（用户 2026-09-30 报的两份待办都是这么来的）。
+        # 不写 pending 也没有副作用：新建条目由 TodoStore._validate 自己落默认值 pending。
+        _st = str(td.get("status") or "").strip().lower()
+        if _st and _st != "pending":
+            item["status"] = _st
+        items.append(item)
+    if not items:
+        return []
+    store.write(items, merge=True)
+    return items
+
+
+def _should_emit_todos(todos, prev_todos):
+    """这份待办要不要推给前端。
+
+    非空 → 推。空 → 只有「之前有、现在没了」才推一次：原来这里写的是
+    `if todos and len(todos) > 0`，于是「待办被清空」这件事永远到不了前端 ——
+    列表就一直挂在输入框上方不动（用户 2026-09-30 报的现象之一）。
+    服务端已经空了、页面还挂着旧清单，就是这么来的。
+    """
+    if todos:
+        return True
+    return bool(prev_todos)
+
+
+def _todos_public(todos):
+    """把任意来源的待办归一成前端认识的四项 {id,title,status,module}。"""
+    out = []
+    if not isinstance(todos, list):
+        return out
+    for t in todos:
+        if not isinstance(t, dict):
+            continue
+        out.append({
+            "id": str(t.get("id", "") or ""),
+            "title": str(t.get("title") or t.get("content") or t.get("name") or ""),
+            "status": str(t.get("status") or "pending"),
+            "module": str(t.get("module", "") or ""),
+        })
+    return out
+
+
+def _kv_ns(kind, sid):
+    return f"memomics_{kind}:{sid}"
+
+
+def _sync_session_todos(session, todos, persist=True):
+    """把待办写回会话（None = 保留旧值，[] = 显式清空），内容变了才落库。
+
+    返回归一化后的列表。revision 供前端做乐观更新对账（抄 deer-flow
+    use-active-goal.ts:15-68 的「服务器一回报就丢弃本地覆盖」）。
+    """
+    if todos is None:
+        return _todos_public(session.get("todos"))
+    pub = _todos_public(todos)
+    sid = session.get("id", "")
+    try:
+        blob = json.dumps(pub, ensure_ascii=False, sort_keys=True)
+    except Exception:
+        blob = ""
+    if session.get("_todos_blob") != blob:
+        session["todos"] = pub
+        session["_todos_blob"] = blob
+        session["todos_revision"] = int(session.get("todos_revision", 0) or 0) + 1
+        if persist and sid:
+            _kv_set(_kv_ns("todos", sid), blob)
+    return pub
+
+
+def _session_todos(session):
+    """读会话待办：内存优先，其次 state.db（服务重启后仍在）。"""
+    todos = session.get("todos")
+    if todos:
+        return _todos_public(todos)
+    sid = session.get("id", "")
+    if sid:
+        raw = _kv_get(_kv_ns("todos", sid))
+        if raw:
+            try:
+                cached = json.loads(raw)
+            except Exception:
+                cached = None
+            if isinstance(cached, list) and cached:
+                session["todos"] = _todos_public(cached)
+                session["_todos_blob"] = raw
+                return session["todos"]
+    return _todos_public(todos)
+
+
+def _goal_get(session):
+    """读会话目标：内存优先，其次 state.db。"""
+    goal = session.get("goal")
+    if isinstance(goal, dict) and goal.get("objective"):
+        return goal
+    sid = session.get("id", "")
+    if sid:
+        raw = _kv_get(_kv_ns("goal", sid))
+        if raw:
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                parsed = None
+            if isinstance(parsed, dict) and parsed.get("objective"):
+                session["goal"] = parsed
+                return parsed
+    return None
+
+
+def _goal_set(session, objective, status="active", source="manual"):
+    objective = (objective or "").strip()
+    if not objective:
+        return None
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    old = _goal_get(session) or {}
+    goal = {
+        "objective": objective[:_GOAL_MAX_LEN],
+        "status": status if status in _GOAL_STATUSES else "active",
+        "source": source if source in ("manual", "auto") else "manual",
+        "created_at": old.get("created_at") or now,
+        "updated_at": now,
+        "revision": int(old.get("revision", 0) or 0) + 1,
+    }
+    session["goal"] = goal
+    sid = session.get("id", "")
+    if sid:
+        _kv_set(_kv_ns("goal", sid), json.dumps(goal, ensure_ascii=False))
+    return goal
+
+
+def _goal_clear(session):
+    session["goal"] = None
+    sid = session.get("id", "")
+    if sid:
+        _kv_set(_kv_ns("goal", sid), "")
+
+
+def _goal_payload(session):
+    """给前端的统一目标条载荷（progress / goal 两个端点共用一份形状）。"""
+    return {
+        "goal": _goal_get(session),
+        "todos": _session_todos(session),
+        "todos_revision": int(session.get("todos_revision", 0) or 0),
+    }
+
+
+class GoalRequest(BaseModel):
+    objective: str = ""
+    status: str = "active"
+    source: str = "manual"
+
+
+@app.get("/api/sessions/{sid}/goal")
+async def get_session_goal(sid: str):
+    """P1-1: 会话目标（目标条数据源）"""
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    session = _sessions[sid]
+    return _goal_payload(session)
+
+
+@app.put("/api/sessions/{sid}/goal")
+async def put_session_goal(sid: str, req: GoalRequest):
+    """P1-1: 设置会话目标（objective 为空 = 无效；要清空请用 DELETE）"""
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    objective = (req.objective or "").strip()
+    if not objective:
+        return JSONResponse({"error": "objective 不能为空"}, status_code=400)
+    if len(objective) > _GOAL_MAX_LEN:
+        return JSONResponse({"error": f"objective 过长（>{_GOAL_MAX_LEN}）"}, status_code=400)
+    if req.status not in _GOAL_STATUSES:
+        return JSONResponse({"error": f"status 必须是 {list(_GOAL_STATUSES)}"}, status_code=400)
+    session = _sessions[sid]
+    goal = _goal_set(session, objective, status=req.status, source=req.source)
+    payload = _goal_payload(session)
+    _session_emit(session, {"type": "goal_update", **payload,
+                            "ts": datetime.now().strftime("%H:%M:%S")})
+    return {"ok": True, **payload}
+
+
+@app.delete("/api/sessions/{sid}/goal")
+async def delete_session_goal(sid: str):
+    """P1-1: 清空会话目标"""
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    session = _sessions[sid]
+    _goal_clear(session)
+    payload = _goal_payload(session)
+    _session_emit(session, {"type": "goal_update", **payload,
+                            "ts": datetime.now().strftime("%H:%M:%S")})
+    return {"ok": True, **payload}
+
+
+@app.delete("/api/sessions/{sid}/todos")
+async def delete_session_todos(sid: str):
+    """P1-1(2026-09-24): 清空会话待办 —— 目标条上「清空」按钮的落点。
+
+    只清展示副本（session["todos"] + state.db 的 kv），**不动** agent 的
+    _todo_store：那本书是 agent 自己的执行状态，下次它推新待办时这里照样会出现。
+    语义同 goal：[] = 显式清空（_sync_session_todos 会涨 revision 并广播）。
+    """
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    session = _sessions[sid]
+    _sync_session_todos(session, [], persist=True)
+    payload = {"todos": [], "revision": int(session.get("todos_revision", 0) or 0)}
+    _session_emit(session, {"type": "todos_update", "todos": [],
+                            "ts": datetime.now().strftime("%H:%M:%S"),
+                            "session_id": session["id"]})
+    return {"ok": True, **payload}
+
+
+# --- P1-2 (2026-09-23): 改动复核（跑前跑后快照 + diff + 单文件回滚） ---
+#
+# 借鉴 deer-flow 的部分（workspace_changes/types.py:63-116 的 WorkspaceFileChange 形状、
+# :18-26 的体积上限、api.py:18-48 的「轻量列表 / 完整内容两次取」）：
+#   path / change_type / lines_added / lines_removed / sha 前后值 / 轻量列表带预览。
+# deer-flow 没有的部分（这里是自己设计的，别处抄不到）：
+#   · 单文件回滚（POST .../revert）：写回改前内容，且要求当前内容仍等于改动后的 sha，
+#     否则 409 拒绝——防止把用户/别的程序后来的修改一起覆盖掉。
+#   · 跳过的改动也要能看见（超大/二进制文件不记 diff，但列表里给出原因）。
+
+_WRITER_TOOLS = {"write_file", "patch", "edit_file", "str_replace", "apply_patch", "create_file"}
+_CHANGE_MAX_FILE_BYTES = 262144     # 单文件快照上限 256KB（超过只记"跳过+原因"）
+_CHANGE_MAX_KEEP = 200              # 每会话保留最近 200 条
+_CHANGE_MAX_DIFF_LINES = 400        # 单条 diff 最多存 400 行
+_CHANGE_MAX_STORE_BYTES = 262144    # 落 state.db 的总量上限 256KB（超了从最旧的丢）
+_CHANGE_MAX_SKIPPED = 50
+_CHANGE_PREVIEW_LINES = 12
+_CHANGE_SKIP_DIRS = {"__pycache__", ".git", ".venv", "venv", "node_modules",
+                     ".ipynb_checkpoints", ".mypy_cache", ".pytest_cache", ".idea"}
+
+_SERVER_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _change_path_from_args(args):
+    """从工具参数里取目标路径（write_file/patch 用 path，别的工具可能用 file_path/file）。"""
+    if not isinstance(args, dict):
+        return ""
+    for k in ("path", "file_path", "file", "filename", "target"):
+        v = args.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip().strip('"').strip("'")
+    return ""
+
+
+def _change_skip_reason(abs_path):
+    parts = set(re.split(r"[\\/]+", abs_path))
+    if parts & _CHANGE_SKIP_DIRS:
+        return "缓存/依赖目录"
+    return ""
+
+
+def _change_skip_reason_text(kind):
+    return {"binary": "二进制/目录", "toolarge": f"超过 {_CHANGE_MAX_FILE_BYTES // 1024}KB",
+            "error": "读取失败"}.get(kind, "不可读")
+
+
+def _read_text_for_change(abs_path):
+    """读文件做快照。返回 (kind, text)：kind ∈ exists|missing|binary|toolarge|error"""
+    try:
+        if not os.path.exists(abs_path):
+            return "missing", None
+        if os.path.isdir(abs_path):
+            return "binary", None
+        size = os.path.getsize(abs_path)
+        if size > _CHANGE_MAX_FILE_BYTES:
+            return "toolarge", None
+        with open(abs_path, "rb") as f:
+            raw = f.read()
+        if b"\x00" in raw[:8192]:
+            return "binary", None
+        try:
+            return "exists", raw.decode("utf-8")
+        except UnicodeDecodeError:
+            try:
+                return "exists", raw.decode("utf-8", errors="replace")
+            except Exception:
+                return "binary", None
+    except Exception:
+        return "error", None
+
+
+def _sha12(text):
+    if text is None:
+        return ""
+    try:
+        return hashlib.sha1(text.encode("utf-8", errors="replace")).hexdigest()[:12]
+    except Exception:
+        return ""
+
+
+def _unified_diff_text(path, before, after):
+    """生成 unified diff；返回 (diff_text, added, removed, truncated)"""
+    import difflib as _dl
+    b = (before or "").splitlines(keepends=True)
+    a = (after or "").splitlines(keepends=True)
+    name = os.path.basename(path) or path
+    lines = list(_dl.unified_diff(b, a, fromfile=f"改前/{name}", tofile=f"改后/{name}", n=3))
+    added = sum(1 for l in lines if l.startswith("+") and not l.startswith("+++"))
+    removed = sum(1 for l in lines if l.startswith("-") and not l.startswith("---"))
+    truncated = False
+    if len(lines) > _CHANGE_MAX_DIFF_LINES:
+        lines = lines[:_CHANGE_MAX_DIFF_LINES]
+        truncated = True
+    return "".join(lines), added, removed, truncated
+
+
+def _change_note_skipped(session, path, reason):
+    lst = session.setdefault("_changes_skipped", [])
+    lst.append({"path": path, "reason": reason, "ts": datetime.now().strftime("%H:%M:%S")})
+    if len(lst) > _CHANGE_MAX_SKIPPED:
+        del lst[:len(lst) - _CHANGE_MAX_SKIPPED]
+
+
+def _snapshot_before_change(session, tool_name, args):
+    """工具执行前：把「改前」内容抓下来（此时文件还没被改）。"""
+    if tool_name not in _WRITER_TOOLS:
+        return None
+    path = _change_path_from_args(args)
+    if not path:
+        return None
+    try:
+        abs_path = os.path.abspath(path)
+    except Exception:
+        return None
+    reason = _change_skip_reason(abs_path)
+    if reason:
+        _change_note_skipped(session, abs_path, reason)
+        return None
+    kind, text = _read_text_for_change(abs_path)
+    if kind in ("binary", "toolarge", "error"):
+        _change_note_skipped(session, abs_path, _change_skip_reason_text(kind))
+        return None
+    pending = session.setdefault("_changes_pending", {})
+    pending[abs_path] = {"tool": tool_name, "before": text, "before_exists": kind == "exists",
+                         "ts": time.time()}
+    # 上限保护：pending 不该堆积（正常一次工具调用一进一出）
+    if len(pending) > 20:
+        for k in list(pending)[:-10]:
+            pending.pop(k, None)
+    return abs_path
+
+
+def _finalize_file_change(session, tool_name, args=None, result=None):
+    """工具执行后：对比「改后」内容，产出 diff 记录并推给前端。
+
+    args 给定时按它的 path 结算；args 为 None（微信通道的 complete 回调不带 args）
+    时，结算本会话里该工具留下的全部待结算项。
+    """
+    if tool_name not in _WRITER_TOOLS:
+        return None
+    pending = session.get("_changes_pending") or {}
+    if args is None or not _change_path_from_args(args):
+        targets = [p for p, s in pending.items() if s.get("tool") == tool_name]
+        rec = None
+        for p in targets:
+            rec = _finalize_one_change(session, tool_name, p) or rec
+        return rec
+    try:
+        abs_path = os.path.abspath(_change_path_from_args(args))
+    except Exception:
+        return None
+    return _finalize_one_change(session, tool_name, abs_path)
+
+
+def _finalize_one_change(session, tool_name, abs_path):
+    """结算单个路径：读改后内容 → diff → 记一条 → 推送。"""
+    pending = session.get("_changes_pending") or {}
+    snap = pending.pop(abs_path, None)
+    if snap is None:
+        return None          # 执行前没抓到（跳过或非本工具写的）→ 不记
+    kind, after_text = _read_text_for_change(abs_path)
+    if kind == "missing":
+        after_text, status = "", "deleted"
+    elif kind in ("binary", "toolarge", "error"):
+        _change_note_skipped(session, abs_path, _change_skip_reason_text(kind))
+        return None
+    else:
+        status = "added" if not snap.get("before_exists") else "modified"
+    before_text = snap.get("before")
+    if (before_text or "") == (after_text or "") and status != "deleted":
+        return None          # 内容没变（工具重写了同样内容）→ 不污染列表
+    diff_text, added, removed, truncated = _unified_diff_text(abs_path, before_text, after_text)
+    rec = {
+        "id": "chg_" + uuid.uuid4().hex[:10],
+        "path": abs_path,
+        "rel_path": _change_rel_path(session, abs_path),
+        "tool": tool_name,
+        "status": status,
+        "ts": datetime.now().strftime("%H:%M:%S"),
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "added": added,
+        "removed": removed,
+        "truncated": truncated,
+        "sha_before": _sha12(before_text),
+        "sha_after": _sha12(after_text),
+        "diff": diff_text,
+        "preview": diff_text.splitlines()[:_CHANGE_PREVIEW_LINES],
+        "revertible": True,
+        # 回滚用的改前内容只放内存（不落库：体积大且含数据路径），重启后只能看不能回滚
+        "_before_text": before_text,
+        "_before_exists": bool(snap.get("before_exists")),
+    }
+    changes = session.setdefault("changes", [])
+    changes.append(rec)
+    if len(changes) > _CHANGE_MAX_KEEP:
+        del changes[:len(changes) - _CHANGE_MAX_KEEP]
+    _persist_changes(session)
+    _session_emit(session, {"type": "changes_update", **_changes_payload(session, light=True)})
+    return rec
+
+
+def _change_rel_path(session, abs_path):
+    for base in (session.get("results_dir") or "", _SERVER_ROOT):
+        if base:
+            try:
+                rel = os.path.relpath(abs_path, base)
+                if not rel.startswith(".."):
+                    return rel.replace("\\", "/")
+            except Exception:
+                pass
+    return abs_path
+
+
+def _changes_persist_blob(session):
+    """落库内容：只存元数据 + diff（不存改前全文），并按总量上限从最旧的丢。"""
+    keep = []
+    total = 0
+    for rec in reversed(session.get("changes", [])):
+        item = {k: v for k, v in rec.items() if not k.startswith("_")}
+        try:
+            size = len(json.dumps(item, ensure_ascii=False))
+        except Exception:
+            continue
+        if total + size > _CHANGE_MAX_STORE_BYTES:
+            break
+        total += size
+        keep.append(item)
+    keep.reverse()
+    return json.dumps({"schema": "memomics.changes/1", "changes": keep}, ensure_ascii=False)
+
+
+def _persist_changes(session):
+    sid = session.get("id", "")
+    if sid:
+        _kv_set(_kv_ns("changes", sid), _changes_persist_blob(session))
+
+
+def _restore_changes(session):
+    """进程重启后从 state.db 读回改动列表（只读不复写；revertible=False）。"""
+    if session.get("changes"):
+        return session["changes"]
+    sid = session.get("id", "")
+    if not sid:
+        return []
+    raw = _kv_get(_kv_ns("changes", sid))
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        return []
+    items = parsed.get("changes") if isinstance(parsed, dict) else None
+    out = []
+    for it in (items or []):
+        if not isinstance(it, dict) or not it.get("path"):
+            continue
+        it = dict(it)
+        it["revertible"] = False      # 重启后没有改前全文 → 只能复核，不能回滚
+        it["restored"] = True
+        out.append(it)
+    session["changes"] = out
+    return out
+
+
+def _changes_payload(session, light=True, change_id=None):
+    _restore_changes(session)
+    changes = session.get("changes", [])
+    skipped = session.get("_changes_skipped", [])
+    def _public(rec):
+        return {k: v for k, v in rec.items() if not k.startswith("_")}
+
+    if change_id:
+        for rec in changes:
+            if rec.get("id") == change_id:
+                return _public(rec)
+        return None
+    if not light:
+        return {"changes": [_public(c) for c in changes], "skipped": list(skipped)}
+    light_list = []
+    for rec in changes:
+        light_list.append({k: v for k, v in rec.items() if k not in ("diff",) and not k.startswith("_")})
+    files = len({c.get("path") for c in changes})
+    return {
+        "summary": {
+            "changes": len(changes),
+            "files": files,
+            "added": sum(int(c.get("added") or 0) for c in changes),
+            "removed": sum(int(c.get("removed") or 0) for c in changes),
+            "skipped": len(skipped),
+            "revertible": sum(1 for c in changes if c.get("revertible")),
+        },
+        "changes": light_list,
+        "skipped": list(skipped),
+    }
+
+
+def _change_revert_allowed(path):
+    """回滚白名单：只允许写回会话 results_dir 或仓库根目录内的文件。"""
+    try:
+        abs_path = os.path.abspath(path)
+    except Exception:
+        return False
+    roots = [_SERVER_ROOT]
+    for base in roots:
+        try:
+            if os.path.commonpath([abs_path, base]) == os.path.abspath(base):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _revert_file_change(session, change_id):
+    """回滚单条改动：把改前内容写回去。
+
+    安全闸（自己设计的部分）：当前文件内容必须仍等于该条改动后的 sha，
+    否则说明之后又有人改过它 → 409，绝不覆盖别人的修改。
+    """
+    _restore_changes(session)
+    rec = None
+    for c in session.get("changes", []):
+        if c.get("id") == change_id:
+            rec = c
+            break
+    if rec is None:
+        return 404, {"error": "改动记录不存在"}
+    if not rec.get("revertible") or "_before_text" not in rec:
+        return 409, {"error": "这条改动是重启前记录的，只有 diff 没有改前全文，无法回滚"}
+    path = rec.get("path") or ""
+    if not _change_revert_allowed(path):
+        return 403, {"error": f"路径不在允许回滚的范围内：{path}"}
+    kind, current = _read_text_for_change(path)
+    if kind in ("binary", "toolarge", "error"):
+        return 409, {"error": f"当前文件不可读（{kind}），拒绝回滚"}
+    cur_sha = _sha12("" if kind == "missing" else current)
+    if cur_sha != (rec.get("sha_after") or ""):
+        return 409, {"error": "文件在本次改动之后又被修改过，拒绝覆盖（请先人工确认）"}
+    # P2-4：回滚既是"写回去"也可能是"删掉它"，按真实动作分别过门
+    # （观察模式不拦；强制 fs.write/fs.delete 后越界或无授权 -> 403，绝不半途写坏文件）
+    _act = "fs.write" if rec.get("_before_exists") else "fs.delete"
+    _denied = _sandbox_precheck(_act, path, [_SERVER_ROOT], "changes.revert")
+    if _denied:
+        return 403, {"error": "sandbox denied: %s" % _denied}
+    try:
+        if not rec.get("_before_exists"):
+            # 改动前文件不存在 → 回滚 = 删除它
+            if os.path.exists(path):
+                os.remove(path)
+        else:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8", newline="") as f:
+                f.write(rec.get("_before_text") or "")
+    except Exception as e:
+        return 500, {"error": f"写回失败：{e}"}
+    rec["status"] = "reverted"
+    rec["revertible"] = False
+    rec["_before_text"] = None
+    _persist_changes(session)
+    _session_emit(session, {"type": "changes_update", **_changes_payload(session, light=True)})
+    return 200, {"ok": True, "path": path, "restored": bool(rec.get("_before_exists")),
+                 **_changes_payload(session, light=True)}
+
+
+@app.get("/api/sessions/{sid}/changes")
+async def get_session_changes(sid: str, full: int = 0):
+    """P1-2: 会话改动复核（默认轻量列表；full=1 时连 diff 一起给）"""
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    session = _sessions[sid]
+    payload = _changes_payload(session, light=(not full))
+    payload["session_id"] = sid
+    return payload
+
+
+@app.get("/api/sessions/{sid}/changes/{change_id}")
+async def get_session_change_detail(sid: str, change_id: str):
+    """P1-2: 单条改动的完整 diff（列表接口刻意不下发 diff，避免大文件刷屏）"""
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    rec = _changes_payload(_sessions[sid], change_id=change_id)
+    if rec is None:
+        return JSONResponse({"error": "改动记录不存在"}, status_code=404)
+    return {"change": rec, "session_id": sid}
+
+
+@app.post("/api/sessions/{sid}/changes/{change_id}/revert")
+async def revert_session_change(sid: str, change_id: str):
+    """P1-2: 回滚单条改动（带 sha 一致性闸门，拒绝覆盖后续修改）"""
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    code, body = _revert_file_change(_sessions[sid], change_id)
+    body["session_id"] = sid
+    return JSONResponse(body, status_code=code)
+
+
+# --- P1-3 可点击引用 --------------------------------------------------------
+# 回答里原本只是「看着像标签、点不动」的文字（[KB源:x] / [数据:y] / [DOI:z] / [PMID:n] / [URL:u]），
+# 现在解析成一个可核对的目标：知识库/数据文件给出原文摘录（含命中行号），
+# DOI/PMID/URL 给出外链，解析不到就明说「找不到」并给原因。
+# 只读、不联网：摘录一律来自本机文件，且只能读知识库/数据目录内的内容。
+
+_CITE_MAX_TEXT = 20000          # 单次解析的文本上限（防超长回答拖垮解析）
+_CITE_MAX_ITEMS = 40            # 单条消息最多解析多少个锚点
+_CITE_EXCERPT_LINES = 24        # 摘录行数
+_CITE_EXCERPT_CHARS = 4000      # 摘录字符上限
+_CITE_MAX_MATCHES = 8           # 同名候选文件上限
+_CITE_MAX_VALUE = 300           # 单个锚点值的字符上限（和前端正则保持一致）
+
+_CITE_RE = re.compile(
+    r"\[\s*(DOI|PMID|PMIDs|KB源|KB|数据|DATA|资料|URL|链接|来源)\s*[:：]?\s*([^\]]*)\]",
+    re.IGNORECASE,
+)
+_CITE_NOTE_RE = re.compile(
+    r"\[\s*(找不到论据|找不到证据|未找到证据|无证据|仅是推理|推理|无外部证据|推断)\s*\]"
+)
+_CITE_KB_KINDS = ("kb源", "kb", "来源", "资料")
+_CITE_DATA_KINDS = ("数据", "data")
+_CITE_URL_KINDS = ("url", "链接")
+
+
+def _cite_kind(raw_kind: str) -> str:
+    """把方括号里的中文/英文标签归一到 5 类。"""
+    kl = (raw_kind or "").strip().lower()
+    if kl == "doi":
+        return "doi"
+    if kl in ("pmid", "pmids"):
+        return "pmid"
+    if kl in _CITE_KB_KINDS:
+        return "kb"
+    if kl in _CITE_DATA_KINDS:
+        return "data"
+    if kl in _CITE_URL_KINDS:
+        return "url"
+    return "other"
+
+
+def _cite_extract(text, limit: int = _CITE_MAX_ITEMS):
+    """抽出证据锚点：保序、按 (类别,值) 去重、限量。"""
+    found = []
+    if not text:
+        return found
+    s = text[:_CITE_MAX_TEXT]
+    for m in _CITE_RE.finditer(s):
+        found.append((m.start(), "anchor", _cite_kind(m.group(1)), m.group(1).strip(), (m.group(2) or "").strip(), m.group(0)))
+    for m in _CITE_NOTE_RE.finditer(s):
+        found.append((m.start(), "note", "note", m.group(1).strip(), m.group(1).strip(), m.group(0)))
+    found.sort(key=lambda x: x[0])
+    out, seen = [], set()
+    for _pos, _t, kind, label, value, raw in found:
+        value = value[:_CITE_MAX_VALUE]      # 超长值没有可核对的可能，直接截断（别把响应撑爆）
+        raw = raw[:_CITE_MAX_VALUE + 8]
+        key = (kind, value.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"kind": kind, "label": label, "value": value, "raw": raw})
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _cite_external_url(kind: str, value: str) -> str:
+    """DOI/PMID → 权威外链；URL → 只放行 http(s)（挡住 javascript:/file: 之类）。"""
+    v = (value or "").strip().strip("<>").strip()
+    if not v:
+        return ""
+    if kind == "doi":
+        v = re.sub(r"^(https?://(dx\.)?doi\.org/|doi:\s*)", "", v, flags=re.IGNORECASE).strip()
+        if not re.match(r"^10\.\d{4,9}/\S+$", v):
+            return ""
+        return "https://doi.org/" + v
+    if kind == "pmid":
+        m = re.search(r"\d{4,9}", v)
+        return ("https://pubmed.ncbi.nlm.nih.gov/%s/" % m.group(0)) if m else ""
+    if re.match(r"^https?://", v, re.IGNORECASE):
+        # 带空白/尖括号/引号的“网址”不是合法 URL，放行只会把脏串带到前端
+        if re.search(r"""[\s<>"'{}|\\^\u0060]""", v):
+            return ""
+        return v[:500]
+    return ""
+
+
+def _cite_safe_roots(session=None):
+    """允许读取的根目录：知识库 + 数据目录（+ 本会话结果目录）。"""
+    roots = [os.path.abspath(KB_DIR), os.path.abspath(DATA_DIR)]
+    if session:
+        rd = (session.get("results_dir") or "").strip()
+        if rd:
+            try:
+                roots.append(os.path.abspath(rd))
+            except Exception:
+                pass
+    uniq = []
+    for r in roots:
+        if r not in uniq:
+            uniq.append(r)
+    return uniq
+
+
+def _cite_inside(abs_path: str, roots) -> bool:
+    p = os.path.abspath(abs_path)
+    for r in roots:
+        if p == r or p.startswith(r + os.sep):
+            return True
+    return False
+
+
+def _cite_rel(abs_path: str) -> str:
+    """给前端一个可读的相对标识（知识库/数据根下）。"""
+    pairs = (("knowledge_base", KB_DIR), ("data", DATA_DIR))
+    for name, root in pairs:
+        try:
+            r = os.path.abspath(root)
+            if abs_path == r or abs_path.startswith(r + os.sep):
+                return name + "/" + os.path.relpath(abs_path, r).replace("\\", "/")
+        except Exception:
+            continue
+    return os.path.basename(abs_path)
+
+
+def _cite_find_files(value: str, roots, limit: int = _CITE_MAX_MATCHES):
+    """找候选文件 → [(绝对路径, 是否精确命中)]。
+
+    优先级：直给路径（相对/绝对）→ 同名或同词干 → 文件名子串（词干≥4 才算，
+    免得 "win.ini" 这种短片断匹配到无关文件）。所有候选必须落在允许的根内，
+    含 .. 的相对路径、盘符路径一律拒绝。
+    """
+    v = (value or "").strip().strip('"').strip("'").strip().replace("\\", "/")
+    if not v:
+        return []
+    parts = [p for p in v.split("/") if p not in ("", ".")]
+    if ".." in parts or v.startswith("/") or re.match(r"^[a-zA-Z]:", v):
+        return []
+    out, seen = [], set()
+
+    def _add(p, exact):
+        try:
+            ap = os.path.abspath(p)
+        except Exception:
+            return
+        if ap in seen or not os.path.isfile(ap) or not _cite_inside(ap, roots):
+            return
+        seen.add(ap)
+        out.append((ap, exact))
+
+    for r in roots:
+        _add(os.path.join(r, v), True)
+    if out:
+        return out[:limit]
+    base = os.path.basename(v)
+    if len(base) < 3:
+        return []
+    stem = os.path.splitext(base)[0].lower()
+    bl = base.lower()
+    for r in roots:
+        if not os.path.isdir(r):
+            continue
+        try:
+            for dirpath, dirnames, filenames in os.walk(r):
+                dirnames[:] = [d for d in dirnames if d not in _CHANGE_SKIP_DIRS]
+                for fn in filenames:
+                    fl = fn.lower()
+                    exact = fl == bl or os.path.splitext(fl)[0] == stem
+                    fuzzy = (not exact) and len(stem) >= 4 and bl in fl
+                    if exact or fuzzy:
+                        _add(os.path.join(dirpath, fn), exact)
+                        if len(out) >= limit:
+                            return out
+        except Exception:
+            continue
+    return out
+
+
+def _cite_excerpt(abs_path: str, needle: str = ""):
+    """读一段摘录（复用 P1-2 的只读读法：二进制/超大/缺失都有明确原因）。"""
+    kind, text = _read_text_for_change(abs_path)
+    if kind != "exists" or text is None:
+        return None, _change_skip_reason_text(kind)
+    lines = text.splitlines()
+    start, hit = 0, 0
+    nl = (needle or "").lower()
+    if nl and len(nl) >= 3:
+        for i, ln in enumerate(lines):
+            if nl in ln.lower():
+                hit = i + 1
+                start = max(0, i - 2)
+                break
+    chunk = lines[start:start + _CITE_EXCERPT_LINES]
+    body = "\n".join(chunk)
+    more = (start + _CITE_EXCERPT_LINES) < len(lines)
+    return {
+        "lines": [{"n": start + i + 1, "text": t[:400]} for i, t in enumerate(chunk)],
+        "start_line": start + 1,
+        "total_lines": len(lines),
+        "hit_line": hit,
+        "text": body[:_CITE_EXCERPT_CHARS],
+        "truncated": bool(more or len(body) > _CITE_EXCERPT_CHARS),
+    }, ""
+
+
+def _cite_resolve_item(item, session=None):
+    """解析单个锚点 → 可展示的结果（resolved/external/missing/note 四种状态）。"""
+    kind = item.get("kind") or "other"
+    value = (item.get("value") or "").strip()
+    rec = {"kind": kind, "label": item.get("label") or "", "value": value, "raw": item.get("raw") or "",
+           "status": "missing", "reason": "", "title": "", "url": "", "path": "", "rel": "",
+           "lines": [], "start_line": 0, "total_lines": 0, "hit_line": 0, "text": "",
+           "truncated": False, "alternatives": [], "approx": False}
+    if kind == "note":
+        rec["status"] = "note"
+        rec["reason"] = "原文写明这条结论只是推理" if ("推理" in value or "推断" in value) else "原文写明找不到论据"
+        return rec
+    if kind in ("doi", "pmid", "url"):
+        url = _cite_external_url(kind, value)
+        if url:
+            rec.update(status="external", url=url, title=value or url)
+        else:
+            rec["reason"] = "不是有效的 DOI / PMID / 网址"
+        return rec
+    if not value:
+        rec["reason"] = "锚点没写具体目标"
+        return rec
+    roots = _cite_safe_roots(session)
+    files = _cite_find_files(value, roots)
+    if not files:
+        rec["reason"] = "知识库/数据目录里找不到「%s」" % value[:80]
+        return rec
+    abs_path, exact = files[0]
+    if not _cite_inside(abs_path, roots):
+        rec["reason"] = "目标不在允许读取的目录内"
+        return rec
+    rec["approx"] = not exact          # 靠文件名模糊匹配到的 → 前端要标明
+    exc, why = _cite_excerpt(abs_path, value if kind == "data" else "")
+    rec["path"] = abs_path.replace("\\", "/")
+    rec["rel"] = _cite_rel(abs_path)
+    rec["title"] = os.path.basename(abs_path)
+    rec["alternatives"] = [_cite_rel(p) for p, _e in files[1:]]
+    if exc is None:
+        rec["reason"] = why or "这个文件读不了"
+        return rec
+    rec.update(exc)
+    rec["status"] = "resolved"
+    return rec
+
+
+def _cite_resolve(text: str, session=None):
+    """把一段文本里的所有证据锚点解析出来。"""
+    items = [_cite_resolve_item(it, session) for it in _cite_extract(text or "")]
+    summary = {"total": len(items), "resolved": 0, "external": 0, "missing": 0, "note": 0,
+               "truncated_text": max(0, len(text or "") - _CITE_MAX_TEXT)}
+    for it in items:
+        summary[it["status"]] = summary.get(it["status"], 0) + 1
+    return {"summary": summary, "items": items}
+
+
+def _cite_last_assistant_index(msgs):
+    for i in range(len(msgs) - 1, -1, -1):
+        if (msgs[i].get("role") or "") == "assistant":
+            return i
+    return None
+
+
+class CiteResolveReq(BaseModel):
+    text: str = ""
+    session_id: Optional[str] = None
+
+
+@app.post("/api/citations/resolve")
+async def citations_resolve(req: CiteResolveReq):
+    """把一段文本里的证据锚点解析成可核对的目标（只读、不联网）。"""
+    text = req.text or ""
+    if len(text) > _CITE_MAX_TEXT * 5:
+        return JSONResponse({"error": "文本过长（上限 %d 字符）" % (_CITE_MAX_TEXT * 5)}, status_code=413)
+    sess = None
+    if req.session_id:
+        sess = _sessions.get(req.session_id)
+        if sess is None:
+            _restore_single_session(req.session_id)
+            sess = _sessions.get(req.session_id)
+    out = _cite_resolve(text, sess)
+    out["ok"] = True
+    if req.session_id:
+        out["session_id"] = req.session_id
+    return out
+
+
+@app.get("/api/sessions/{sid}/citations")
+async def session_citations(sid: str, msg: int = -1):
+    """解析某条消息里的证据锚点（msg=-1 = 最后一条助手消息）。"""
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    msgs = _sessions[sid].get("messages") or []
+    if not msgs:
+        return JSONResponse({"error": "该会话还没有消息"}, status_code=404)
+    idx = msg if msg >= 0 else _cite_last_assistant_index(msgs)
+    if idx is None or idx < 0 or idx >= len(msgs):
+        return JSONResponse({"error": "消息下标越界", "total_messages": len(msgs)}, status_code=404)
+    m = msgs[idx]
+    if (m.get("role") or "") != "assistant":
+        return JSONResponse({"error": "只有助手消息才有证据锚点", "role": m.get("role"),
+                             "total_messages": len(msgs)}, status_code=400)
+    out = _cite_resolve(m.get("content") or "", _sessions[sid])
+    out.update({"ok": True, "session_id": sid, "msg_index": idx, "total_messages": len(msgs)})
+    return out
+
+
+# --- P1-4 会话大纲 ---
+# 会话一长就翻不动：每一轮（一条提问 + 它之后的回答）生成一条目录项，前端点一下就跳过去。
+# 过滤规则与 /api/sessions/{sid}/messages 完全一致（系统注入、工具消息不进目录）；
+# 只读、不联网、不写盘；轮数、摘要长度、扫描条数都封顶，免得大会话把面板拖垮。
+
+_OUTLINE_MAX_TURNS = 200      # 目录最多返回多少轮（超出只留最近这些轮）
+_OUTLINE_SCAN_MSGS = 4000     # 最多扫描多少条消息
+_OUTLINE_TITLE_CHARS = 60     # 提问摘要长度
+_OUTLINE_HEAD_CHARS = 100     # 回答摘要长度
+
+
+def _outline_title(text, limit: int = _OUTLINE_TITLE_CHARS):
+    """取第一条像样的行当摘要：剥掉 markdown 噪声、压空白、截断；全空返回空串。"""
+    s = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
+    for line in s.split("\n"):
+        ln = line.strip().lstrip("#>*+-•· \t").strip()
+        if not ln:
+            continue
+        ln = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", ln)        # 图片 → 去掉
+        ln = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", ln)  # 链接 → 留文字
+        ln = re.sub(r"`+", "", ln)                             # 行内代码反引号
+        ln = re.sub(r"\s+", " ", ln).strip()
+        if ln:
+            return ln[:limit]
+    return ""
+
+
+def _outline_visible_msgs(session, limit=None):
+    """筛出会出现在对话流里的消息（与 /messages 同一套过滤）。
+
+    limit 默认取模块级 _OUTLINE_SCAN_MSGS（调用时读，方便测试收紧窗口）。
+    """
+    if limit is None:
+        limit = _OUTLINE_SCAN_MSGS
+    msgs = session.get("messages") or []
+    if limit and limit > 0 and len(msgs) > limit:
+        msgs = msgs[-limit:]
+    out = []
+    for m in msgs:
+        role = m.get("role")
+        if role not in ("user", "assistant"):
+            continue
+        content = m.get("content")
+        if content is None:
+            content = m.get("text")
+        if not isinstance(content, str):
+            content = "" if content is None else str(content)
+        if content.lstrip().startswith(_INJECT_PREFIXES):
+            continue
+        item = {"role": role, "content": content, "time": m.get("time") or ""}
+        try:
+            item["tool_count"] = int(m.get("tool_count") or 0)
+        except Exception:
+            item["tool_count"] = 0
+        out.append(item)
+    return out
+
+
+def _session_outline(session):
+    """把会话切成一轮一轮，给前端做目录。
+
+    一轮 = 一条用户提问 + 它之后、下一条提问之前的全部回答。
+    提问还没被回答也建轮（正在跑的那一轮在目录里能看见）。
+    """
+    turns = []
+    leading = 0
+    for m in _outline_visible_msgs(session):
+        if m["role"] == "user":
+            turns.append({
+                "turn": len(turns) + 1,
+                "question": _outline_title(m["content"]),
+                "time": m["time"],
+                "answers": 0,
+                "answer_head": "",
+                "chars": 0,
+                "tools": 0,
+                "anchors": 0,
+            })
+            continue
+        if not turns:
+            leading += 1          # 开场白：还没有用户提问
+            continue
+        t = turns[-1]
+        t["answers"] += 1
+        t["chars"] += len(m["content"])
+        if not t["answer_head"]:
+            t["answer_head"] = _outline_title(m["content"], _OUTLINE_HEAD_CHARS)
+        try:
+            t["tools"] += int(m.get("tool_count") or 0)
+        except Exception:
+            pass
+        try:
+            t["anchors"] += len(_cite_extract(m["content"]))
+        except Exception:
+            pass
+    total_turns = len(turns)
+    hidden = 0
+    if total_turns > _OUTLINE_MAX_TURNS:
+        hidden = total_turns - _OUTLINE_MAX_TURNS
+        turns = turns[-_OUTLINE_MAX_TURNS:]
+    return {"turns": turns, "total_turns": total_turns, "leading": leading,
+            "hidden_turns": hidden, "truncated": hidden > 0}
+
+
+@app.get("/api/sessions/{sid}/outline")
+async def session_outline(sid: str):
+    """会话大纲：每条提问一轮，带回答摘要和角标，供右侧面板做可点目录。"""
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    session = _sessions[sid]
+    # 只加载一个窗口（和 /messages 一样），大会话不为了目录把整段历史解进内存
+    if not session.get("_messages_loaded"):
+        try:
+            _win = max(int(_OUTLINE_SCAN_MSGS), 200)
+            if len(session.get("messages") or []) < _win:
+                session["messages"] = _load_session_messages(sid, limit=_win)
+        except Exception:
+            pass
+    data = _session_outline(session)
+    data.update({"ok": True, "session_id": sid, "title": session.get("title") or ""})
+    return data
+
+
+# --- 待办 ---
+
+@app.get("/api/todos/{sid}")
+async def get_todos(sid: str):
+    """获取会话待办（P1-1 起：内存 + state.db 双读，刷新/重启不丢）"""
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    session = _sessions[sid]
+    return {"todos": _session_todos(session),
+            "revision": int(session.get("todos_revision", 0) or 0)}
 
 @app.get("/api/sessions/{sid}/progress")
 async def get_progress(sid: str):
@@ -11256,6 +17852,9 @@ async def get_progress(sid: str):
         "is_running": bool(session.get("running_agent") or session.get("running_task")),
         # 2026-08-23: 最近一次工具调用（刷新后状态条显示 agent 在干什么）
         "last_tool": _last_tool_of(sid),
+        # P1-1(2026-09-23): 目标条数据随进度接口一起下发 —— 前端刷新/切会话时
+        # 本来就要拉这个接口，零新增请求即可恢复目标 + 待办。
+        **_goal_payload(session),
         "session_id": sid,
     }
 
@@ -11293,10 +17892,10 @@ async def wakeup_session(sid: str):
 def _memory_api_token() -> str:
     """P1-10(2026-08-13): 记忆写 API 轻量鉴权 token。
 
-    服务首次启动时生成随机 token 持久化到 hermes_home/memory_api_token。
+    服务首次启动时生成随机 token 持久化到 memomics_home/memory_api_token。
     同源 WebUI 通过 GET /api/memory 拿到 token 后随写请求携带。
     """
-    _tok_path = os.path.join(HERMES_HOME_DIR, "memory_api_token")
+    _tok_path = os.path.join(MEMOMICS_HOME_DIR, "memory_api_token")
     try:
         if os.path.exists(_tok_path):
             with open(_tok_path, encoding="utf-8") as f:
@@ -11313,19 +17912,89 @@ def _memory_api_token() -> str:
         pass
     return _tok
 
-# 记忆文件限额（与 hermes_home/config.yaml memory 段保持一致）
-_MEMORY_CHAR_LIMITS = {"USER.md": 10000, "MEMORY.md": 10000}
+# 记忆文件限额：真相源是 memomics_home/config.yaml 的 memory_char_limit / user_char_limit
+# （MemOmics MemoryStore 用的就是这两个数）。
+# 2026-09-23 修：原来硬编码 10000，而 config.yaml 写的是 30000 —— 于是记忆栏的
+# 「追加/覆盖」在这台机器上 100% 被 413 挡死（MEMORY.md 早已 29530 字符），
+# 用户看到的就是"添加完全没用"。注释当时声称"与 config 保持一致"，其实从来没读过 config。
+_MEMORY_LIMIT_KEYS = {"USER.md": "user_char_limit", "MEMORY.md": "memory_char_limit"}
+_MEMORY_DEFAULT_LIMIT = 30000
+
+
+def _memory_char_limit(filename: str) -> int:
+    """取记忆文件限额：config.yaml 优先，读不到就退回默认值（绝不再硬编码一个小数）。"""
+    _name = os.path.basename(str(filename or "MEMORY.md"))
+    _key = _MEMORY_LIMIT_KEYS.get(_name, "memory_char_limit")
+    try:
+        _cfg, _raw = _memomics_config_read()
+        _mem = (_cfg or {}).get("memory") or {}
+        _val = _mem.get(_key) or _mem.get("memory_char_limit") or _MEMORY_DEFAULT_LIMIT
+        _val = int(_val)
+        return _val if _val > 0 else _MEMORY_DEFAULT_LIMIT
+    except Exception:
+        return _MEMORY_DEFAULT_LIMIT
+
+
+def _memory_usage():
+    """记忆文件占用/限额（面板占用条 + 治理体检共用；限额真相源=config.yaml）。"""
+    mem_dir = os.path.join(MEMOMICS_HOME_DIR, "memories")
+    out = {}
+    for name in ("MEMORY.md", "USER.md"):
+        path = os.path.join(mem_dir, name)
+        chars = 0
+        if os.path.isfile(path):
+            try:
+                with open(path, encoding="utf-8", errors="replace") as f:
+                    chars = len(f.read())
+            except Exception:
+                chars = 0
+        limit = _memory_char_limit(name)
+        out[name] = {"chars": chars, "limit": limit,
+                     "pct": round(100.0 * chars / limit, 1) if limit else None,
+                     "headroom": max(0, limit - chars)}
+    return out
 
 
 @app.post("/api/memory/govern")
-async def memory_govern():
-    """记忆治理：重新扫描打分并生成索引（2026-08-14）。
+async def memory_govern(payload: dict = None, request: Request = None):
+    """记忆治理（2026-09-24 重做 —— 原实现只重算索引，点了等于没点）。
 
-    只读操作（不迁移条目）——L1/L2/L3 实际流转需显式 apply 才执行。"""
+    mode="dry"（默认，只读）：占用/余量、分层、分数分布、可归档候选、预计释放字符。
+    mode="apply"：把"自己标了低价值"（条目开头 [imp:x] ≤ threshold）的条目归档到
+        memories/archive/YYYY-MM.md，原位置留一行索引；动前整档备份到
+        memories/.backup/<ts>/；内容永不删除。apply 需要 X-Memory-Token。
+    旧前端不带 body 调用 → 走 dry，纯只读，向后兼容。
+    """
+    payload = payload or {}
+    mode = str(payload.get("mode", "dry")).lower()
+    try:
+        threshold = float(payload.get("threshold", 0.7))
+    except Exception:
+        threshold = 0.7
+    limits = {k: v["limit"] for k, v in _memory_usage().items()}
     try:
         from memomics.memory_governance import governor
-        idx = governor.init_index(verbose=False)
-        return {"ok": True, "stats": idx["stats"], "total": sum(idx["stats"].values())}
+        if mode in ("apply", "run"):
+            _token = (request.headers.get("x-memory-token", "") if request else "") \
+                or str(payload.get("token", ""))
+            if _token != _memory_api_token():
+                return JSONResponse({"error": "Unauthorized: missing/invalid memory API token"},
+                                    status_code=401)
+            _target = os.path.join(MEMOMICS_HOME_DIR, "memories", "MEMORY.md")
+            _denied = _sandbox_precheck("fs.write", _target, [MEMOMICS_DIR], "memory.govern")
+            if _denied:
+                return JSONResponse({"error": "sandbox denied: %s" % _denied}, status_code=403)
+            rep = governor.archive_low_value(threshold=threshold, dry_run=False,
+                                             limits=limits, force=bool(payload.get("force")))
+            rep["mode"] = "apply"
+        else:
+            rep = governor.archive_low_value(threshold=threshold, dry_run=True,
+                                             limits=limits)
+            rep["mode"] = "dry"
+        rep["usage"] = _memory_usage()
+        if not rep.get("ok", True):
+            return JSONResponse(rep, status_code=409)
+        return rep
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
@@ -11333,8 +18002,15 @@ async def memory_govern():
 @app.get("/api/memory")
 async def get_memory():
     """读取外置记忆内容（响应携带写 API token，供同源页面使用）"""
-    mem_dir = os.path.join(HERMES_HOME_DIR, "memories")
-    result = {"entries": [], "api_token": _memory_api_token()}
+    mem_dir = os.path.join(MEMOMICS_HOME_DIR, "memories")
+    result = {"entries": [], "api_token": _memory_api_token(),
+              "usage": _memory_usage()}
+    try:
+        from memomics.memory_governance import governor
+        result["parsed"] = governor.list_entries()
+    except Exception as e:
+        result["parsed"] = {}
+        result["parsed_error"] = str(e)
     # MEMORY.md — agent 自己的记忆
     memory_md = os.path.join(mem_dir, "MEMORY.md")
     if os.path.exists(memory_md):
@@ -11359,7 +18035,7 @@ async def write_memory(payload: dict, request: Request):
     _token = request.headers.get("x-memory-token", "") or str(payload.get("token", ""))
     if _token != _memory_api_token():
         return JSONResponse({"error": "Unauthorized: missing/invalid memory API token"}, status_code=401)
-    mem_dir = os.path.join(HERMES_HOME_DIR, "memories")
+    mem_dir = os.path.join(MEMOMICS_HOME_DIR, "memories")
     os.makedirs(mem_dir, exist_ok=True)
     target = payload.get("target", "MEMORY.md")  # MEMORY.md or USER.md
     content = payload.get("content", "")
@@ -11368,8 +18044,8 @@ async def write_memory(payload: dict, request: Request):
     if not target.endswith(".md"):
         return JSONResponse({"error": "Only .md files allowed"}, status_code=400)
     file_path = os.path.join(mem_dir, os.path.basename(target))
-    # 限额检查（防记忆无限膨胀，对齐 MemoryStore char limit）
-    _limit = _MEMORY_CHAR_LIMITS.get(os.path.basename(target), 10000)
+    # 限额检查（防记忆无限膨胀；数值与 MemOmics MemoryStore 同源：config.yaml）
+    _limit = _memory_char_limit(target)
     _existing = ""
     if mode != "overwrite" and os.path.exists(file_path):
         with open(file_path, encoding="utf-8", errors="replace") as f:
@@ -11377,9 +18053,15 @@ async def write_memory(payload: dict, request: Request):
     _new_total = len((_existing + "\n\n" + content) if _existing else content)
     if _new_total > _limit:
         return JSONResponse({
-            "error": f"超出记忆限额：{_new_total}/{_limit} 字符。请先删除/压缩旧条目再写入。",
+            "error": (f"超出记忆限额：{_new_total}/{_limit} 字符"
+                      f"（限额取自 memomics_home/config.yaml 的 memory_char_limit / user_char_limit）。"
+                      f"请先删除或压缩旧条目，或用「🧹 治理」归档低价值条目再写入。"),
             "current": len(_existing), "limit": _limit,
         }, status_code=413)
+    # P2-4：写动作过沙箱门（观察模式不拦；强制 fs.write 后越界/无授权 -> 403 且不落盘）
+    _denied = _sandbox_precheck("fs.write", file_path, [MEMOMICS_DIR], "memory.write")
+    if _denied:
+        return JSONResponse({"error": "sandbox denied: %s" % _denied}, status_code=403)
     if mode == "overwrite":
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
@@ -11387,6 +18069,39 @@ async def write_memory(payload: dict, request: Request):
         with open(file_path, "a", encoding="utf-8") as f:
             f.write("\n\n" + content)
     return {"ok": True, "path": file_path.replace("\\", "/"), "size": os.path.getsize(file_path)}
+
+
+@app.delete("/api/memory/entry")
+async def memory_delete_entry(payload: dict = None, request: Request = None):
+    """删除单条记忆（面板逐条 🗑）—— 2026-09-24 用户要求"记忆支持删除"。
+
+    与"治理归档"不同，这是真删，所以：token 鉴权 + 服务端先整档备份 + 未知文件/越界
+    一律不动字节。路由必须注册在 /api/memory/{filename} 之前，否则 "entry" 会被当成文件名。
+    """
+    payload = payload or {}
+    _token = (request.headers.get("x-memory-token", "") if request else "") \
+        or str(payload.get("token", ""))
+    if _token != _memory_api_token():
+        return JSONResponse({"error": "Unauthorized: missing/invalid memory API token"},
+                            status_code=401)
+    target = os.path.basename(str(payload.get("target", "MEMORY.md")))
+    if target not in ("MEMORY.md", "USER.md"):
+        return JSONResponse({"error": "只允许 MEMORY.md / USER.md"}, status_code=400)
+    file_path = os.path.join(MEMOMICS_HOME_DIR, "memories", target)
+    _denied = _sandbox_precheck("fs.write", file_path, [MEMOMICS_DIR], "memory.entry_delete")
+    if _denied:
+        return JSONResponse({"error": "sandbox denied: %s" % _denied}, status_code=403)
+    try:
+        from memomics.memory_governance import governor
+        rep = governor.delete_entry(target, payload.get("index"))
+        rep["usage"] = _memory_usage()
+        if not rep.get("ok"):
+            _err = str(rep.get("error", ""))
+            _code = 404 if ("越界" in _err or "未知" in _err or "不存在" in _err) else 400
+            return JSONResponse(rep, status_code=_code)
+        return rep
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 
 @app.delete("/api/memory/{filename}")
@@ -11397,9 +18112,13 @@ async def delete_memory(filename: str, request: Request):
         return JSONResponse({"error": "Unauthorized: missing/invalid memory API token"}, status_code=401)
     if not filename.endswith(".md"):
         return JSONResponse({"error": "Only .md files"}, status_code=400)
-    mem_dir = os.path.join(HERMES_HOME_DIR, "memories")
+    mem_dir = os.path.join(MEMOMICS_HOME_DIR, "memories")
     file_path = os.path.join(mem_dir, os.path.basename(filename))
     if os.path.exists(file_path):
+        # P2-4：删动作过沙箱门（观察模式不拦；强制 fs.delete 后越界/无授权 -> 403）
+        _denied = _sandbox_precheck("fs.delete", file_path, [MEMOMICS_DIR], "memory.delete")
+        if _denied:
+            return JSONResponse({"error": "sandbox denied: %s" % _denied}, status_code=403)
         os.remove(file_path)
         return {"ok": True}
     return JSONResponse({"error": "Not found"}, status_code=404)
@@ -11565,6 +18284,18 @@ async def ws_endpoint(ws: WebSocket):
                 }, ensure_ascii=False))
                 continue
 
+            # 后台任务面板订阅/退订：订阅当场回一份快照，之后由扫描循环按变化推
+            if msg_type == "task_subscribe":
+                _TASK_WS_CLIENTS.add(ws)
+                _ensure_task_watch()
+                snapshot = _tasks_payload(limit=100, refresh=1)
+                snapshot["type"] = "tasks"
+                await ws.send_text(json.dumps(snapshot, ensure_ascii=False))
+                continue
+            if msg_type == "task_unsubscribe":
+                _TASK_WS_CLIENTS.discard(ws)
+                continue
+
             sid = msg.get("session_id")
             prev_sid = current_sid  # 保存上一轮的 sid（switch_session 需要）
             session = _get_or_create_session(sid)
@@ -11611,6 +18342,27 @@ async def ws_endpoint(ws: WebSocket):
             elif msg_type == "chat":
                 user_text = msg.get("message", msg.get("content", "")).strip()
                 image_urls = msg.get("images", []) or []
+                # P3(2026-09-22): 用户直接回消息 = 对确认弹窗的答复 → 立即解除执行门禁
+                # （弹窗提交走 /api/ask_form/answer 后也把答复当消息发回，会命中这里）
+                try:
+                    _pf_sid = msg.get("session_id") or session.get("id", "")
+                    from webui import enforcement as _enf_c
+                    _es_c = _enf_c.get_enforcement(_pf_sid)
+                    if _enf_c.clear_awaiting_form(_es_c, "", {"selected": [], "other": user_text[:200],
+                                                              "question": getattr(_es_c, "awaiting_form_question", "")}):
+                        _pq_list = session.get("_pending_questions") or []
+                        for _pq in reversed(_pq_list):
+                            if not _pq.get("answered"):
+                                _pq["answered"] = True
+                                _pq["answer"] = {"selected": [], "other": user_text[:200],
+                                                 "via": "chat"}
+                                break
+                    # 预置门禁（高代价任务还没弹表单）：用户这一轮消息本身就是对
+                    # "要做什么"的补充 → 解除，避免同一件事反复追问。
+                    if _enf_c.clear_intent_confirm(_es_c):
+                        session["_intent_confirmed"] = True
+                except Exception:
+                    pass
                 # 允许仅图片无文字
                 if not user_text and not image_urls:
                     continue
@@ -11699,7 +18451,14 @@ async def ws_endpoint(ws: WebSocket):
                 # 同一 agent 上交错流, single-writer 护栏砍掉在飞流导致工具参数被截断为空。
                 # 在 self_intro/agent创建失败/run_agent finally 三处清除。
                 session["_user_turn_active"] = True
-                # state.db 持久化由 Hermes 框架 _persist_session 自动完成（agent 带 session_db），
+                # P2-2：显式回合记账（默认只记账，不改行为；同一会话第二个回合起飞时计 conflicts）。
+                # P2-2 补丁：MEMOMICS_THREAD_SERIALIZE=1 时先过串行化门——等同会话上一个回合收尾
+                # 再开新回合，conflicts 归零；默认关 = 立刻返回、零开销、行为与以前完全一致。
+                if _thread_state is not None:
+                    if await _thread_state.begin_turn_serialized(session["id"], source="user") is None:
+                        logger.warning("[ThreadState] session %s: 串行化门等待超时，按原行为继续",
+                                       session["id"][:12])
+                # state.db 持久化由 MemOmics 框架 _persist_session 自动完成（agent 带 session_db），
                 # 手动写入会双写（2026-08-13 实测同秒重复 2 份 → 刷新后回复重复显示）
 
                 # RunGate（P1-A 接线，2026-08-12）：用户主动发消息 = 新指令 →
@@ -11812,55 +18571,21 @@ async def ws_endpoint(ws: WebSocket):
 
                 # RED 必触发预检在 _build_skill_injection 内部完成：
                 # chat/self_intro 意图也调用（命中 RED 触发词 → 返回强约束注入；
-                # 未命中 → chat 返回空字符串，self_intro 由下方快速回复处理）
-                if _intent == "self_intro":
-                    _skill_ctx = None
-                else:
-                    _skill_ctx = _build_skill_injection(_intent, domain or session.get("domain", ""), session.get("lang", "zh"), user_text)
+                # 未命中 → chat 返回空字符串，self_intro 返回「按语境作答 + 事实参考」）
+                # P0-3: 显式 /skill-name 调用 —— 用户点名的技能优先级最高（高于置顶与 RED）
+                _explicit_inv = _parse_skill_invocations(user_text)
+                # 2026-09-26: self_intro 不再走"写好的介绍"快速回复，和别的意图一样交给
+                # agent LLM 回答。这里统一构建注入：self_intro 分支现在给的是
+                # "按语境作答 + 事实参考"，不是逐字文案。
+                _inj_intent = _intent
+                _skill_ctx = _build_skill_injection(_inj_intent, domain or session.get("domain", ""), session.get("lang", "zh"), user_text,
+                                                  pinned=_pinned_skills_get(session["id"]),
+                                                  explicit=_explicit_inv)
+                _pinned_expect_emit(session, user_text)  # P8: 置顶技能触发词命中 → 前端标记「本轮应加载」
+                _red_hit_emit(session, user_text)        # P0-3: RED 命中原因 → 前端 chip 显示「为什么」
+                _skill_invoke_emit(session, _explicit_inv)  # P0-3: 显式点名结果（命中/未知/歧义）→ 前端回显
                 logger.info(f"Session {session['id']}: intent={_intent} conf={_intent_conf:.2f} domain={domain or session.get('domain','')}")
 
-                # === 自我介绍快速回复（绕过 agent LLM）===
-                if _intent == "self_intro":
-                    _intro_zh = (
-                        "我是 **MemOmics**，基于 Hermes 框架的自进化多组学生信分析平台。\n\n"
-                        "我不是聊天机器人，而是能帮你**跑完完整生信分析**的自主 Agent。给我数据，我自己扫描、分析、出报告，你不用写一行代码。\n\n"
-                        "## 核心能力\n\n"
-                        "**数据扫描**：自动识别 scRNA-seq / scATAC-seq / 空间转录组 / Bulk RNA-seq 等数据格式，检测物种、组织、细胞数、注释状态，推荐最佳分析路径。\n\n"
-                        "**完整分析流程**：QC（去污染→双胞过滤→归一化）→ 降维 → 聚类 → 细胞注释 → 差异表达 → 通路富集 → 细胞通讯 → 轨迹推断 → SCENIC 转录因子调控 → 生存分析 → 报告生成，全流程自动走完。\n\n"
-                        "**R + Python 双引擎**：根据数据规模智能推荐——大于 60 万细胞自动切换 Python/Scanpy，默认用 R/Seurat。缺包时自动安装（BiocManager/remotes/pip/conda），不用你操心环境。\n\n"
-                        "**内置 270+ 生信技能模板**：Seurat、Scanpy、CellChat、Monocle3、SCENIC、CellBender、Harmony、squidpy 等覆盖主流分析场景，分析时自动调用对应技能的参数和模板，不是从零写代码。\n\n"
-                        "**铁轨审查机制**：每个分析步骤前后自动审查——环境检查 → 缺失包安装 → 参数校验 → 结果质量评估 → 图表检查 → 代码审查。不通过则阻断纠正，不会带着错误继续往下跑。\n\n"
-                        "**知识库驱动**：内置生信知识库（物种/组织/方向三维索引），分析时自动检索相关生物学背景，结合文献先验知识做注释和解读。\n\n"
-                        "**结果管理**：分析结果按 `results/<模块>/<方法>/{figures,results,scripts,data}` 分目录存储，每次分析可追溯、可复现。\n\n"
-                        "有什么需要帮忙的，直接告诉我！"
-                    )
-                    _intro_en = (
-                        "I'm **MemOmics**, a self-evolving multi-omics bioinformatics analysis platform powered by the Hermes framework.\n\n"
-                        "I'm not a chatbot — I'm an autonomous Agent that can run complete bioinformatics analyses for you. Give me your data, and I'll scan, analyze, and generate reports. You don't need to write a single line of code.\n\n"
-                        "## Core Capabilities\n\n"
-                        "**Data Scanning**: Automatically identifies scRNA-seq / scATAC-seq / Spatial Transcriptomics / Bulk RNA-seq formats, detecting species, tissue, cell count, and annotation status to recommend optimal analysis paths.\n\n"
-                        "**Complete Analysis Pipeline**: QC (decontamination → doublet filtering → normalization) → Dimensionality Reduction → Clustering → Cell Annotation → Differential Expression → Pathway Enrichment → Cell Communication → Trajectory Inference → SCENIC TF Regulation → Survival Analysis → Report Generation — fully automated.\n\n"
-                        "**R + Python Dual Engine**: Intelligently selects R/Seurat by default, auto-switches to Python/Scanpy for datasets >600K cells. Auto-installs missing packages (BiocManager/remotes/pip/conda).\n\n"
-                        "**270+ Built-in Bioinformatics Skill Templates**: Seurat, Scanpy, CellChat, Monocle3, SCENIC, CellBender, Harmony, squidpy covering mainstream analysis scenarios. Skills are called with proper parameters — never writing code from scratch.\n\n"
-                        "**Rail Review Mechanism**: Each analysis step undergoes pre/post review — environment check → missing package install → parameter validation → result quality assessment → figure inspection → code review. Blocked and corrected if anything fails.\n\n"
-                        "**Knowledge Base Driven**: Built-in bioinformatics knowledge base (species/tissue/direction 3D index) for automatic biological context retrieval, combining literature priors for annotation and interpretation.\n\n"
-                        "**Result Management**: Results stored under `results/<module>/<method>/{figures,results,scripts,data}` — traceable and reproducible for every analysis.\n\n"
-                        "What can I help you with? Just let me know!"
-                    )
-                    _intro = _intro_en if session.get("lang") == "en" else _intro_zh
-                    session["messages"].append({"role": "assistant", "content": _intro, "time": datetime.now().strftime("%H:%M:%S")})
-                    session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    _persist_session_message(session, "assistant", _intro)
-                    await ws.send_text(json.dumps({"type": "session", "session_id": session["id"], "title": session["title"]}, ensure_ascii=False))
-                    await ws.send_text(json.dumps({"type": "thinking", "content": _pt(session, "understanding") + "...", "session_id": session["id"]}, ensure_ascii=False))
-                    await ws.send_text(json.dumps({"type": "progress", "step": _pt(session, "thinking"), "status": "pending", "detail": _pt(session, "understanding"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False))
-                    await asyncio.sleep(1.0)  # 让前端有时间渲染思考状态
-                    await ws.send_text(json.dumps({"type": "progress", "step": _pt(session, "thinking"), "status": "done", "detail": _pt(session, "completed"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False))
-                    await ws.send_text(json.dumps({"type": "reasoning", "content": _pt(session, "intro_reasoning"), "session_id": session["id"]}, ensure_ascii=False))
-                    await ws.send_text(json.dumps({"type": "delta", "content": _intro, "session_id": session["id"]}, ensure_ascii=False))
-                    await ws.send_text(json.dumps({"type": "complete", "content": _intro, "session_id": session["id"]}, ensure_ascii=False))
-                    session["_user_turn_active"] = False  # 并发护栏: 快速回复路径结束后清除
-                    continue  # 跳过 agent 调用
 
                 # 发送 session_id（thinking 已在消息到达时即时发送）
                 _session_emit(session, {"type": "session", "session_id": session["id"], "title": session["title"]})
@@ -11880,6 +18605,8 @@ async def ws_endpoint(ws: WebSocket):
                     except Exception as e:
                         _session_emit(session, {"type": "error", "content": f"Agent 创建失败: {e}"})
                         session["_user_turn_active"] = False  # 并发护栏: 失败路径也需清除
+                        if _thread_state is not None:
+                            _thread_state.mark_turn_end(session["id"])
                         continue
 
                 # 清除可能残留的中断标志（上一个 turn 完成后未正确重置会导致新 turn 立即退出）
@@ -11904,7 +18631,7 @@ async def ws_endpoint(ws: WebSocket):
 
                 # 设置线程级会话上下文（纯线程隔离，避免多会话竞态）
                 from memomics.bio_tools.debate_analysis import set_session_context
-                set_session_context(sid=session["id"], results_dir=session.get("results_dir", ""))
+                _set_debate_session_context(session)
                 # 注意：不再写 os.environ，多会话并发时 os.environ 会串会话
 
                 # 注入 results_dir 到 Agent 系统提示词，确保输出文件写到正确位置
@@ -11931,7 +18658,7 @@ async def ws_endpoint(ws: WebSocket):
                 # light 只是不再注入 KB/领域尾部；heavy 的 KB 注入已走 _kb_tail。
                 _soul_detail = ""
                 try:
-                    _detail_path = os.path.join(HERMES_HOME_DIR, "SOUL-detail.md")
+                    _detail_path = os.path.join(MEMOMICS_HOME_DIR, "SOUL-detail.md")
                     if os.path.isfile(_detail_path):
                         with open(_detail_path, encoding="utf-8") as _f:
                             _soul_detail = _f.read()
@@ -12024,7 +18751,7 @@ async def ws_endpoint(ws: WebSocket):
                         # 2026-08-16 修订(memomics-2274ab75 用户反馈):
                         #   - 拦截范围限定"单轮"：每轮新用户消息都会清零 _tool_dedup ——
                         #     用户合法地反复重跑相同代码（改图改很多遍）不受任何限制
-                        #   - 记录带 tid：hermes 对同一调用会触发两次回调(预检+执行worker)，
+                        #   - 记录带 tid：memomics 对同一调用会触发两次回调(预检+执行worker)，
                         #     同一调用的第二次触发不算重复，只有"别的调用"提交相同代码才拦截
                         #   - 跳过的调用以非零退出码结束(status=error)，模型不会再误报"已生成"
                         _dedup = _s.setdefault("_tool_dedup", {})
@@ -12149,6 +18876,17 @@ async def ws_endpoint(ws: WebSocket):
                         _s["_live_tool_ts"] = time.time()
                         _s.pop("_live_tool_warned", None)  # 每个工具各自一次 30min 长工具提醒
                         _session_emit(_s, {"type": "tool_start", "tool": tool_name, "args": args or {}, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
+                        # P1-2(2026-09-23): 改动复核 —— 执行前抓「改前」快照（此时文件尚未被改）
+                        try:
+                            _snapshot_before_change(_s, tool_name, args)
+                        except Exception as _e_snap:
+                            logger.warning(f"[changes] 快照失败: {_e_snap}")
+                        # P8: 记录本会话实际加载过的 skill（前端徽标 + 每轮审计数据源）
+                        try:
+                            if tool_name == "skill_view" and isinstance(args, dict) and args.get("name"):
+                                _skill_usage_note(_s["id"], str(args["name"]), _s)
+                        except Exception:
+                            pass
 
                         # 问题4: 激活进度时间线 — 工具开始时推送进度
                         _send_progress(_pt(_s, "executing") + ": " + tool_name, "pending", tool_name)
@@ -12192,7 +18930,56 @@ async def ws_endpoint(ws: WebSocket):
                         _s["_turn_activity_ts"] = time.time()
                         _s["_live_tool"] = ""
                         _s["_live_tool_ts"] = time.time()
-                        _session_emit(_s, {"type": "tool_complete", "tool": tool_name, "result": result_str[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
+                        _ev_complete = {"type": "tool_complete", "tool": tool_name, "result": result_str[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]}
+                        # 2026-09-18: 辩论完成 → 事件里带上完整辩论归档，前端据此渲染「辩论过程」表格
+                        # （tool_complete 的 result 只有 500 字，装不下 7 位编辑的完整论点）
+                        if tool_name == "debate_analysis":
+                            try:
+                                _deb = _load_latest_debate(_s["id"])
+                                if _deb.get("ok"):
+                                    _ev_complete["debate"] = _deb
+                                else:
+                                    _ev_complete["debate_error"] = _deb.get("error", "")
+                            except Exception:
+                                pass
+                        _session_emit(_s, _ev_complete)
+                        # P1-2(2026-09-23): 改动复核 —— 工具跑完结算 before/after，产出 diff 并推送
+                        try:
+                            _finalize_file_change(_s, tool_name, args)
+                        except Exception as _e_chg:
+                            logger.warning(f"[changes] 结算失败: {_e_chg}")
+                        # P2(2026-09-22): 裁决 → 会话待办（辩论结果必须进入下一步进程）
+                        if tool_name == "debate_analysis":
+                            try:
+                                from webui import enforcement as _enf_plan
+                                _es_plan = _enf_plan.get_enforcement(_s["id"])
+                                _dt = list(getattr(_es_plan, "debate_todos", []) or [])
+                                _plan = dict(getattr(_es_plan, "debate_plan", {}) or {})
+                                if _dt:
+                                    # 注意：MemOmics TodoStore 只有 {id, content, status} 三字段，
+                                    # 且没有 add()（只有 write(merge=True)）——写错会静默丢失待办。
+                                    if hasattr(_agent, "_todo_store") and _agent._todo_store is not None:
+                                        # 别再把 status 无条件写成 pending：write(merge=True) 见到
+                                        # status 就覆盖，于是每跑一次裁决就把 agent 已标记的
+                                        # completed 打回未完成 —— 裁决待办做完也不划掉就是这么来的
+                                        # （用户 2026-09-30 报的这份 3 条全 ⬜ 的待办）。
+                                        # _seed_agent_todos 只在源里真有 status 时才写它，
+                                        # 而 _dt 的 status 由 sync_debate_todos 从 store 同步过来，
+                                        # 已经是可信值。
+                                        _seed_agent_todos(_agent, _dt, "debate")
+                                        _cur = [t for t in _agent._todo_store.read() if isinstance(t, dict)]
+                                        _todos_pub = [{"id": t.get("id", ""),
+                                                       "title": t.get("title", t.get("content", "")),
+                                                       "status": t.get("status", "pending"),
+                                                       "module": t.get("module", "")} for t in _cur]
+                                    else:
+                                        _todos_pub = [{"id": t.get("id", ""), "title": t.get("title", ""),
+                                                       "status": t.get("status", "pending"), "module": "debate"} for t in _dt]
+                                    _session_emit(_s, {"type": "todos_update", "todos": _todos_pub,
+                                                       "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
+                                    logger.info(f"[DEBATE-PLAN] {len(_dt)} 条裁决待办已进入会话待办 decision={( _plan.get('decision') or '')[:60]}")
+                            except Exception as _e_plan:
+                                logger.warning(f"[DEBATE-PLAN] 待办同步失败: {_e_plan}")
                         # 问题4: 激活进度时间线 — 工具完成时推送进度
                         _send_progress(_pt(_s, "tool_completed") + ": " + tool_name, "done", tool_name)
                         # 2026-08-16 任务类型：管线启动命令 = 长任务运行时证据
@@ -12244,7 +19031,7 @@ async def ws_endpoint(ws: WebSocket):
                             import json as _tcl_json
                             import time as _tcl_time
                             import os as _tcl_os  # 2026-08-20: 局部别名, 规避闭包作用域 os 未绑定
-                            _db_path = _tcl_os.path.join(HERMES_HOME_DIR, "state.db")
+                            _db_path = _tcl_os.path.join(MEMOMICS_HOME_DIR, "state.db")
                             _args_json = _tcl_json.dumps(args, ensure_ascii=False, default=str) if args else ""
                             _result_trunc = result_str[:2000]  # 截断长结果
                             import sqlite3 as _tcl_sqlite
@@ -12283,29 +19070,24 @@ async def ws_endpoint(ws: WebSocket):
                                             _s["_pipeline_todos"] = result_obj.get("todos", result_obj.get("modules", []))
                                             # 如果有 todos，写入 store
                                             if result_obj.get("todos"):
-                                                for td in result_obj["todos"]:
-                                                    _agent._todo_store.add({
-                                                        "title": td.get("title", td.get("name", "")),
-                                                        "module": td.get("module", td.get("id", "")),
-                                                        "skill": td.get("skill", ""),
-                                                        "status": "pending",
-                                                        "description": td.get("description", td.get("desc", ""))
-                                                    })
-                                    except Exception:
-                                        pass
+                                                _seed_agent_todos(_agent, result_obj["todos"], "pipe")
+                                    except Exception as _e_seed:
+                                        # 以前这里是 except: pass —— add() 不存在被静默吞掉，
+                                        # 待办进不了 store，前端永远显示全 pending。别再吞了。
+                                        logger.warning(f"[todos] pipeline 待办写入 store 失败: {_e_seed}")
                                 # ⚡ 桥接: todo_manage → _agent._todo_store
                                 if tool_name == "todo_manage" and hasattr(_agent, "_todo_store"):
                                     try:
                                         result_obj = json.loads(result_str) if isinstance(result_str, str) else result_str
                                         if isinstance(result_obj, dict) and result_obj.get("action") in ("create",) and result_obj.get("todos"):
-                                            hermes_todos = []
+                                            memomics_todos = []
                                             for i, td in enumerate(result_obj["todos"]):
-                                                hermes_todos.append({
+                                                memomics_todos.append({
                                                     "id": td.get("id", f"todo_{i}"),
                                                     "content": f"[{td.get('module_id','')}] {td.get('substep_name','')}",
                                                     "status": td.get("status", "pending"),
                                                 })
-                                            _agent._todo_store.write(hermes_todos)
+                                            _agent._todo_store.write(memomics_todos)
                                             # 同时缓存为 pipeline_todos 供 skill 映射
                                             _s["_pipeline_todos"] = result_obj["todos"]
                                         # 兜底: todo_manage 未传 modules → 0个todo → 自动生成默认待办
@@ -12316,14 +19098,14 @@ async def ws_endpoint(ws: WebSocket):
                                                     from memomics.memomics_pipeline import modules_to_todos
                                                     default_ids = ["01","02","03","04","05"]
                                                     pipe_todos = modules_to_todos(default_ids)
-                                                    hermes_todos = []
+                                                    memomics_todos = []
                                                     for i, td in enumerate(pipe_todos):
-                                                        hermes_todos.append({
+                                                        memomics_todos.append({
                                                             "id": td.get("id", f"todo_{i}"),
                                                             "content": td.get("title", td.get("name", f"Module {td.get('module','')}-{td.get('substep','')}")),
                                                             "status": "pending",
                                                         })
-                                                    _agent._todo_store.write(hermes_todos)
+                                                    _agent._todo_store.write(memomics_todos)
                                                     session["_pipeline_todos"] = pipe_todos
                                                     logger.info(f"[TODO-FALLBACK] 自动生成 {len(pipe_todos)} 个默认待办")
                                                 except Exception:
@@ -12337,7 +19119,7 @@ async def ws_endpoint(ws: WebSocket):
                                     if isinstance(t, str):
                                         store_todos.append({"title": t, "status": "pending", "skill": "", "module": ""})
                                     elif isinstance(t, dict):
-                                        # Hermes TodoStore 格式: {id, content, status} → {title, status, skill, module}
+                                        # MemOmics TodoStore 格式: {id, content, status} → {title, status, skill, module}
                                         if "content" in t and "title" not in t:
                                             store_todos.append({
                                                 "title": t.get("content", ""),
@@ -12378,7 +19160,17 @@ async def ws_endpoint(ws: WebSocket):
                                                     if best:
                                                         st["skill"] = best.get("skill", "")
                                                         st["module"] = best.get("module", "")
-                                if todos and len(todos) > 0:
+                                # 空清单也要推（见 _should_emit_todos）：清空必须让前端知道
+                                if _should_emit_todos(todos, session.get("todos")):
+                                    # P2(2026-09-22): 裁决待办完成状态回写（blocks 硬约束据此解除）
+                                    try:
+                                        from webui import enforcement as _enf_sync
+                                        _n_sync = _enf_sync.sync_debate_todos(
+                                            _enf_sync.get_enforcement(session["id"]), todos)
+                                        if _n_sync:
+                                            logger.info(f"[DEBATE-PLAN] 裁决待办状态同步 {_n_sync} 条")
+                                    except Exception:
+                                        pass
                                     _session_emit(session, {"type": "todos_update", "todos": todos, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                             except Exception:
                                 pass
@@ -12446,14 +19238,14 @@ async def ws_endpoint(ws: WebSocket):
                         pass
 
                 def notice_clear_cb(key, _s=session):
-                    """Hermes notice_clear_callback: 清除前端对应的通知"""
+                    """MemOmics notice_clear_callback: 清除前端对应的通知"""
                     try:
                         _session_emit(_s, {"type": "notice_clear", "key": str(key), "session_id": _s["id"]})
                     except Exception:
                         pass
 
                 def tool_gen_cb(tool_name, partial_args="", _s=session):
-                    """Hermes tool_gen_callback: 工具参数生成中实时回调"""
+                    """MemOmics tool_gen_callback: 工具参数生成中实时回调"""
                     try:
                         _session_emit(_s, {"type": "tool_gen", "tool": tool_name, "partial": str(partial_args)[:300], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                     except Exception:
@@ -12464,7 +19256,7 @@ async def ws_endpoint(ws: WebSocket):
                         _s["_turn_activity_ts"] = time.time()
                     except Exception:
                         pass
-                    """Hermes tool_progress_callback: 工具执行进度更新"""
+                    """MemOmics tool_progress_callback: 工具执行进度更新"""
                     try:
                         # 问题9: 翻译英文事件名为会话语言
                         msg_str = str(progress_msg)
@@ -12588,7 +19380,7 @@ async def ws_endpoint(ws: WebSocket):
                                 try:
                                     _recent_files = []
                                     _scan_dirs = []
-                                    # 用户指定的分析目录（如 F:/CellBender_v2）
+                                    # 用户指定的分析目录（如 /data/CellBender_v2）
                                     _analysis_dir = _s.get("analysis_dir", "")
                                     if _analysis_dir and os.path.isdir(_analysis_dir):
                                         _scan_dirs.append(_analysis_dir)
@@ -12738,9 +19530,9 @@ async def ws_endpoint(ws: WebSocket):
                             pass
                 _heartbeat_task = asyncio.ensure_future(_heartbeat_loop())
 
-                # 统一事件流：Hermes event_callback 转发所有结构化事件到 WebSocket
+                # 统一事件流：MemOmics event_callback 转发所有结构化事件到 WebSocket
                 def event_cb(event_type, data, _s=session):
-                    """Hermes event_callback(event_type, data) — 统一事件流"""
+                    """MemOmics event_callback(event_type, data) — 统一事件流"""
                     try:
                         _session_emit(_s, {"type": "event", "event_type": event_type, "data": data, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                     except Exception:
@@ -12964,13 +19756,84 @@ async def ws_endpoint(ws: WebSocket):
                         except Exception:
                             pass
 
-                        # 2026-08-25: 开工前澄清（grill）——执行意图 + 关键信息缺失 → 先问清楚
+                        # P3(2026-09-22): 确认弹窗的结构化答复 → 确定性上下文（只注入一次）
                         try:
-                            _grill = _build_grill_prompt(_session, user_text or "", _intent)
-                            if _grill:
-                                conversation_history.append({"role": "system", "content": _grill})
+                            _form_ctx = _build_ask_form_context(_session, user_text or "")
+                            if _form_ctx:
+                                conversation_history.append({"role": "system", "content": _form_ctx})
                         except Exception:
                             pass
+
+                        # 2026-08-25: 开工前澄清（grill）——执行意图 + 关键信息缺失 → 先问清楚
+                        # P3(2026-09-22): grill 没触发时，高代价任务再补一层"意图确认"
+                        # （数据有了但要做成什么没交代）——并预置门禁：用户勾选前不许执行。
+                        # P4(2026-09-22): 代码修改模式优先 —— 用户给脚本让"改一下"时只改不跑；
+                        # 记忆里正好有他的数据 → **服务器自己**弹窗问"要不要用数据验证"。
+                        _ce_mode, _ce_data = "", []
+                        try:
+                            _ce_mode = _code_edit_mode(user_text or "")
+                            _is_form_ans = _is_form_answer_text(user_text or "", _session)
+                            from webui import enforcement as _enf_ce
+                            _es_ce = _enf_ce.get_enforcement(_session.get("id", ""))
+                            if _ce_mode == "edit":
+                                _ce_data = _find_memory_data(_session, user_text or "")
+                                _enf_ce.arm_code_edit(
+                                    _es_ce, "用户要求改代码、没说要跑：%s" % (user_text or "")[:60],
+                                    data=_ce_data)
+                                if _ce_data and not _session.get("_code_edit_asked"):
+                                    _fid_ce, _ok_ce = _emit_code_edit_form(_session, _ce_data)
+                                    _session["_code_edit_asked"] = bool(_ok_ce)
+                                    if _ok_ce:
+                                        logger.info("[code_edit] session %s: 已弹窗问验证（%d 条数据）",
+                                                    str(_session.get("id", ""))[:12], len(_ce_data))
+                            elif _ce_mode != "verify" and not _is_form_ans \
+                                    and _enf_ce.code_edit_pending(_es_ce):
+                                # 锁还开着，但用户这轮说的是别的（不是弹窗答复）→ 语境变了，解锁
+                                _enf_ce.clear_code_edit(_es_ce)
+                                logger.info("[code_edit] 用户新消息 → 解锁代码修改模式")
+                        except Exception as _e_ce0:
+                            logger.warning("[code_edit] 预置失败: %s", _e_ce0)
+                        if _ce_mode:
+                            try:
+                                conversation_history.append({
+                                    "role": "system",
+                                    "content": _build_code_edit_prompt(_session, user_text or "",
+                                                                       _ce_mode, _ce_data)})
+                                logger.info("[code_edit] session %s mode=%s data=%d asked=%s",
+                                            str(_session.get("id", ""))[:12], _ce_mode, len(_ce_data),
+                                            bool(_session.get("_code_edit_asked")))
+                            except Exception as _e_ce1:
+                                logger.warning("[code_edit] 指令注入失败: %s", _e_ce1)
+                        else:
+                            # P4: 上一轮锁着"只改代码"、这轮用户说了别的（非弹窗答复）→ 解锁
+                            try:
+                                from webui import enforcement as _enf_ce2
+                                _es_ce2 = _enf_ce2.get_enforcement(_session.get("id", ""))
+                                if _enf_ce2.code_edit_pending(_es_ce2) and not \
+                                        _is_form_answer_text(user_text or "", _session):
+                                    _enf_ce2.clear_code_edit(_es_ce2)
+                                    logger.info("[code_edit] 用户新消息 → 解锁代码修改模式")
+                            except Exception:
+                                pass
+                            try:
+                                _grill = _build_grill_prompt(_session, user_text or "", _intent)
+                                if _grill:
+                                    conversation_history.append({"role": "system", "content": _grill})
+                                else:
+                                    _iconf = _build_intent_confirm_prompt(_session, user_text or "", _intent)
+                                    if _iconf:
+                                        conversation_history.append({"role": "system", "content": _iconf})
+                                        try:
+                                            from webui import enforcement as _enf_ic
+                                            _es_ic = _enf_ic.get_enforcement(_session.get("id", ""))
+                                            _enf_ic.arm_intent_confirm(
+                                                _es_ic, "高代价任务（分析/投递/入库/报告）开工前意图未确认")
+                                            logger.info("[intent_confirm] session %s: 已预置门禁，等用户勾选",
+                                                        str(_session.get("id", ""))[:12])
+                                        except Exception as _e_ic:
+                                            logger.warning("[intent_confirm] arm failed: %s", _e_ic)
+                            except Exception:
+                                pass
 
                         # 2026-08-16 修复「问下一个问题被旧上下文占据」：
                         # 用户消息带新数据路径且不是"继续/接着"→ 视为新任务，
@@ -13080,7 +19943,7 @@ async def ws_endpoint(ws: WebSocket):
                             # execute_r/execute_python 才能识别会话并隔离 kernel。
                             try:
                                 from memomics.bio_tools.debate_analysis import set_session_context
-                                set_session_context(sid=_session["id"], results_dir=_session.get("results_dir", ""))
+                                _set_debate_session_context(_session)
                             except Exception:
                                 pass
                             result = _agent.run_conversation(
@@ -13167,26 +20030,30 @@ async def ws_endpoint(ws: WebSocket):
                                     default_ids = ["02", "03", "04"]
                                     pipe_todos = modules_to_todos(default_ids)
                                     if pipe_todos:
-                                        for td in pipe_todos:
-                                            _agent._todo_store.add({"title": td.get("title", td.get("name", "")), "module": td.get("module", ""), "skill": td.get("skill", ""), "status": "pending", "description": td.get("description", "")})
+                                        _seed_agent_todos(_agent, pipe_todos, "auto")
                                         _session_emit(_session, {"type": "todos_update", "todos": pipe_todos, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
                                         _session_emit(_session, {"type": "progress", "step": "auto_todos", "status": "done", "detail": f"自动生成{len(pipe_todos)}个待办", "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
                                 except Exception as e:
                                     logger.warning(f"auto-todos failed: {e}")
-                        # Hermes 中断是优雅的：run_conversation() 正常返回
+                        # MemOmics 中断是优雅的：run_conversation() 正常返回
                         if getattr(_agent, "_interrupt_requested", False):
                             _agent.clear_interrupt()
                             _session_emit(_session, {"type": "progress", "step": _pt(_session, "stopped"), "status": "done", "detail": _pt(_session, "user_stopped"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
                             _session_emit(_session, {"type": "cancelled", "session_id": _session["id"]})
                             return
-                        # 记录助手回复到 _session（state.db 由 Hermes 框架 _persist_session 自动写）
+                        # 记录助手回复到 _session（state.db 由 MemOmics 框架 _persist_session 自动写）
                         _session["messages"].append({"role": "assistant", "content": result, "time": datetime.now().strftime("%H:%M:%S")})
                         _session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         # 尝试提取 todo
+                        # P1-1 修正：原代码调 _agent.get_todos()，该方法在 MemOmics 全仓 grep
+                        # 0 命中（根本不存在）→ 这个分支恒为 []，等于每轮结束什么都没同步。
+                        # 真源是 _todo_store.read()；四个推送点的回写统一走 _session_emit
+                        # 收口，这里只在 store 非空时补齐一次（store 空时不清空已有待办）。
                         try:
-                            todos = _agent.get_todos() if hasattr(_agent, "get_todos") else []
-                            if todos:
-                                _session["todos"] = todos if isinstance(todos, list) else []
+                            _tstore = getattr(_agent, "_todo_store", None)
+                            _cur_todos = [t for t in _tstore.read() if isinstance(t, dict)] if _tstore is not None else []
+                            if _cur_todos:
+                                _sync_session_todos(_session, _cur_todos)
                         except Exception:
                             pass
                         # 回合结束：循环检测（重复表述）
@@ -13300,6 +20167,19 @@ async def ws_endpoint(ws: WebSocket):
                         _session["running_agent"] = None
                         _session["running_task"] = None
                         _session["_user_turn_active"] = False  # 并发护栏: 用户回合结束清除
+                        if _thread_state is not None:
+                            _thread_state.mark_turn_end(_session["id"])
+                        # 技能索引自愈（2026-09-24）：agent 会话中途用 write 直接造出来的技能目录不在
+                        # 启动 scan 范围内，不补就永远不进 SKILLS_INDEX.md（模型唯一能看到的技能清单）。
+                        # 廉价判定（列目录 + 读索引），真缺行才整表重建；失败绝不影响回合收尾。
+                        try:
+                            _sync_info = auto_register.sync_new_skills()
+                            if _sync_info.get("rebuilt") or _sync_info.get("json_generated"):
+                                logger.info(
+                                    "[MemOmics] 技能索引自愈：补 %d 行 / 补 %d 个 skill.json"\
+                                    % (len(_sync_info.get("missing") or []), len(_sync_info.get("json_generated") or [])))
+                        except Exception as _e_sync:
+                            logger.info(f"[MemOmics] skill index sync skipped: {_e_sync}")
                         # LoopX 执行层：用户回合交付记录（cadence 数据源）
                         try:
                             from memomics.loopx_bridge import LoopXBridge
@@ -13339,7 +20219,10 @@ async def ws_endpoint(ws: WebSocket):
                     session["running_agent"] = agent
                     _res_req = _session_resource_request(session)
                     try:
-                        _lease = await asyncio.wait_for(_resource_scheduler.acquire(session["id"], _res_req), timeout=60)
+                        _lease = await asyncio.wait_for(
+                            _resource_scheduler.acquire(session["id"], _res_req,
+                                                        label=_queue_label(session)),
+                            timeout=60)
                     except Exception:
                         # 排队超时/容量不足 → 无租约降级运行（不阻塞聊天）
                         _lease = None
@@ -13498,6 +20381,7 @@ async def ws_endpoint(ws: WebSocket):
     except WebSocketDisconnect:
         # WS 断开 - 只断开 WS 引用，不杀 agent（agent 继续在后台运行）
         _detach_ws(ws)
+        _TASK_WS_CLIENTS.discard(ws)  # 任务面板订阅也要摘掉，免得往死连接推
         if current_sid and current_sid in _sessions:
             _cleanup_session_agent(_sessions[current_sid], kill_agent=False)
     except Exception as e:
@@ -13511,6 +20395,703 @@ async def ws_endpoint(ws: WebSocket):
         _detach_ws(ws)
         if current_sid and current_sid in _sessions:
             _cleanup_session_agent(_sessions[current_sid], kill_agent=False)
+
+
+# === 远端集群控制台（2026-09-19）===
+# 让用户直接在 WebUI 里敲 SSH 命令 / 交作业，不必先跟模型说话。三点取舍：
+#  1. 复用 remote_cluster 的 handler —— UI 与 agent 走同一条代码路径，行为不漂移；
+#  2. UI 里敲的命令是用户自己的操作，不过 rail_review / 辩论门禁（那是给模型看的闸）；
+#  3. 配置写回用「文本块替换」而不是 _memomics_config_write —— 后者整文件 yaml.dump，
+#     会把 config.yaml 的注释全抹掉（本机已被抹过一次，注释模板就是这么没的）。
+_CLUSTER_FIELDS = (
+    "enabled", "host", "user", "port", "key", "workdir", "scheduler",
+    "partition", "queue", "local_root", "remote_root", "timeout", "job_dir",
+    "extra_ssh_options", "default_node", "node_policy", "auto_record_env",
+)
+# 单个命名节点里允许覆盖的字段（前端节点编辑器渲染的就是这些；其余字段走共享配置）
+_CLUSTER_NODE_FIELDS = (
+    "name", "host", "port", "user", "key", "workdir", "note", "role",
+    "proxy_jump", "scheduler", "partition", "queue",
+)
+_CLUSTER_NODE_LIST_FIELDS = ("extra_ssh_options",)
+_CLUSTER_ACTIONS = ("locate", "nodes", "check", "run", "push", "pull", "submit", "status", "logs", "cancel", "jobs", "session_start", "session_exec", "session_save", "session_restore", "session_status", "session_stop", "session_list", "session_cells", "session_plot", "r_packages")
+_CLUSTER_NODE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,47}$")
+
+
+def _cluster_mod():
+    from memomics.bio_tools import remote_cluster as _rc
+    return _rc
+
+
+def _cluster_view() -> dict:
+    """配置视图：只回显当前生效值，不建连接（连通性自检是单独的 action=check）。"""
+    rc = _cluster_mod()
+    cfg = rc._load_remote_config(force=True)
+    out = {k: cfg.get(k) for k in _CLUSTER_FIELDS}
+    out["enabled"] = bool(cfg.get("enabled"))
+    key = str(cfg.get("key") or "")
+    out["key_exists"] = bool(key) and os.path.exists(os.path.expanduser(key))
+    try:      # 2026-10-11：没配私钥也能用——告诉前端探测到哪把/没有会帮你生成
+        _det_keys = rc.detect_private_keys()
+    except Exception:
+        _det_keys = []
+    out["key_detected"] = _det_keys[0] if _det_keys else ""
+    if key:
+        out["key_auto_note"] = "私钥：%s" % key
+    elif _det_keys:
+        out["key_auto_note"] = "已自动探测到本机私钥：%s（无需手填，留空即用）" % _det_keys[0]
+    else:
+        out["key_auto_note"] = "本机还没有 SSH 密钥：输一次密码点「🔑 安装公钥」，会自动生成 ed25519 并装好"
+    out["config_path"] = str(rc._get_config_path())
+    out["tool_visible"] = bool(rc.remote_cluster_enabled())
+    out["job_dir_effective"] = cfg.get("job_dir")
+    # 2026-10-10：给前端一个"到底能不能用"的判断 + 还缺哪个字段，别再让用户猜
+    out["ready"] = bool(cfg.get("enabled")) and bool(cfg.get("host") or cfg.get("nodes")) and bool(cfg.get("user"))
+    _miss = []
+    if not cfg.get("enabled"):
+        _miss.append("启用")
+    if not (cfg.get("host") or cfg.get("nodes")):
+        _miss.append("登录节点")
+    if not cfg.get("user"):
+        _miss.append("用户名")
+    # 私钥路径不再算缺项：探测不到会自动生成（2026-10-11）
+    out["missing"] = _miss
+    # 命名节点：既回显「用户显式写了什么」（spec），也回显「实际会连什么」（effective）。
+    # effective 由 remote_cluster._node_table 算出来，和真正连的时候用的是同一份逻辑。
+    table = rc._node_table(cfg)
+    nodes = []
+    for name, entry in (cfg.get("nodes") or {}).items():
+        eff = table.get(name) or {}
+        spec = {"name": name}
+        for k in _CLUSTER_NODE_FIELDS:
+            if k == "name":
+                continue
+            val = entry.get(k)
+            if val not in (None, "", [], {}):
+                spec[k] = val
+        nodes.append({
+            "name": name,
+            "spec": spec,
+            "effective": {
+                "host": eff.get("host"), "user": eff.get("user"), "port": eff.get("port"),
+                "key": eff.get("key"), "workdir": eff.get("workdir"),
+                "job_dir": eff.get("job_dir"), "scheduler": eff.get("scheduler"),
+                "proxy_jump": str(entry.get("proxy_jump") or ""),
+                "note": eff.get("_note") or "",
+            },
+            "is_default": name == str(cfg.get("default_node") or ""),
+            "reachable_note": "",
+        })
+    out["nodes"] = nodes
+    out["nodes_effective_count"] = len(table)
+    out["node_policy"] = cfg.get("node_policy") or "ask"
+    return out
+
+
+def _cluster_yaml_scalar(value) -> str:
+    """单引号 YAML 标量：Windows 路径里的反斜杠在单引号里是字面量，不会被转义吃掉。"""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def _cluster_node_lines(nodes) -> list:
+    """生成 remote.nodes: 段（两级缩进）。名字非法/重复直接报错，不静默丢配置。"""
+    if isinstance(nodes, dict):
+        items = []
+        for name, spec in nodes.items():
+            if isinstance(spec, dict):
+                item = dict(spec)
+            elif spec in (None, ""):
+                item = {}
+            else:
+                item = {"host": spec}
+            item["name"] = name
+            items.append(item)
+    elif isinstance(nodes, (list, tuple)):
+        items = [dict(x) for x in nodes if isinstance(x, dict)]
+    else:
+        raise ValueError("nodes 必须是列表或字典")
+    seen = set()
+    lines = ["  nodes:"]
+    for item in items:
+        name = str(item.get("name") or "").strip()
+        if not name:
+            continue
+        if not _CLUSTER_NODE_NAME_RE.match(name):
+            raise ValueError(
+                "节点名 %r 不合法：只允许字母/数字/点/下划线/短横线，且不超过 48 字符"
+                "（中文请写在 note 里，节点名会进入远端作业名和日志文件名）" % name)
+        low = name.lower()
+        if low in seen:
+            raise ValueError("节点名 %r 重复了（节点名用来选机器，不能重名）" % name)
+        seen.add(low)
+        spec = {}
+        for k in _CLUSTER_NODE_FIELDS:
+            if k == "name":
+                continue
+            val = item.get(k)
+            if val is None:
+                continue
+            if isinstance(val, str) and not val.strip():
+                continue
+            if k == "port":
+                try:
+                    val = int(str(val).strip())
+                except Exception:
+                    raise ValueError("节点 %r 的 port 不是数字：%r" % (name, item.get(k)))
+            spec[k] = val
+        extra = item.get("extra_ssh_options")
+        if extra:
+            spec["extra_ssh_options"] = extra if isinstance(extra, (list, tuple)) else [str(extra)]
+        if not spec:
+            lines.append("    %s: {}" % name)
+            continue
+        lines.append("    %s:" % name)
+        for k, v in spec.items():
+            if isinstance(v, (list, tuple)):
+                lines.append("      %s: [%s]" % (k, ", ".join(_cluster_yaml_scalar(x) for x in v)))
+            else:
+                lines.append("      %s: %s" % (k, _cluster_yaml_scalar(v)))
+    if len(lines) == 1:
+        return []
+    return lines
+
+
+def _cluster_write_config(values: dict) -> dict:
+    rc = _cluster_mod()
+    cfg = rc._load_remote_config(force=True)  # 合并的底：当前生效值
+    path = rc._get_config_path()
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        text = ""
+    # 合并而不是替换：从当前生效配置起底，只覆盖前端提交的字段。
+    # 这样手写在 config.yaml 里、表单没有的字段（extra_ssh_options 等）不会被抹掉。
+    merged = {}
+    for key in _CLUSTER_FIELDS:
+        cur = cfg.get(key)
+        if key == "enabled":
+            merged[key] = bool(cur)
+        elif cur is not None and cur != "" and cur != [] and cur != {}:
+            merged[key] = cur
+    nodes_in = values.pop("nodes", None) if "nodes" in values else None
+    for key, val in values.items():
+        if key not in _CLUSTER_FIELDS:
+            continue
+        if key == "enabled":
+            merged[key] = bool(val) if not isinstance(val, str) else val.strip().lower() in ("1", "true", "yes", "on")
+            continue
+        if val is None or (isinstance(val, str) and not val.strip()):
+            merged.pop(key, None)  # 明确的空值 = 移除该字段，回落默认
+            continue
+        merged[key] = val
+    if nodes_in is not None:
+        old_nodes = cfg.get("nodes") or {}
+        if isinstance(nodes_in, dict):
+            seq = []
+            for name, spec in nodes_in.items():
+                item = dict(spec) if isinstance(spec, dict) else ({"host": spec} if spec else {})
+                item["name"] = name
+                seq.append(item)
+        else:
+            seq = list(nodes_in or [])
+        # 逐个节点并回原来的显式覆盖：前端没渲染的字段（extra_ssh_options/job_dir/timeout）
+        # 保留；前端显式给了空串的字段 = 用户清掉了这个覆盖，回落共享配置。
+        for item in seq:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "").strip()
+            old = old_nodes.get(name) or {}
+            if not isinstance(old, dict):
+                old = {}
+            for k, v in list(item.items()):
+                if k == "name":
+                    continue
+                if isinstance(v, str) and not v.strip():
+                    item.pop(k)
+                    old.pop(k, None)
+            for k, v in old.items():
+                item.setdefault(k, v)
+        values["nodes"] = seq
+    # 2026-10-10（用户报「保存后还说没配置远端」+「default_node='https://…' 不在 nodes 里」）：
+    # 落盘前把 default_node 规范化、把"填了 host 却没启用"自动打开，别再让用户对着报错猜。
+    notes = []
+    node_names = [str((x or {}).get("name") or "").strip()
+                  for x in (values.get("nodes") or []) if isinstance(x, dict)]
+    node_names = [x for x in node_names if x]
+    dn = str(merged.get("default_node") or "").strip()
+    if dn and dn not in node_names:
+        if len(node_names) == 1:
+            merged["default_node"] = node_names[0]
+            notes.append("默认节点 %r 不是已配置的节点，已自动改成唯一节点 %r" % (dn, node_names[0]))
+        else:
+            merged.pop("default_node", None)
+            notes.append("默认节点 %r 不在节点列表里，已清空（多节点时请在调用里点名）" % dn)
+    if not merged.get("enabled") and (merged.get("host") or merged.get("nodes")):
+        merged["enabled"] = True
+        notes.append("填了 host/节点但没勾「启用」，已自动启用（不启用时所有集群动作都会报『还没配置远端』）")
+    if merged.get("enabled") and not merged.get("user"):
+        notes.append("还没填「用户名」：SSH 登录需要它，补齐后再保存一次")
+    lines = ["remote:"]
+    for key in _CLUSTER_FIELDS:
+        if key not in merged:
+            continue
+        val = merged[key]
+        if isinstance(val, (list, tuple)):
+            lines.append("  %s: [%s]" % (key, ", ".join(_cluster_yaml_scalar(x) for x in val)))
+        else:
+            lines.append("  %s: %s" % (key, _cluster_yaml_scalar(val)))
+    if "nodes" in values:
+        lines += _cluster_node_lines(values["nodes"])
+    block = "\n".join(lines) + "\n"
+    # 顶层 remote: 块（后续行必须缩进；注释行以 # 开头，不会被误吞）
+    pat = re.compile(r"(?m)^remote:[ \t]*\n(?:[ \t]+[^\n]*\n)*")
+    m = pat.search(text)
+    if m:
+        new_text = text[:m.start()] + block + text[m.end():]
+    else:
+        if text and not text.endswith("\n"):
+            text += "\n"
+        new_text = text + block
+    # 落盘前先校验：新文件必须能解析出 remote 段，宁可写不进去也不写坏 config.yaml
+    import yaml as _yaml
+    parsed = _yaml.safe_load(new_text) or {}
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("remote"), dict):
+        raise ValueError("生成的 remote 段无法被 YAML 解析，已放弃写入（config.yaml 未改动）")
+    tmp = str(path) + ".cluster.tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(new_text)
+    os.replace(tmp, path)
+    rc._load_remote_config(force=True)  # 清 mtime 缓存，下一个动作就用新配置
+    try:
+        from tools.registry import invalidate_check_fn_cache
+        invalidate_check_fn_cache()  # 让模型侧立刻看到工具出现/消失，不用重启
+    except Exception:
+        pass
+    out = _cluster_view()
+    out["notes"] = notes
+    return out
+
+
+@app.get("/api/cluster/status")
+async def api_cluster_status():
+    try:
+        return {"ok": True, "config": _cluster_view(), "actions": list(_CLUSTER_ACTIONS)}
+    except Exception as exc:
+        return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+
+
+@app.post("/api/cluster/config")
+async def api_cluster_config(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": False, "error": "请求体不是合法 JSON"}
+    if not isinstance(body, dict):
+        return {"ok": False, "error": "请求体必须是 JSON 对象"}
+    values = {k: v for k, v in body.items() if k in _CLUSTER_FIELDS or k == "nodes"}
+    if not values:
+        return {"ok": False, "error": "没有可写入的字段（可选：%s, nodes）" % ", ".join(_CLUSTER_FIELDS)}
+    try:
+        return {"ok": True, "config": _cluster_write_config(values)}
+    except Exception as exc:
+        return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+
+
+@app.post("/api/cluster/exec")
+async def api_cluster_exec(request: Request):
+    """把 WebUI 的输入原样转给 remote_cluster（与 agent 同一个 handler）。"""
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": False, "error": "请求体不是合法 JSON"}
+    if not isinstance(body, dict):
+        return {"ok": False, "error": "请求体必须是 JSON 对象"}
+    action = str(body.get("action") or "").strip().lower()
+    if action not in _CLUSTER_ACTIONS:
+        return {"ok": False, "error": "未知 action: %r（可选：%s）" % (action, ", ".join(_CLUSTER_ACTIONS))}
+    args = {k: v for k, v in body.items() if v is not None and v != ""}
+    args["action"] = action
+    try:
+        raw = _cluster_mod().remote_cluster_handler(args)
+    except Exception as exc:
+        return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+    try:
+        return {"ok": True, "result": json.loads(raw)}
+    except Exception:
+        return {"ok": True, "result": {"note": "工具未返回 JSON", "raw": raw}}
+
+
+@app.post("/api/cluster/install_key")
+async def api_cluster_install_key(request: Request):
+    """WebUI「🔑 安装公钥」：用密码登录一次，把本机公钥写进远端 authorized_keys。
+
+    密码只在内存里用这一次：不落盘、不进日志、不进会话历史。装完全部走密钥免密。
+    逻辑在 memomics.bio_tools.remote_cluster.install_pubkey（含 proxy_jump 跳板链路）。
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": False, "error": "请求体不是合法 JSON"}
+    if not isinstance(body, dict):
+        return {"ok": False, "error": "请求体必须是 JSON 对象"}
+    password = str(body.get("password") or "")
+    if not password:
+        return {"ok": False, "error": "密码不能为空（只用于这一次安装，不会保存）"}
+    node = str(body.get("node") or "").strip()
+    rc = _cluster_mod()
+    cfg = rc._load_remote_config(force=True)
+    try:
+        raw = rc.install_pubkey(cfg, node, password)
+    except Exception as exc:
+        return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+    try:
+        return {"ok": True, "result": json.loads(raw)}
+    except Exception:
+        return {"ok": True, "result": {"note": "工具未返回 JSON", "raw": raw}}
+
+# === ☁️ DCS 云（华大 DCS Cloud / GenPilot 连接器，2026-10-07）===
+# 与 remote_cluster 同款薄路由：端点只做参数校验与转发；逻辑全在
+# memomics/connectors/dcs_cloud.py（agent 工具 dcs_cloud 用的是同一个 handler）。
+
+_DCS_ACTIONS = ("status", "bind", "unbind", "projects", "use_project", "current", "context",
+                "ls", "find", "info", "download", "upload",
+                "container_open", "container_exec", "container_close",
+                "tasks", "task_logs",
+                # 🚀 投递（2026-10-07）：只读表单三件套 + 写操作投递/取消
+                "flows", "flow_form", "flow_run", "analysis_run", "images",
+                "flow_tasks", "flow_task_info", "task_cancel", "raw")
+_DCS_CFG_FIELDS = ("enabled", "cli_path", "base_url", "region", "default_project",
+                   "timeout", "max_output_chars", "allow_write", "download_dir")
+
+
+def _dcs_mod():
+    from memomics.connectors import dcs_cloud as _m
+    return _m
+
+
+def _dcs_view() -> dict:
+    cfg = _dcs_mod().load_config(force=True)
+    cred = _dcs_mod().read_credential()
+    cli = _dcs_mod().resolve_cli(cfg)
+    return {
+        "enabled": bool(cfg.get("enabled")),
+        "bound": bool(cred.get("pat")),
+        "pat_masked": cred.get("masked") or "",
+        "user": cred.get("user") or "",
+        "cli_path": cli or "",
+        "cli_found": bool(cli),
+        "cli_ok": bool(cli),            # 2026-10-10：与连接器 action_status 的字段名对齐（前端/agent 同一口径）
+        "base_url": cfg.get("base_url"),
+        "region": cfg.get("region") or "",
+        "default_project": cfg.get("default_project") or "",
+        "allow_write": bool(cfg.get("allow_write")),
+        "vault": str(_dcs_mod().vault_path()),
+        # 2026-10-07：下载队列要显示"到底存哪" —— 配置为空时给真实生效目录（仓库 results/dcs）
+        "download_dir_effective": _dcs_pick_initial("dir", ""),
+        "config": {k: cfg.get(k) for k in _DCS_CFG_FIELDS},
+    }
+
+
+def _dcs_write_config(values: dict) -> dict:
+    """写 config.yaml 的 dcs_cloud: 段（保留其他键），与 _set_update_config 同款。"""
+    import yaml as _yaml
+    _p = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
+    try:
+        with open(_p, encoding="utf-8") as _f:
+            _d = _yaml.safe_load(_f) or {}
+    except Exception:
+        _d = {}
+    sec = _d.get("dcs_cloud")
+    if not isinstance(sec, dict):
+        sec = {}
+        _d["dcs_cloud"] = sec
+    for k, v in values.items():
+        sec[k] = v
+    with open(_p, "w", encoding="utf-8") as _f:
+        _yaml.safe_dump(_d, _f, allow_unicode=True, sort_keys=False)
+    _dcs_mod().load_config(force=True)
+    try:
+        from tools.registry import invalidate_check_fn_cache
+        invalidate_check_fn_cache()   # 开关一变，模型侧立刻看到工具出现/消失
+    except Exception:
+        pass
+    return _dcs_view()
+
+
+def _dcs_wrap(raw) -> dict:
+    try:
+        return {"ok": True, "result": json.loads(raw)}
+    except Exception:
+        return {"ok": True, "result": {"note": "连接器未返回 JSON", "raw": str(raw)}}
+
+
+@app.get("/api/dcs/status")
+async def api_dcs_status():
+    try:
+        return {"ok": True, "config": _dcs_view(), "actions": list(_DCS_ACTIONS)}
+    except Exception as exc:
+        return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+
+
+@app.post("/api/dcs/bind")
+async def api_dcs_bind(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": False, "error": "请求体不是合法 JSON"}
+    pat = str((body or {}).get("pat") or "").strip()
+    if not pat:
+        return {"ok": False, "error": "需要 pat 字段（DCS 个人中心 → 访问令牌 → 创建并复制）"}
+    return _dcs_wrap(_dcs_mod().dcs_cloud_handler({"action": "bind", "pat": pat}))
+
+
+@app.post("/api/dcs/diagnose")
+async def api_dcs_diagnose():
+    """🩺 DCS 一键体检（2026-10-10 用户报「新电脑完全无法绑定」后加的排障入口）：逐项查 CLI/版本/站点/PAT/可达性。"""
+    return _dcs_wrap(_dcs_mod().dcs_cloud_handler({"action": "diagnose"}))
+
+
+@app.post("/api/dcs/install_cli")
+async def api_dcs_install_cli():
+    """一键安装官方 dcs CLI（官方 CDN + SHA256 校验）——老用户更新后 DCS 云开箱可用。"""
+    return _dcs_wrap(_dcs_mod().dcs_cloud_handler({"action": "install_cli"}))
+
+
+@app.post("/api/dcs/unbind")
+async def api_dcs_unbind():
+    return _dcs_wrap(_dcs_mod().dcs_cloud_handler({"action": "unbind"}))
+
+
+@app.post("/api/dcs/config")
+async def api_dcs_config(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": False, "error": "请求体不是合法 JSON"}
+    if not isinstance(body, dict):
+        return {"ok": False, "error": "请求体必须是 JSON 对象"}
+    values: dict = {}
+    for k, v in body.items():
+        if k not in _DCS_CFG_FIELDS:
+            continue
+        if k in ("enabled", "allow_write"):
+            values[k] = str(v).strip().lower() in ("1", "true", "yes", "on") if not isinstance(v, bool) else v
+        elif k in ("timeout", "max_output_chars"):
+            try:
+                values[k] = int(v)
+            except Exception:
+                return {"ok": False, "error": "%s 必须是整数" % k}
+        else:
+            values[k] = str(v or "").strip()
+    if not values:
+        return {"ok": False, "error": "没有可写入的字段（可选：%s）" % ", ".join(_DCS_CFG_FIELDS)}
+    try:
+        return {"ok": True, "config": _dcs_write_config(values)}
+    except Exception as exc:
+        return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+
+
+@app.post("/api/dcs/exec")
+async def api_dcs_exec(request: Request):
+    """把 WebUI 的输入原样转给连接器（与 agent 同一个 handler）。"""
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": False, "error": "请求体不是合法 JSON"}
+    if not isinstance(body, dict):
+        return {"ok": False, "error": "请求体必须是 JSON 对象"}
+    action = str(body.get("action") or "").strip().lower()
+    if action not in _DCS_ACTIONS:
+        return {"ok": False, "error": "未知 action: %r（可选：%s）" % (action, ", ".join(_DCS_ACTIONS))}
+    args = {k: v for k, v in body.items() if v is not None and v != ""}
+    args["action"] = action
+    try:
+        # 连接器里的每条 dcs CLI 都是同步阻塞调用（真机实测一次云往返 1.6–2.8s）：
+        # 必须丢到线程池跑，否则会冻住整个事件循环 —— 队列轮询 / 其它面板接口全跟着卡。
+        return _dcs_wrap(await asyncio.to_thread(_dcs_mod().dcs_cloud_handler, args))
+    except Exception as exc:
+        return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+
+
+# 2026-10-07：下载要有进度 / 完成显示 / 多文件队列 —— WebUI 专用的队列接口。
+# 真正的队列 worker 在连接器里（dcs_cloud.dl_*），这里只做薄路由：
+# 任务登记在**服务进程内存**里，所以刷新页面不丢队列，重启服务才清空。
+async def _dcs_body(request: Request):
+    """解析 JSON 请求体；返回 (body, error_response)。"""
+    try:
+        body = await request.json()
+    except Exception:
+        return None, {"ok": False, "error": "请求体不是合法 JSON"}
+    if not isinstance(body, dict):
+        return None, {"ok": False, "error": "请求体必须是 JSON 对象"}
+    return body, None
+
+
+def _dcs_dl_call(fn_name: str, body: dict) -> dict:
+    """调连接器里的队列函数（缺函数说明服务进程还是旧代码）。"""
+    fn = getattr(_dcs_mod(), fn_name, None)
+    if fn is None:
+        return {"ok": False,
+                "error": "连接器里没有 %s（服务进程还是旧代码：重启 MemOmics 后再试）" % fn_name}
+    try:
+        return {"ok": True, "result": fn(body or {})}
+    except Exception as exc:
+        return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+
+
+@app.post("/api/dcs/dl/start")
+async def api_dcs_dl_start(request: Request):
+    """入队一个/一批下载：立即返回 job id，进度与完成态走 /api/dcs/dl/list 轮询。"""
+    body, bad = await _dcs_body(request)
+    if bad:
+        return bad
+    return _dcs_dl_call("dl_start", body)
+
+
+@app.post("/api/dcs/dl/list")
+async def api_dcs_dl_list(request: Request):
+    """队列快照：jobs[]（最新在前）+ counts（queued/running/done/failed/cancelled/active）。"""
+    body, bad = await _dcs_body(request)
+    if bad:
+        return bad
+    return _dcs_dl_call("dl_list", body)
+
+
+@app.post("/api/dcs/dl/cancel")
+async def api_dcs_dl_cancel(request: Request):
+    """取消：排队中的直接标取消，正在跑的杀下载进程。"""
+    body, bad = await _dcs_body(request)
+    if bad:
+        return bad
+    return _dcs_dl_call("dl_cancel", body)
+
+
+@app.post("/api/dcs/dl/retry")
+async def api_dcs_dl_retry(request: Request):
+    """重试失败/已取消的任务（按原参数重新入队）。"""
+    body, bad = await _dcs_body(request)
+    if bad:
+        return bad
+    return _dcs_dl_call("dl_retry", body)
+
+
+@app.post("/api/dcs/dl/clear")
+async def api_dcs_dl_clear(request: Request):
+    """清掉已结束的任务（默认全清）。"""
+    body, bad = await _dcs_body(request)
+    if bad:
+        return bad
+    return _dcs_dl_call("dl_clear", body)
+
+
+@app.post("/api/dcs/dl/reveal")
+async def api_dcs_dl_reveal(request: Request):
+    """在资源管理器里定位下载好的文件。"""
+    body, bad = await _dcs_body(request)
+    if bad:
+        return bad
+    return _dcs_dl_call("dl_reveal", body)
+
+
+# 2026-10-07：下载/上传要选本地路径 —— 用本机原生选择框（tkinter 优先，PowerShell 兜底），
+# 用户要求"弹出路径的时候能不能选择"（不要手打）。
+def _dcs_pick_initial(kind: str, initial: str) -> str:
+    initial = str(initial or "").strip()
+    if initial and os.path.isdir(initial):
+        return initial
+    if initial and os.path.isfile(initial):
+        return os.path.dirname(initial)
+    try:
+        _cfg = _dcs_mod().load_config(force=True)
+        _d = str(_cfg.get("download_dir") or "").strip()
+        if _d and os.path.isdir(_d):
+            return _d
+    except Exception:
+        pass
+    _r = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "results"))
+    return _r if os.path.isdir(_r) else os.path.expanduser("~")
+
+
+def _dcs_pick_path(kind: str = "dir", initial: str = "") -> dict:
+    """弹本机原生选择框；返回 {ok, path} 或 {ok:False, cancelled:True}。"""
+    kind = "file" if str(kind).lower() in ("file", "f") else "dir"
+    start = _dcs_pick_initial(kind, initial)
+    _tk_err = ""
+    # ① tkinter（Python 标准库）
+    try:
+        import tkinter as _tk
+        from tkinter import filedialog as _fd
+        _root = _tk.Tk()
+        _root.withdraw()
+        try:
+            _root.attributes("-topmost", True)
+        except Exception:
+            pass
+        _root.update()
+        if kind == "file":
+            picked = _fd.askopenfilename(title="选择要上传到云上的文件",
+                                         initialdir=start, parent=_root)
+        else:
+            picked = _fd.askdirectory(title="选择本机目录（下载/上传目标）",
+                                      initialdir=start, mustexist=True, parent=_root)
+        try:
+            _root.destroy()
+        except Exception:
+            pass
+        if picked:
+            return {"ok": True, "path": os.path.abspath(picked)}
+        return {"ok": False, "cancelled": True, "error": "已取消选择"}
+    except Exception as _e:
+        _tk_err = "%s: %s" % (type(_e).__name__, _e)
+    # ② PowerShell(System.Windows.Forms) 兜底
+    try:
+        import subprocess as _sp
+        if kind == "file":
+            _ps = ("Add-Type -AssemblyName System.Windows.Forms;"
+                   "$d=New-Object System.Windows.Forms.OpenFileDialog;"
+                   "$d.Title='选择要上传到云上的文件';"
+                   "if($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK)"
+                   "{[Console]::Out.Write($d.FileName)}")
+        else:
+            _ps = ("Add-Type -AssemblyName System.Windows.Forms;"
+                   "$d=New-Object System.Windows.Forms.FolderBrowserDialog;"
+                   "$d.Description='选择本机目录（下载/上传目标）';"
+                   "$d.SelectedPath='%s';"
+                   "if($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK)"
+                   "{[Console]::Out.Write($d.SelectedPath)}" % start.replace("'", "''"))
+        _pr = _sp.run(["powershell", "-NoProfile", "-STA", "-Command", _ps],
+                      capture_output=True, text=True, timeout=600)
+        _out = (_pr.stdout or "").strip()
+        if _out:
+            return {"ok": True, "path": os.path.abspath(_out), "via": "powershell"}
+        return {"ok": False, "cancelled": True, "error": "已取消选择"}
+    except Exception as _e2:
+        return {"ok": False,
+                "error": "无法弹出选择框（tkinter %s；powershell %s: %s）" % (_tk_err, type(_e2).__name__, _e2),
+                "hint": "可以手动输入路径；或在「设置」里把默认下载目录（download_dir）填好"}
+
+
+@app.post("/api/dcs/pick")
+async def api_dcs_pick(request: Request):
+    """选本机目录/文件：下载目标、上传来源。dry_run=true 只回默认目录，不弹窗（测试用）。"""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    kind = body.get("kind") or "dir"
+    initial = body.get("initial") or ""
+    if body.get("dry_run"):
+        return {"ok": True, "opened": False, "initial": _dcs_pick_initial(kind, initial)}
+    try:
+        return await asyncio.to_thread(_dcs_pick_path, kind, initial)
+    except Exception as exc:
+        return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
 
 
 if __name__ == "__main__":

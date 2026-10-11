@@ -1,0 +1,29 @@
+{
+  "id": "scrna-trajectory-analysis",
+  "name": "Trajectory Analysis — 轨迹推断全流程",
+  "category": "scRNA",
+  "language": "['windows', 'linux', 'macos']",
+  "description": "单细胞轨迹推断/拟时序分析：Monocle3 (R)、Slingshot (R)、scVelo RNA velocity (Python)、CellRank 命运映射 (Python)。从 Seurat/Scanpy 对象链接。",
+  "starting_prompt": "使用 Trajectory Analysis — 轨迹推断全流程 进行分析",
+  "source_dir": "skills/bioinformatics/scrna-trajectory-analysis",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "trajectory",
+    "pseudotime",
+    "monocle3",
+    "slingshot",
+    "scvelo",
+    "rna-velocity",
+    "cellrank",
+    "cell-fate",
+    "03_高级分析"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "trajectory"
+  ],
+  "when_to_use": "[trajectory-analysis] scRNA-seq 轨迹推断/拟时序分析/RNA velocity/发育分化。使用场景:已聚类的 scRNA-seq 数据，需重建发育/衰老/分化轨迹，伪时间排序，RNA velocity 分析。"
+}

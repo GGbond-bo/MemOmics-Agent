@@ -1,0 +1,25 @@
+{
+  "id": "nature-citation",
+  "name": "Nature Citation — Router",
+  "category": "literature",
+  "language": "Python",
+  "description": "Find and verify Nature/CNS-family literature supporting manuscript claims, with claim-to-source mapping and reference-manager export. Use for Nature系列引用、CNS支撑文献、分段补引用 when this journal scope is reques",
+  "starting_prompt": "使用 Nature Citation — Router 进行分析",
+  "source_dir": "skills/bioinformatics/nature-citation",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "找引用",
+    "补引用",
+    "引用匹配",
+    "论点找文献",
+    "引用溯源",
+    "claim引用",
+    "citation"
+  ],
+  "when_to_use": "Find and verify Nature/CNS-family literature supporting manuscript claims, with claim-to-source mapping and reference-manager export. Use for Nature系列引用、CNS支撑文献、分段补引用 when this journal scope is reques"
+}

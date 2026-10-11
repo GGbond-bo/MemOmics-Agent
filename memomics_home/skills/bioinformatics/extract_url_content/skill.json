@@ -1,0 +1,21 @@
+{
+ "id": "extract_url_content",
+ "name": "Extract Url Content",
+ "category": "literature",
+ "language": "Python",
+ "source": "Biomni",
+ "description": "Extract the text content of a webpage using requests and BeautifulSoup.",
+ "detailed_description": "Extract the text content of a webpage using requests and BeautifulSoup.",
+ "when_to_use": "When you need extract url content analysis",
+ "parameters": {
+  "url": "[Required] Webpage URL to extract content from (str)"
+ },
+ "trigger_keywords": [
+  "extract_url_content",
+  "extract url content",
+  "extract",
+  "url",
+  "content"
+ ],
+ "trigger_level": "YEL"
+}

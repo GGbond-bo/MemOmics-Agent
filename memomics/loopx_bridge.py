@@ -126,6 +126,50 @@ class LoopXBridge:
             logger.warning("[LoopXBridge] goal 注册失败（降级）", exc_info=True)
             return None
 
+    # ── 外部工作证据 ────────────────────────────────────────────────────────
+    # 平台自写文件/目录（不算产出）：与 webui/server.py 的产出判定保持同一份清单，
+    # 否则循环会被自己的记账文件（token_usage.jsonl / .task_state.json）喂活，永远停不下来。
+    _SELF_WRITE = frozenset(("token_usage.jsonl", ".task_state.json", "task_plan.md",
+                             "log", ".loopx", ".git"))
+
+    def has_live_activity(self, window_sec: int = 900, max_entries: int = 4000) -> bool:
+        """results_dir 下最近 window_sec 内有没有**真实**写入（平台自写除外）。
+
+        用途：LoopX 说 waiting/skip（没选定要干的活）时，只有确有外部管线在动
+        才值得继续盯。窗口 15 分钟与 server._session_no_live_work 保持一致；
+        会递归（文件写在 figures/ 这类子目录里，只比目录 mtime 会漏判），
+        但有条目上限防大目录卡住。
+        """
+        import time as _time
+        rd = self.results_dir
+        if not rd or not os.path.isdir(rd):
+            return False
+        cutoff = _time.time() - max(30, int(window_sec))
+        seen = 0
+        stack = [rd]
+        while stack and seen < max_entries:
+            cur = stack.pop()
+            try:
+                names = os.listdir(cur)
+            except OSError:
+                continue
+            for name in names:
+                if name in self._SELF_WRITE:
+                    continue
+                p = os.path.join(cur, name)
+                seen += 1
+                if seen >= max_entries:
+                    break
+                try:
+                    st = os.stat(p)
+                except OSError:
+                    continue
+                if st.st_mtime >= cutoff:
+                    return True
+                if os.path.isdir(p):
+                    stack.append(p)
+        return False
+
     # ── 核心查询 ────────────────────────────────────────────────────────────
     def collect(self, limit: int = 80) -> dict:
         """聚合会话控制平面状态。loopx 不可用/异常 → 空 dict（上层走安全默认）。"""
@@ -178,9 +222,19 @@ class LoopXBridge:
         # 活跃工作可能完全在外部（bash 管线/Rscript 子进程），这些状态不应停掉自检唤醒。
         # 只尊重明确的硬停状态（blocked/paused/throttled）+ 数据完整性保护（blocked_health）。
         if not should and state in ("waiting", "skip", "no_run", "connected_without_run"):
-            should = True
-            verdict = "run"
-            reason = "loopx " + state + " 忽略（Codex 工作项语义；活跃工作可能在外部管线）: " + reason
+            # 2026-10-02 修复：加"确有外部工作在动"这个前提。原来无条件改写，于是只要
+            # LoopX 不说 blocked/paused/throttled，循环就永远跑 —— 60s 一轮唤醒，唤醒消息
+            # 又被前端 INJECT_PREFIXES 过滤掉，用户看到的只有答案一遍遍重复，
+            # 外加 .loopx/runs 一天 63 条（用户报的"重复答案 + LoopX 一直有任务"）。
+            # 老注释的担忧（活跃工作可能在外部 bash/Rscript 管线）仍然成立，所以
+            # 不是简单删掉改写，而是拿证据说话：产出窗口内没有任何真实写入 → 尊重 LoopX。
+            if self.has_live_activity():
+                should = True
+                verdict = "run"
+                reason = "loopx " + state + " 忽略（产出窗口内有真实写入，外部管线在动）: " + reason
+            else:
+                verdict = "wait"
+                reason = "loopx " + state + " 尊重（产出窗口内无真实写入，自检退避）: " + reason
         # 交互式适配：operator_gate 且用户在线 → 放行（LoopX 无人值守假设不适用）
         if state == "operator_gate" and not should and self.user_online:
             should = True

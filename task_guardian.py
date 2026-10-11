@@ -11,7 +11,7 @@ server.py 启动时自动拉起本守护（独立进程，不随 server 崩溃�
 配置（environment.json）：
 {
   "task_guardian": {
-    "project_dir": "F:/CellBender_v2",        // 项目目录（缺省则不启动守护）
+    "project_dir": "/data/CellBender_v2",        // 项目目录（缺省则不启动守护）
     "heartbeat_script": "heartbeat_v2.py",    // 心跳脚本文件名（可选，默认 heartbeat_v2.py）
     "scanner_script": "error_scanner.py",     // 错误扫描脚本文件名（可选，默认 error_scanner.py）
     "task_name": "CellBender_26samples",      // 传给心跳的 --task（可选）

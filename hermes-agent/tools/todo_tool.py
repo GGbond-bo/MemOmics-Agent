@@ -19,7 +19,11 @@ from typing import Dict, Any, List, Optional
 
 
 # Valid status values for todo items
-VALID_STATUSES = {"pending", "in_progress", "completed", "cancelled"}
+# 2026-10-02: 补上 waiting_review。webui/server.py 的唤醒提示词一直在指示模型
+# 「需要审查→标记 waiting_review」（server.py:2350 附近），紧急唤醒判据也在读它
+# （server.py:18712「待审阅任务，触发立即唤醒」），但这里没有它 → _validate 静默改写成
+# pending（见本文件 180 行），于是那个状态永远存不进去，那条紧急唤醒分支是死代码。
+VALID_STATUSES = {"pending", "in_progress", "completed", "cancelled", "waiting_review"}
 
 # Bounds on persisted todo state. The todo list is a planning aid the model
 # re-reads after every context-compression event (see format_for_injection),

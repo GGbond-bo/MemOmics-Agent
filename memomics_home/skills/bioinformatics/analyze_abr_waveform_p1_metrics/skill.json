@@ -1,0 +1,20 @@
+{
+ "id": "analyze_abr_waveform_p1_metrics",
+ "name": "Analyze Abr Waveform P1 Metrics",
+ "category": "clinical",
+ "language": "Python",
+ "source": "Biomni",
+ "description": "Extracts P1 amplitude and latency from Auditory Brainstem Response (ABR) waveform data.",
+ "detailed_description": "Extracts P1 amplitude and latency from Auditory Brainstem Response (ABR) waveform data.",
+ "when_to_use": "When you need analyze abr waveform p1 metrics analysis",
+ "parameters": {
+  "time_ms": "[Required] Time points of the ABR recording in milliseconds (array-like)",
+  "amplitude_uv": "[Required] Amplitude values of the ABR recording in microvolts (array-like)"
+ },
+ "trigger_keywords": [
+  "abr",
+  "waveform",
+  "metrics"
+ ],
+ "trigger_level": "YEL"
+}

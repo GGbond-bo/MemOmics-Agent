@@ -15,7 +15,7 @@ API: NCBI E-utilities (https://eutils.ncbi.nlm.nih.gov/entrez/eutils/)
 
 速率限制: 无 key 时 3 次/秒，每次请求间隔 0.34s。
 
-注册为 hermes 工具。
+注册为 memomics 工具。
 """
 
 import json
@@ -196,7 +196,7 @@ def list_ncbi_databases() -> str:
     }, ensure_ascii=False)
 
 
-# ============ Hermes 工具注册 ============
+# ============ MemOmics 工具注册 ============
 
 def register(registry):
     registry.register(

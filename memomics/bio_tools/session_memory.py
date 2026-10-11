@@ -3,7 +3,7 @@
 
 科研会话超长运行的核心保障：
 - 用户重要的文件/路径/脚本/结论/偏好 → session_memory(add) 确定性写入
-  hermes_home/session_anchors/<sid>.md（JSON Lines，不依赖 LLM 摘要）
+  memomics_home/session_anchors/<sid>.md（JSON Lines，不依赖 LLM 摘要）
 - 每轮对话自动注入锚点摘要（server.py _inject_anchors），压缩后依然找回
 - 系统自动标记：results/ 新产物、用户消息中的路径
 """
@@ -15,9 +15,9 @@ import logging
 
 logger = logging.getLogger("memomics.session_memory")
 
-# 相对 hermes_home：<repo>/hermes_home/session_anchors/<sid>.md
+# 相对 memomics_home：<repo>/memomics_home/session_anchors/<sid>.md
 _MEMOMICS_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_ANCHORS_DIR = os.path.join(_MEMOMICS_DIR, "hermes_home", "session_anchors")
+_ANCHORS_DIR = os.path.join(_MEMOMICS_DIR, "memomics_home", "session_anchors")
 
 _KINDS = ("file", "path", "script", "finding", "preference", "decision", "todo")
 # 值得锚定的产物扩展名

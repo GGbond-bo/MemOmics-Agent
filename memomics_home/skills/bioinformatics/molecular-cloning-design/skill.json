@@ -1,0 +1,22 @@
+{
+  "id": "molecular-cloning-design",
+  "name": "Molecular Cloning Design",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": "Design complete cloning strategies for plasmid engineering (Gibson, Golden Gate, restriction-ligation) including backbone linearization, primer/overhang design, long-insert splitting, mutation introdu",
+  "starting_prompt": "使用 Molecular Cloning Design 进行分析",
+  "source_dir": "skills/bioinformatics/molecular-cloning-design",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "molecular-cloning-design",
+    "molecular cloning design",
+    "molecular",
+    "cloning"
+  ],
+  "when_to_use": "[molecular cloning] 克隆策略设计:Gibson Assembly / Golden Gate / Restriction-Ligation / Addgene质粒改造 / 慢病毒·细菌·酵母·IVT载体构建 / LABBench2 cloning考试"
+}

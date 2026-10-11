@@ -11,7 +11,7 @@ API: KEGG REST API (http://rest.kegg.jp/)
 
 速率限制: 官方建议请求间隔，无需严格 sleep。
 
-注册为 hermes 工具。
+注册为 memomics 工具。
 """
 
 import json
@@ -233,7 +233,7 @@ def query_kegg(query: str, query_type: str = "pathway", max_results: int = 10,
         }, ensure_ascii=False)
 
 
-# ============ Hermes 工具注册 ============
+# ============ MemOmics 工具注册 ============
 
 def register(registry):
     registry.register(

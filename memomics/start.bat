@@ -4,12 +4,12 @@ cd /d "%~dp0"
 
 echo === MemOmics Debug Start ===
 
-set "HERMES_HOME=%~dp0hermes_home"
+set "MEMOMICS_HOME=%~dp0memomics_home"
 set "PYTHONPATH=%~dp0;%~dp0hermes-agent;%PYTHONPATH%"
 set "MEMOMICS_PORT=8899"
 set "MEMOMICS_HOST=0.0.0.0"
 
-echo HERMES_HOME=%HERMES_HOME%
+echo MEMOMICS_HOME=%MEMOMICS_HOME%
 echo.
 
 if exist ".venv\Scripts\python.exe" (

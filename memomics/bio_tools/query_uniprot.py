@@ -11,7 +11,7 @@ API: UniProt REST API (https://rest.uniprot.org/)
 
 速率限制: UniProt 建议合理使用，无严格限制。
 
-注册为 hermes 工具。
+注册为 memomics 工具。
 """
 
 import json
@@ -227,7 +227,7 @@ def query_uniprot(query: str, query_type: str = "search", max_results: int = 10,
         }, ensure_ascii=False)
 
 
-# ============ Hermes 工具注册 ============
+# ============ MemOmics 工具注册 ============
 
 def register(registry):
     registry.register(

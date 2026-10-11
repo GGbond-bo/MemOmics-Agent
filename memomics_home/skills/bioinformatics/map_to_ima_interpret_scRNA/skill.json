@@ -1,0 +1,21 @@
+{
+ "id": "map_to_ima_interpret_scRNA",
+ "name": "Map To Ima Interpret Scrna",
+ "category": "genomics",
+ "language": "Python",
+ "source": "Biomni",
+ "description": "Map cell embeddings from the input dataset to the Integrated Megascale Atlas reference dataset using UCE embeddings.",
+ "detailed_description": "Map cell embeddings from the input dataset to the Integrated Megascale Atlas reference dataset using UCE embeddings.",
+ "when_to_use": "When you need map to ima interpret scRNA analysis",
+ "parameters": {
+  "adata_filename": "[Required] Filename of the AnnData object to be mapped (str)",
+  "data_dir": "[Required] Directory containing the AnnData file (str)",
+  "custom_args": "[Optional] Dictionary of custom arguments including 'n_neighbors' and 'metric' for nearest neighbor search"
+ },
+ "trigger_keywords": [
+  "map",
+  "ima",
+  "interpret"
+ ],
+ "trigger_level": "YEL"
+}

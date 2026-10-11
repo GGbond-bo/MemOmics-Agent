@@ -1,0 +1,33 @@
+{
+  "id": "grill-me",
+  "name": "Grill Me: 连环拷问打磨方案",
+  "category": "general",
+  "language": "Markdown",
+  "description": ">-",
+  "starting_prompt": "使用 Grill Me: 连环拷问打磨方案 对当前方案进行拷问",
+  "source_dir": "skills/bioinformatics/grill-me",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "grill",
+    "interview",
+    "review",
+    "design",
+    "plan",
+    "拷问",
+    "方案打磨",
+    "设计审查"
+  ],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "grill",
+    "拷问",
+    "面试方案",
+    "挑毛病",
+    "方案打磨",
+    "设计审查"
+  ],
+  "when_to_use": "方案打磨/设计审查:方案/设计/计划刚产出时、重大决策落地前 debate/rail_review 前的预检、多方案选型时。用户说\"拷问一下\"\"帮我挑毛病\" \"这个方案行不行\"时必触发。"
+}

@@ -131,7 +131,7 @@ services:
     networks:
       - egress
     volumes:
-      - ./config/squid-allowlist.conf:/etc/squid/conf.d/allowlist.conf:ro
+      - ./config/squid-allowlist.con/data/etc/squid/conf.d/allowlist.conf:ro
     restart: unless-stopped
 ```
 

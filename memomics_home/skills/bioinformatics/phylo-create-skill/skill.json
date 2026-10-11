@@ -1,0 +1,16 @@
+{
+ "id": "phylo-create-skill",
+ "name": "phylo-create-skill",
+ "category": "phylo",
+ "language": "R+Python",
+ "description": "Auto-generated for phylo-create-skill",
+ "tags": [],
+ "steps": [],
+ "when_to_use": "Create, test, package, and present reusable skills for Phylo's Biomni platform and bioinformatics workflows.",
+ "trigger_keywords": [
+  "phylo-create-skill",
+  "phylo create skill",
+  "phylo"
+ ],
+ "trigger_level": "GRN"
+}

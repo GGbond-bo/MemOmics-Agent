@@ -3,7 +3,7 @@
 
 用户问题：文献库"怎么算"——不只是 agent 自己下载的 PDF，用户自己下载好的文献也能导入。
 本模块提供：
-- import_pdfs(paths): 导入本地 PDF（文件或目录）到全局文献库 hermes_home/papers/
+- import_pdfs(paths): 导入本地 PDF（文件或目录）到全局文献库 memomics_home/papers/
   - 自动提取元数据：DOI 正则 → Crossref 反查（期刊/文章名/作者/年份）
   - 标识字段：journal(期刊) / title(文章名) / authors / year / doi
     / downloaded_at(下载日期=原文件修改时间) / imported_at(导入时间) / sha256
@@ -11,12 +11,16 @@
   - 同步注册进全局引用库（BibTeX/RIS，save_reference global_lib）
 - list_library(): 列出全部文献（用户导入 + agent 下载的 work/papers 索引合并）
 """
+import difflib
 import hashlib
 import json
 import logging
 import os
 import re
+import shutil
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -49,11 +53,11 @@ def _clean_doi(raw: str) -> str:
 
 
 def _library_dir() -> str:
-    hh = os.environ.get("HERMES_HOME", "")
+    hh = os.environ.get("MEMOMICS_HOME", "")
     if hh:
         return os.path.join(hh, "papers")
     here = Path(__file__).resolve().parent.parent.parent
-    return str(here / "hermes_home" / "papers")
+    return str(here / "memomics_home" / "papers")
 
 
 def _agent_papers_index() -> str:
@@ -251,6 +255,86 @@ def _extract_metadata(pdf_path: str, text: str, original_path: str) -> dict:
     return meta
 
 
+# ================= 2026-09-17 导入提速：Crossref 结果落盘缓存 + 并发预取 ===================
+# 实测单篇 Crossref 反查 1.0–1.4s，且原实现是串行 —— 18 篇导入光网络就 20s+。
+# 这里把"同一篇文献"的元数据结果缓存到 .crossref_cache.json（重复导入/补元数据零网络），
+# 并按并发预取代价最高的网络查询。
+_CROSSREF_CACHE_TTL = 30 * 86400.0   # 命中可用结果：30 天
+_CROSSREF_MISS_TTL = 6 * 3600.0      # 未解析出期刊/作者/年份的弱结果：6 小时（避免死 DOI 每次重试）
+_cr_cache_mem = None
+_cr_cache_lock = threading.Lock()
+_cr_cache_dirty = False
+_cr_stats = {"hit": 0, "miss": 0, "write": 0}
+
+
+def _cr_cache_path() -> str:
+    return os.path.join(_library_dir(), ".crossref_cache.json")
+
+
+def _cr_cache_get(key: str):
+    global _cr_cache_mem
+    with _cr_cache_lock:
+        if _cr_cache_mem is None:
+            raw = _load_index(_cr_cache_path())
+            _cr_cache_mem = raw if isinstance(raw, dict) else {}
+        rec = _cr_cache_mem.get(key)
+    if not isinstance(rec, dict):
+        return None
+    try:
+        if time.time() - float(rec.get("ts") or 0) > float(rec.get("ttl") or 0):
+            return None
+    except Exception:
+        return None
+    return rec.get("meta") or {}
+
+
+def _cr_cache_put(key: str, meta: dict, ttl: float):
+    global _cr_cache_mem, _cr_cache_dirty
+    with _cr_cache_lock:
+        if _cr_cache_mem is None:
+            _cr_cache_mem = {}
+        _cr_cache_mem[key] = {"ts": time.time(), "ttl": float(ttl), "meta": meta}
+        _cr_cache_dirty = True
+
+
+def _cr_cache_flush():
+    """把缓存写回磁盘（导入结束时调用一次，避免每篇都写盘）。"""
+    global _cr_cache_dirty
+    with _cr_cache_lock:
+        if not _cr_cache_dirty or not _cr_cache_mem:
+            return
+        data = dict(_cr_cache_mem)
+        _cr_cache_dirty = False
+    try:
+        _save_index(_cr_cache_path(), data)
+    except Exception as e:
+        logger.debug(f"crossref cache save failed: {e}")
+
+
+def _meta_cache_key(text: str, original_path: str) -> str:
+    """缓存键：能抓到 DOI 就用 DOI，否则用"文件名/标题猜测"（同一篇文献跨导入稳定）。"""
+    m = DOI_RE.search(text or "")
+    if m:
+        return "doi:" + _clean_doi(m.group(0)).lower()
+    stem = _pdf_title_guess(original_path) or Path(original_path).stem
+    return "name:" + re.sub(r"\s+", " ", str(stem)).strip().lower()[:200]
+
+
+def _crossref_meta_cached(pdf_path: str, text: str, original_path: str) -> dict:
+    """_extract_metadata + 磁盘缓存（并发调用安全）。"""
+    key = _meta_cache_key(text, original_path)
+    hit = _cr_cache_get(key)
+    if hit is not None:
+        _cr_stats["hit"] += 1
+        return dict(hit)
+    _cr_stats["miss"] += 1
+    meta = _extract_metadata(pdf_path, text, original_path)
+    resolved = bool(meta.get("journal") or meta.get("authors") or meta.get("year"))
+    _cr_cache_put(key, meta, _CROSSREF_CACHE_TTL if resolved else _CROSSREF_MISS_TTL)
+    _cr_stats["write"] += 1
+    return meta
+
+
 def _load_index(path: str) -> list:
     try:
         with open(path, encoding="utf-8") as f:
@@ -259,10 +343,18 @@ def _load_index(path: str) -> list:
         return []
 
 
+_INDEX_LOCK = threading.Lock()
+
+
 def _save_index(path: str, entries: list):
+    """原子写索引（tmp + os.replace）：防止并发任务（导入/翻译/知识提取同时改索引）
+    读到一个写了一半的 JSON——最坏会把整个 .pdf_index.json 变成空数组。"""
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(entries, f, ensure_ascii=False, indent=2)
+    with _INDEX_LOCK:
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(entries, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
 
 
 def _collect_pdfs(paths) -> list:
@@ -333,17 +425,33 @@ def _repair_json_via_llm(bad_text: str, target: str) -> str:
         return ""
 
 
+def _no_think_enabled() -> bool:
+    """批量文献任务（翻译/提炼/知识提取）默认首轮就抑制推理。
+
+    实测（2026-09-17，dcs-cloud/deepseek-flash，同一 1691 字符翻译单元 2×2 次）：
+    带前缀 11.5/13.4s，不带 16.4/19.5s —— 快约 30%，且译文质量一致。
+    环境变量 MEMOMICS_LIT_NO_THINK=0 可关掉。"""
+    return os.environ.get("MEMOMICS_LIT_NO_THINK", "1").lower() not in ("0", "false", "no", "off")
+
+
+_NO_THINK_PREFIX = "【不要输出任何思考/推理过程，直接输出最终结果】\n"
+
+
 def _llm_content(prompt: str, label: str, temperature: float = 0.3,
-                 max_tokens: int = 6000, retry_prefix: str = "") -> str:
+                 max_tokens: int = 6000, retry_prefix: str = "",
+                 no_think: bool = False) -> str:
     """LLM 调用 + 推理占满自动重试（批N 2026-08-16）。
 
     deepseek-v4-flash 是推理模型，偶尔把输出额度全花在 reasoning 上、
     content 为空（_call_llm_sync 回退返回 reasoning 草稿）→ 检测到后
     重试一次并要求直接输出最终结果。
+    no_think=True：首轮就带上"不要思考"前缀（批量翻译/提炼用，实测快 30%，
+    且省掉一次"推理占满→整轮重试"的重复调用）。重试仍用原始 prompt，避免前缀叠加。
     """
     from memomics.bio_tools.debate_analysis import _call_llm_sync, _default_role_llm
     cfg = _default_role_llm("", "", "deepseek-v4-flash", _load_provider_keys())
-    r = _call_llm_sync(prompt, label, cfg["api_key"], cfg["base_url"], cfg["model"],
+    r = _call_llm_sync((_NO_THINK_PREFIX if (no_think and _no_think_enabled()) else "") + prompt,
+                       label, cfg["api_key"], cfg["base_url"], cfg["model"],
                        temperature=temperature, max_tokens=max_tokens)
     if r.get("used_reasoning_fallback"):
         logger.warning(f"{label} reasoning 占满 → 重试直接输出")
@@ -354,12 +462,136 @@ def _llm_content(prompt: str, label: str, temperature: float = 0.3,
     return r.get("content", "")
 
 
+def _llm_chunks_parallel(chunks: list, make_prompt, label_prefix: str,
+                         progress_cb=None, phase: str = "extract",
+                         max_tokens: int = 4000, retry_prefix: str = "",
+                         workers: int = 0) -> list:
+    """分块 LLM 提炼并发执行，按输入顺序返回解析后的 JSON dict 列表。
+
+    各分块互不依赖（结果统一合并），并发不改变语义。实测某篇 170k 字符文献切 19 块，
+    串行每块 20–40s；并发 5 路后整体 <2 分钟（MEMOMICS_LIT_CHUNK_WORKERS 可覆盖）。
+    """
+    out = [{} for _ in chunks]
+    n = len(chunks)
+    if not n:
+        return out
+    mw = workers or max(1, min(10, int(os.environ.get("MEMOMICS_LIT_CHUNK_WORKERS", "6"))))
+
+    def _run(i: int):
+        return _parse_json_object(_llm_content(
+            make_prompt(i, chunks[i]), f"{label_prefix}_{i}", temperature=0.2,
+            max_tokens=max_tokens, retry_prefix=retry_prefix, no_think=True))
+
+    done = 0
+    try:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(max_workers=min(mw, n)) as ex:
+            futs = {ex.submit(_run, i): i for i in range(n)}
+            for f in as_completed(futs):
+                i = futs[f]
+                try:
+                    out[i] = f.result() or {}
+                except Exception as e:
+                    logger.warning(f"{label_prefix} 第{i + 1}块失败: {e}")
+                    out[i] = {}
+                done += 1
+                if progress_cb:
+                    progress_cb(phase, done, n, f"{label_prefix} {done}/{n} 块（并发{mw}）")
+        # 批P4(2026-09-17)：没产出有效 JSON 的块重试一次——否则那块内容直接蒸发
+        # （实测 lung_no-smoking 缺了 Methods 里的 FACETS/GISTIC：24 块里 1-2 块 JSON 没解析出来）
+        _empty = [i for i in range(n) if not out[i]]
+        if _empty:
+            logger.warning(f"{label_prefix} {len(_empty)}/{n} 块未产出有效 JSON → 严格模式重试")
+
+            def _run_strict(i: int):
+                return _parse_json_object(_llm_content(
+                    "【严格：只输出一个 JSON 对象，第一个字符必须是 { ，不要任何解释或思考】\n"
+                    + make_prompt(i, chunks[i]), f"{label_prefix}_fix_{i}", temperature=0.1,
+                    max_tokens=max_tokens, retry_prefix=retry_prefix, no_think=True))
+
+            try:
+                with ThreadPoolExecutor(max_workers=min(mw, len(_empty))) as ex2:
+                    futs2 = {ex2.submit(_run_strict, i): i for i in _empty}
+                    for f in as_completed(futs2):
+                        i = futs2[f]
+                        try:
+                            got = f.result() or {}
+                        except Exception as e:
+                            logger.warning(f"{label_prefix} 第{i + 1}块严格重试失败: {e}")
+                            got = {}
+                        if got:
+                            out[i] = got
+                _fixed = sum(1 for i in _empty if out[i])
+                if progress_cb:
+                    progress_cb(phase, n, n, f"{label_prefix} 空块重试补齐 {_fixed}/{len(_empty)} 块")
+            except Exception as e:
+                logger.warning(f"strict chunk retry failed: {e}")
+    except Exception as e:
+        logger.warning(f"parallel chunk LLM failed, fallback serial: {e}")
+        done = 0
+        for i in range(n):
+            try:
+                out[i] = _run(i) or {}
+            except Exception as e2:
+                logger.warning(f"{label_prefix} 第{i + 1}块失败: {e2}")
+                out[i] = {}
+            done += 1
+            if progress_cb:
+                progress_cb(phase, done, n, f"{label_prefix} {done}/{n} 块")
+    return out
+
+
+def _cap_json_size(obj, cap: int):
+    """把碎片 JSON 压到 ≤cap 字符，且保持 JSON 合法（按完整条目丢弃，不切字符串）。"""
+    s = json.dumps(obj, ensure_ascii=False)
+    if len(s) <= cap:
+        return s
+    import copy as _copy
+    cur = _copy.deepcopy(obj)
+
+    def _trim(node):
+        changed = False
+        for k, v in list(node.items()):
+            if isinstance(v, list) and v:
+                v.pop()
+                changed = True
+            elif isinstance(v, dict) and v:
+                changed = _trim(v) or changed
+        return changed
+
+    while len(json.dumps(cur, ensure_ascii=False)) > cap and _trim(cur):
+        pass
+    return json.dumps(cur, ensure_ascii=False)
+
+
+def _compact_fragments(parts: list) -> dict:
+    """合并去重分块碎片（列表取并集、标量取首个非空）——压缩合并调用的输入。
+
+    旧实现把碎片 JSON 硬截断到 12000 字符，长文献（19 块）后面几块的碎片
+    直接被丢掉 → 知识缺失。去重后体积通常只剩零头，可完整送进合并调用。
+    """
+    agg = {}
+    for part in parts:
+        for k, v in (part or {}).items():
+            if isinstance(v, list):
+                bucket = agg.setdefault(k, [])
+                seen = {json.dumps(x, ensure_ascii=False, sort_keys=True) for x in bucket}
+                for it in v:
+                    sig = json.dumps(it, ensure_ascii=False, sort_keys=True)
+                    if sig not in seen:
+                        seen.add(sig)
+                        bucket.append(it)
+            elif isinstance(v, str) and v.strip() and not agg.get(k):
+                agg[k] = v
+    return agg
+
+
 def _markdown_dir() -> str:
     return os.path.join(_library_dir(), "markdown")
 
 
 def pdf_to_markdown(path: str, force: bool = False) -> str:
-    """PDF → Markdown 落盘（批N 2026-08-16）：hermes_home/papers/markdown/<名>.md。
+    """PDF → Markdown 落盘（批N 2026-08-16）：memomics_home/papers/markdown/<名>.md。
 
     pymupdf4llm 优先（标题/段落结构化）；失败回退纯文本；扫描版走 OCR。
     已存在且非 force → 直接复用缓存。
@@ -408,15 +640,33 @@ def _split_md_sections(md: str) -> list:
 
 
 def _chunk_sections(sections: list, max_chars: int = 9000) -> list:
-    """分节合并成 ≤max_chars 的块（块内保留节标题）。"""
-    chunks, cur = [], ""
+    """分节合并成 ≤max_chars 的块（块内保留节标题）；超大节按段落再拆。
+
+    批P2(2026-09-17)：旧实现只合并、从不拆分。遇到 pdf→markdown 没产出 # 标题的
+    PDF 时整篇 = 1 节 → 拼出一个 170k 字符的巨型块，一次送模型必然「推理占满/超时」，
+    知识提取直接报「未能提取出知识」（实测 lung_no-smoking_clinic.pdf 100% 失败）。
+    """
+    pieces = []
     for title, content in sections:
-        piece = f"## {title}\n{content}\n\n"
-        if len(cur) + len(piece) > max_chars and cur:
+        head = f"## {title}\n" if title else ""
+        for para in re.split(r"\n\s*\n", (content or "").strip()):
+            para = para.strip()
+            if not para:
+                continue
+            while len(para) > max_chars:      # 单段超长（无空行）→ 硬切
+                pieces.append(para[:max_chars])
+                para = para[max_chars:]
+            pieces.append(head + para)
+            head = ""
+        if head:
+            pieces.append(head)
+    chunks, cur = [], ""
+    for p in pieces:
+        if cur and len(cur) + len(p) + 2 > max_chars:
             chunks.append(cur)
-            cur = piece
+            cur = p
         else:
-            cur += piece
+            cur = (cur + "\n\n" + p) if cur else p
     if cur:
         chunks.append(cur)
     return chunks
@@ -454,6 +704,38 @@ def _parse_json_array(text: str) -> list:
         return []
 
 
+_CLASSIFY_LOCK = threading.Lock()
+
+
+def _apply_classification_bg(index_file: str, keymap: dict, fut):
+    """后台补写 LLM 精细分类标签（不阻塞导入返回；只改条目 tags，不动其它字段）。"""
+    try:
+        tags = fut.result() or {}
+    except Exception as e:
+        logger.warning(f"background classification failed: {e}")
+        return
+    if not tags:
+        return
+    try:
+        with _CLASSIFY_LOCK:
+            cur = _load_index(index_file)
+            changed = 0
+            for fname, key in (keymap or {}).items():
+                tg = tags.get(key)
+                if not tg:
+                    continue
+                for e in cur:
+                    if e.get("file") == fname and e.get("tags"):
+                        e["tags"] = tg
+                        changed += 1
+                        break
+            if changed:
+                _save_index(index_file, cur)
+            logger.info(f"background classification applied: {changed}/{len(keymap or {})}")
+    except Exception as e:
+        logger.warning(f"background classification save failed: {e}")
+
+
 def import_pdfs(paths, progress_cb=None, imported_by: str = "") -> str:
     """导入本地 PDF 到全局文献库（去重 + 元数据标识 + 分类标签 + 引用库注册）。
 
@@ -471,6 +753,7 @@ def import_pdfs(paths, progress_cb=None, imported_by: str = "") -> str:
     if not files:
         return json.dumps({"ok": False, "error": "未找到 PDF 文件（支持 .pdf 文件或目录路径）"},
                           ensure_ascii=False)
+    _t0 = time.time()
     _cb = progress_cb or (lambda *a, **k: None)
     _cb("collect", 0, len(files), f"共发现 {len(files)} 个 PDF")
     lib_dir = _library_dir()
@@ -482,10 +765,13 @@ def import_pdfs(paths, progress_cb=None, imported_by: str = "") -> str:
 
     imported, skipped, errors = [], [], []
     _n_done = 0
+
+    # ---- ① 本地预筛（快）：空文件 / 非 PDF / 重复 ----
+    # 2026-09-17 提速：便宜判断在前 —— 原实现先无条件算 sha256（整文件读一遍）再判同名，
+    # 重复导入时白读全文；现在同名同大小直接跳过，重复文件零读取。
+    _cands = []
     for src in files:
-        _cb("file", _n_done, len(files), os.path.basename(src))
         try:
-            # 校验：空文件 / 非 PDF 直接报错跳过
             _sz = os.path.getsize(src)
             if _sz == 0:
                 errors.append({"file": os.path.basename(src),
@@ -499,17 +785,66 @@ def import_pdfs(paths, progress_cb=None, imported_by: str = "") -> str:
                                "error": "不是有效的 PDF 文件（文件头非 %PDF-）"})
                 _n_done += 1
                 continue
-            sha = _sha256_of(src)
-            size = _sz
-            if sha and sha in by_sha:
-                skipped.append({"file": os.path.basename(src), "reason": "重复(sha256)"})
+            if (os.path.basename(src), _sz) in by_name:
+                skipped.append({"file": os.path.basename(src), "reason": "重复(同名同大小)"})
                 _n_done += 1  # 2026-08-25: 续传跳过也算进度（原实现卡住计数）
                 continue
-            if (os.path.basename(src), size) in by_name:
-                skipped.append({"file": os.path.basename(src), "reason": "重复(同名同大小)"})
-                _n_done += 1  # 2026-08-25: 同上
-                continue
-            # 复制进库
+        except Exception as e:
+            errors.append({"file": os.path.basename(src), "error": str(e)[:200]})
+            _n_done += 1
+            continue
+        sha = _sha256_of(src)
+        if sha and sha in by_sha:
+            skipped.append({"file": os.path.basename(src), "reason": "重复(sha256)"})
+            _n_done += 1
+            continue
+        _cands.append((src, sha, _sz))
+
+    # ---- ②③ 元数据预取：本地解析首页文本（快）→ 并发 Crossref 反查（网络是瓶颈）----
+    _metas, _texts = {}, {}
+    if _cands:
+        _cb("meta", 0, len(_cands), f"解析首页文本（{len(_cands)} 篇）…")
+        for _src, _sha, _sz in _cands:
+            try:
+                _texts[_src] = _pdf_text(_src, pages=2)
+            except Exception:
+                _texts[_src] = ""
+        _workers = min(8, max(1, len(_cands)))
+        _n_meta = 0
+        with ThreadPoolExecutor(max_workers=_workers) as _ex:
+            _futs = {_ex.submit(_crossref_meta_cached, _src, _texts.get(_src, ""), _src): _src
+                     for _src, _sha, _sz in _cands}
+            for _fu in as_completed(_futs):
+                _src = _futs[_fu]
+                try:
+                    _metas[_src] = _fu.result() or {}
+                except Exception as e:
+                    logger.debug(f"metadata prefetch failed for {_src}: {e}")
+                    _metas[_src] = {}
+                _n_meta += 1
+                _cb("meta", _n_meta, len(_futs), f"并发查询元数据 {_n_meta}/{len(_futs)}")
+
+    # ---- ④ 分类（LLM，实测 15–20s/批）与后面的复制入库并行：LLM 等待被本地 IO 掩盖 ----
+    _cls_pool, _cls_fut, _cls_order = None, None, []
+    if _cands:
+        try:
+            _cls_order = [s for s, _h, _z in _cands]
+            _cls_items = []
+            for _i, _src in enumerate(_cls_order):
+                _m = _metas.get(_src) or {}
+                _cls_items.append({"file": f"__{_i}",
+                                   "title": (_m.get("title") or os.path.basename(_src))[:200],
+                                   "journal": (_m.get("journal") or "")[:80]})
+            _cls_pool = ThreadPoolExecutor(max_workers=1)
+            _cls_fut = _cls_pool.submit(_classify_papers, _cls_items)
+        except Exception as e:
+            logger.debug(f"classify prefetch failed: {e}")
+
+    _entry_for = {}
+    for src, sha, size in _cands:
+        _cb("file", _n_done, len(files), os.path.basename(src))
+        try:
+            # 复制进库（2026-09-17: 改用 shutil.copyfile —— 原实现 fin.read() 把整个 PDF 读进内存）
             dest_name = "".join(c if (c.isalnum() or c in "._-") else "_" for c in os.path.basename(src))
             dest = os.path.join(lib_dir, dest_name)
             n = 1
@@ -517,11 +852,9 @@ def import_pdfs(paths, progress_cb=None, imported_by: str = "") -> str:
                 stem, ext = os.path.splitext(dest_name)
                 dest = os.path.join(lib_dir, f"{stem}_{n}{ext}")
                 n += 1
-            with open(src, "rb") as fin, open(dest, "wb") as fout:
-                fout.write(fin.read())
-            # 元数据提取（PDF 文本 + Crossref）
-            text = _pdf_text(dest, pages=2)
-            meta = _extract_metadata(dest, text, src)
+            shutil.copyfile(src, dest)
+            # 元数据：直接用预取结果（源文件已解析 + 已并发 Crossref），命中缓存时零网络
+            meta = _metas.get(src) or _extract_metadata(dest, _pdf_text(dest, pages=2), src)
             entry = {
                 "file": os.path.basename(dest),
                 "path": dest.replace("\\", "/"),
@@ -547,6 +880,7 @@ def import_pdfs(paths, progress_cb=None, imported_by: str = "") -> str:
             by_sha.add(sha)
             by_name.add((entry["file"], size))
             imported.append({k: entry[k] for k in ("file", "title", "journal", "year", "doi", "downloaded_at")})
+            _entry_for[src] = entry
             # 注册进全局引用库（BibTeX/RIS）
             try:
                 from memomics.bio_tools.reference_library import save_reference
@@ -566,27 +900,46 @@ def import_pdfs(paths, progress_cb=None, imported_by: str = "") -> str:
         _n_done += 1
         _cb("file", _n_done, len(files), f"已处理 {_n_done}/{len(files)}")
     # 自动分类打标（物种/组织/方向/assay/kb_category）——仅对新导入的
+    # 2026-09-17 提速：分类的 LLM 调用在复制入库之前就已并发发出（见 ④），
+    # 这里只取回结果 —— 实测该调用固定 15–20s，现在与复制/解析并行，不再叠加等待。
     if index and any(not e.get("tags") for e in index):
         _new = [e for e in index if not e.get("tags")]
-        _cb("classify", _n_done, len(files), f"LLM 分类 {len(_new)} 篇文献…")
-        try:
-            _tags = _classify_papers(_new)
-            for e in _new:
-                if e.get("file") in _tags:
-                    e["tags"] = _tags[e["file"]]
-        except Exception as e:
-            logger.warning(f"classification failed: {e}")
+        # 2026-09-17：先落规则标签（零成本、立即可用），再让 LLM 精细分类在后台改写——
+        # 实测单次 LLM 分类固定 15–20s（一篇和十八篇一样），不该让用户等它。
+        for e in _new:
+            e["tags"] = _rule_classify(e.get("title") or "")
         _save_index(index_file, index)
+        _keymap = {}
+        for _i, _src in enumerate(_cls_order):
+            _e = _entry_for.get(_src)
+            if _e is not None:
+                _keymap[_e.get("file")] = f"__{_i}"
+        if _cls_fut is not None and _keymap:
+            _cb("classify", _n_done, len(files),
+                f"已按规则打标 {len(_new)} 篇；LLM 精细分类 {len(_keymap)} 篇后台进行（不阻塞导入）")
+            threading.Thread(target=_apply_classification_bg,
+                             args=(index_file, _keymap, _cls_fut), daemon=True).start()
+        else:
+            _cb("classify", _n_done, len(files), f"分类打标 {len(_new)} 篇（规则）")
+    if _cls_pool is not None:
+        try:
+            _cls_pool.shutdown(wait=False)
+        except Exception:
+            pass
     for it in imported:
         for e in index:
             if e.get("file") == it.get("file") and e.get("tags"):
                 it["tags"] = e["tags"]
-    _cb("done", _n_done, len(files), f"完成：导入 {len(imported)} 篇")
+    _cr_cache_flush()
+    _elapsed = time.time() - _t0
+    _cb("done", _n_done, len(files), f"完成：导入 {len(imported)} 篇（{_elapsed:.1f}s）")
     return json.dumps({
         "ok": True, "imported": len(imported), "skipped": len(skipped), "errors": errors,
         "entries": imported, "library_dir": lib_dir.replace("\\", "/"),
         "bibtex_file": os.path.join(os.path.dirname(_library_dir()) or "", "references.bib").replace("\\", "/"),
         "ris_file": os.path.join(os.path.dirname(_library_dir()) or "", "references.ris").replace("\\", "/"),
+        "elapsed_s": round(_elapsed, 2),
+        "crossref_cache": dict(_cr_stats),
     }, ensure_ascii=False, indent=2)
 
 
@@ -638,7 +991,7 @@ def list_library() -> str:
 
 
 def _load_provider_keys() -> dict:
-    hh = os.environ.get("HERMES_HOME", "")
+    hh = os.environ.get("MEMOMICS_HOME", "")
     if hh:
         try:
             with open(os.path.join(hh, "provider_keys.json"), encoding="utf-8") as f:
@@ -714,11 +1067,12 @@ def _classify_papers(entries: list) -> dict:
         "文献列表:\n" + json.dumps(items, ensure_ascii=False)
     )
     try:
-        from memomics.bio_tools.debate_analysis import _call_llm_sync, _default_role_llm
-        cfg = _default_role_llm("", "", "deepseek-v4-flash", _load_provider_keys())
-        r = _call_llm_sync(prompt, "lit_classify", cfg["api_key"], cfg["base_url"],
-                           cfg["model"], temperature=0.2, max_tokens=3000)
-        txt = r.get("content", "")
+        # 2026-09-17：改用 _llm_content（no_think + 推理占满自动重试）。实测原实现 max_tokens=3000
+        # 被 reasoning 全吃掉、无重试 → 11 篇 0/11 拿到 kb_category，静默退回规则标签
+        # （用户在文献库里看到的物种/方向是规则结果，后台 LLM 精细分类从未生效）。
+        txt = _llm_content(prompt, "lit_classify", temperature=0.2, max_tokens=8000,
+                           retry_prefix="【不要思考，立即输出 JSON 数组，第一个字符必须是 [ 】\n",
+                           no_think=True)
         arr = _parse_json_array(txt)
         for it in arr:
             if isinstance(it, dict) and it.get("file"):
@@ -858,7 +1212,8 @@ def _translate_block_batch(blocks: list) -> list:
     for i, b in enumerate(blocks):
         prompt += f"[{i + 1}]\n{b}\n\n"
     out = _llm_content(prompt, "lit_trans_blocks", temperature=0.2, max_tokens=12000,
-                       retry_prefix="【不要思考，立即按 ###N### 编号输出译文】\n")
+                       retry_prefix="【不要思考，立即按 ###N### 编号输出译文】\n",
+                       no_think=True)
     res = _parse_numbered_output(out, len(blocks))
     missing = [i for i, t in enumerate(res) if not t]
     if not any(res):
@@ -867,7 +1222,7 @@ def _translate_block_batch(blocks: list) -> list:
             "【重要：不要输出任何思考过程，立即按 ###N### 编号逐段输出译文，"
             "每段必须以 ###数字### 单独一行开头】\n" + prompt,
             "lit_trans_blocks_retry", temperature=0.1, max_tokens=12000,
-            retry_prefix="【直接输出译文，不要思考】\n")
+            retry_prefix="【直接输出译文，不要思考】\n", no_think=True)
         res = _parse_numbered_output(out2, len(blocks))
         missing = [i for i, t in enumerate(res) if not t]
     if missing and any(res):
@@ -878,7 +1233,7 @@ def _translate_block_batch(blocks: list) -> list:
         out3 = _llm_content(
             "【重要：不要输出任何思考过程，立即按 ###N### 编号逐段输出译文】\n" + sub_prompt,
             "lit_trans_blocks_sub", temperature=0.1, max_tokens=12000,
-            retry_prefix="【直接输出译文，不要思考】\n")
+            retry_prefix="【直接输出译文，不要思考】\n", no_think=True)
         part3 = _parse_numbered_output(out3, len(blocks))
         for i in missing:
             if part3[i]:
@@ -895,6 +1250,59 @@ def _normalize_zh(results: list, blocks: list) -> list:
         t = re.sub(r"^#{1,6}\s*\d{1,3}\s*#{1,6}\s*", "", t, count=1)
         zh_parts.append(t or (blocks[i] if i < len(blocks) else ""))
     return zh_parts
+
+
+def _split_text_sentences(text: str, max_chars: int = 1800) -> list:
+    """按句子边界把长文本切成 ≤max_chars 的片段（单句超长时硬切）。"""
+    out, cur = [], ""
+    for part in re.split(r"(?<=[.!?。！？])\s+", text or ""):
+        if not part:
+            continue
+        if cur and len(cur) + len(part) + 1 > max_chars:
+            out.append(cur.strip())
+            cur = part
+        else:
+            cur = (cur + " " + part) if cur else part
+        while len(cur) > max_chars:
+            out.append(cur[:max_chars].strip())
+            cur = cur[max_chars:]
+    if cur.strip():
+        out.append(cur.strip())
+    return [x for x in out if x] or [(text or "").strip()]
+
+
+def _split_units(blocks: list, max_chars: int = 1800) -> list:
+    """块 → 翻译单元 [(块下标, 文本)…]。
+
+    PDF→Markdown 常把整页/整节并成一个“段”（实测某篇 31 段里 18 段 >6000 字符、
+    最大 8995），整段送模型单次要 30–120s 且极易被 max_tokens 截断。
+    这里按句子边界把超大段拆成小单元，译完再拼回原段，中英对照仍严格 1:1。
+    """
+    units = []
+    for bi, b in enumerate(blocks):
+        if len(b) <= max_chars:
+            units.append((bi, b))
+        else:
+            for piece in _split_text_sentences(b, max_chars):
+                units.append((bi, piece))
+    return units
+
+
+def _join_unit_texts(pieces: list) -> str:
+    """把同一段的单元译文拼回一段（相邻都是中文则不插空格）。"""
+    out = ""
+    for p in pieces:
+        p = (p or "").strip()
+        if not p:
+            continue
+        if not out:
+            out = p
+            continue
+        if re.search(r"[\u4e00-\u9fff]$", out) or re.match(r"^[\u4e00-\u9fff]", p):
+            out += p
+        else:
+            out += " " + p
+    return out
 
 
 def translate_paper(file_or_title: str, progress_cb=None, force: bool = False) -> str:
@@ -959,38 +1367,62 @@ def translate_paper(file_or_title: str, progress_cb=None, force: bool = False) -
         except Exception as e:
             logger.warning(f"translation part flush failed: {e}")
 
-    batches = _batch_blocks(blocks)
-    # 批O2：2 路并发翻译批次（每批编号直译互不依赖；结果按批次偏移回填保证顺序）
+    # 批P1(2026-09-17)：超大段先拆成小单元再翻译。实测单段 3630 字符的整段直译要 32s，
+    # 8–9k 字符的段会顶到 120s 超时/被 max_tokens 截断 → 拆单元后单次输出小，快且不截断。
+    _uns = _split_units(blocks)
+    _unit_text = [""] * len(_uns)
+    batches = _batch_blocks([t for _bi, t in _uns], max_chars=6000, max_blocks=4)
     indexed = []
     _off = 0
     for batch in batches:
         indexed.append((_off, batch))
         _off += len(batch)
-    # 只翻译还有缺失段的批次（断点续译跳过已完成批次）
+    # 断点续译：已完成的段（.part.json 里已有译文）直接用旧结果，其单元不再翻
+    _block_done = [bool(results[i]) for i in range(len(blocks))]
+    _units_of = {}
+    for _ui, (_bi, _t) in enumerate(_uns):
+        _units_of.setdefault(_bi, []).append(_ui)
+
+    def _block_flush(bi):
+        """某段所有单元都译完 → 拼回该段（保证译文段数 == 原文段数）。"""
+        if _block_done[bi]:
+            return
+        _idxs = _units_of.get(bi) or []
+        if _idxs and all(_unit_text[j] for j in _idxs):
+            results[bi] = _join_unit_texts([_unit_text[j] for j in _idxs])
+            _block_done[bi] = True
+
     pending = []
     for off, batch in indexed:
-        if all(results[off + k] for k in range(len(batch))):
+        if all(_block_done[_uns[off + k][0]] for k in range(len(batch))):
             continue
         pending.append((off, batch))
+    # 批P1：默认 5 路并发（MEMOMICS_LIT_TRANS_WORKERS 可覆盖）
+    _mw = max(1, min(10, int(os.environ.get("MEMOMICS_LIT_TRANS_WORKERS", "6"))))
     if pending:
-        _cb("translate", 0, len(pending), f"段落级编号直译 {len(pending)}/{len(indexed)} 批（并发2）")
+        _cb("translate", 0, len(pending),
+            f"段落级编号直译 {len(pending)}/{len(indexed)} 批（{len(_uns)} 单元，并发{_mw}）")
+    _n_done = 0
     try:
-        from concurrent.futures import ThreadPoolExecutor
-        _mw = max(1, min(2, int(os.environ.get("MEMOMICS_LIT_TRANS_WORKERS", "2"))))
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
         def _one(off_batch):
             off, batch = off_batch
             return off, _translate_block_batch(batch)
 
-        _n_done = 0
-        with ThreadPoolExecutor(max_workers=_mw) as _ex:
-            for off, part in _ex.map(_one, pending):
+        with ThreadPoolExecutor(max_workers=min(_mw, max(1, len(pending)))) as _ex:
+            _futs = [_ex.submit(_one, ib) for ib in pending]
+            for _f in as_completed(_futs):
+                off, part = _f.result()
                 for k, t in enumerate(part):
                     if t:
-                        results[off + k] = t
+                        _unit_text[off + k] = t
+                for bi in {_uns[off + k][0] for k in range(len(part))}:
+                    _block_flush(bi)
                 _n_done += 1
                 _flush_part()  # 每完成一批落盘一次（服务重启可续）
-                _cb("translate", _n_done, len(pending), f"段落级翻译 {_n_done}/{len(pending)} 批")
+                _cb("translate", _n_done, len(pending),
+                    f"段落级翻译 {_n_done}/{len(pending)} 批（{sum(1 for d in _block_done if d)}/{len(blocks)} 段完成）")
     except Exception as e:
         logger.warning(f"parallel translate failed, fallback serial: {e}")
         _n_done = 0
@@ -998,20 +1430,24 @@ def translate_paper(file_or_title: str, progress_cb=None, force: bool = False) -
             part = _translate_block_batch(batch)
             for k, t in enumerate(part):
                 if t:
-                    results[off + k] = t
+                    _unit_text[off + k] = t
+            for bi in {_uns[off + k][0] for k in range(len(part))}:
+                _block_flush(bi)
             _n_done += 1
             _flush_part()
-            _cb("translate", _n_done, len(pending), f"段落级翻译第 {_n_done}/{len(pending)} 批（{len(batch)} 段）")
-    # 缺段单段兜底直译（保证 1:1 完整）
-    for i, b in enumerate(blocks):
-        if not results[i]:
-            _cb("translate", i, len(blocks), f"补译第 {i + 1}/{len(blocks)} 段")
-            results[i] = _llm_content(
-                "把下面这段英文文献翻译成学术严谨的中文（保持 Markdown 标题格式），"
-                "输出为**单个段落，不要空行**，只输出译文：\n" + b,
-                f"lit_trans_fix_{i}", temperature=0.2, max_tokens=6000,
-                retry_prefix="【不要思考，立即输出译文】\n").strip()
-            _flush_part()
+            _cb("translate", _n_done, len(pending), f"段落级翻译第 {_n_done}/{len(pending)} 批")
+    # 缺单元兜底直译（单单元送模型，保证 1:1 完整）
+    for _ui, (_bi, _txt) in enumerate(_uns):
+        if _unit_text[_ui] or _block_done[_bi]:
+            continue
+        _cb("translate", _ui, len(_uns), f"补译第 {_ui + 1}/{len(_uns)} 单元")
+        _unit_text[_ui] = _llm_content(
+            "把下面这段英文文献翻译成学术严谨的中文（保持 Markdown 标题格式），"
+            "输出为**单个段落，不要空行**，只输出译文：\n" + _txt,
+            f"lit_trans_fix_{_ui}", temperature=0.2, max_tokens=6000,
+            retry_prefix="【不要思考，立即输出译文】\n", no_think=True).strip()
+        _block_flush(_bi)
+        _flush_part()
     # 批O2c：块归一化——折叠块内空行/残余编号；仍为空的段落回填原文
     # （保证译文段落数与原文严格一致，中英对照逐段对齐不漂移）
     zh_parts = _normalize_zh(results, blocks)
@@ -1038,8 +1474,14 @@ def translate_paper(file_or_title: str, progress_cb=None, force: bool = False) -
     except Exception as e:
         logger.warning(f"translated mark failed: {e}")
     _cb("done", len(blocks), len(blocks), "翻译完成")
+    # 2026-10-07：译完顺手重建双语对照缓存（句级锚定），对照视图打开零等待
+    try:
+        threading.Thread(target=lambda: build_bilingual(hit.get("file") or "", rebuild=True),
+                         daemon=True).start()
+    except Exception:
+        pass
     return json.dumps({"ok": True, "paper": hit.get("title"), "file": hit.get("file"),
-                       "translation_file": f"hermes_home/papers/translations/{stem}.zh.md",
+                       "translation_file": f"memomics_home/papers/translations/{stem}.zh.md",
                        "blocks": len(blocks), "chars": len(zh)}, ensure_ascii=False, indent=2)
 
 
@@ -1259,23 +1701,25 @@ def summarize_paper(file_or_title: str, progress_cb=None, force: bool = False) -
             txt = _llm_content(
                 base + "输出 JSON 对象（不要其他文字）。以下为文献 Markdown（# 为标题）:\n" + md_text,
                 "lit_summary", temperature=0.3, max_tokens=6000,
-                retry_prefix="【重要：不要输出任何思考过程，立即输出最终 JSON 对象，第一个字符必须是 { 】\n")
+                retry_prefix="【重要：不要输出任何思考过程，立即输出最终 JSON 对象，第一个字符必须是 { 】\n",
+                no_think=True)
             summary = _parse_json_object(txt)
         else:
             # 长文献：分节分块 → 每块提炼要点 → 合并成 9 项
             _cb("summarize", 0, 1, f"长文献分块解读: {len(_split_md_sections(md_text))} 节")
             chunks = _chunk_sections(_split_md_sections(md_text))
             bullets = {k: [] for k in _SUMMARY_FIELDS}
-            for ci, chunk in enumerate(chunks):
-                _cb("summarize", ci, len(chunks), f"解读第 {ci + 1}/{len(chunks)} 块")
-                txt = _llm_content(
-                    "你是文献解读助手。对下面的文献片段，按 9 个字段各提炼 1-2 句要点，"
-                    '输出 JSON：{"idea":[],"background":[],"species":[],"tissue":[],'
-                    '"problem":[],"solution":[],"methods":[],"conclusion":[],"validation":[]}'
-                    "（值都是字符串数组；该片段没涉及的字段给空数组；不要其他文字）\n" + chunk,
-                    f"lit_chunk_{ci}", temperature=0.2, max_tokens=3000,
-                    retry_prefix="【不要思考，立即输出 JSON 数组，第一个字符必须是 { 】\n")
-                part = _parse_json_object(txt)
+
+            def _sum_prompt(_i, chunk):
+                return ("你是文献解读助手。对下面的文献片段，按 9 个字段各提炼 1-2 句要点，"
+                        '输出 JSON：{"idea":[],"background":[],"species":[],"tissue":[],'
+                        '"problem":[],"solution":[],"methods":[],"conclusion":[],"validation":[]}'
+                        "（值都是字符串数组；该片段没涉及的字段给空数组；不要其他文字）\n" + chunk)
+
+            _parts = _llm_chunks_parallel(
+                chunks, _sum_prompt, "lit_chunk", progress_cb=_cb, phase="summarize",
+                max_tokens=6000, retry_prefix="【不要思考，立即输出 JSON 数组，第一个字符必须是 { 】\n")
+            for part in _parts:
                 for k in _SUMMARY_FIELDS:
                     for v in (part.get(k) or []):
                         if isinstance(v, str) and v.strip():
@@ -1284,8 +1728,9 @@ def summarize_paper(file_or_title: str, progress_cb=None, force: bool = False) -
             txt = _llm_content(
                 base + "以下是从全文各节提炼出的要点（按字段聚合），请据此写出最终的 9 项摘要，"
                 "输出 JSON 对象（不要其他文字）:\n" + merged[:9000],
-                "lit_summary_merge", temperature=0.3, max_tokens=6000,
-                retry_prefix="【不要思考，立即输出最终 JSON 对象，第一个字符必须是 { 】\n")
+                "lit_summary_merge", temperature=0.3, max_tokens=12000,
+                retry_prefix="【不要思考，立即输出最终 JSON 对象，第一个字符必须是 { 】\n",
+                no_think=True)
             summary = _parse_json_object(txt)
     except Exception as e:
         logger.warning(f"lit_summary LLM 调用异常: {e}")
@@ -1327,7 +1772,7 @@ def summarize_paper(file_or_title: str, progress_cb=None, force: bool = False) -
         logger.warning(f"summary mark failed: {e}")
     _cb("done", 1, 1, "全文提炼完成")
     return json.dumps({"ok": True, "paper": hit.get("title"), "file": hit.get("file"),
-                       "summary": summary, "markdown_file": f"hermes_home/papers/summaries/{stem}.md"},
+                       "summary": summary, "markdown_file": f"memomics_home/papers/summaries/{stem}.md"},
                       ensure_ascii=False, indent=2)
 
 
@@ -1346,8 +1791,11 @@ def summarize_all_papers(progress_cb=None) -> str:
                           ensure_ascii=False)
     _cb = progress_cb or (lambda *a, **k: None)
     n = len(pending)
-    results = []
-    for i, e in enumerate(pending):
+    results = [None] * n
+    # 2026-10-07 提速：篇级 2 路并发（篇内块级并发不变；MEMOMICS_LIT_PAPER_WORKERS 可调）
+    _pw = max(1, min(3, int(os.environ.get("MEMOMICS_LIT_PAPER_WORKERS", "2"))))
+
+    def _one(i, e):
         name = e.get("file") or e.get("title") or ""
         _cb("paper", i, n, f"[{i + 1}/{n}] 全文提炼: {e.get('title') or name}")
         try:
@@ -1357,19 +1805,115 @@ def summarize_all_papers(progress_cb=None) -> str:
             )))
         except Exception as ex:
             r = {"ok": False, "error": str(ex)[:200]}
-        results.append({"paper": e.get("title") or name, "ok": r.get("ok"),
-                        "error": r.get("error", "")})
+        return i, {"paper": e.get("title") or name, "ok": r.get("ok"),
+                   "error": r.get("error", "")}
+
+    with ThreadPoolExecutor(max_workers=_pw) as ex:
+        for fut in as_completed([ex.submit(_one, i, e) for i, e in enumerate(pending)]):
+            i, row = fut.result()
+            results[i] = row
+    results = [r for r in results if r]
     ok_n = sum(1 for r in results if r["ok"])
     _cb("done", n, n, f"全文提炼完成: {ok_n}/{n} 篇成功")
     return json.dumps({"ok": ok_n > 0, "total": len(lib), "pending": n, "succeeded": ok_n,
                        "results": results,
-                       "note": "9 项摘要已写入 hermes_home/papers/summaries/，可在文献库查看。"},
+                       "note": "9 项摘要已写入 memomics_home/papers/summaries/，可在文献库查看。"},
                       ensure_ascii=False, indent=2)
 
 
 # ── 方向3：结构化知识提取（生物学知识 + 生信知识，批O 2026-08-16）──
+# 2026-10-07 证据链升级（kb-evidence-v1）：生物学结论按 L0-L3 可信度分级，每条带验证方式；
+# 方法/参数类（测序/流程/软件/参数/QC/数据库）不做可信度分级，只要求 source 溯源。
+_EVIDENCE_LEVELS = {
+    "L0": "无文献来源（推测/常识性陈述）——仅作线索，待补源",
+    "L1": "有文献来源，但原文未做实验验证（综述转述/纯生信分析发现）——一定程度可信",
+    "L2": "有文献来源且原文做了实验验证（免疫荧光/细胞实验/动物模型等湿实验）——很可信",
+    "L3": "有文献来源且经大量验证或临床实验/临床队列验证——非常可信",
+}
+_EVIDENCE_ORDER = {"L0": 0, "L1": 1, "L2": 2, "L3": 3}
+# 湿实验证据关键词（辅助判定 L2/L3；提示词与校验共用一份口径）
+_EVIDENCE_WET_KW = ("immunofluorescence", "immunohistochemistry", "western blot", "qpcr", "rt-qpcr",
+                    "elisa", "flow cytometry", "in vivo", "mouse model", "animal model",
+                    "knockout", "overexpression", "cell culture", "organoid", "免疫荧光",
+                    "免疫组化", "细胞实验", "动物实验", "类器官", "敲除", "过表达")
+_EVIDENCE_CLINICAL_KW = ("clinical trial", "clinical cohort", "patient cohort", "randomized",
+                         "prospective", "临床实验", "临床试验", "临床队列", "患者队列")
+
+
+def _norm_evidence_level(v) -> str:
+    """任意输入 → L0/L1/L2/L3（无法识别时给 L1 = 有文献来源但未验证，最保守的文献级）。"""
+    s = str(v or "").strip().upper()
+    if s in _EVIDENCE_ORDER:
+        return s
+    m = re.search(r"L\s*([0-3])", s)
+    return f"L{m.group(1)}" if m else "L1"
+
+
+def _normalize_conclusion_item(it) -> dict:
+    """结论条目归一化为 {text, evidence_level, validation, locator}（兼容旧字符串格式 → L1）。"""
+    if isinstance(it, str):
+        return {"text": it.strip(), "evidence_level": "L1", "validation": "", "locator": ""}
+    if not isinstance(it, dict):
+        return {"text": str(it), "evidence_level": "L1", "validation": "", "locator": ""}
+    return {
+        "text": str(it.get("text") or it.get("conclusion") or "").strip(),
+        "evidence_level": _norm_evidence_level(it.get("evidence_level") or it.get("level")),
+        "validation": str(it.get("validation") or "").strip(),
+        "locator": str(it.get("locator") or "").strip(),
+    }
+
+
+def _conclusion_text(c: dict) -> str:
+    return (c or {}).get("text") or ""
+
+
+def _evidence_chain_stats(knowledge: dict) -> dict:
+    """汇总一篇文献的证据链：各级条数 + 最高级（写入 YAML 顶层 evidence_chain 字段）。"""
+    bio = (knowledge or {}).get("biology") or {}
+    dist = {"L0": 0, "L1": 0, "L2": 0, "L3": 0}
+    for c in bio.get("conclusions") or []:
+        dist[_norm_evidence_level((c or {}).get("evidence_level"))] += 1
+    max_lv = "L0"
+    for lv in ("L3", "L2", "L1"):
+        if dist[lv] > 0:
+            max_lv = lv
+            break
+    return {"standard": "kb-evidence-v1", "level_distribution": dist,
+            "max_level": max_lv,
+            "graded_conclusions": sum(dist.values()),
+            "level_meaning": _EVIDENCE_LEVELS}
+
+
+def _normalize_knowledge_evidence(knowledge: dict) -> dict:
+    """提炼结果定稿前统一走这里：结论升级为证据链对象（旧字符串格式 → L1），并做 L 级合理性校验。
+
+    校验（写实防虚高）：声称 L2 但 validation 为空且不含湿实验关键词 → 降级 L1；
+    声称 L3 但无临床/队列关键词 → 降级 L2。
+    """
+    bio = (knowledge or {}).get("biology") or {}
+    out = []
+    for raw in bio.get("conclusions") or []:
+        c = _normalize_conclusion_item(raw)
+        if not c["text"]:
+            continue
+        blob = (c["validation"] + " " + c["text"]).lower()
+        if c["evidence_level"] == "L2" and not (c["validation"] or any(k in blob for k in _EVIDENCE_WET_KW)):
+            c["evidence_level"] = "L1"
+        if c["evidence_level"] == "L3" and not any(k in blob for k in _EVIDENCE_CLINICAL_KW):
+            c["evidence_level"] = "L2"
+        out.append(c)
+    if "biology" in (knowledge or {}):
+        knowledge["biology"]["conclusions"] = out
+    return knowledge
+
+
 _KNOWLEDGE_SCHEMA_HINT = (
-    '{"biology":{"conclusions":["主要发现/结论，每条一句"],'
+    '{"biology":{"conclusions":[{"text":"主要结论一句（中文）","evidence_level":"L0|L1|L2|L3（证据链分级：'
+    'L0=无文献来源的推测；L1=有文献来源但原文未做实验验证（综述转述/纯生信分析发现）；'
+    'L2=原文做了实验验证（免疫荧光/免疫组化/Western/qPCR/细胞实验/动物模型/类器官等湿实验）；'
+    'L3=经大量验证或临床实验/临床队列验证）","validation":"原文中支持该级别的验证方式描述'
+    '（如图3B 免疫荧光、队列 n=120；找不到验证描述时留空且级别只能给 L0/L1）",'
+    '"locator":"原文位置提示（章节/图号，如 Results 第2段 / Fig.3B）"}],'
     '"gene_markers":[{"gene":"基因名","cell_type":"细胞类型","direction":"up/down/na","context":"说明"}],'
     '"cell_types":["涉及的细胞类型"],"pathways":["关键通路/信号轴"],'
     '"organoid":[{"name":"类器官名","species":"物种","media":"培养基","cytokines":["细胞因子"],'
@@ -1403,8 +1947,27 @@ def _knowledge_to_markdown(k: dict, title: str, meta_line: str) -> str:
     bi = k.get("bioinfo") or {}
     L = [f"# {title}", f"> {meta_line}", ""]
     L.append("## 🧬 生物学知识")
-    for label, key in (("📌 结论", "conclusions"), ("🫁 细胞类型", "cell_types"),
-                       ("🔀 通路", "pathways")):
+    # 证据链（kb-evidence-v1）：结论带 [L0-L3] 可信度级别 + 验证方式 + 原文位置
+    _concs = [_normalize_conclusion_item(c) for c in (bio.get("conclusions") or [])]
+    _concs = [c for c in _concs if c["text"]]
+    if _concs:
+        _stats = _evidence_chain_stats(k)
+        _dist = _stats["level_distribution"]
+        L.append("### 📌 结论（证据链分级 L0 无来源 → L1 有来源未验证 → L2 实验验证 → L3 临床级）")
+        L.append(f"> 本篇证据分布：L3×{_dist['L3']} · L2×{_dist['L2']} · L1×{_dist['L1']} · L0×{_dist['L0']}"
+                 f"（最高 {_stats['max_level']}）\n")
+        for c in _concs:
+            _line = f"- **[{c['evidence_level']}]** {c['text']}"
+            _meta = []
+            if c.get("validation"):
+                _meta.append(f"验证：{c['validation']}")
+            if c.get("locator"):
+                _meta.append(f"位置：{c['locator']}")
+            if _meta:
+                _line += "　（" + " ｜ ".join(_meta) + "）"
+            L.append(_line)
+        L.append("")
+    for label, key in (("🫁 细胞类型", "cell_types"), ("🔀 通路", "pathways")):
         vals = bio.get(key) or []
         if vals:
             L.append(f"### {label}\n" + "\n".join(f"- {v}" for v in vals) + "\n")
@@ -1496,6 +2059,10 @@ def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> t
     bio = k.get("biology") or {}
     bi = k.get("bioinfo") or {}
     assay = str(tags.get("assay") or "RNA").upper()
+    # 证据链汇总（kb-evidence-v1）：生物条目带 L0-L3 分布；方法/参数类按用户规则只做来源标注
+    chain = _evidence_chain_stats(k)
+    chain_source_only = {"standard": "kb-evidence-v1", "grading": "source_only",
+                         "note": "方法/参数/质控类知识不做可信度分级，来源见 evidence 字段"}
 
     def _record(r, extra_note: str = ""):
         rec = {kk: r.get(kk) for kk in ("status", "name", "path", "error") if r.get(kk)}
@@ -1505,7 +2072,24 @@ def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> t
 
     # 1) 生物学知识条目 —— 每个物种一份（跨物种拆分）
     bio_parts = []
-    for label, key in (("结论", "conclusions"), ("细胞类型", "cell_types"), ("通路", "pathways")):
+    # 证据链（kb-evidence-v1）：结论逐条带 [L0-L3] 级别 + 验证方式 + 原文位置
+    conclusions = [_normalize_conclusion_item(c) for c in (bio.get("conclusions") or [])]
+    conclusions = [c for c in conclusions if c["text"]]
+    if conclusions:
+        _lines = []
+        for c in conclusions:
+            _seg = f"- **[{c['evidence_level']}]** {c['text']}"
+            _meta = []
+            if c.get("validation"):
+                _meta.append(f"验证：{c['validation']}")
+            if c.get("locator"):
+                _meta.append(f"位置：{c['locator']}")
+            if _meta:
+                _seg += "　（" + " ｜ ".join(_meta) + "）"
+            _lines.append(_seg)
+        bio_parts.append("## 结论（证据链分级：L0 无来源 / L1 有来源未验证 / L2 实验验证 / L3 临床级）\n"
+                         + "\n".join(_lines))
+    for label, key in (("细胞类型", "cell_types"), ("通路", "pathways")):
         vals = bio.get(key) or []
         if vals:
             bio_parts.append(f"## {label}\n" + "\n".join(f"- {v}" for v in vals))
@@ -1536,7 +2120,8 @@ def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> t
                 source="literature", evidence=evidence,
                 verified="partially_verified",
                 species=sp, tissue=ti, direction=dr,
-                kb_category="01_生物学知识", assay_type=assay))
+                kb_category="01_生物学知识", assay_type=assay,
+                evidence_chain=chain))
             _record(r, f"species={sp}")
 
     # 2) 生信知识条目 —— 物种无关，common 域一份
@@ -1572,7 +2157,8 @@ def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> t
             source="literature", evidence=evidence,
             verified="partially_verified",
             domain="common", direction="general",
-            kb_category="03_测序方法", assay_type=assay))
+            kb_category="03_测序方法", assay_type=assay,
+            evidence_chain=chain_source_only))
         _record(r, "domain=common")
 
     # 3) 质控参数条目 —— 物种无关，common 域
@@ -1585,7 +2171,8 @@ def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> t
             content=content, source="literature", evidence=evidence,
             verified="partially_verified",
             domain="common", direction="general",
-            kb_category="02_质控参数", assay_type=assay))
+            kb_category="02_质控参数", assay_type=assay,
+            evidence_chain=chain_source_only))
         _record(r, "domain=common")
 
     # 4) 化合物条目 —— chemistry/compounds/ 每化合物一条（化学类文章）
@@ -1601,7 +2188,8 @@ def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> t
             name=_safe_kb_name(stem, "chem") + f"_{slug}",
             content=c_content, source="literature", evidence=evidence,
             verified="partially_verified",
-            domain="chemistry", direction="compounds"))
+            domain="chemistry", direction="compounds",
+            evidence_chain=chain_source_only))
         _record(r, "domain=chemistry")
     return written, rejected
 
@@ -1612,7 +2200,7 @@ def extract_paper_knowledge(file_or_title: str, progress_cb=None, force: bool = 
     - 生物学知识：结论、基因 marker、细胞类型、通路、类器官/培养条件、化合物/化学信息
     - 生信知识：测序方法（技术/平台/建库/深度）、分析流程、软件包（含版本/语言）、
       关键参数、质控阈值、参考基因组、数据库
-    产物：hermes_home/papers/knowledge/<名>.md（人读）+ 索引 knowledge JSON（机读）
+    产物：memomics_home/papers/knowledge/<名>.md（人读）+ 索引 knowledge JSON（机读）
           + knowledge_base 五级目录 YAML 条目（给 AI 检索复用）。
     """
     _cb = progress_cb or (lambda *a, **k: None)
@@ -1640,6 +2228,12 @@ def extract_paper_knowledge(file_or_title: str, progress_cb=None, force: bool = 
         "规则：① 只提取文献明确给出的信息，没有的字段给空数组/空串，禁止编造 ② 基因名/参数值/"
         "阈值/版本号必须原文原样 ③ 参数要带 tool 和 context（如 resolution=0.8 用于聚类）"
         " ④ 化学信息要给剂量/IC50/模型 ⑤ 类器官要给培养基/细胞因子/基质条件。\n"
+        "⑥ 证据链（kb-evidence-v1，重要）：biology.conclusions 每条必须判 evidence_level——"
+        "只根据原文写实判定：原文明确描述了湿实验验证（免疫荧光/免疫组化/Western blot/qPCR/"
+        "细胞实验/动物模型/类器官等）才能给 L2，且 validation 字段必须写出验证方式与图号；"
+        "有临床实验/大队列验证才给 L3；只是作者声称或纯组学分析发现的给 L1；"
+        "没有文献依据的推测给 L0。禁止为了显得可信而拔高级别。"
+        "方法类内容（测序/流程/软件/参数/QC/数据库）不做可信度分级，只需如实提取并带来源。\n"
         f"文献标题: {hit.get('title')} | 期刊: {hit.get('journal')} | DOI: {hit.get('doi')}\n"
         f"预分类: {json.dumps(tags, ensure_ascii=False)}\n"
     )
@@ -1650,30 +2244,49 @@ def extract_paper_knowledge(file_or_title: str, progress_cb=None, force: bool = 
             txt = _llm_content(
                 base + "输出 JSON 对象（不要其他文字）。以下为文献 Markdown（# 为标题）:\n" + md_text,
                 "lit_knowledge", temperature=0.3, max_tokens=6000,
-                retry_prefix="【重要：不要输出任何思考过程，立即输出最终 JSON 对象，第一个字符必须是 { 】\n")
+                retry_prefix="【重要：不要输出任何思考过程，立即输出最终 JSON 对象，第一个字符必须是 { 】\n",
+                no_think=True)
             knowledge = _parse_json_object(txt)
         else:
             _cb("extract", 0, 1, f"长文献分块提取: {len(_split_md_sections(md_text))} 节")
             chunks = _chunk_sections(_split_md_sections(md_text))
             bullets = {"biology": [], "bioinfo": []}
-            for ci, chunk in enumerate(chunks):
-                _cb("extract", ci, len(chunks), f"提取第 {ci + 1}/{len(chunks)} 块")
-                txt = _llm_content(
-                    "你是文献知识提炼助手。对下面的文献片段，按给出的 schema 提炼**结构化知识**，"
-                    "输出 JSON 对象（不要其他文字）：\n" + _KNOWLEDGE_SCHEMA_HINT + "\n"
-                    "（该片段没涉及的字段给空数组/空串）\n" + chunk,
-                    f"lit_know_chunk_{ci}", temperature=0.2, max_tokens=4000,
-                    retry_prefix="【不要思考，立即输出 JSON 对象，第一个字符必须是 { 】\n")
-                part = _parse_json_object(txt)
+
+            def _know_prompt(_i, chunk):
+                return ("你是文献知识提炼助手。对下面的文献片段，按给出的 schema 提炼**结构化知识**，"
+                        "输出 JSON 对象（不要其他文字）：\n" + _KNOWLEDGE_SCHEMA_HINT + "\n"
+                        "（该片段没涉及的字段给空数组/空串）\n"
+                        "证据链：conclusions 每条必须带 evidence_level（L0 无来源/L1 有来源未验证/"
+                        "L2 原文有湿实验验证/L3 临床级验证）+ validation（验证方式与图号，写实判定，"
+                        "找不到验证描述只能给 L0/L1）。\n" + chunk)
+
+            # max_tokens 4000 → 10000：实测 24 块里 20 块把 4000 额度全用在 reasoning 上、
+            # content 为空 → 每块都白跑一遍再重试。给足额度后一次成型（推理+JSON 都装得下）。
+            _parts = _llm_chunks_parallel(
+                chunks, _know_prompt, "lit_know_chunk", progress_cb=_cb, phase="extract",
+                max_tokens=10000, retry_prefix="【不要思考，立即输出 JSON 对象，第一个字符必须是 { 】\n")
+            for part in _parts:
                 for sec in ("biology", "bioinfo"):
                     bullets[sec].append(part.get(sec) or {})
-            merged = json.dumps(bullets, ensure_ascii=False)
-            txt = _llm_content(
-                base + "以下是从全文各节提取出的知识碎片（按 biology/bioinfo 聚合，数组可能有重复/冲突），"
-                "请合并去重后输出最终的完整 JSON 对象（不要其他文字）:\n" + merged[:12000],
-                "lit_knowledge_merge", temperature=0.3, max_tokens=6000,
-                retry_prefix="【不要思考，立即输出最终 JSON 对象，第一个字符必须是 { 】\n")
-            knowledge = _parse_json_object(txt)
+            # 去重压缩后再合并：旧实现 merged[:12000] 会把后面几块的碎片直接截掉
+            merged = json.dumps({sec: _compact_fragments(bullets[sec])
+                                 for sec in ("biology", "bioinfo")}, ensure_ascii=False)
+            # 批P3(2026-09-17)：碎片超长时不硬上合并调用。实测 24 块碎片（72k 字符）时
+            # 合并调用必然失败（输出 JSON 过长 → 解析失败 → 退化），白花 20s 还丢内容。
+            # 小/中篇走 LLM 合并（去重 + 冲突消解）；超长直接走下面的确定性聚合（内容一条不丢）。
+            if len(merged) <= 14000:
+                txt = _llm_content(
+                    base + "以下是从全文各节提取出的知识碎片（按 biology/bioinfo 聚合，数组可能有重复/冲突），"
+                    "请合并去重后输出最终的完整 JSON 对象（不要其他文字）"
+                    "（结论合并时保留 evidence_level/validation/locator 字段；同一结论有多个级别时取较低的级别，"
+                    "validation 合并写出全部验证依据）:\n" + merged,
+                    "lit_knowledge_merge", temperature=0.3, max_tokens=12000,
+                    retry_prefix="【不要思考，立即输出最终 JSON 对象，第一个字符必须是 { 】\n",
+                    no_think=True)
+                knowledge = _parse_json_object(txt)
+            else:
+                logger.info(f"lit_knowledge 碎片 {len(merged)} 字符（{len(chunks)} 块）→ 跳过 LLM 合并，"
+                            "用确定性聚合（去重并集，内容不丢）")
     except Exception as e:
         logger.warning(f"lit_knowledge LLM 调用异常: {e}")
         knowledge = {}
@@ -1693,6 +2306,8 @@ def extract_paper_knowledge(file_or_title: str, progress_cb=None, force: bool = 
                     elif isinstance(v2, str) and v2 and not agg.get(k2):
                         agg[k2] = v2
             knowledge[sec] = agg
+    # 证据链归一化（kb-evidence-v1）：结论升级为带级别对象 + 写实校验（虚高降级）
+    knowledge = _normalize_knowledge_evidence(knowledge)
     bio = knowledge.get("biology") or {}
     bi = knowledge.get("bioinfo") or {}
     if not any(bio.values()) and not any(bi.values()):
@@ -1729,7 +2344,7 @@ def extract_paper_knowledge(file_or_title: str, progress_cb=None, force: bool = 
     return json.dumps({
         "ok": True, "paper": hit.get("title"), "file": hit.get("file"), "doi": hit.get("doi"),
         "knowledge": knowledge, "written": written, "rejected": rejected,
-        "knowledge_file": f"hermes_home/papers/knowledge/{stem}.md",
+        "knowledge_file": f"memomics_home/papers/knowledge/{stem}.md",
         "note": "生物学知识(结论/marker/类器官/化学) → 01_生物学知识；生信知识(测序/流程/包/参数) → 03_测序方法；质控 → 02_质控参数。带 DOI 溯源。"},
         ensure_ascii=False, indent=2)
 
@@ -1749,8 +2364,11 @@ def extract_all_knowledge(progress_cb=None) -> str:
                           ensure_ascii=False)
     _cb = progress_cb or (lambda *a, **k: None)
     n = len(pending)
-    results = []
-    for i, e in enumerate(pending):
+    results = [None] * n
+    # 2026-10-07 提速：篇级 2 路并发（篇内块级并发不变；MEMOMICS_LIT_PAPER_WORKERS 可调）
+    _pw = max(1, min(3, int(os.environ.get("MEMOMICS_LIT_PAPER_WORKERS", "2"))))
+
+    def _one(i, e):
         name = e.get("file") or e.get("title") or ""
         _cb("paper", i, n, f"[{i + 1}/{n}] 知识提取: {e.get('title') or name}")
         try:
@@ -1760,10 +2378,16 @@ def extract_all_knowledge(progress_cb=None) -> str:
             )))
         except Exception as ex:
             r = {"ok": False, "error": str(ex)[:200]}
-        results.append({"paper": e.get("title") or name, "ok": r.get("ok"),
-                        "written": len(r.get("written") or []),
-                        "rejected": len(r.get("rejected") or []),
-                        "error": r.get("error", "")})
+        return i, {"paper": e.get("title") or name, "ok": r.get("ok"),
+                   "written": len(r.get("written") or []),
+                   "rejected": len(r.get("rejected") or []),
+                   "error": r.get("error", "")}
+
+    with ThreadPoolExecutor(max_workers=_pw) as ex:
+        for fut in as_completed([ex.submit(_one, i, e) for i, e in enumerate(pending)]):
+            i, row = fut.result()
+            results[i] = row
+    results = [r for r in results if r]
     ok_n = sum(1 for r in results if r["ok"])
     _cb("done", n, n, f"知识提取完成: {ok_n}/{n} 篇成功")
     return json.dumps({
@@ -1772,6 +2396,126 @@ def extract_all_knowledge(progress_cb=None) -> str:
         "results": results,
         "note": "结构化知识(生物学+生信)已写入 papers/knowledge/ 与 knowledge_base 五级目录，带 DOI 溯源。"},
         ensure_ascii=False, indent=2)
+
+
+# ── 一键全流程管线（2026-10-07）：翻译 + 9项摘要 + 证据链知识提取 + 双语缓存重建 ──
+def process_paper_full(file_or_title: str, progress_cb=None, force: bool = False) -> str:
+    """一篇文献的完整入库管线（幂等：已完成的步骤自动跳过，force=True 全部重跑）：
+
+    ① 学术中文翻译（段落级 1:1 对齐）→ ② 9 项全文摘要 → ③ 结构化知识提取（证据链 L0-L3）
+    → ④ 双语对照缓存重建（点译文句→框原文句，打开对照视图零等待）。
+    """
+    _cb = progress_cb or (lambda *a, **k: None)
+    hit = _find_raw_entry(file_or_title)
+    if not hit:
+        return json.dumps({"ok": False, "error": f"文献库中未找到 '{file_or_title}'"},
+                          ensure_ascii=False)
+    name = hit.get("file") or file_or_title
+    steps = {}
+
+    def _step_cb(label):
+        def _c(phase, done, total, detail):
+            _cb("step", 0, 4, f"[{label}] {detail}")
+        return _c
+
+    # ① 翻译
+    _cb("step", 1, 4, f"① 翻译: {name}")
+    try:
+        r = json.loads(translate_paper(name, progress_cb=_step_cb("翻译"), force=force))
+        steps["translate"] = {"ok": bool(r.get("ok")), "skipped": bool(r.get("skipped")),
+                              "error": r.get("error", "")}
+    except Exception as e:
+        steps["translate"] = {"ok": False, "error": str(e)[:200]}
+    # ② 9 项摘要
+    _cb("step", 2, 4, f"② 全文提炼(9项): {name}")
+    try:
+        r = json.loads(summarize_paper(name, progress_cb=_step_cb("提炼"), force=force))
+        steps["summarize"] = {"ok": bool(r.get("ok")), "skipped": bool(r.get("skipped")),
+                              "error": r.get("error", "")}
+    except Exception as e:
+        steps["summarize"] = {"ok": False, "error": str(e)[:200]}
+    # ③ 证据链知识提取
+    _cb("step", 3, 4, f"③ 知识提取(证据链): {name}")
+    try:
+        r = json.loads(extract_paper_knowledge(name, progress_cb=_step_cb("知识"), force=force))
+        steps["extract"] = {"ok": bool(r.get("ok")), "skipped": bool(r.get("skipped")),
+                            "written": len(r.get("written") or []), "error": r.get("error", "")}
+    except Exception as e:
+        steps["extract"] = {"ok": False, "error": str(e)[:200]}
+    # ④ 双语对照缓存重建（只有翻译存在才有意义；CPU 本地操作，秒级）
+    if steps["translate"].get("ok"):
+        _cb("step", 4, 4, f"④ 双语对照锚定: {name}")
+        try:
+            r = json.loads(build_bilingual(name, rebuild=True))
+            steps["bilingual"] = {"ok": bool(r.get("ok")),
+                                  "modules": len(r.get("modules") or []), "error": r.get("error", "")}
+        except Exception as e:
+            steps["bilingual"] = {"ok": False, "error": str(e)[:200]}
+    else:
+        steps["bilingual"] = {"ok": False, "error": "无译文，跳过"}
+    ok_all = all(s.get("ok") for s in steps.values() if s)
+    _cb("done", 4, 4, f"全流程完成: {name}")
+    return json.dumps({"ok": ok_all, "paper": hit.get("title") or name, "file": name,
+                       "steps": steps,
+                       "note": "翻译→提炼→证据链知识→双语锚定 四步全跑完（已完成步骤幂等跳过）"},
+                      ensure_ascii=False, indent=2)
+
+
+def process_all_papers(progress_cb=None, force: bool = False) -> str:
+    """全库一键全流程（并行 2 篇，MEMOMICS_LIT_PAPER_WORKERS 可覆盖；每篇内部块级仍并发）。
+
+    默认只处理"三步有缺"的文献（全部完成的一律跳过，零成本）；
+    force=True 重跑全部（谨慎：重新调用 LLM，124 篇要跑数小时）。
+    """
+    try:
+        lib = json.loads(list_library()).get("library", [])
+    except Exception:
+        lib = []
+    if not lib:
+        return json.dumps({"ok": False, "error": "文献库为空"}, ensure_ascii=False)
+    if force:
+        pending = lib
+    else:
+        pending = [e for e in lib if not (e.get("translated") and e.get("summary_done")
+                                          and e.get("knowledge_done"))]
+    if not pending:
+        return json.dumps({"ok": True, "total": len(lib), "pending": 0, "results": [],
+                           "note": "全部文献都已完成 翻译+提炼+知识提取"},
+                          ensure_ascii=False)
+    _cb = progress_cb or (lambda *a, **k: None)
+    n = len(pending)
+    mw = max(1, min(3, int(os.environ.get("MEMOMICS_LIT_PAPER_WORKERS", "2"))))
+    results = []
+    _done = [0]
+    _lock = threading.Lock()
+
+    def _one(e):
+        name = e.get("file") or e.get("title") or ""
+        try:
+            r = json.loads(process_paper_full(name, force=force))
+        except Exception as ex:
+            r = {"ok": False, "error": str(ex)[:200]}
+        with _lock:
+            _done[0] += 1
+            i = _done[0]
+        _cb("paper", i, n, f"[{i}/{n}] {'✅' if r.get('ok') else '❌'} {name[:60]}")
+        return {"paper": e.get("title") or name, "ok": r.get("ok"),
+                "steps": {k2: v2.get("ok") for k2, v2 in (r.get("steps") or {}).items()},
+                "error": r.get("error", "")}
+
+    with ThreadPoolExecutor(max_workers=mw) as ex:
+        futs = [ex.submit(_one, e) for e in pending]
+        for f in as_completed(futs):
+            try:
+                results.append(f.result())
+            except Exception as ex:
+                results.append({"paper": "?", "ok": False, "error": str(ex)[:200]})
+    ok_n = sum(1 for r in results if r["ok"])
+    _cb("done", n, n, f"全流程完成: {ok_n}/{n} 篇")
+    return json.dumps({"ok": ok_n > 0, "total": len(lib), "pending": n, "succeeded": ok_n,
+                       "results": results, "paper_workers": mw,
+                       "note": "翻译+9项提炼+证据链知识+双语锚定 四步管线；每篇已完成步骤幂等跳过。"},
+                      ensure_ascii=False, indent=2)
 
 
 # ── 元数据补全（批O 2026-08-16：引用格式正确性）──
@@ -2095,15 +2839,1034 @@ def _find_block_rect(path: str, page_no: int, text: str) -> list:
         return None
 
 
+# ── 批Q(2026-09-23)：句级锚定引擎（点译文任意一句 → 精确框出原文）────────────────────
+# 旧实现 _find_block_rect 只把"整段前 12/8/5/3 个词"在整页里 search_for 取第一个命中：
+#   ① 双栏 PDF 常命中另一栏的同词 → 高亮框错位；
+#   ② PDF→Markdown 的"段"可达数千字符，一次搜不到 → rect 为空（点译文毫无反应）。
+# 新实现：把 PDF 文本层按"行"重建（行内间距 >12pt 断行、行尾连字符合并），
+# 段落/句子用 token 锚定 + 贪婪扩展落到行区间 → 每句都有页码 + 逐行并集矩形。
+
+_ANCH_TOK_RE = re.compile(r"\w+(?:['\u2019\-/]\w+)*")
+_ANCH_SENT_RE = re.compile(r"[^.!?\u3002\uff01\uff1f]+(?:[.!?\u3002\uff01\uff1f]+[\"'\u201d\u2019)\]]*)?")
+_ANCH_HYPHEN_RE = re.compile(r"[-\u2010\u00ad]\s*$")
+_ANCH_TITLE_RE = re.compile(r"^#{1,6}\s*")
+_ANCH_GAP_BREAK = 12.0     # 行内视觉断档（pt）：大于此值视为分栏/分列，断开成两行
+_ANCH_LIG = {
+    "\ufb00": "ff", "\ufb01": "fi", "\ufb02": "fl", "\ufb03": "ffi", "\ufb04": "ffl",
+    "\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"',
+    "\u2013": "-", "\u2014": "-", "\u2212": "-", "\u00ad": "",
+    "\u00a0": " ", "\u2002": " ", "\u2003": " ", "\u2007": " ", "\u2009": " ",
+    "\u200a": " ", "\u202f": " ", "\u3000": " ",
+}
+
+
+def _anch_norm_chars(s: str):
+    """归一化（大小写/连字/引号/空白）→ (归一化串, 每个字符对应的原串下标)。
+
+    连续空白折叠成单个空格：Markdown 里"行尾空格 + 换行"与 PDF 文本层的换行
+    归一化后必须一致，否则整句永远匹配不上（实测某句因此漏配）。
+    """
+    out, idx = [], []
+    prev_space = False
+    for i, ch in enumerate(s or ""):
+        lo = ch.lower()
+        rep = _ANCH_LIG.get(lo)
+        if rep is None:
+            rep = " " if ch.isspace() else lo
+        for r in rep:
+            if r == " ":
+                if prev_space:
+                    continue
+                prev_space = True
+            else:
+                prev_space = False
+            out.append(r)
+            idx.append(i)
+    return "".join(out), idx
+
+
+def _anch_norm_map(s: str):
+    """归一化（大小写/连字/引号/空白）并给出每个归一化字符对应的原串下标。"""
+    return _anch_norm_chars(s)
+
+
+def _anch_tokens(norm_text: str) -> list:
+    """归一化文本 → [(token, start, end)…]（锚定用的最小单位）。"""
+    out = []
+    for m in _ANCH_TOK_RE.finditer(norm_text or ""):
+        t = m.group(0).strip("-'/")
+        if len(t) >= 2:
+            out.append((t, m.start(), m.end()))
+    return out
+
+
+_ANCH_ABBREV = {"fig", "figs", "eq", "eqs", "no", "nos", "vs", "etc", "al", "ref", "refs",
+                "sec", "approx", "ca", "dr", "prof", "suppl", "supp", "resp", "sd", "sem",
+                "min", "max", "inc", "ltd", "co", "st", "chr", "tab", "table", "extended", "data"}
+
+
+def _anch_ends_abbrev(text: str, pos: int) -> bool:
+    """pos 处是否是"缩写/编号"造成的假句末（Fig. / e.g. / A. / 5d,）。"""
+    tail = (text or "")[max(0, pos - 18):pos]
+    ch = (tail[-1:] or "")
+    if ch in ",;:":
+        return True
+    w = re.search(r"([A-Za-z][A-Za-z\.]{0,12})\s*$", tail)
+    if not w:
+        return False
+    word = w.group(1).strip(".").lower()
+    if word in _ANCH_ABBREV:
+        return True
+    return len(word) == 1   # 单字母（人名缩写）不当句末
+
+
+def _sentence_ranges(text: str) -> list:
+    """句级切分（含末尾标点与右引号）→ [(start, end)…]（原串下标）。
+
+    缩写/编号（Fig. 3a,b / e.g. / A. Smith）不算句末；下一片段以小写字母开头时
+    也并回前句——否则会切出 "5e,f)." 这类永远定位不到的碎句。
+    """
+    out = []
+    for m in _ANCH_SENT_RE.finditer(text or ""):
+        raw = m.group(0)
+        a = m.start() + (len(raw) - len(raw.lstrip()))
+        b = m.end() - (len(raw) - len(raw.rstrip()))
+        if b - a < 2:
+            continue
+        if not out:
+            out.append([a, b])
+            continue
+        prev = out[-1]
+        nxt = text[a:a + 1]
+        prev_ch = text[prev[1] - 2:prev[1] - 1]
+        merge = (_anch_ends_abbrev(text, prev[1]) or nxt.islower()
+                 or (prev_ch.isdigit() and nxt.isdigit()))   # "88." + "5%" 不是句末
+        if merge:
+            prev[1] = b
+        else:
+            out.append([a, b])
+    return [(a, b) for a, b in out]
+
+
+def _anch_gap_split(xs: list, gap: float = _ANCH_GAP_BREAK) -> list:
+    """按坐标间隔把一行切成若干段 → [[下标…]…]（栏/表格分列时用）。"""
+    out, cur = [], []
+    for i, x in enumerate(xs or []):
+        if cur and (x - xs[i - 1]) > gap:
+            out.append(cur)
+            cur = []
+        cur.append(i)
+    if cur:
+        out.append(cur)
+    return out
+
+
+def _anch_push_line(lines: list, page_no: int, seg: list, blk: int = -1):
+    if not seg:
+        return
+    txt = "".join(c["c"] for c in seg).strip()
+    if not txt or not txt.strip("-\u2010\u00ad"):
+        return
+    lines.append({
+        "page": page_no, "blk": blk, "text": txt,
+        "x0": min(c["bbox"][0] for c in seg), "y0": min(c["bbox"][1] for c in seg),
+        "x1": max(c["bbox"][2] for c in seg), "y1": max(c["bbox"][3] for c in seg),
+    })
+
+
+def _pdf_line_layer(path: str) -> dict:
+    """PDF 文本层 → 行（按 PDF 自身阅读顺序逐页）＋页面尺寸。
+
+    行内字距 >_ANCH_GAP_BREAK 断成两行：双栏/多列表格同行文字不会被连成一行，
+    两栏各自的换行才能被正确识别为"续行"（供连字符合并与矩形并集使用）。
+    """
+    out = {"n_pages": 0, "page_wh": [], "lines": []}
+    try:
+        import pymupdf as fitz
+        doc = fitz.open(path)
+    except Exception as e:
+        logger.warning(f"text layer open failed: {e}")
+        return out
+    try:
+        for pno in range(doc.page_count):
+            page = doc[pno]
+            out["page_wh"].append((page.rect.width or 595.0, page.rect.height or 842.0))
+            raw = page.get_text("rawdict")
+            for bi, blk in enumerate(raw.get("blocks", [])):
+                if blk.get("type") != 0:
+                    continue
+                for ln in blk.get("lines", []):
+                    chars = [c for sp in ln.get("spans", []) for c in sp.get("chars", []) if c.get("c")]
+                    if not chars:
+                        continue
+                    seg = [chars[0]]
+                    for prev, ch in zip(chars, chars[1:]):
+                        if ch["bbox"][0] - prev["bbox"][2] > _ANCH_GAP_BREAK:
+                            _anch_push_line(out["lines"], pno, seg, bi)
+                            seg = []
+                        seg.append(ch)
+                    _anch_push_line(out["lines"], pno, seg, bi)
+    except Exception as e:
+        logger.warning(f"text layer build failed: {e}")
+    finally:
+        try:
+            doc.close()
+        except Exception:
+            pass
+    out["n_pages"] = len(out["page_wh"])
+    return out
+
+
+def _anch_is_continuation(a: dict, b: dict) -> bool:
+    """b 是否是 a 的续行（同页同栏同块、紧邻下一行）——用于行尾连字符合并。
+
+    必须同块：否则上一栏末行会与下一栏首行被连成"一行"，矩形横跨两栏。
+    """
+    if a.get("page") != b.get("page") or a.get("blk") != b.get("blk"):
+        return False
+    h = max(1.0, a["y1"] - a["y0"])
+    gap = b["y0"] - a["y1"]
+    return -1.5 <= gap <= max(8.0, 2.2 * h) and abs(b["x0"] - a["x0"]) <= 45.0
+
+
+def _anch_index(lines: list, page_wh: list) -> dict:
+    """行列表 → 锚定索引（拼接文本 + 归一化映射 + token 表 + 每页区间）。"""
+    idx = {"lines": lines, "page_wh": page_wh, "ztext": "", "norm": "", "n2z": [],
+           "z2n": [], "atom_of_z": [], "atoms": [], "toks": [], "tok_starts": [],
+           "page_n": {}}
+    if not lines:
+        return idx
+    atoms, parts, pos = [], [], 0
+    i, n = 0, len(lines)
+    while i < n:
+        j = i
+        while (j + 1 < n and _ANCH_HYPHEN_RE.search(lines[j].get("text") or "")
+               and _anch_is_continuation(lines[j], lines[j + 1])):
+            j += 1
+        chunk = ""
+        for k in range(i, j + 1):
+            t = lines[k].get("text") or ""
+            if k < j and _ANCH_HYPHEN_RE.search(t):
+                t = _ANCH_HYPHEN_RE.sub("", t)
+            chunk += t
+        atoms.append({"lines": list(range(i, j + 1)), "z0": pos, "z1": pos + len(chunk)})
+        parts.append(chunk)
+        pos += len(chunk) + 1        # 行间以单个空格相接
+        i = j + 1
+    ztext = " ".join(parts)
+    atom_of_z = [0] * len(ztext)
+    for ai, a in enumerate(atoms):
+        for z in range(a["z0"], min(a["z1"] + 1, len(ztext))):
+            atom_of_z[z] = ai
+    norm, n2z = _anch_norm_chars(ztext)
+    z2n = [None] * (len(ztext) + 1)
+    for ni, zi in enumerate(n2z):
+        if z2n[zi] is None:
+            z2n[zi] = ni
+    nxt = len(n2z)
+    for zi in range(len(ztext), -1, -1):
+        if z2n[zi] is None:
+            z2n[zi] = nxt
+        else:
+            nxt = z2n[zi]
+    toks, starts, tok_pos, page_of_n = [], [], {}, []
+    for m in _ANCH_TOK_RE.finditer(norm):
+        t = m.group(0).strip("-'/")
+        if len(t) < 2:
+            continue
+        toks.append((t, m.start(), m.end()))
+        starts.append(m.start())
+        tok_pos.setdefault(t, []).append(len(toks) - 1)
+    page_n = {}
+    for a in atoms:
+        p = lines[a["lines"][0]]["page"]
+        z0 = a["z0"]
+        z1 = min(a["z1"], len(ztext) - 1) if ztext else 0
+        n0, n1 = z2n[z0], z2n[z1]
+        if p not in page_n:
+            page_n[p] = [n0, n1]
+        else:
+            page_n[p][0] = min(page_n[p][0], n0)
+            page_n[p][1] = max(page_n[p][1], n1)
+    page_of_n = [0] * (len(norm) + 1)
+    for ai, a in enumerate(atoms):
+        p = lines[a["lines"][0]]["page"]
+        n0, n1 = z2n[a["z0"]], z2n[min(a["z1"], max(0, len(ztext) - 1))]
+        for n in range(n0, min(n1 + 1, len(page_of_n))):
+            page_of_n[n] = p
+    idx.update({"ztext": ztext, "norm": norm, "n2z": n2z, "z2n": z2n,
+                "atom_of_z": atom_of_z, "atoms": atoms, "toks": toks,
+                "tok_starts": starts, "tok_pos": tok_pos, "page_n": page_n,
+                "page_of_n": page_of_n})
+    return idx
+
+
+def _anch_probes(qn: str, qtoks: list) -> list:
+    """按 token 边界截取探针（长→短；前 1–3 个 token 在 PDF 里缺失时允许跳过）。
+
+    探针必须完整 token 收尾（半截词永远匹配不上）；命中后由 _anch_refine 向两侧扩展
+    把整句补齐，因此"短而稳"的探针反而最容易成功。
+    """
+    out = []
+    if not qtoks:
+        return [(qn.strip()[:400], 0, 0, len(qn.strip()[:400]))]
+    for skip in (0, 1, 2, 3):
+        if skip >= len(qtoks) - 1:
+            break
+        s0 = qtoks[skip][1]
+        limits = (600, 320, 180, 90) if skip == 0 else (600,)
+        for limit in limits:
+            end, e0, e1 = None, 0, 0
+            for (_t, s, e) in qtoks[skip:]:
+                if e - s0 <= limit:
+                    end, e0, e1 = e, s0, e
+                else:
+                    break
+            if end and end - s0 >= 24:
+                out.append((qn[s0:end], skip, e0, e1))
+    return out
+
+
+def _anch_find_norm(norm: str, probe: str, start: int = 0) -> int:
+    """探针在归一化文本中的位置（先精确；首端有胶连残留时从下一个完整 token 起找）。
+
+    start>0 时从该处往后继续找——同一探针在长文里会出现多次（方法/图注模板相似），
+    必须逐个比相似度再决定，不能先到先得。
+    """
+    if not probe:
+        return -1
+    hit = norm.find(probe, start)
+    if hit >= 0:
+        return hit
+    for cut in (1, 2, 3, 5):
+        p2 = probe[cut:]
+        if len(p2) < 24:
+            break
+        hit = norm.find(p2, start)
+        if hit >= 0:
+            return hit
+    return -1
+
+
+def _anch_refine(idx: dict, qtoks: list, n0: int, n1: int, q0: int = 0, q1: int = 0):
+    """贪婪向两侧扩展 token 覆盖 → (n0, n1, 覆盖率)。
+
+    q0/q1 是本次探针在"归一化 query"里的区间（query 坐标），覆盖率按 query token 算。
+    """
+    import bisect as _bs
+    toks, starts = idx["toks"], idx["tok_starts"]
+    norm = idx["norm"]
+
+    def _cross_sentence(a: int, b: int) -> bool:
+        """[a,b) 之间是否已经跨过句号（句号+空格+大写/数字）——跨过就不再扩展。"""
+        return re.search(r"[.!?][\"\')\]]?\s+[A-Z0-9\u2018\u201c]", norm[a:b]) is not None
+
+    def _step(sign: int):
+        """向一侧扩展一格：优先直连；否则允许"跳过 1-2 个多余 token"（容断字/漏词）。
+
+        返回 (新 ai, 新 qi, 新 edge, 用掉的跳跃数) 或 None。
+        跳跃必须同时受字符间隔 _ANCH_MAX_GAP 与跨句检测约束，避免匹配拉飞。
+        """
+        return None
+
+    # 起点：query 侧从"探针覆盖范围之后"继续（q1 是 query 坐标！不能拿它跟目标坐标 n1 比），
+    #       目标侧从探针在文本层里的结束位置继续。
+    qi = 0
+    while qi < len(qtoks) and qtoks[qi][2] <= max(q1, 0):
+        qi += 1
+    ai = _bs.bisect_left(starts, n1)
+    edge, skips = n1, 0
+    while qi < len(qtoks) and ai < len(toks) and skips <= _ANCH_MAX_SKIP:
+        direct = (toks[ai][0] == qtoks[qi][0] and 0 <= toks[ai][1] - edge <= _ANCH_MAX_GAP
+                  and not _cross_sentence(n1, toks[ai][1]))
+        if direct:
+            edge, n1, ai, qi = toks[ai][2], toks[ai][2], ai + 1, qi + 1
+            continue
+        # 目标层多出 token（PDF 有 "a" 而 md 没有）→ 跳过它
+        tskip = next((k for k in range(1, _ANCH_SKIP_T + 1)
+                      if ai + k < len(toks) and toks[ai + k][0] == qtoks[qi][0]
+                      and 0 <= toks[ai + k][1] - edge <= _ANCH_MAX_GAP
+                      and not _cross_sentence(n1, toks[ai + k][1])), None)
+        # query 层多出 token（md 有而 PDF 没有）→ 跳过它
+        qskip = next((k for k in range(1, _ANCH_SKIP_Q + 1)
+                      if qi + k < len(qtoks) and toks[ai][0] == qtoks[qi + k][0]
+                      and 0 <= toks[ai][1] - edge <= _ANCH_MAX_GAP
+                      and not _cross_sentence(n1, toks[ai][1])), None)
+        if tskip is not None and (qskip is None or tskip <= qskip):
+            ai += tskip
+            skips += tskip
+        elif qskip is not None:
+            qi += qskip
+            skips += qskip
+        else:
+            break
+    qi = len(qtoks) - 1
+    while qi >= 0 and qtoks[qi][1] >= max(q0, 0):
+        qi -= 1
+    ai = _bs.bisect_left(starts, n0) - 1
+    edge, skips = n0, 0
+    while qi >= 0 and ai >= 0 and skips <= _ANCH_MAX_SKIP:
+        direct = (toks[ai][0] == qtoks[qi][0] and 0 <= edge - toks[ai][2] <= _ANCH_MAX_GAP
+                  and not _cross_sentence(toks[ai][2], n0))
+        if direct:
+            edge, n0, ai, qi = toks[ai][1], toks[ai][1], ai - 1, qi - 1
+            continue
+        tskip = next((k for k in range(1, _ANCH_SKIP_T + 1)
+                      if ai - k >= 0 and toks[ai - k][0] == qtoks[qi][0]
+                      and 0 <= edge - toks[ai - k][2] <= _ANCH_MAX_GAP
+                      and not _cross_sentence(toks[ai - k][2], n0)), None)
+        qskip = next((k for k in range(1, _ANCH_SKIP_Q + 1)
+                      if qi - k >= 0 and toks[ai][0] == qtoks[qi - k][0]
+                      and 0 <= edge - toks[ai][2] <= _ANCH_MAX_GAP
+                      and not _cross_sentence(toks[ai][2], n0)), None)
+        if tskip is not None and (qskip is None or tskip <= qskip):
+            ai -= tskip
+            skips += tskip
+        elif qskip is not None:
+            qi -= qskip
+            skips += qskip
+        else:
+            break
+    covered = sum(1 for (_t, s, e) in qtoks if s >= q0 and e <= q1) if q1 > q0 else 0
+    return n0, n1, covered / max(1, len(qtoks))
+
+
+def _anch_lines_rects(idx: dict, line_idx) -> list:
+    """行下标 → 按页并集的归一化矩形 [{"page","rect","li"}…]（跨页自动拆分）。"""
+    lines = idx["lines"]
+    wh = idx.get("page_wh") or []
+    groups = []
+    for li in sorted(set(line_idx)):
+        if li < 0 or li >= len(lines):
+            continue
+        ln = lines[li]
+        if groups and groups[-1]["page"] == ln["page"] and li == groups[-1]["li"][-1] + 1:
+            g = groups[-1]
+            g["li"].append(li)
+            g["x0"] = min(g["x0"], ln["x0"])
+            g["y0"] = min(g["y0"], ln["y0"])
+            g["x1"] = max(g["x1"], ln["x1"])
+            g["y1"] = max(g["y1"], ln["y1"])
+        else:
+            groups.append({"page": ln["page"], "li": [li], "x0": ln["x0"], "y0": ln["y0"],
+                           "x1": ln["x1"], "y1": ln["y1"]})
+    out = []
+    for g in groups:
+        w, h = wh[g["page"]] if g["page"] < len(wh) else (595.0, 842.0)
+        w = w or 595.0
+        h = h or 842.0
+        out.append({"page": g["page"], "li": g["li"],
+                    "rect": [round(g["x0"] / w, 4), round(g["y0"] / h, 4),
+                             round(g["x1"] / w, 4), round(g["y1"] / h, 4)]})
+    return out
+
+
+def _anch_span_rects(idx: dict, n0: int, n1: int) -> list:
+    """归一化区间 → 文本层行区间矩形。"""
+    n2z, atoms = idx["n2z"], idx["atoms"]
+    if not n2z or not atoms:
+        return []
+    z0 = n2z[max(0, min(n0, len(n2z) - 1))]
+    z1 = n2z[max(0, min(n1 - 1, len(n2z) - 1))]
+    a0 = idx["atom_of_z"][z0]
+    a1 = idx["atom_of_z"][min(z1, len(idx["atom_of_z"]) - 1)]
+    li = []
+    for ai in range(a0, a1 + 1):
+        li.extend(atoms[ai]["lines"])
+    return _anch_lines_rects(idx, li)
+
+
+def _anch_pages(idx: dict, qtoks: list) -> list:
+    """按 query token 命中数给候选页排名（全局探针失败时的逐页兜底）。"""
+    norm = idx["norm"]
+    score = {}
+    for t in [x[0] for x in qtoks[:40]]:
+        p = norm.find(t)
+        if p < 0:
+            continue
+        for pg, (n0, n1) in idx["page_n"].items():
+            if n0 <= p <= n1:
+                score[pg] = score.get(pg, 0) + 1
+                break
+    return [p for p, _s in sorted(score.items(), key=lambda kv: -kv[1])[:2]]
+
+
+def _anch_similarity(qn: str, seg: str) -> float:
+    """query 归一化文本与命中片段归一化文本的相似度（抗断字/空格差异）。"""
+    if not qn or not seg:
+        return 0.0
+    return difflib.SequenceMatcher(None, qn[:600], seg[:600]).ratio()
+
+
+def _anch_span_ok(reps: list) -> bool:
+    """矩形是否可信：跨行数不超上限，且不是"整页/整栏"式的大框。"""
+    if not reps:
+        return False
+    li = [x for rep in reps for x in rep.get("li") or []]
+    if not li or (max(li) - min(li)) > _ANCH_MAX_SPAN:
+        return False
+    for rep in reps:
+        r = rep.get("rect") or []
+        if len(r) == 4 and (r[2] - r[0]) > 0.55 and (r[3] - r[1]) > 0.55:
+            return False
+    return True
+
+
+def _anch_grow_from(idx: dict, qtoks: list, qi: int, ni: int):  # noqa: D401
+    """从"query 第 qi 个 token 命中文本层第 ni 个 token"出发向两侧对齐扩展。
+
+    比"从句子开头找探针"更稳：句子开头若是页眉残留/被截断，仍能从中间某处锚定。
+    """
+    toks = idx["toks"]
+    i, j = ni, qi
+    while i > 0 and j > 0 and toks[i - 1][0] == qtoks[j - 1][0]:
+        i -= 1
+        j -= 1
+    i0, j0 = i, j
+    i, j = ni, qi
+    while i + 1 < len(toks) and j + 1 < len(qtoks) and toks[i + 1][0] == qtoks[j + 1][0]:
+        i += 1
+        j += 1
+    run = i - i0 + 1
+    return toks[i0][1], toks[i][2], run / max(1, len(qtoks)), run
+
+
+def _anch_search(q: str, idx: dict, hint_pages=None) -> list:
+    """query → 文本层矩形（整篇定位失败时逐页重试）。"""
+    norm = idx["norm"]
+    qn, _qm = _anch_norm_map(q)
+    qtoks = _anch_tokens(qn)
+    if not qtoks:
+        return []
+    probes = _anch_probes(qn, qtoks)
+    hint = set(hint_pages or [])
+    best = None
+    for probe, _skip, q0, q1 in probes:
+        # 扫描该探针的所有出现位置再取最优——段落模板相似（方法/图注/重复句式）时
+        # "先到先得"会把第 2 页的段锚到第 1 页（实测合成样例），必须比相似度。
+        start = 0
+        seen_pos = 0
+        while seen_pos < _ANCH_SCAN_MAX:
+            hit = _anch_find_norm(norm, probe, start)
+            if hit < 0:
+                break
+            start = hit + 1
+            seen_pos += 1
+            n0, n1, cov = _anch_refine(idx, qtoks, hit, hit + len(probe), q0, q1)
+            if cov < _ANCH_MATCH_FLOOR:
+                continue
+            sim = _anch_similarity(qn, norm[n0:n1])
+            if sim < _ANCH_SIM_MIN:
+                continue
+            pg = idx["page_of_n"][n0] if idx.get("page_of_n") else -1
+            # 先按"相似度量级"排序，量级相同时优先段落已知页（歧义句靠上下文页消歧），
+            # 最后才用精细相似度——"同模板重复句"必须让位给同页候选。
+            score = (round(sim, 1), 1 if (hint and pg in hint) else 0, round(sim, 3), -n0)
+            if best is None or score > best[0]:
+                best = (score, n0, n1)
+            if score[0] >= 0.999 and score[1]:
+                break
+        if best and best[0][0] >= 0.999 and best[0][1]:
+            break
+    if best and best[0][0] >= _ANCH_SIM_MIN:
+        reps = _anch_span_rects(idx, best[1], best[2])
+        if _anch_span_ok(reps):
+            return reps
+    for p in _anch_pages(idx, qtoks):
+        n0p, n1p = idx["page_n"][p]
+        sub = norm[n0p:n1p + 1]
+        for probe, _skip, q0, q1 in probes:
+            hit = sub.find(probe)
+            if hit < 0:
+                continue
+            n0, n1, cov = _anch_refine(idx, qtoks, n0p + hit, n0p + hit + len(probe), q0, q1)
+            reps = _anch_span_rects(idx, n0, n1) if cov >= 0.5 else []
+            if reps:
+                return reps
+    # 末级兜底：任取句中一个 token 命中处向两侧扩展，取覆盖最长的一段
+    best = None
+    tok_pos = idx.get("tok_pos") or {}
+    for qi in list(range(min(8, len(qtoks)))) + list(range(max(0, len(qtoks) - 4), len(qtoks))):
+        for ni in (tok_pos.get(qtoks[qi][0]) or [])[:8]:
+            n0, n1, cov, run = _anch_grow_from(idx, qtoks, qi, ni)
+            if run < 10 or cov < 0.45:
+                continue
+            pg = idx["page_of_n"][n0] if idx.get("page_of_n") else -1
+            score = (1 if (hint_pages and pg in hint_pages) else 0, round(cov, 3))
+            if best is None or score > best[0]:
+                best = (score, n0, n1)
+    if best:
+        reps = _anch_span_rects(idx, best[1], best[2])
+        if _anch_span_ok(reps):
+            return reps
+    return []
+
+
+def _anch_locate(query: str, idx: dict, memo: dict = None, hint_pages=None) -> list:
+    """把一段文本锚定到文本层行 → [{"page","rect","li"}…]。"""
+    q = _ANCH_TITLE_RE.sub("", (query or "").strip())
+    if len(q) < 6 or not idx.get("norm"):
+        return []
+    key = (q[:120], tuple(sorted(hint_pages)) if hint_pages else None)
+    if memo is not None and key in memo:
+        return memo[key]
+    res = _anch_search(q, idx, hint_pages=hint_pages)
+    if memo is not None:
+        memo[key] = res
+    return res
+
+
+def _anch_window(idx: dict, li0: int, li1: int, before: int = 0, after: int = 0,
+                 lo: int = -1, hi: int = -1) -> list:
+    """行区间 [li0,li1] 向两侧扩 before/after 行（lo/hi 为段落边界）→ 矩形。"""
+    a = max(0, li0 - before) if lo < 0 else max(lo, li0 - before)
+    b = (li1 + after) if hi < 0 else min(hi, li1 + after)
+    if b < a:
+        b = a
+    return _anch_lines_rects(idx, list(range(a, b + 1)))
+
+
+_ANCH_BRIDGE_LINES = 3      # 相邻句之间的空白行（页眉/夹注）允许跨过
+_ANCH_MAX_SPAN = 34         # 锚定跨行上限（超过视为误配，宁可不框也不要框错）
+_ANCH_MAX_GAP = 60          # 相邻 token 间允许的原始字符间隔（防"和/的"这类常用词把匹配拉飞）
+_ANCH_MATCH_FLOOR = 0.45    # 最低 token 覆盖率：低于此判为误配，宁可退回段落框
+_ANCH_SCAN_MAX = 60         # 每个探针最多检查多少个出现位置（再取最优相似度）
+_ANCH_SKIP_T = 3            # 扩展时允许跳过的目标 token 数（PDF 多词）
+_ANCH_SKIP_Q = 2            # 扩展时允许跳过的 query token 数（md 多词）
+_ANCH_MAX_SKIP = 10         # 单侧扩展允许的累计跳跃上限
+_ANCH_SIM_GOOD = 0.78       # 归一化文本相似度闸门（防"匹配到别处的相似句子"）
+_ANCH_SIM_MIN = 0.55        # 最低可接受相似度
+
+def _anch_running_patterns(layer: dict) -> list:
+    """页眉/页脚/页码行的正则（批Q）。
+
+    Markdown 会把每页的 "532 | Nature | Vol 643 | 10 July 2025"、"Article" 混进段落，
+    这些"运行页眉"既不是正文、又常与其它页重复 → 锚定前必须先剥掉。
+    判据（从严，避免误伤正文）：① 页面上/下缘 5% 带内；② 行首是页码数字且行短；
+    ③ 同一行文本在 ≥3 个不同页面出现（running head）。
+    """
+    lines = layer.get("lines") or []
+    wh = layer.get("page_wh") or []
+    occ = {}
+    for ln in lines:
+        txt = (ln.get("text") or "").strip()
+        parts = txt.split()
+        if not parts or len(parts) > 18:
+            continue
+        p = ln.get("page", 0)
+        h = (wh[p][1] if p < len(wh) else 842.0) or 842.0
+        occ.setdefault(txt.lower(), []).append(
+            {"page": p, "y0": ln.get("y0", 0), "y1": ln.get("y1", 0), "h": h, "n": len(parts)})
+    pats = []
+    for key, rows in occ.items():
+        ntok = rows[0]["n"]
+        edge = any(r["y0"] < 0.05 * r["h"] or r["y1"] > 0.95 * r["h"] for r in rows)
+        numbered = ntok <= 12 and re.match(r"^\d{1,4}\s*(?:\||$)", key) is not None
+        pages = {r["page"] for r in rows}
+        ys = [r["y0"] for r in rows]
+        repeated = (len(pages) >= 5 and ntok <= 6
+                    and (max(ys) - min(ys)) <= 10.0)
+        if not (edge or numbered or repeated):
+            continue
+        pats.append(r"\s+".join(re.escape(x) for x in key.split()))
+    pats.sort(key=len, reverse=True)
+    return pats[:400]
+
+
+def _anch_strip_heads(text: str, pats: list) -> str:
+    """剥掉段落里混入的运行页眉/页脚（只影响锚定用的副本，不动译文展示）。"""
+    for pat in pats:
+        if not pat:
+            continue
+        # 词边界包夹：绝不允许把 "high" 这样的短页眉从 "highlighting" 里切掉
+        rx = r"(?<![A-Za-z0-9])" + pat + r"(?![A-Za-z0-9])"
+        if re.search(rx, text, flags=re.IGNORECASE):
+            text = re.sub(rx, " ", text, flags=re.IGNORECASE)
+    return text
+
+
+def _anch_running_heads(idx: dict) -> list:
+    return idx.get("head_pats") or []
+
+
+
+
+
+_ANCH_MD_HYPHEN_RE = re.compile(r"([A-Za-z]{2,})[-\u2010]\n\s*([a-z]{2,})")
+
+
+def _anch_join_md_hyphens(text: str) -> str:
+    """"approxi-\nmately" → "approximately"（只用于锚定副本）。
+
+    PDF 文本层里换行断字是同一行的两段，Markdown 却保留连字符+换行；
+    不先接回去，含断字的整句永远匹配不上（实测该文有 151 处）。
+    真连字符（single-cell、two-tailed）的下一段以大写/数字开头，不受影响。
+    """
+    prev = None
+    while prev != text:
+        prev = text
+        text = _ANCH_MD_HYPHEN_RE.sub(lambda m: m.group(1) + m.group(2), text)
+    return text
+
+
+def _anch_prepare(text: str, idx: dict):
+    """段落 → (锚定用的 clean 文本, 句区间列表)。
+
+    先剥 Markdown 标题前缀、接回断字、剥掉混入段落的运行页眉，再切句；
+    切句结果与译文侧（_sentence_ranges）一致，句对才能一一对应。
+    """
+    title = _ANCH_TITLE_RE.match(text or "")
+    clean = text[title.end():] if title else (text or "")
+    clean = _anch_join_md_hyphens(clean)
+    clean = _anch_strip_heads(clean, _anch_running_heads(idx))
+    return clean, _sentence_ranges(clean)
+
+
+def _anchor_paragraph(text: str, idx: dict) -> dict:
+    """段落级锚定 → {page, rects, units, pre, post}（批Q 2026-09-23）。
+
+    逐句锚定：units[i] 与原文第 i 句一一对应（前端点译文任意一句 → 精确框原文那一句）；
+    rects = 已定位句子的行并集（段落级"整段定位"）；pre/post = 首/末句上下一行的上下文宽框。
+    句级定位失败的句子退化为 union 矩形并标 weak（前端虚线框），绝不整页乱框。
+    """
+    res = {"page": -1, "rects": [], "units": [], "pre": [], "post": []}
+    if not text or not idx.get("lines") or not idx.get("norm"):
+        return res
+    clean, sents = _anch_prepare(text, idx)
+    if not sents:
+        return res
+    memo = {}
+    # 段落整体先锚一次：拿到"这一段在第几页" → 句级歧义（模板重复句）靠它消歧
+    par = _anch_locate(clean, idx, memo)
+    hint0 = [par[0]["page"]] if par else None
+    found = [None] * len(sents)
+    for i, (s, e) in enumerate(sents):
+        found[i] = _anch_locate(clean[s:e], idx, memo, hint0)
+    located = [i for i, f in enumerate(found) if f]
+    # 第二轮：用已定位的邻近句所在页做提示重试（跨栏/跨页句子常靠这一步救回）
+    for i in [i for i, f in enumerate(found) if not f]:
+        if not located:
+            break
+        near = min(located, key=lambda j: abs(j - i))
+        hint = [found[near][0]["page"]]
+        found[i] = _anch_locate(clean[sents[i][0]:sents[i][1]], idx, memo, hint)
+        if found[i]:
+            located.append(i)
+    located.sort()
+    # 段级 = 已定位句行并集（相邻句间隔 ≤_ANCH_BRIDGE_LINES 行则补齐中间行）
+    li_all = []
+    for i in located:
+        sp = found[i]
+        li_all.extend(range(min(sp[0]["li"]), max(sp[0]["li"]) + 1))
+    li_all = sorted(set(li_all))
+    if len(li_all) > _ANCH_MAX_SPAN:
+        li_all = li_all[:_ANCH_MAX_SPAN]
+    rects = _anch_lines_rects(idx, li_all) if li_all else []
+    page = rects[0]["page"] if rects else -1
+    pre = post = rects
+    if located:
+        f0, f1 = found[located[0]], found[located[-1]]
+        pre = _anch_window(idx, min(f0[0]["li"]), max(f0[0]["li"]), before=2)
+        post = _anch_window(idx, min(f1[0]["li"]), max(f1[0]["li"]), after=2)
+    # 第三轮：位置推断——句子 i 没锚到，但前后句都锚到了 → 它必然夹在两者之间的行里
+    infer = {}
+    for i in range(len(sents)):
+        if found[i]:
+            continue
+        prev = max([j for j in located if j < i], default=None)
+        nxt = min([j for j in located if j > i], default=None)
+        cand = []
+        if prev is not None and nxt is not None:
+            a, b = found[prev][0], found[nxt][0]
+            la, lb = max(a["li"]), min(b["li"])
+            if a["page"] == b["page"] and 0 <= lb - la - 1 <= 12:
+                cand = _anch_lines_rects(idx, list(range(la + 1, lb)))
+        if not cand and prev is not None:
+            a = found[prev][0]
+            cand = _anch_window(idx, max(a["li"]), max(a["li"]), after=2)
+        if not cand and nxt is not None:
+            b = found[nxt][0]
+            cand = _anch_window(idx, min(b["li"]), min(b["li"]), before=2)
+        if cand and _anch_span_ok(cand):
+            infer[i] = cand
+    units = []
+    for i in range(len(sents)):
+        sp = found[i]
+        if sp and len(sp) == 1 and _anch_span_ok(sp):
+            units.append({"p": sp[0]["page"], "r": sp[0]["rect"]})
+        elif i in infer:
+            c0 = infer[i][0]
+            units.append({"p": c0["page"], "r": c0["rect"], "i": 1})
+        elif sp:
+            # 跨了页/栏：只留与最长片段同页的那部分，避免把整页都框进去
+            best = max(sp, key=lambda x: len(x.get("li") or []))
+            units.append({"p": best["page"], "r": best["rect"], "w": 1})
+        else:
+            units.append({"p": page, "r": (rects[0]["rect"] if rects else None), "w": 1})
+    res.update({"page": page, "rects": rects, "pre": pre, "post": post, "units": units})
+    return res
+
+
 def _bilingual_cache_path(stem: str) -> str:
     return os.path.join(_translations_dir(), f"{stem}.bilingual.json")
 
 
-_BILINGUAL_SCHEMA = 2  # 模块结构版本（变动时自动重建缓存）
+# ---------------------------------------------------------------- 批Q：中英句级配对
+_ANCH_CUE_RE = re.compile(r"[a-z]{0,3}\d{1,4}(?:[a-z]\d{0,2})?(?:[.,]\d+)*%?|[a-z]{4,}", re.I)
+_ANCH_CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+_ZH_HEAD_NUM_RE = re.compile(r"\d+")
 
 
-def build_bilingual(file_or_title: str, rebuild: bool = False) -> str:
-    """构建双语对照文档（批O4 2026-08-16）。
+def _anch_cues(text: str) -> list:
+    """句中的"锚点线索"：数字/编号（88.5%、2,293,951、CM08、E04、Fig. 3a）。
+
+    翻译会保留数字与编号的先后顺序，用它们做中英句对的骨架对齐（LCS），
+    比按句数比例切分稳得多——译文合并/拆句时也不会整段错位。
+    """
+    out = []
+    for m in _ANCH_CUE_RE.finditer(text or ""):
+        t = m.group(0).lower().strip(".")
+        if len(t) >= 2 and (t[:1].isdigit() or re.match(r"^[a-z]{1,3}\d", t)):
+            out.append(t)
+    return out
+
+
+def _anch_lcs_pairs(a: list, b: list) -> list:
+    """最长公共子序列的配对下标 → [(ia, ib)…]（单调递增）。"""
+    n, m = len(a), len(b)
+    if not n or not m:
+        return []
+    if n * m > 400000:            # 超大段落退化为空（调用方走比例对齐）
+        return []
+    dp = [[0] * (m + 1) for _ in range(n + 1)]
+    for i in range(n - 1, -1, -1):
+        row, nxt = dp[i], dp[i + 1]
+        for j in range(m - 1, -1, -1):
+            row[j] = nxt[j + 1] + 1 if a[i] == b[j] else max(nxt[j], row[j + 1])
+    pairs, i, j = [], 0, 0
+    while i < n and j < m:
+        if a[i] == b[j]:
+            pairs.append((i, j))
+            i += 1
+            j += 1
+        elif dp[i + 1][j] >= dp[i][j + 1]:
+            i += 1
+        else:
+            j += 1
+    return pairs
+
+
+def _align_sentence_pairs(text_en: str, sents_en: list, text_zh: str, sents_zh: list) -> list:
+    """中文句 → 英文句下标（单调不减，长度 = 中文句数）。
+
+    骨架：两侧都出现的编号/数字做 LCS 配对；锚点之间按句数比例插值。
+    与译文侧 litSplitSentences 的切分规则保持一致（同样断句 → 下标可直连）。
+    """
+    nz, ne = len(sents_zh or []), len(sents_en or [])
+    if not nz or not ne:
+        return []
+    if nz == ne:
+        return list(range(ne))
+    flat_en = [(i, c) for i, (s, e) in enumerate(sents_en) for c in _anch_cues(text_en[s:e])]
+    flat_zh = [(k, c) for k, (s, e) in enumerate(sents_zh) for c in _anch_cues(text_zh[s:e])]
+    anchors = []
+    if flat_en and flat_zh:
+        for ia, ib in _anch_lcs_pairs([c for _, c in flat_en], [c for _, c in flat_zh]):
+            i, k = flat_en[ia][0], flat_zh[ib][0]
+            if anchors and (i <= anchors[-1][0] or k <= anchors[-1][1]):
+                continue
+            anchors.append([i, k])
+    out = [0] * nz
+    if not anchors:
+        for k in range(nz):
+            out[k] = min(ne - 1, int(round((k + 0.5) * ne / nz - 0.5)))
+        return out
+    i0, k0 = anchors[0]
+    for k in range(0, k0):
+        out[k] = max(0, min(ne - 1, int(round(i0 * (k + 1) / (k0 + 1)))))
+    for ai in range(len(anchors)):
+        i_a, k_a = anchors[ai]
+        out[k_a] = i_a
+        i_b, k_b = anchors[ai + 1] if ai + 1 < len(anchors) else (ne - 1, nz - 1)
+        span_k, span_i = k_b - k_a, i_b - i_a
+        for d in range(1, span_k):
+            out[k_a + d] = i_a + int(round(d * span_i / span_k)) if span_k else i_a
+    i_z, k_z = anchors[-1]
+    for k in range(k_z + 1, nz):
+        out[k] = i_z + int(round((k - k_z) * (ne - 1 - i_z) / max(1, nz - 1 - k_z)))
+    for k in range(1, nz):
+        if out[k] < out[k - 1]:
+            out[k] = out[k - 1]
+    return [max(0, min(ne - 1, x)) for x in out]
+
+
+def _zh_sentence_payload(en: str, zh: str, anchor: dict, idx, zh_heads: set) -> list:
+    """把一段中英对照切成"句子对" → [{z, u, w}]。
+
+    o=[start,end] 为译文句中该句在 zh 段落里的字符区间（前端按区间切片渲染，零漂移）；
+    u=对应原文句下标（_align_sentence_pairs）；w=1 表示该句锚定不可靠（前端画虚线框）。
+    只返回需要渲染的句子——运行页眉整句被丢弃。
+    """
+    if not zh or not (zh or "").strip():
+        return []
+    if not idx:
+        return [{"o": [s, e], "u": -1} for s, e in _sentence_ranges(zh)]
+    clean_en, sents_en = _anch_prepare(en or "", idx)
+    sents_zh = _sentence_ranges(zh)
+    if not sents_zh:
+        return []
+    pairs = _align_sentence_pairs(clean_en, sents_en, zh, sents_zh)
+    units = (anchor or {}).get("units") or []
+    out = []
+    # 区间必须首尾相接：_sentence_ranges 会裁掉句首尾空白，句间残留（如参考文献编号
+    # "1."）若不并入下一句就会在渲染时凭空消失（实测 47 个编号被吞）。
+    cursor = 0
+    for k, (s, e) in enumerate(sents_zh):
+        kind = _zh_head_kind(zh[s:e], zh_heads)
+        if kind == "head":
+            cursor = e                      # 页眉整句丢弃，连它前面的间隙一起丢
+            continue
+        if kind == "num":
+            continue                        # 编号不单独成句，字符留给下一句（cursor 不动）
+        u = pairs[k] if k < len(pairs) else -1
+        unit = units[u] if 0 <= u < len(units) else None
+        item = {"o": [cursor, e], "u": u}
+        cursor = e
+        if unit is None or not unit.get("r") or unit.get("w"):
+            item["w"] = 1
+        out.append(item)
+    return out
+
+
+def _zh_running_keys(zh_text: str) -> set:
+    """中文译文里重复出现的运行页眉/页脚行（数字归一后统计出现次数）。"""
+    cnt = {}
+    for ln in (zh_text or "").splitlines():
+        ln = ln.strip()
+        if not (2 <= len(ln) <= 90):
+            continue
+        key = _ZH_HEAD_NUM_RE.sub("#", ln.lower())
+        if key.count("#") > 6:
+            continue
+        cnt[key] = cnt.get(key, 0) + 1
+    # 整行重复出现 >=3 次才算运行页眉；正文句子几乎不可能整行重复，
+    # 因此不会误伤（译文页眉里含"第643卷/2025年7月10日"这类中文，不能用"无中文"当判据）。
+    return {k for k, v in cnt.items() if v >= 3}
+
+
+def _zh_head_kind(seg: str, keys: set) -> str:
+    """该片段是"页眉/散文"里的哪一种 → 'head' | 'num' | ''。
+
+    'head'：重复出现的运行页眉/页脚（>=3 次相同整行）→ 整句丢弃。
+    'num'：纯编号/分隔片段（"48."、"1."）→ 不单独成句，但字符必须并入下一句，
+           否则渲染时参考文献编号会凭空消失（实测 47 个编号被吞）。
+    """
+    t = (seg or "").strip()
+    if not t:
+        return "head"
+    key = _ZH_HEAD_NUM_RE.sub("#", " ".join(t.split()).lower())
+    if key in keys:
+        return "head"
+    if re.fullmatch(r"[\s\d|.–—]+", t):
+        return "num"
+    return ""
+
+
+def _zh_head_only(seg: str, keys: set) -> bool:
+    """兼容旧调用：是否整句丢弃（页眉或纯空片段）。"""
+    return _zh_head_kind(seg, keys) == "head"
+
+
+_BILINGUAL_SCHEMA = 3  # 模块结构版本（变动时自动重建缓存；批Q 句级锚定 + 中英句对）
+# 锚定引擎版本：算法改动必须 +1，否则老缓存（算法旧、结果差）会一直生效，
+# 用户看到的就是"改了没效果"（本文件曾因此连踩两次）。
+_ANCHOR_ENGINE = "q3"
+
+
+def _anchor_cache_path(stem: str) -> str:
+    return os.path.join(_translations_dir(), f"{stem}.anchors.json")
+
+
+def _anchor_cache_ok(stem: str, md_path: str, zh_path: str) -> bool:
+    """句级锚点缓存是否仍可用（schema 一致，且不早于原文 md / 译文）。"""
+    p = _anchor_cache_path(stem)
+    if not os.path.isfile(p):
+        return False
+    try:
+        with open(p, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return False
+    if (not data.get("paras") or data.get("_schema") != _BILINGUAL_SCHEMA
+            or data.get("_engine") != _ANCHOR_ENGINE):
+        return False
+    mt = os.path.getmtime(p)
+    for src in (md_path, zh_path):
+        if os.path.isfile(src) and os.path.getmtime(src) > mt:
+            return False
+    return True
+
+
+def build_anchor_map(pdf_path: str, md_path: str, stem: str = "",
+                     force: bool = False, progress_cb=None) -> list:
+    """原文段落 → 文本层句级锚点（批Q 2026-09-23）。
+
+    返回 [{"page","rects","pre","post","units":[{"p","r"}…]}…]，与 _md_blocks(md) 一一对应；
+    缓存 translations/<stem>.anchors.json（原文 md 更新时自动重建）。
+    """
+    _cb = progress_cb or (lambda *a, **k: None)
+    try:
+        with open(md_path, encoding="utf-8") as f:
+            md = f.read()
+    except Exception as e:
+        logger.warning(f"anchor md read failed: {e}")
+        return []
+    blocks = _md_blocks(md)
+    stem = stem or os.path.splitext(os.path.basename(md_path))[0]
+    cache_path = _anchor_cache_path(stem) if stem else ""
+    if cache_path and not force and _anchor_cache_ok(stem, md_path,
+                                                     os.path.join(_translations_dir(), f"{stem}.zh.md")):
+        try:
+            with open(cache_path, encoding="utf-8") as f:
+                data = json.load(f)
+            if len(data.get("paras") or []) == len(blocks):
+                return data["paras"]
+        except Exception as e:
+            logger.warning(f"anchor cache read failed: {e}")
+    if not os.path.isfile(pdf_path):
+        return [{"page": -1, "rects": [], "units": [], "pre": [], "post": []}] * len(blocks)
+    _cb("anchor", 0, len(blocks), "构建句级锚点（文本层逐行定位）…")
+    _layer = _pdf_line_layer(pdf_path)
+    idx = _anch_index(_layer["lines"], _layer["page_wh"])
+    idx["head_pats"] = _anch_running_patterns(_layer)
+    paras, n_hit, n_units, n_u_hit, done = [], 0, 0, 0, 0
+    for b in blocks:
+        a = _anchor_paragraph(b, idx)
+        if a.get("rects"):
+            n_hit += 1
+        n_units += len(a.get("units") or [])
+        n_u_hit += sum(1 for u in (a.get("units") or []) if u.get("r"))
+        paras.append(a)
+        done += 1
+        if done % 8 == 0 or done == len(blocks):
+            _cb("anchor", done, len(blocks),
+                f"句级锚点 {done}/{len(blocks)} 段（命中 {n_hit} 段 / {n_u_hit} 句）")
+    logger.info(f"anchor map {stem}: 段命中 {n_hit}/{len(blocks)}，句命中 {n_u_hit}/{n_units}")
+    if cache_path:
+        try:
+            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+            with open(cache_path, "w", encoding="utf-8") as f:
+                json.dump({"ok": True, "_schema": _BILINGUAL_SCHEMA, "stem": stem,
+                           "_engine": _ANCHOR_ENGINE,
+                           "blocks": len(blocks), "built_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                           "paras": paras}, f, ensure_ascii=False)
+        except Exception as e:
+            logger.warning(f"anchor cache write failed: {e}")
+    return paras
+
+
+def build_bilingual(file_or_title: str, rebuild: bool = False, progress_cb=None) -> str:
+    """构建双语对照文档（批O4 2026-08-16；批Q 2026-09-23 句级锚定）。
 
     结构：
       {ok, file, stem, title, pages, has_zh,
@@ -2111,7 +3874,8 @@ def build_bilingual(file_or_title: str, rebuild: bool = False) -> str:
        modules: [{id, title, start_page, end_page, paras: [
                   {page, en, zh, rect:[x0,y0,x1,y1]|null}]}]}
     模块边界优先取 PDF 书签（get_toc），无书签时按页眉字号检测，都无 → 单模块"全文"。
-    段落→页码靠逐页文本匹配；段落→矩形靠 search_for（点译文定位原文高亮）。
+    段落→页码/矩形走句级锚定（_anchor_paragraph）：文本层逐行定位，每句一个矩形，
+    前端点译文任意一句即可精确框选原文（整段命中率低时退回 _find_block_rect 整体搜索）。
     结果缓存 translations/<stem>.bilingual.json（md/zh 更新时自动重建）。
     """
     hit = _find_raw_entry(file_or_title)
@@ -2137,7 +3901,8 @@ def build_bilingual(file_or_title: str, rebuild: bool = False) -> str:
                     _cached = f.read()
                 try:
                     _cj = json.loads(_cached)
-                    if _cj.get("_schema") == _BILINGUAL_SCHEMA:
+                    if (_cj.get("_schema") == _BILINGUAL_SCHEMA
+                            and _cj.get("_engine") == _ANCHOR_ENGINE):
                         return _cached
                 except Exception:
                     pass
@@ -2161,9 +3926,27 @@ def build_bilingual(file_or_title: str, rebuild: bool = False) -> str:
         pairs = _align_blocks_backend(blocks_en, blocks_zh)
     else:
         pairs = [[i, None] for i in range(len(blocks_en))]
-    # 段落 → 页码
+    # 段落 → 页码（批Q：优先用句级锚点的行级页号，命中更准）
     pages_text = _pdf_pages_text(pdf_path)
     page_of = _map_blocks_to_pages(blocks_en, pages_text) if pages_text else [-1] * len(blocks_en)
+    anchors = []
+    try:
+        anchors = build_anchor_map(pdf_path, md_path, stem=stem, progress_cb=progress_cb)
+    except Exception as e:
+        logger.warning(f"anchor map failed: {e}")
+    if anchors and len(anchors) == len(blocks_en):
+        for i, a in enumerate(anchors):
+            if (a or {}).get("page", -1) >= 0:
+                page_of[i] = a["page"]
+    # 批Q：中英句级配对（点译文任意一句 → 精确框原文那一句）
+    _zh_heads = _zh_running_keys(zh_text)
+    _anch_idx = None
+    try:
+        _lay = _pdf_line_layer(pdf_path)
+        _anch_idx = _anch_index(_lay["lines"], _lay["page_wh"])
+        _anch_idx["head_pats"] = _anch_running_patterns(_lay)
+    except Exception as e:
+        logger.warning(f"anchor index failed: {e}")
     # 模块边界
     toc = _pdf_toc(pdf_path)
     toc_source = "toc"
@@ -2200,16 +3983,30 @@ def build_bilingual(file_or_title: str, rebuild: bool = False) -> str:
                 continue
             en = blocks_en[ei] if ei is not None else ""
             zh = blocks_zh[zi] if zi is not None and zi < len(blocks_zh) else ""
-            rect = _find_block_rect(pdf_path, pg, en) if en else None
-            m["paras"].append({"page": pg, "en": en, "zh": zh, "rect": rect})
+            a = anchors[ei] if (ei is not None and ei < len(anchors)) else {}
+            rects = (a or {}).get("rects") or []
+            if not rects and en:
+                _fr = _find_block_rect(pdf_path, pg, en)
+                if _fr:
+                    rects = [{"page": pg, "rect": _fr, "li": []}]
+            # rect 保持"单个扁平矩形"的老形状（旧前端/外部调用方依赖），
+            # rects 是批Q新增的多行并集列表 [{page, rect, li}…]
+            m["paras"].append({"page": pg, "en": en, "zh": zh,
+                               "rect": (rects[0]["rect"] if rects else None),
+                               "rects": rects,
+                               "pre": (a or {}).get("pre") or [],
+                               "post": (a or {}).get("post") or [],
+                               "units": (a or {}).get("units") or [],
+                               "zs": _zh_sentence_payload(en, zh, a, _anch_idx, _zh_heads)})
         m["id"] = idx
     out = json.dumps({
         "ok": True, "file": hit.get("file"), "stem": stem,
         "title": hit.get("title") or "", "pages": len(pages_text),
         "has_zh": bool(blocks_zh), "toc_source": toc_source,
-        "_schema": _BILINGUAL_SCHEMA,
+        "_schema": _BILINGUAL_SCHEMA, "_engine": _ANCHOR_ENGINE,
         "modules": modules,
-        "note": "左侧为原版 PDF（含图），右侧为按模块组织的译文；点模块/段落自动定位原文页与高亮区域。",
+        "note": "左侧为原版 PDF（含图），右侧为按模块组织的译文；"
+                "点译文任意一句即框出对应原文（句级对齐），点原文页可回定位译文。",
     }, ensure_ascii=False)
     try:
         with open(cache_path, "w", encoding="utf-8") as f:
@@ -2286,7 +4083,7 @@ def bind_session(session_id: str, force: bool = False) -> dict:
 SCHEMA = {
     "name": "literature_import",
     "description": (
-        "导入用户已有的本地 PDF 文献（文件或目录路径）到全局文献库 hermes_home/papers/。"
+        "导入用户已有的本地 PDF 文献（文件或目录路径）到全局文献库 memomics_home/papers/。"
         "自动提取并标识：期刊(journal)、文章名(title)、作者、年份、DOI、下载日期；"
         "自动注册进引用库（BibTeX/RIS）。重复文件自动跳过。"
         "用户说'这是我下载的文献/论文 PDF'时用它导入，不要用 download_pdf 重复下载。"
@@ -2312,7 +4109,7 @@ EXTRACT_SCHEMA = {
         "生物学知识（结论/基因marker/细胞类型/通路/类器官培养条件/化合物化学信息）→ 01_生物学知识；"
         "生信知识（测序方法/分析流程/软件包含版本/关键参数/QC阈值/参考基因组/数据库）→ 03_测序方法；"
         "质控阈值 → 02_质控参数。写入 knowledge_base 五级目录（物种/组织/方向/类别/assay），"
-        "evidence 带 DOI 溯源，另存人读版 hermes_home/papers/knowledge/<名>.md。"
+        "evidence 带 DOI 溯源，另存人读版 memomics_home/papers/knowledge/<名>.md。"
         "用户说'把这篇文献的参数/生物学知识/生信知识提炼进知识库/入库'时使用。"
         "【重要】用户要'总结文章思路/论文解读/全文提炼/9项摘要'时不要用本工具——那走 summarize_paper。"
     ),
@@ -2356,7 +4153,7 @@ def _register():
                 "description": (
                     "文献全文思路提炼（给人看的方向）：对文献库里一篇文章提取 9 项结构化摘要"
                     "（思路、背景、物种、组织、问题、怎么解决、方法、结论、怎么验证），写入 "
-                    "hermes_home/papers/summaries/ 并标记已提炼。"
+                    "memomics_home/papers/summaries/ 并标记已提炼。"
                     "用户说'总结这篇文章/这篇文章的思路/讲了什么/论文解读/全文提炼/9项摘要'时使用。"
                     "【重要】提炼生信参数/知识库条目（给 AI 调用）走 kb_extract_from_paper，"
                     "两者分工不同，不要混用。"

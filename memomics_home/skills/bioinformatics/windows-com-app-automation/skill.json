@@ -1,0 +1,25 @@
+{
+  "name": "windows-com-app-automation",
+  "version": "1.0.0",
+  "source": "memomics-created",
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "Illustrator自动化",
+    "操控Illustrator",
+    "批量改Illustrator",
+    "Illustrator脚本",
+    "ExtendScript",
+    "JSX脚本",
+    "COM自动化",
+    "Photoshop自动化",
+    "InDesign自动化",
+    "脚本控制软件",
+    "软件没有CLI",
+    "桌面软件自动化",
+    "图内文字批量改",
+    "cscript",
+    "DoJavaScriptFile",
+    "画板操作"
+  ],
+  "when_to_use": "用 Windows COM + 脚本引擎确定性地驱动桌面应用（Illustrator/Photoshop/InDesign/Word/Excel）：cscript→VBScript→CreateObject→DoJavaScriptFile/DoScript 桥，ExtendScript ES3 手拼 JSON、隔离文档写操作的安全模式、可复制的 doctor/探测脚手架。"
+}

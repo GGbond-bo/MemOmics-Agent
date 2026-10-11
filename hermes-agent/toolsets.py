@@ -202,6 +202,7 @@ TOOLSETS = {
             "search_papers_by_context",
             "guide_analysis",
             "check_env",
+            "env_inventory",
             "rail_review",
             "debate_analysis",
             "memomics_pipeline",

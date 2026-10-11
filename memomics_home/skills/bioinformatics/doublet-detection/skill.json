@@ -1,0 +1,29 @@
+{
+  "id": "doublet-detection",
+  "name": "双细胞检测与判定",
+  "category": "scRNA",
+  "language": "R+Python",
+  "description": "双细胞（doublet）检测与判定:scDblFinder / DoubletFinder（R）与 scrublet（Python）选型与执行，含多样本·每样本细胞数少的数据策略决策、双细胞率判读区间、'要不要剔除'的判定准则与交付口径。触发:'检测双细胞' / '双细胞比例高不高' / '要不要剔除 doublet' / 'doublet rate' / '去双胞'。",
+  "starting_prompt": "使用 双细胞检测与判定 进行分析",
+  "source_dir": "skills/bioinformatics/doublet-detection",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "doublet",
+    "scDblFinder",
+    "DoubletFinder",
+    "scrublet",
+    "qc",
+    "scRNA-seq"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "doublet-detection",
+    "doublet detection",
+    "doublet",
+    "detection"
+  ],
+  "when_to_use": "双细胞（doublet）检测与判定:scDblFinder / DoubletFinder（R）与 scrublet（Python）选型与执行，含多样本·每样本细胞数少的数据策略决策、双细胞率判读区间、'要不要剔除'的判定准则与交付口径。触发:'检测双细胞' / '双细胞比例高不高' / '要不要剔除 doublet' / 'doublet rate' / '去双胞'。"
+}

@@ -1,0 +1,22 @@
+{
+ "id": "query_encode",
+ "name": "Query Encode",
+ "category": "data_retrieval",
+ "language": "Python",
+ "source": "Biomni",
+ "description": "Query the ENCODE Portal API to locate functional genomics data (experiments, files, biosamples, datasets).",
+ "detailed_description": "Query the ENCODE Portal API to locate functional genomics data (experiments, files, biosamples, datasets).",
+ "when_to_use": "When you need query encode analysis",
+ "parameters": {
+  "prompt": "[Required] Natural language query about functional genomics data (str)",
+  "endpoint": "[Optional] Direct ENCODE Portal endpoint or full URL",
+  "max_results": "[Optional] Limit for search endpoints (number or 'all') (default: 25)",
+  "verbose": "[Optional] Return detailed results (default: True)"
+ },
+ "trigger_keywords": [
+  "query_encode",
+  "query encode",
+  "encode"
+ ],
+ "trigger_level": "YEL"
+}

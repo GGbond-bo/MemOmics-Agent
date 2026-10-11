@@ -1,0 +1,95 @@
+{
+ "id": "hdwgcna",
+ "name": "共表达网络分析 (hdWGCNA)",
+ "category": "transcriptomics",
+ "language": "R",
+ "description": "WGCNA/hdWGCNA共表达网络分析。模块鉴定/hub基因/模块-性状关联",
+ "starting_prompt": "进行共表达网络分析",
+ "source_dir": "skills/built_in/hdwgcna",
+ "memomics_module": "03_高级分析",
+ "chains_from": [],
+ "chains_to": [],
+ "tags": [
+  "hdwgcna",
+  "wgcna",
+  "co-expression",
+  "module"
+ ],
+ "aliases": [
+  "共表达网络 (WGCNA/hdWGCNA)"
+ ],
+ "steps": [
+  {
+   "name": "Setup hdWGCNA",
+   "description": "SetUpWGCNA initialize",
+   "tool": "terminal"
+  },
+  {
+   "name": "Module detection",
+   "description": "FindWGCNAModules",
+   "tool": "terminal"
+  },
+  {
+   "name": "Module eigengenes",
+   "description": "ModuleEigengenes",
+   "tool": "terminal"
+  },
+  {
+   "name": "Hub gene identification",
+   "description": "GetHubGenes per module",
+   "tool": "terminal"
+  },
+  {
+   "name": "Module-trait correlation",
+   "description": "CorrelateModules",
+   "tool": "terminal"
+  },
+  {
+   "name": "Functional enrichment",
+   "description": "GO/KEGG per module",
+   "tool": "terminal"
+  }
+ ],
+ "r_packages": [
+  "hdWGCNA",
+  "Seurat",
+  "WGCNA",
+  "igraph"
+ ],
+ "python_packages": [],
+ "difficulty": "advanced",
+ "applicable": [
+  "异质性高",
+  ">5K细胞",
+  "disease",
+  "aging"
+ ],
+ "parameters": {
+  "r_packages": "hdWGCNA, Seurat, WGCNA, igraph",
+  "steps": "Setup hdWGCNA -> Module detection -> Module eigengenes -> Hub gene identification -> Module-trait correlation -> Functional enrichment"
+ },
+ "detailed_description": "WGCNA/hdWGCNA共表达网络分析。模块鉴定/hub基因/模块-性状关联\n\n适用场景: 异质性高, >5K细胞, disease, aging\n\n分析步骤:\n  - Setup hdWGCNA: SetUpWGCNA initialize\n  - Module detection: FindWGCNAModules\n  - Module eigengenes: ModuleEigengenes\n  - Hub gene identification: GetHubGenes per module\n  - Module-trait correlation: CorrelateModules\n  - Functional enrichment: GO/KEGG per module\n\n依赖包: WGCNA, Seurat, hdWGCNA, igraph\n\n难度: advanced\n\n触发提示: \"进行共表达网络分析\"\n\n别名: 共表达网络 (WGCNA/hdWGCNA)",
+ "when_to_use": "适用于: 异质性高, >5K细胞, disease, aging",
+ "official_docs": "https://smorabit.github.io/hdWGCNA/articles/basic_tutorial.html",
+ "doc_source": "official",
+ "prerequisites": {
+  "requires": [
+   "scrna-clustering"
+  ],
+  "description": "需要已聚类的数据"
+ },
+ "debate_verdicts": [
+  {
+   "topic": "hdWGCNA 模块-性状关联分析：软阈值选择",
+   "verdict": "建议 power=9",
+   "recommended_params": "{\"power\": 9}",
+   "confidence": 0.7,
+   "evidence": "{\"call_ids\": [\"\", \"\", \"\"], \"scores\": {}, \"kb_used\": {}}",
+   "date": "2026-08-10 20:51:12"
+  }
+ ],
+ "trigger_keywords": [
+  "hdwgcna"
+ ],
+ "trigger_level": "YEL"
+}

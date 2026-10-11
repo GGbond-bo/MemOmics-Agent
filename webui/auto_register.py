@@ -20,6 +20,19 @@ def init(skills_dir: str, index_path: str, soul_path: str):
     SOUL_PATH = soul_path
 
 
+def _registry():
+    """按需导入 skills_registry（server.py 以 webui/ 为 sys.path，包方式则 from webui）。"""
+    try:
+        import skills_registry  # noqa: PLC0415 — 延迟导入，避免与 server.py 的 sys.path 顺序打架
+        return skills_registry
+    except Exception:
+        try:
+            from webui import skills_registry  # noqa: PLC0415
+            return skills_registry
+        except Exception:
+            return None
+
+
 def _parse_skill_md(skill_dir: str) -> dict:
     """从 SKILL.md frontmatter 提取元数据"""
     md_path = os.path.join(skill_dir, "SKILL.md")
@@ -29,9 +42,17 @@ def _parse_skill_md(skill_dir: str) -> dict:
     with open(md_path, 'r', encoding='utf-8') as f:
         content = f.read()
     
-    # Extract YAML-style frontmatter between --- markers
+    # frontmatter 解析统一走 skills_registry._parse_frontmatter（同一套口径）：
+    # 老实现是「逐行 key: value」，遇到 `description: >-` 块标量只取到字面量 `>-`，
+    # 续行全丢 —— 生成出来的 skill.json 描述就是垃圾（2026-09 实测：'description': '>-'）。
     meta = {}
-    fm_match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
+    reg = _registry()
+    if reg is not None:
+        try:
+            meta = dict(reg._parse_frontmatter(content) or {})
+        except Exception:  # noqa: BLE001 — 解析器异常时退回老逻辑，不能阻断注册
+            meta = {}
+    fm_match = None if meta else re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
     if fm_match:
         fm = fm_match.group(1)
         # Parse simple key: value pairs
@@ -155,23 +176,68 @@ def auto_generate_skill_json(skill_dir: str, force: bool = False) -> bool:
         "trigger_level": meta.get('trigger_level', 'YEL'),
         "trigger_keywords": meta.get('trigger_keywords', []),
     }
+    # 从 SKILL.md 搬来的触发词/使用场景可能是长句、逗号粘连、分类水词，
+    # 一律先过 skills_registry.normalize_meta()，保证写出来的 skill.json 与索引同一口径。
+    reg = _registry()
+    if reg is not None:
+        old = {}
+        if os.path.exists(json_path):
+            try:
+                with open(json_path, encoding="utf-8") as f:
+                    old = json.load(f) or {}
+            except (OSError, ValueError):
+                old = {}
+        try:
+            data = reg.normalize_meta(meta['id'], data, existing=old)
+        except TypeError:   # 老版本 skills_registry 没有 existing 形参
+            data = reg.normalize_meta(meta['id'], data)
+        except Exception as e:  # noqa: BLE001 — 规范化失败也要能落盘
+            print(f"[auto-register] normalize_meta failed ({e}); write raw metadata")
     
-    with open(json_path, 'w', encoding='utf-8') as f:
+    with open(json_path, 'w', encoding='utf-8', newline='\n') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     print(f"[auto-register] Generated skill.json for {meta['id']}")
     return True
 
 
 def auto_register_to_index(skill_dir: str) -> bool:
-    """自动添加到 SKILLS_INDEX.md"""
+    """自动添加到 SKILLS_INDEX.md
+
+    2026-09-23 起改为「整表重建」（webui/skills_registry.py）：旧实现只会在表尾追加
+    一行，且表头 5 列 / 追加行 4 列导致错列，触发词回退成分类水词（rna, scrna…），
+    355 个技能里有 82 个始终没有索引行。重建后索引 = 磁盘全量技能，新技能自动出现。
+    下面的老追加逻辑保留为兜底（重建失败时才走）。
+    """
     meta = _parse_skill_md(skill_dir)
-    skill_name = meta['id']
-    
+    skill_name = meta.get('id') or os.path.basename(str(skill_dir).rstrip('/\\'))
+    try:
+        try:
+            import skills_registry  # server.py 以 webui/ 为 sys.path 时
+        except Exception:
+            from webui import skills_registry  # 包方式导入
+        index_path = SKILLS_INDEX_PATH or skills_registry.INDEX_PATH
+        with open(index_path, 'r', encoding='utf-8') as f:
+            # 新索引是 5 列编号行（| 12 | skill | ... |），老判定 | name | 匹配不到
+            existed = bool(re.search(r'\|\s*(?:\d+\s*\|\s*)?' + re.escape(skill_name) + r'\s*\|', f.read()))
+        # backfill_json=True：把 skill.json 里空/垃圾的 when_to_use、trigger_keywords、
+        # trigger_level 用索引口径补齐（只补空，不覆盖人工填写值）。运行期写 skill.json 的
+        # 路径不止一条（auto_generate_skill_json 会搬 SKILL.md frontmatter），不在这里收敛，
+        # 那份脏值会一直躺在磁盘上并进下一次注册。
+        skills_registry.build(write=True, backfill_json=True)
+        print(f"[auto-register] Rebuilt SKILLS_INDEX.md "
+              f"({'added' if not existed else 'refreshed'}: {skill_name})")
+        return not existed
+    except Exception as e:  # noqa: BLE001 — 兜底走老逻辑
+        print(f"[auto-register] skills_registry rebuild unavailable ({e}); falling back to append")
+
+    if not SKILLS_INDEX_PATH:
+        print("[auto-register] SKILLS_INDEX_PATH 未初始化（未调用 init()），跳过索引注册")
+        return False
     with open(SKILLS_INDEX_PATH, 'r', encoding='utf-8') as f:
         index = f.read()
     
     # Already registered?
-    if f'| {skill_name} |' in index:
+    if re.search(r'\|\s*(?:\d+\s*\|\s*)?' + re.escape(skill_name) + r'\s*\|', index):
         return False
     
     # Determine category section
@@ -225,7 +291,9 @@ def auto_register_to_index(skill_dir: str) -> bool:
     
     # Update section count
     old_header = index[section_pos:index.find('\n', section_pos)]
-    import re
+    # 这里曾有一句函数内 import re：它会让 re 成为整个函数的局部名，于是上面
+    # re.search(...) 在赋值前就抛 UnboundLocalError —— 主重建路径与下面的兜底追加
+    # 一起失效（register_skill 直接抛异常）。模块顶部第 7 行已 import re，删掉即可。
     count_match = re.search(r'\((\d+) skills\)', old_header)
     if count_match:
         new_count = int(count_match.group(1)) + 1
@@ -315,87 +383,102 @@ def register_skill(skill_dir: str,
 
 
 def rebuild_index_descriptions() -> dict:
-    """修复 SKILLS_INDEX.md 中描述为空的历史条目（只追加不更新导致）。
+    """重建 SKILLS_INDEX.md —— 统一委托 skills_registry，索引只有一个生成口径。
 
-    遍历 bioinformatics 下所有 skill 目录，重新解析 SKILL.md frontmatter，
-    把索引行里 Description / Keywords 为空的单元格补全。
-    不动已有内容的单元格（保留手工优化），不动 trigger_level。
+    历史实现是「就地补格」：重新解析 SKILL.md frontmatter，当索引单元格里的词数少于
+    SKILL.md 里的 trigger_keywords 时，用**原始列表**整格覆盖写入，而且是默认文本模式
+    （Windows 下变 CRLF）。实测后果：5 行被写成逗号粘连的长句（academic-paper-reviewer
+    一格 19 个词：帮我审一下, 审一下这篇, ... review this, review the），全文 58802 字节，
+    每次服务启动都会重犯 —— 这正是「注册触发场景没写好」的现场之一。
+
+    现在整表交给 skills_registry.build()：触发词清洗 + 限长 + 等级与 SOUL 必触发表对齐后再
+    渲染。返回键（ok / filled_desc / filled_keywords）保持不变，供启动日志继续使用。
     """
     if not SKILLS_BIO_DIR:
         return {"ok": False, "error": "not initialized"}
+    reg = _registry()
+    if reg is None:
+        return {"ok": False, "error": "skills_registry unavailable"}
+    try:
+        info = reg.build(write=True, backfill_json=True)  # 同上：重建索引时顺手修掉 skill.json 里的垃圾字段
+    except Exception as e:  # noqa: BLE001 — 启动期索引重建失败不能拖垮服务
+        print(f"[auto-register] index rebuild failed: {e}", flush=True)
+        return {"ok": False, "error": str(e)}
+    rows = int(info.get("total") or 0)
+    print(f"[auto-register] Index rebuilt via skills_registry: {rows} rows", flush=True)
+    return {"ok": True, "filled_desc": 0, "filled_keywords": 0, "rows": rows}
 
-    with open(SKILLS_INDEX_PATH, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
 
-    filled_desc, filled_kw = 0, 0
-    for d in sorted(os.listdir(SKILLS_BIO_DIR)):
-        full = os.path.join(SKILLS_BIO_DIR, d)
-        if not os.path.isdir(full) or d.startswith('.') or d.startswith('_'):
-            continue
-        md = os.path.join(full, "SKILL.md")
-        if not os.path.exists(md):
-            continue
-        meta = _parse_skill_md(full)
-        desc = str(meta.get('description', '') or '')[:100]
-        if not desc:
-            # 兜底：从 when_to_use 提取（去掉 "[skillname] " 前缀）
-            wtu = str(meta.get('when_to_use', '') or '').strip()
-            if wtu:
-                if wtu.startswith('['):
-                    wtu = wtu.split(']', 1)[-1].strip()
-                desc = wtu[:100]
-        tks = meta.get('trigger_keywords', []) or []
-        tags = meta.get('tags', []) or []
-        if not desc and not tks:
-            continue  # 本身没有可补内容
+def sync_new_skills(verbose: bool = False) -> dict:
+    """会话中途新造出来的技能，立刻补进 SKILLS_INDEX.md（2026-09-24 真机事故）。
 
-        # tags 兜底泛词（rna, scrna, scrnaseq 等）对触发识别无用；
-        # SKILL.md 有真实 trigger_keywords 时用真词覆盖
-        tag_fallback = ', '.join(tags[:10])
+    现场：wave4 真机测试期间磁盘上多出一个技能目录 trajectory-conclusion-validation，
+    SKILLS_INDEX.md 里没有它的行 —— 而 SKILLS_INDEX.md 是唯一会被注入 system prompt 的
+    技能清单，缺行就等于模型永远看不到这个技能；同一条漂移还会让
+    webui/tests/test_skills_registry.py 的「索引行集合 == 磁盘技能集合」两条断言直接红。
+    原因：索引只在进程启动 scan_and_register_all() 和「注册技能」工具里重建，agent 自己用
+    write 直接写文件造出来的技能，要等到下一次重启才进索引。
 
-        for i, line in enumerate(lines):
-            if not line.startswith('|') or line.startswith('| #') or line.startswith('|---'):
+    这里做一次廉价前置判定：只列目录名 + 读一次索引，不解析 355 个 SKILL.md；真的缺行才触发
+    整表重建（重建口径仍然只有 skills_registry.build() 一个）。
+    """
+    if not SKILLS_BIO_DIR:
+        return {"ok": False, "error": "not initialized"}
+    reg = _registry()
+    if reg is None:
+        return {"ok": False, "error": "skills_registry unavailable"}
+    # 只扫产品自己的技能面（memomics_home/skills/bioinformatics）。MemOmics 框架自带的那批只有
+    # SKILL.md 的技能（apple-notes / arxiv / notion …）**故意不进索引**，避免污染模型触发面
+    # —— 见 skills_registry.scan_skills() 的注释。2026-09-24 实测：若对整棵 skills/ 树补
+    # skill.json，索引会从 357 行涨到 440 行，把 83 个无关技能灌进触发面（已回滚）。
+    # 规则同 scan_skills：跳过 . / _ 开头目录 + 只收带 skill.json 的目录。
+    root = SKILLS_BIO_DIR or getattr(reg, "SKILLS_DIR", None)
+    disk = set()
+    need_json = []
+    try:
+        for dirpath, dirs, files in os.walk(root):
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            base = os.path.basename(dirpath)
+            if base.startswith("_"):
                 continue
-            cells = line.split('|')
-            # 两种行格式兼容（split 后首尾是空串，序号列在 cells[1]）：
-            #   老格式: | N | name | desc | keywords | trigger |   → cells[1] 数字
-            #   新格式: | name | desc | keywords | trigger |        → cells[1] 是名字
-            if len(cells) < 5:
-                continue
-            if cells[1].strip().isdigit():
-                # 老格式: | N | name | desc | kw | trigger |
-                if len(cells) < 7:
-                    continue
-                name_col, desc_col, kw_col = 2, 3, 4
-            else:
-                # 新格式: | name | desc | kw | trigger |
-                name_col, desc_col, kw_col = 1, 2, 3
-            name = cells[name_col].strip()
-            if name != d:
-                continue
-            updated = False
-            if not cells[desc_col].strip() and desc:
-                cells[desc_col] = f' {desc} '
-                filled_desc += 1
-                updated = True
-            cur_kw = cells[kw_col].strip()
-            if tks:
-                want_kw = ', '.join(tks)
-                cur_kw_n = len([k for k in cur_kw.split(',') if k.strip()]) if cur_kw else 0
-                # 覆盖条件：当前列为空 / 是 tags 兜底泛词 / 词数少于 SKILL.md 真触发词
-                # （历史条目多为 [:5] 截断或 tags 兜底，需升级为完整 trigger_keywords）
-                if not cur_kw or cur_kw == tag_fallback or cur_kw_n < len(tks):
-                    cells[kw_col] = f' {want_kw} '
-                    filled_kw += 1
-                    updated = True
-            if updated:
-                lines[i] = '|'.join(cells)
-
-    with open(SKILLS_INDEX_PATH, 'w', encoding='utf-8') as f:
-        f.writelines(lines)
-    print(f"[auto-register] Index rebuild: filled {filled_desc} descriptions, {filled_kw} keyword cells", flush=True)
-    return {"ok": True, "filled_desc": filled_desc, "filled_keywords": filled_kw}
-
+            if "skill.json" in files:
+                disk.add(base)
+            elif "SKILL.md" in files:
+                need_json.append(dirpath)
+    except OSError as e:
+        return {"ok": False, "error": f"scan failed: {e}"}
+    # 第二种漂移（2026-09-24 真机抓到：memomics_home/skills/bioinformatics/doublet-detection 只有
+    # SKILL.md + references/，没有 skill.json）：WebUI 技能选择器直接读 SKILL.md，所以用户「选得到」；
+    # 索引只收带 skill.json 的目录，所以模型「触发不到」。这里补 skill.json（与启动 scan 同一动作），
+    # 补完它才会进入下面的索引比对。
+    json_generated = []
+    for d in need_json:
+        try:
+            if auto_generate_skill_json(d):
+                json_generated.append(os.path.basename(d))
+                disk.add(os.path.basename(d))
+        except Exception as e:  # noqa: BLE001 — 单个技能生成失败不能拖垮回合收尾
+            print(f"[auto-register] sync_new_skills: skill.json 生成失败 {d}: {e}", flush=True)
+    indexed = set()
+    try:
+        with open(reg.INDEX_PATH, encoding="utf-8") as f:
+            for line in f:
+                m = re.match(r"\|\s*\d+\s*\|\s*([^|]+?)\s*\|", line)
+                if m:
+                    indexed.add(m.group(1).strip())
+    except FileNotFoundError:
+        # 索引文件不存在（全新安装 / 被删）→ 不是错误，视作「一行都没有」，走下面的重建分支
+        indexed = set()
+    except OSError as e:
+        return {"ok": False, "error": f"index unreadable: {e}"}
+    missing = sorted(disk - indexed)
+    if not missing and not json_generated:
+        return {"ok": True, "rebuilt": False, "missing": [], "json_generated": []}
+    if verbose:
+        print(f"[auto-register] sync_new_skills: 索引缺 {len(missing)} 个技能 {missing[:5]} → 重建", flush=True)
+    info = rebuild_index_descriptions()
+    return {"ok": bool(info.get("ok")), "rebuilt": True, "missing": missing,
+            "json_generated": sorted(json_generated), "rows": info.get("rows", 0)}
 
 def scan_and_register_all():
     """启动时扫描所有 skill 目录，补全缺失的 skill.json + 索引条目"""

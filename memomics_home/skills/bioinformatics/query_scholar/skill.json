@@ -1,0 +1,19 @@
+{
+ "id": "query_scholar",
+ "name": "Query Scholar",
+ "category": "literature",
+ "language": "Python",
+ "source": "Biomni",
+ "description": "Query Google Scholar for papers based on the provided search query and return the first search result.",
+ "detailed_description": "Query Google Scholar for papers based on the provided search query and return the first search result.",
+ "when_to_use": "When you need query scholar analysis",
+ "parameters": {
+  "query": "[Required] The search query string. (str)"
+ },
+ "trigger_keywords": [
+  "query_scholar",
+  "query scholar",
+  "scholar"
+ ],
+ "trigger_level": "YEL"
+}

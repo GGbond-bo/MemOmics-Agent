@@ -1,0 +1,22 @@
+{
+ "id": "blast_sequence",
+ "name": "Blast Sequence",
+ "category": "data_retrieval",
+ "language": "Python",
+ "source": "Biomni",
+ "description": "Identify a DNA or protein sequence using NCBI BLAST.",
+ "detailed_description": "Identify a DNA or protein sequence using NCBI BLAST.",
+ "when_to_use": "When you need blast sequence analysis",
+ "parameters": {
+  "sequence": "[Required] Query sequence (str)",
+  "database": "[Required] BLAST database (e.g., core_nt or nr) (str)",
+  "program": "[Required] BLAST program (blastn or blastp) (str)"
+ },
+ "trigger_keywords": [
+  "blast_sequence",
+  "blast sequence",
+  "blast",
+  "sequence"
+ ],
+ "trigger_level": "YEL"
+}

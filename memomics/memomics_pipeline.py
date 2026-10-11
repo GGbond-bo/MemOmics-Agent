@@ -12,8 +12,7 @@ import logging
 logger = logging.getLogger("memomics.memomics_pipeline")
 
 MODULES = {
-    "01": {"id": "01", "name": "深度去污染", "description": "CellBender/SoupX/DoubletFinder", "modality": "scrna", "skills": ["scrna-qc", "cellbender-remove-background"], "note": "探索性分析不建议", "substeps": [{"id": "cellbender", "name": "CellBender去背景", "skill": "cellbender-remove-background"}, {"id": "doublet", "name": "双胞过滤", "skill": "scrna-qc"}]},
-    "02": {"id": "02", "name": "基础分析", "modality": "scrna", "description": "QC->SCTransform->Harmony->UMAP->Leiden->Annotation->Markers", "skills": ["scrna-clustering", "annotate_celltype_scRNA"], "substeps": [
+    "01": {"id": "01", "name": "深度去污染", "description": "CellBender/SoupX/DoubletFinder", "modality": "scrna", "skills": ["scrna-qc", "cellbender-    "02": {"id": "02", "name": "基础分析", "modality": "scrna", "description": "QC->SCTransform->Harmony->UMAP->Leiden->Annotation->Markers", "skills": ["scrna-clustering", "annotate_celltype_scRNA"], "substeps": [
         {"id": "qc", "name": "QC", "skill": "scrna-qc"},
         {"id": "sct", "name": "SCTransform", "skill": "scrna-clustering"},
         {"id": "harmony", "name": "Harmony", "skill": "create_harmony_embeddings_scRNA"},
@@ -143,7 +142,7 @@ DIRECTION_MAP = {
     "metabolism": ["代谢", "metabolic", "diabetes", "糖尿病", "obesity", "肥胖", "脂质", "lipid"],
     "cardiovascular": ["心脏", "cardiac", "heart", "心血管", "cardiovascular", "血管", "vascular", "动脉", "atherosclerosis"],
     "hepatology": ["肝脏", "liver", "hepatic", "肝细胞", "hepatocyte", "肝硬化", "cirrhosis"],
-    "muscle_biology": ["骨骼肌", "muscle", "skeletal", "肌肉", "myogenesis", "肌萎缩", "atrophy"],
+    "muscle_biology": ["示例组织", "muscle", "skeletal", "肌肉", "myogenesis", "肌萎缩", "atrophy"],
     "microbiome": ["微生物", "microbiome", "菌群", "microbiota", "16s", "metagenom", "宏基因组"],
     "infectious": ["感染", "infection", "病毒", "virus", "细菌", "bacteria", "宿主", "host", "covid", "SARS"],
     "drug_response": ["药物", "drug", "耐药", "resistance", "敏感性", "sensitivity", "药靶", "target"],

@@ -1,0 +1,17 @@
+{
+ "id": "phylogenetics-toolkit",
+ "name": "Phylogenetics Toolkit",
+ "category": "GWAS/Genetics",
+ "language": "R+Python",
+ "description": "Phylogenetic tree construction and analysis toolkit",
+ "tags": [],
+ "steps": [],
+ "when_to_use": "系统发育分析工具包:序列比对→建树(ML/NJ/MP)→树可视化→进化距离→祖先重建",
+ "trigger_keywords": [
+  "phylogenetics-toolkit",
+  "phylogenetics toolkit",
+  "phylogenetics",
+  "toolkit"
+ ],
+ "trigger_level": "YEL"
+}

@@ -1,0 +1,16 @@
+{
+ "id": "pptx-generation",
+ "name": "pptx-generation",
+ "category": "pptx",
+ "language": "R+Python",
+ "description": "Auto-generated for pptx-generation",
+ "tags": [],
+ "steps": [],
+ "when_to_use": "PPTX文件生成:内容/图表→python-pptx→专业排版→图表嵌入→PowerPoint文件",
+ "trigger_keywords": [
+  "pptx-generation",
+  "pptx generation",
+  "pptx"
+ ],
+ "trigger_level": "YEL"
+}

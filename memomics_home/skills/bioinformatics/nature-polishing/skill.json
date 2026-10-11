@@ -1,0 +1,24 @@
+{
+  "id": "nature-polishing",
+  "name": "Nature-Style Academic Polishing — Router",
+  "category": "general",
+  "language": "Python",
+  "description": "Polish, translate, or tighten existing academic prose while preserving facts, terminology, and evidence boundaries. Use for 论文润色、学术翻译、正文精简, or manuscript LaTeX layout fixes. Use nature-writing when th",
+  "starting_prompt": "使用 Nature-Style Academic Polishing — Router 进行分析",
+  "source_dir": "skills/bioinformatics/nature-polishing",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "英文润色",
+    "学术润色",
+    "期刊语言",
+    "语言打磨",
+    "收紧表达",
+    "polish manuscript"
+  ],
+  "when_to_use": "Polish, translate, or tighten existing academic prose while preserving facts, terminology, and evidence boundaries. Use for 论文润色、学术翻译、正文精简, or manuscript LaTeX layout fixes. Use nature-writing when th"
+}

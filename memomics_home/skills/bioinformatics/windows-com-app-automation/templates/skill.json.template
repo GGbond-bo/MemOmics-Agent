@@ -1,0 +1,59 @@
+{
+  "name": "windows-com-app-automation",
+  "version": "1.0.0",
+  "source": "memomics-created",
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "Illustrator自动化",
+    "操控Illustrator",
+    "批量改Illustrator",
+    "Illustrator脚本",
+    "ExtendScript",
+    "JSX脚本",
+    "COM自动化",
+    "Photoshop自动化",
+    "InDesign自动化",
+    "脚本控制软件",
+    "软件没有CLI",
+    "桌面软件自动化",
+    "图内文字批量改",
+    "cscript",
+    "DoJavaScriptFile",
+    "画板操作"
+  ],
+  "success_count": 1,
+  "proven_script": "scripts/com_bridge_probe.py",
+  "proven_params": [
+    {
+      "date": "2026-10-04",
+      "script": "com_bridge_probe.py",
+      "params_used": "{\"progid\":\"Illustrator.Application\",\"mode\":\"info(read-only)\"}",
+      "result_summary": "桥探活通过：bridge=true，cscript=C:\\WINDOWS\\system32\\cscript.EXE；doc_count 诚实返回（无文档时为 0）。隔离写探测 probe 出 PNG 2395B；gradient-probe applied_via_gradientcolor=true / error=null。",
+      "auto_score": 8,
+      "approved": false
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "results/memomics-ad6fdb02/software_control/illustrator/agent-harness",
+    "preferred_params": {
+      "safety": "写操作一律在独立文档，绝不保存用户文档（DONOTSAVECHANGES）",
+      "proof_style": "要真实返回的 JSON，不要口头承诺"
+    },
+    "notes": "用户日常用 Illustrator 做论文图 → 优先做批量类命令（统一字号/字体、批量导出），而非单点微调。"
+  },
+  "error_log": [
+    {
+      "date": "2026-10-04",
+      "error_message": "JS_FAIL|Error 1302: No such element -> rect.fillColor = newDoc.swatches.getByName(\"CMYK Red\").color",
+      "root_cause": "文档以 DocumentColorSpace.RGB 创建，其色板库不含 CMYK 色板名",
+      "fix_applied": "改用 new RGBColor() 直接设 r/g/b，不依赖色板名"
+    },
+    {
+      "date": "2026-10-04",
+      "error_message": "Internal error（中文 locale 下乱码）-> rect.fillColor = doc.gradients[0]",
+      "root_cause": "ExtendScript 不能把 Gradient 对象直接当颜色；且新建 RGB 文档的 swatches 里没有渐变色板（typename 只有 Swatch），但 doc.gradients 有 5 个",
+      "fix_applied": "new GradientColor() + gc.gradient=doc.gradients[i] + gc.origin + gc.angle → applied=true, error=null"
+    }
+  ],
+  "debate_verdicts": []
+}

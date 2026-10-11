@@ -1,0 +1,22 @@
+{
+ "id": "query_clinicaltrials",
+ "name": "Query Clinicaltrials",
+ "category": "data_retrieval",
+ "language": "Python",
+ "source": "Biomni",
+ "description": "Query the ClinicalTrials.gov API v2 using natural language or a direct endpoint.",
+ "detailed_description": "Query the ClinicalTrials.gov API v2 using natural language or a direct endpoint.",
+ "when_to_use": "When you need query clinicaltrials analysis",
+ "parameters": {
+  "prompt": "[Required] Natural language query about clinical trials (str)",
+  "endpoint": "[Optional] Direct ClinicalTrials.gov endpoint or full URL",
+  "max_results": "[Optional] Page size for results (pageSize) (default: 10)",
+  "verbose": "[Optional] Return detailed results (default: True)"
+ },
+ "trigger_keywords": [
+  "query_clinicaltrials",
+  "query clinicaltrials",
+  "clinicaltrials"
+ ],
+ "trigger_level": "YEL"
+}

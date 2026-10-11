@@ -1,0 +1,23 @@
+{
+  "id": "nature-paper2ppt",
+  "name": "Paper-to-PPTX — Router",
+  "category": "general",
+  "language": "Python",
+  "description": "Create or improve a Chinese academic PPTX from a scientific paper or research reading notes, with source figures and speaker notes. Use for 论文做PPT、文献汇报、组会PPT and paper-based conference or defense pres",
+  "starting_prompt": "使用 Paper-to-PPTX — Router 进行分析",
+  "source_dir": "skills/bioinformatics/nature-paper2ppt",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "论文转PPT",
+    "文献做成PPT",
+    "组会PPT",
+    "学术PPT",
+    "paper2ppt"
+  ],
+  "when_to_use": "Create or improve a Chinese academic PPTX from a scientific paper or research reading notes, with source figures and speaker notes. Use for 论文做PPT、文献汇报、组会PPT and paper-based conference or defense pres"
+}

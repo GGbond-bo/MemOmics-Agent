@@ -1,0 +1,55 @@
+MemOmics 背景插画 —— 第三方素材署名与许可
+================================================
+
+本目录（webui/assets/backgrounds/）下的插画素材**不是** MemOmics 自有素材，
+而是第三方皮肤作品，随 MemOmics 一同分发。文字说明如下。
+
+素材出处
+--------
+第三方皮肤：maid-atelier（深海女仆工坊 · Abyssal Maid Atelier）
+皮肤作者：Small-tailqwq（dsh-external/dsh-deep-whale）
+皮肤页面：https://github.com/dsh-external/dsh-deep-whale
+上游许可：CC BY-NC-SA 4.0
+
+许可：CC BY-NC-SA 4.0（署名 — 非商业性使用 — 相同方式共享）
+----------------------------------------------------------
+1. 署名（BY）：必须保留下方完整创作链署名，不得删除或简化。
+2. 非商业性使用（NC）：**禁止任何商业性使用。**
+   若你要将 MemOmics（或其发行包）用于商业目的，必须先移除本目录
+   及 webui/index.html 中的「背景图」功能，或另行取得授权。
+3. 相同方式共享（SA）：对本目录素材的改编（裁剪、调色、合成等）必须以
+   相同许可（CC BY-NC-SA 4.0）发布。仅按原样缩放/转码用于展示，属于
+   格式转换，不构成改编。
+   注：MemOmics 其余代码以 MIT 许可发布（见仓库根 LICENSE）。MIT 允许
+   商业使用，而本目录素材不允许 —— 二者是**分开授权的组件**，本目录
+   构成一个「合集（collection）」，其存在不影响 MemOmics 其余部分的 MIT
+   授权，但使用本目录素材时须遵守上述 NC 条款。
+
+创作链署名（必须完整保留）
+--------------------------
+1. 一创（原作者）：上善 —— 鲸鱼娘（whale-girl）角色形象原作者
+   Pixiv：https://www.pixiv.net/users/62155430
+   Bilibili：上善无形 · https://b23.tv/8h5L4xz
+
+2. 二创：zipzip —— 在上善的鲸鱼娘形象基础上加入 DeepSeek 元素，
+   二次设计出「女仆鲸鱼娘」（生成模型：GPT Image 2）
+   Pixiv：https://www.pixiv.net/users/18604994
+   Bilibili：ZipZipPipe · https://b23.tv/Pnw6nG8
+
+3. 三创：Small-tailqwq —— 本皮肤使用的 DeepSeek 元素再设计
+
+本目录文件
+----------
+palace-day.webp    深海宫殿场景（白天）    maid-atelier-palace-day-v4.webp
+palace-night.webp  深海宫殿场景（夜晚）    maid-atelier-palace-night-v4.webp
+maid-left.webp     女仆鲸鱼娘（左）        maid-atelier-maid-left-v5.webp
+maid-right.webp    女仆鲸鱼娘（右）        maid-atelier-maid-right-v6.webp
+chibi.webp         Q 版角色（交互框边上那只）MAID_ATELIER_CHIBI（皮肤内嵌素材）
+
+处理说明：仅做了等比缩放与 WebP 重编码（quality 86），未裁剪、未调色、未合成。
+原始素材位于皮肤仓库的 assets/ 目录。
+
+移除方式
+--------
+删除本目录，并移除 webui/index.html 中 BACKGROUNDS / setBackground /
+renderBackgroundOptions 与 #bg-art 相关样式即可，其余功能不受影响。

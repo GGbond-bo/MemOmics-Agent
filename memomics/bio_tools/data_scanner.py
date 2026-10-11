@@ -140,7 +140,7 @@ def _persist_metadata(file_path, result):
         rd = get_session_results_dir()
         base_dir = os.path.join(rd, "datasets") if rd else ""
         if not base_dir:
-            hh = os.environ.get("HERMES_HOME")
+            hh = os.environ.get("MEMOMICS_HOME")
             base_dir = os.path.join(hh, "datasets") if hh else ""
         if not base_dir:
             return {"registered": False, "error": "no results dir"}
@@ -182,7 +182,7 @@ def _inventory():
         from memomics.bio_tools.debate_analysis import get_session_results_dir
         rd = get_session_results_dir()
         candidates = [os.path.join(rd, "datasets")] if rd else []
-        hh = os.environ.get("HERMES_HOME")
+        hh = os.environ.get("MEMOMICS_HOME")
         if hh:
             candidates.append(os.path.join(hh, "datasets"))
         for d in candidates:
@@ -218,7 +218,7 @@ def _register():
     try:
         from tools.registry import registry
     except ImportError:
-        return  # 非 Hermes 运行时跳过注册
+        return  # 非 MemOmics 运行时跳过注册
     registry.register(
         name="scan_data",
         toolset="memomics",

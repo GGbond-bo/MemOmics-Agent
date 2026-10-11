@@ -49,25 +49,31 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # === 会话级隔离（ContextVar，替代 threading.local） ===
-# 2026-08-16 修复：threading.local 不跨线程传播——Hermes 的 tool_executor 会把
+# 2026-08-16 修复：threading.local 不跨线程传播——MemOmics 的 tool_executor 会把
 # 工具调用丢到 ThreadPoolExecutor worker 线程执行（tool_executor.py 的
 # _execute_tool_calls_concurrent），worker 线程拿不到 _do_run 线程里
 # set_session_context 设置的 threading.local 值，导致 execute_r/execute_python
 # 在工具线程里 get_session_sid() 返回空 → 全部退化到 "default" kernel（会话串染）。
-# ContextVar 会被 Hermes 的 propagate_context_to_thread（contextvars.copy_context）
+# ContextVar 会被 MemOmics 的 propagate_context_to_thread（contextvars.copy_context）
 # 自动传播到 worker 线程，会话隔离才对工具执行真正生效。
 import contextvars as _contextvars
 
 _sid_var = _contextvars.ContextVar("memomics_session_sid", default="")
 _results_dir_var = _contextvars.ContextVar("memomics_session_results_dir", default="")
+# 2026-09-13（用户要求）：辩论必须跟随「当前使用模型的提供商」。会话级模型配置由
+# server.py 在 agent 回合入口注入（多会话各用各的模型），见 _current_model_route()。
+_model_cfg_var = _contextvars.ContextVar("memomics_session_model_cfg", default=None)
 
-def set_session_context(sid: str = "", results_dir: str = ""):
+def set_session_context(sid: str = "", results_dir: str = "", model_config: dict = None):
     """设置当前上下文（线程 + 其派生的工具 worker 线程）的会话上下文。
 
     由 server.py 在 agent 启动 / executor 线程入口调用。
+    model_config: 该会话当前使用的模型配置 {provider, base_url, api_key, model}。
+    辩论/文献库等独立 LLM 调用据此走「当前模型提供商」（2026-09-13 新增）。
     """
     _sid_var.set(sid or "")
     _results_dir_var.set(results_dir or "")
+    _model_cfg_var.set(dict(model_config) if isinstance(model_config, dict) and model_config else None)
 
 def get_session_sid() -> str:
     """获取当前会话 ID（ContextVar，跨工具 worker 线程传播）。"""
@@ -77,17 +83,158 @@ def get_session_results_dir() -> str:
     """获取当前结果目录（ContextVar，跨工具 worker 线程传播）。"""
     return _results_dir_var.get()
 
+def get_session_model_config() -> dict:
+    """获取当前会话「正在使用的模型配置」（ContextVar，跨工具 worker 线程传播）。"""
+    cfg = _model_cfg_var.get()
+    return cfg if isinstance(cfg, dict) else {}
+
+
+# ==================== 辩论进度上报（2026-09-26 用户反馈「有时候会卡住，长时间不输出内容」） ====================
+# 实测根因：一场辩论 = 场景预判 + 7 席位 + 裁判，席位调用是**非流式** HTTP
+# （_call_llm_sync 里 httpx.Client(timeout=120)，每席位最多 3 次重试，8 席位按
+# max_workers=3 分波跑）→ 最坏十几分钟；而工具全程只在开始时发一次 tool.started，
+# 中途什么都不发。日志实测：62 次 debate_analysis，最慢 1253s，其次 971/934/902/900/
+# 880/877/872/860/856s —— 用户看到的就是「聊天区 15-20 分钟一个字都不新增」。
+# 这里把「阶段开始/结束、席位完成、瞬时失败重试、30 秒心跳」推到前端进度时间线。
+_PROGRESS_MIN_GAP = 1.0          # 同类进度最短间隔，防刷屏
+_PROGRESS_LAST_TS = 0.0
+_PROGRESS_LOCK = threading.Lock()
+
+
+def _emit_progress(content: str, status: str = "pending") -> None:
+    """把一条辩论进度推给前端时间线。任何失败都吞掉 —— 进度上报绝不能影响辩论本身。"""
+    global _PROGRESS_LAST_TS
+    try:
+        now = time.time()
+        with _PROGRESS_LOCK:
+            if now - _PROGRESS_LAST_TS < _PROGRESS_MIN_GAP:
+                return
+            _PROGRESS_LAST_TS = now
+        sid = get_session_sid()
+        if not sid:
+            return
+        # 复用 ask_user 里那套「找到正在跑的 server 实例」的解析（入口名被改过也能命中）
+        from memomics.bio_tools.ask_user import _live_server
+        srv = _live_server(sid)
+        if srv is None:
+            return
+        sess = (getattr(srv, "_sessions", None) or {}).get(sid)
+        if not sess:
+            return
+        srv._session_emit(sess, {
+            "type": "tool_progress",
+            "tool": "debate_analysis",
+            "content": str(content)[:180],
+            "status": status,
+            "session_id": sid,
+        })
+    except Exception as _e:      # pragma: no cover - 纯防御
+        logger.debug(f"debate progress emit failed: {_e}")
+
+
+class _ProgressHeartbeat:
+    """辩论/裁判期间每 30 秒报一次「还在跑 + 已用多久」。
+
+    没有它，用户看到的就是 15 分钟死寂（日志实测最慢一场 1253s）。
+    """
+
+    def __init__(self, label: str, interval: float = 30.0, max_seconds: float = 2700.0):
+        self.label = label
+        self.interval = max(5.0, float(interval))
+        # 自限寿命：万一某条路径异常退出没 stop()，最多刷 45 分钟就自己停，
+        # 不会变成一个永远在后台报"进行中"的幽灵线程
+        self.max_seconds = max(60.0, float(max_seconds))
+        self._stop = threading.Event()
+        self._t0 = time.time()
+        self._thread = None
+
+    def start(self):
+        self._t0 = time.time()
+        self._thread = threading.Thread(target=self._loop, daemon=True,
+                                        name="debate-progress-heartbeat")
+        self._thread.start()
+        return self
+
+    def _loop(self):
+        while not self._stop.wait(self.interval):
+            # 注意：elapsed 是取整的秒数，拿它比 max_seconds 会永远为假（int(0.9)=0）
+            if (time.time() - self._t0) > self.max_seconds:
+                return
+            _emit_progress(f"{self.label}进行中：已用 {self.elapsed}s，暂无输出", "pending")
+
+    def stop(self, done_text: str = "") -> None:
+        self._stop.set()
+        if done_text:
+            _emit_progress(done_text, "done")
+
+    @property
+    def elapsed(self) -> int:
+        return int(time.time() - self._t0)
+
+
+# ==================== 辩论总预算（2026-09-26） ====================
+# 单次调用的时间上限 × 重试次数 × 分波数是乘起来的：8 席位 / 并发 3 / 3 次重试
+# × 120s ≈ 18 分钟。日志实测最慢一场 1253s，用户看到的就是「卡住」。
+# 三道闸：
+#   1) 单次 HTTP 上限 120s → 60s（MEMOMICS_DEBATE_HTTP_TIMEOUT 可覆盖）
+#   2) 配置类错误（401/403/模型不存在/MissingSessionID）不再重试 3 次
+#   3) 整场辩论总预算（默认 900s = 15 分钟，MEMOMICS_DEBATE_BUDGET 可覆盖）：
+#      预算耗尽后 _call_llm_sync 直接返回失败，不再发 HTTP —— 剩下的席位/轮次
+#      毫秒级跑完，整场不会再挂 20 分钟
+# 预算取值有实测依据：扫 memomics_home/logs/agent.log*（324 个 debate_analysis 时长样本）
+# 得 min 1.0 / p25 59 / 中位 100.9 / p75 325.1 / p90 585.6 / max 1252.7 秒，
+# >480s 占 15.7%、>600s 占 8.6%。所以硬上限定 900s：只砍真正病态的长尾
+# （p90 以上约 8%），不会把正常的长辩论一起误杀。
+_DEBATE_BUDGET_DEFAULT = float(os.environ.get("MEMOMICS_DEBATE_BUDGET", "900") or 900)
+_HTTP_TIMEOUT_DEFAULT = float(os.environ.get("MEMOMICS_DEBATE_HTTP_TIMEOUT", "60") or 60)
+_DEADLINES: dict = {}
+_DEADLINE_LOCK = threading.Lock()
+
+
+def _set_debate_deadline(seconds: float = 0.0) -> float:
+    """开一场辩论时登记截止时间（按会话隔离）。返回 0 表示不限时。"""
+    budget = float(seconds) if seconds and float(seconds) > 0 else _DEBATE_BUDGET_DEFAULT
+    if budget <= 0:
+        return 0.0
+    dl = time.time() + budget
+    sid = get_session_sid() or ""
+    with _DEADLINE_LOCK:
+        _now = time.time()
+        # 顺手清掉两小时前的僵尸登记，别让 dict 无限长
+        for _k in [k for k, v in _DEADLINES.items() if v < _now - 7200]:
+            _DEADLINES.pop(_k, None)
+        _DEADLINES[sid] = dl
+    return dl
+
+
+def _budget_left() -> float:
+    """本场辩论还剩多少秒；没登记预算返回 inf（不干预）。"""
+    sid = get_session_sid() or ""
+    with _DEADLINE_LOCK:
+        dl = _DEADLINES.get(sid, 0.0)
+    if not dl:
+        return float("inf")
+    return dl - time.time()
+
+
 SCHEMA = {
     "name": "debate_analysis",
     "description": (
         "Trigger a multi-role structured debate on an analysis decision or result. "
-        "Pro side has 3 independent role editors (biology/statistics/bioinformatics), "
-        "Con side has 4 independent role editors (biology/statistics/bioinformatics/history). "
+        "SCENARIO PRE-ANALYSIS runs first (automatic, +1 call): the engine classifies the question "
+        "(bio_data / stats_design / figure_layout / code_engineering / writing / ops_environment / general) and then "
+        "rewrites the seat identities and the judge's rubric keys to match that scenario — so figure layout, "
+        "journal-compliance, code-engineering, writing and environment questions are judged by scenario-appropriate "
+        "criteria instead of biology ones. Therefore topic+context must state the question TYPE and its constraints "
+        "(target journal, grayscale/CVD printing, panel size, language & dependencies, deployment env); the classifier sees "
+        "only these two strings. "
+        "Pro side has 3 independent role editors, Con side has 4 (the 4th is the history/pitfalls seat); "
+        "seat identities are scenario-driven (biology/statistics/bioinformatics/history in the default bio_data scenario). "
         "Each role is a professional editor making an INDEPENDENT LLM call — they cannot see each other's arguments. "
-        "Each discipline uses its own knowledge base (biology_kb/statistics_kb/bioinfo_kb). "
         "A judge editor reviews ALL arguments and gives a final verdict with confidence level. "
-        "Use for: parameter choices, cell type annotation disputes, method selection, "
-        "result validation, biological conclusion verification. "
+        "Use for: parameter choices, cell type annotation disputes, method selection, result validation, "
+        "biological conclusion verification, AND non-biology decisions such as figure layout/typesetting, "
+        "journal figure compliance, grayscale/CVD accessibility, code architecture and environment issues. "
         "MUST call this when encountering uncertain parameters or debatable results. "
         "Results are archived to results/.../log/debate_*.json automatically."
     ),
@@ -96,11 +243,11 @@ SCHEMA = {
         "properties": {
             "topic": {
                 "type": "string",
-                "description": "The decision/parameter/result being debated (e.g. 'clustering resolution=0.8', 'MT% threshold=15%', 'cluster 3 = T cells?', '衰老相关基因在Type II纤维中上调')"
+                "description": "The decision/parameter/result being debated, phrased with its question type (e.g. 'clustering resolution=0.8', 'MT% threshold=15%', 'cluster 3 = T cells?', 'FigA3 热图左侧是否删除纤维型色条、亚群顺序如何排列'). The scenario pre-analysis reads this — vague topics fall back to a generic judge."
             },
             "context": {
                 "type": "string",
-                "description": "Context: data details, species, tissue, direction, cell count, current parameters, results summary, QC metrics"
+                "description": "Context: data details, species, tissue, direction, cell count, current parameters, results summary, QC metrics — and for non-biology questions the constraints that decide the judging standard (target journal & submission guide, grayscale/CVD printing, publication figure size, language/dependencies/runtime, deployment environment)"
             },
             "knowledge_base_info": {
                 "type": "string",
@@ -403,6 +550,10 @@ JUDGE_PROMPT = """你是生信分析多角色辩论的**裁判编辑**。7位专
 3. **置信度**：高 / 中 / 低（表示对裁决的信心程度）
 4. 如果建议修改，给出具体推荐参数
 5. 裁决理由（300字以内）
+6. **行动方案（必填，任何裁决都要给）**：decision（现在就该做的那一件事）+ next_actions
+   （至少 1 条你现在就能执行的动作：查什么/跑什么/补什么，带 expected）+ fallback
+   （若暂时补不齐证据，先走哪条临时路径、有什么风险、结论要打什么标注）
+   —— 只写"需要更多信息"而不给方案，等于没有裁决。
 
 **重要**：正方和反方是独立生成的（切断上下文），你不能假设他们看过彼此的论点。你需要综合判断哪方更有说服力。
 
@@ -422,6 +573,15 @@ JUDGE_PROMPT = """你是生信分析多角色辩论的**裁判编辑**。7位专
   }},
   "verdict": "support" | "modify" | "need_more_info",
   "confidence": "high" | "medium" | "low",
+  "decision": "一句话：现在就该做的那件事（禁止写'需要更多证据'）",
+  "next_actions": [
+    {{"action": "具体动作", "owner": "ai|user", "why": "为什么", "expected": "做完能得到什么",
+      "cost": "low|medium|high", "blocks": ["不做的话哪些动作必须停"]}}
+  ],
+  "fallback": {{"path": "补不齐证据时先走哪条路", "confidence": "low|medium",
+                "risk": "风险", "label": "结论要带的标注"}},
+  "reopen_condition": "出现什么新证据要回来重审",
+  "missing": ["缺什么证据 + 怎么补 + 补到什么程度算够"],
   "recommended_params": {{}},
   "reasoning": "..."
 }}
@@ -519,7 +679,7 @@ _V2_ROLE_TEMPLATE = """你是**{title}**。你的任务是从你的专业视角{
 
 ## 辩论主题
 {topic}
-
+{scenario_line}
 ## 上下文
 {context}
 
@@ -537,7 +697,7 @@ _V2_ROLE_TEMPLATE = """你是**{title}**。你的任务是从你的专业视角{
 - 你不知道其他编辑的观点，请独立思考。
 {output_spec}"""
 
-_V2_JUDGE_PROMPT = """你是生信分析多角色辩论的**裁判编辑**（v2）。{n_pro}位专业编辑（{roles}）进行了辩论，请按 rubrics 综合裁决。
+_V2_JUDGE_PROMPT = """你是{persona}。{n_pro}位专业编辑（{roles}）进行了辩论，请按 rubrics 综合裁决。
 
 ## 辩论主题
 {topic}
@@ -551,19 +711,38 @@ _V2_JUDGE_PROMPT = """你是生信分析多角色辩论的**裁判编辑**（v2�
 ## 反方论证
 {con_arguments}
 
-{neutral_args}{evidence_section}{contract}
+{digest_section}{neutral_args}{evidence_section}{contract}
 
-## 评分 rubrics（替代主观“说服力”）
+{focus_section}## 评分 rubrics（替代主观“说服力”）
 {rubrics_hint}
 
 ## 裁决决策树（必须遵守）
-1. 若正反双方证据均不足（大量 [I]/[仅是推理]）→ verdict=need_more_info, confidence=low, 必须列 missing。
+0. 你的职责**不是判断"证据够不够"，而是决定"下一步怎么走"**。任何裁决都必须给出
+   decision（现在就做的那件事）+ next_actions（至少 1 条 ai 现在就能执行的动作）+ fallback。
+   只写"证据不足、建议补数据"而不给方案 = 没有完成裁决。
+1. 若正反双方证据均不足（大量 [I]/[仅是推理]）→ verdict=need_more_info, confidence=low, 必须列 missing；
+   **同时必须给出**：① decision：现有证据下能确定到哪一步（可执行的边界，例："按证据更强的 X 先做，
+   结论标注低置信"）；② next_actions：补证据的具体动作（查哪个库/跑哪个对照/要用户给什么），带 expected；
+   ③ fallback：补不到证据时现在先走哪条临时路径 + 风险 + 结论要打的标注。
 2. 若 verdict=modify 但拿不出 recommended_params → 禁止输出该组合。
 3. 若 confidence=high 但 missing 非空 → confidence 必须降为 medium。
-4. 若双方论证接近 → 只能 need_more_info + missing，不得强行二选一。
+4. 若双方论证接近 → 不要强行二选一，但**必须给条件化决策**：decision 写清"若判据 A 成立走 X、
+   若 B 成立走 Y；拿到判据前先走风险更低的 Z"，并把 Z 写进 fallback。
+5. next_actions 不允许全部是 owner=user（把"等用户给数据"当唯一出路等于没给方案）：
+   至少 1 条必须是 ai 现在能自己做的（查文献/查库/补对照/算指标/先出草图/先跑小样本）。
+6. blocks 字段写清"这条不做的话哪些动作必须停"（例：不做批次校正就不许出差异结论），
+   它是后续流程的硬约束，写不出就说明 next_action 还不够具体。
 
 ## 输出格式（严格 JSON）
-{{"rubrics": {{"evidence_quality": 1-10, "effect_size": 1-10, "confounding_control": 1-10, "prior_literature": 1-10, "reproducibility": 1-10, "pro_claim_coverage": 1-10, "con_claim_coverage": 1-10}}, "verdict": "support|modify|need_more_info", "confidence": "high|medium|low", "recommended_params": {{}}, "missing": ["必要证据/数据清单"], "reasoning": "≤500字，说明哪些论点挂在哪条证据上"}}"""
+{{"rubrics": {{{rubric_keys}}}, "verdict": "support|modify|need_more_info", "confidence": "high|medium|low",
+ "decision": "一句话：现在就该做的那件事（可执行，禁止写'需要更多证据'）",
+ "next_actions": [{{"action": "具体动作", "owner": "ai|user", "why": "为什么做", "expected": "做完能得到什么",
+                   "cost": "low|medium|high", "blocks": ["不做则必须停的动作"]}}],
+ "fallback": {{"path": "补不齐证据时先走哪条路", "confidence": "low|medium", "risk": "这么做的风险",
+               "label": "临时结论要带的标注（例：临时结论/低置信）"}},
+ "reopen_condition": "出现什么新证据要回来重审",
+ "recommended_params": {{}}, "missing": ["缺什么证据 + 怎么补 + 补到什么程度算够"],
+ "reasoning": "≤500字，说明哪些论点挂在哪条证据上"}}"""
 
 _RUBRICS_HINT = """- evidence_quality：论点是否锚定 PMID/DOI/数据
 - effect_size：效应量大小与生物学意义
@@ -571,6 +750,451 @@ _RUBRICS_HINT = """- evidence_quality：论点是否锚定 PMID/DOI/数据
 - prior_literature：是否参考相关文献
 - reproducibility：是否可复现
 - pro/con_claim_coverage：正/反方是否覆盖完整（未覆盖给低分）"""
+
+
+# ==================== 赛前场景预判（2026-09-18，用户提出） ====================
+# 背景（用户原话）：「如果辩论的东西不是生物学相关的东西，而是排版，一些技术上的，
+# 是不是需要采取其他的裁判呢？所以辩论之前，也要分析一下场景呢？」
+# 问题：角色身份与裁判 rubric 长期硬编码生物学（marker gene / 批次效应 / 效应量 …）。
+# 当辩题其实是「图版式怎么改」「脚本怎么修」「目录怎么组织」时，生物学 rubric 会问错问题，
+# 裁判也会拿生信的标准打分 —— 结论看着专业，其实答非所问。
+# 做法：正式辩论前先花 1 次短调用做**场景预判**，产出：
+#   ① 主场景与判定依据 ② 裁判身份、必须逐条检查的要点 ③ 本场景的评分 rubric 键
+#   ④ 各角色槽位的专业身份与提问清单（槽位数量不变 → 调用数/路由/归档结构不动）
+# 预判失败或解析失败一律回退到原有生物学模板，绝不阻断辩论。
+
+_SCENARIO_LABELS = {
+    "bio_data": "生物学数据与结论",
+    "stats_design": "统计与实验设计",
+    "figure_layout": "图表版式与视觉呈现",
+    "code_engineering": "代码与工程实现",
+    "writing": "文档写作与表达",
+    "ops_environment": "运维环境与资源",
+    "general": "通用综合判断",
+}
+
+_SCENARIO_PROMPT = """你在为一场多角色辩论做**赛前场景预判**。辩论题目如下，请先判断它到底属于哪一类问题，再据此设计本次辩论的角色与裁判标准。
+
+## 辩论主题
+{topic}
+
+## 上下文
+{context}
+
+## 判断要求
+1. 先看主题真正在争论什么：是**生物学/实验结论**、**统计与实验设计**、**图表版式与视觉呈现**、
+   **代码与工程实现**、**文档写作**，还是**运维环境/资源**问题。可以复合，但必须给出一个主场景。
+2. 角色槽位固定：正方 3 席、反方 4 席（反方第 4 席专门负责「历史经验/踩过的坑」）。
+   你要为每个槽位起一个**符合本场景**的专业身份，并写出该身份必须追问的问题清单。
+   生物学辩题就用生物学/统计/生信身份；版式辩题应该是信息设计/期刊规范/可读性与色觉可达性
+   这类身份；代码辩题应该是软件工程/性能/测试与可维护性这类身份。**不许所有场景都套生物学**。
+3. 裁判 rubric：给出 5-7 个**本场景真正该看**的评分维度（英文 key + 中文名 + 打分说明）。
+   生物学场景可用 evidence_quality/effect_size/confounding_control；
+   版式场景应换成期刊规范符合度/信息层级/色觉与灰度可达性/最小改动成本 这类维度。
+4. 证据：说明本场景里「什么算证据」。生物学场景的证据是 PMID/DOI/实验数据；版式场景的证据是
+   期刊投稿规范原文、目标期刊已发表图样例、灰度和色盲模拟结果、实际渲染尺寸；代码场景的证据是
+   实测耗时/报错日志/版本 diff/测试结果。**不要照抄生物学证据标准**。
+5. 不确定就选 general，并在 why 里说明为何无法归类。
+
+## 输出格式（严格 JSON，不要输出任何其他文字）
+{{"scenario": "bio_data|stats_design|figure_layout|code_engineering|writing|ops_environment|general",
+  "scenario_label": "中文场景名（≤12字）",
+  "why": "一句话判定依据（≤60字）",
+  "judge_persona": "本场裁判身份一句话（例：期刊图版式与技术审稿编辑）",
+  "judge_focus": ["裁判必须逐条检查的要点（4-6 条）", "…"],
+  "rubric_keys": ["英文键名（5-7 个）", "…"],
+  "rubrics": [{{"key": "英文键名", "label": "中文名", "hint": "怎么打分"}}],
+  "evidence_types": ["本场景里什么算证据", "…"],
+  "pro_roles": [{{"title": "正方第1席身份（例：信息设计编辑（正方））", "task": "从…角度支持", "questions": ["该席必须回答的问题", "…"]}}, {{"title": "…", "task": "…", "questions": ["…"]}}, {{"title": "…", "task": "…", "questions": ["…"]}}],
+  "con_roles": [{{"title": "反方第1席身份", "task": "从…角度质疑", "questions": ["…"]}}, {{"title": "…", "task": "…", "questions": ["…"]}}, {{"title": "…", "task": "…", "questions": ["…"]}}, {{"title": "反方第4席的具体身份（负责历史经验/踩过的坑，不要照抄这句话）", "task": "从历史记录角度质疑", "questions": ["…"]}}]}}"""
+
+# 角色槽位 → 场景预判里的位置。槽位 label 保持原样（调用路由/归档键/UI 全都不变），
+# 只替换「展示身份 + 任务 + 提问清单」。
+_SCENARIO_ROLE_SLOTS = {
+    "pro_biology": ("pro_roles", 0),
+    "pro_statistics": ("pro_roles", 1),
+    "pro_bioinformatics": ("pro_roles", 2),
+    "con_biology": ("con_roles", 0),
+    "con_statistics": ("con_roles", 1),
+    "con_bioinformatics": ("con_roles", 2),
+    "con_history": ("con_roles", 3),
+}
+
+_SCENARIO_DEFAULT_RUBRIC_KEYS = ['"evidence_quality": 1-10', '"effect_size": 1-10',
+                                 '"confounding_control": 1-10', '"prior_literature": 1-10',
+                                 '"reproducibility": 1-10', '"pro_claim_coverage": 1-10',
+                                 '"con_claim_coverage": 1-10']
+
+
+# ==================== 裁判整理阶段（2026-09-18） ====================
+# 背景（用户实测反馈）：大量角色模型不遵守 JSON 契约，只留下 "[reasoning草稿…]" 式的
+# 思维链草稿 → 裁判直接读草稿，裁决理由又长又乱、论点挂不上锚点、"找不到证据"也看不出来。
+# 做法：正式裁决之前先让裁判模型做一次**整理**（不重新辩论、不发明论据）：
+#   ① 把每个角色的草稿/JSON 压缩成 1-3 条清晰陈述；
+#   ② 论据只允许引用原文出现过的锚点，没证据就老实写「找不到论据」；
+#   ③ 草稿角色显式标注、正反冲突摆明、证据缺口单独列。
+# 整理稿同时用于两处：喂给最终裁决（裁判读整理稿）+ 存进归档供 WebUI 展示。
+
+_DIGEST_ROLE_CHARS = 3500   # 每个角色进入整理 prompt 的原文上限（控输入规模，防上下文超限）
+
+_JUDGE_DIGEST_PROMPT = """你是这场多角色辩论的**首席整理编辑**。你现在的任务不是重新辩论、也不是下结论，而是把各角色的发言**整理成干净、可核查的清单**，交给最终裁判直接使用。
+
+## 辩论主题
+{topic}
+
+## 上下文
+{context}
+
+{evidence_section}## 各角色原始发言（已按角色切分；标注「草稿」的是没按 JSON 契约输出、只留下推理过程的角色）
+{raw}
+
+{note}## 整理要求（逐条遵守，违反即作废）
+1. **只整理，不发明**：只能使用上面原文出现过的内容。你自己知道、但原文里没有写的文献、数据、基因名，一律不得写进来。
+2. **说人话**：把每个角色的草稿/JSON/长篇推理压缩成 1-3 条清晰陈述；删掉过程性自言自语（如「我们是从正方角度」「需从三个角度论证」「先想一下」）。
+3. **论据必须落在锚点上**：每条陈述的 evidence 只填原文出现过的 [PMID:…] / [DOI:…] / [KB源:…] / [数据:…] / [仅是推理]。
+4. **找不到就老实承认**：原文没有任何外部证据支撑的陈述，evidence 写 "[找不到论据]"，evidence_status 写 "无外部证据"。不要为了让清单好看而补证据——裁判要靠这个判断该不该下结论。
+5. **草稿必须标出来**：草稿角色的观点照实整理，但 draft_flag 写 true，note 里写明「该角色未按契约输出，本节取自推理草稿」。
+6. **正反冲突要摆明**：双方对同一问题给出相反判断 → 写成一条 conflicts；谁的证据更硬写谁，都没证据就写 "双方都没有证据"。
+7. **按角色成组**：每条陈述都要写清 source_role（用上面发言块标题里的角色名/角色键）。同一个角色的同类陈述合并成一条，不同角色的论点不要混进同一条——展示时会按「正方·生物学编辑 1/2/3…、正方·统计学编辑 1/2/3…、反方·生物学编辑 1/2/3…」分组，漏掉某个角色等于判它没说话。
+
+## 输出格式（严格 JSON，不要输出任何其他文字，不要用代码块包裹）
+{{"pro_points": [{{"claim": "一句清晰的陈述", "evidence": "[PMID:…] / [数据:…]", "evidence_status": "有外部证据|仅推理|无外部证据", "source_role": "pro_biology", "draft_flag": false, "note": ""}}], "con_points": [{{"claim": "…", "evidence": "…", "evidence_status": "…", "source_role": "con_biology", "draft_flag": false, "note": ""}}], "agreements": ["双方都认同的点"], "conflicts": [{{"issue": "争议点", "pro": "正方主张", "con": "反方主张", "who_has_evidence": "正方|反方|双方都有|双方都没有证据", "judgement": "一句话说明为什么"}}], "evidence_gaps": [{{"claim": "需要证据支撑的结论", "missing": "缺什么证据/数据", "source_role": "谁提的"}}], "draft_roles": ["未按契约输出、只给了草稿的角色"], "summary": "≤200字：这场辩论真正吵清楚的是什么，卡在什么地方"}}"""
+
+
+# 2026-09-18 实跑教训：实测 opencode-go/deepseek-v4-pro 在整理步骤里也**只回了推理过程**
+# （content 为空 → _call_llm_sync 用 reasoning_content 兜底，前缀 "[reasoning草稿…]"），
+# 白白浪费一次调用、整理稿为空。修法：把模型自己刚才那段输出原样塞回去，只要求它做「格式化」
+# 这一件事——分析已经做完，第二次通常就能把 JSON 吐出来（不再需要重新推理）。
+_JUDGE_DIGEST_REPAIR_PROMPT = """你上一步已经把辩论整理分析做完了，但没有按要求输出结果——你的回复只有推理过程，没有 JSON。
+
+现在只做一件事：**把你自己上面的分析结论，原样格式化成 JSON**。不要重新分析、不要写解释、不要写思考过程、不要用代码块。
+
+## 你上一步的输出（可能被截断）
+{prev}
+
+## 输出要求（第一个字符必须是 {{ ，最后一个字符必须是 }} ）
+1. 只允许使用原始发言里出现过的内容与锚点；没有证据的陈述 evidence 写 "[找不到论据]"，evidence_status 写 "无外部证据"。
+2. 结构必须是这个 JSON：
+{{"pro_points": [{{"claim": "一句清晰的陈述", "evidence": "[PMID:…] / [数据:…] / [找不到论据]", "evidence_status": "有外部证据|仅推理|无外部证据", "source_role": "pro_biology", "draft_flag": false, "note": ""}}], "con_points": [{{"claim": "…", "evidence": "…", "evidence_status": "…", "source_role": "con_biology", "draft_flag": false, "note": ""}}], "agreements": ["双方都认同的点"], "conflicts": [{{"issue": "争议点", "pro": "正方主张", "con": "反方主张", "who_has_evidence": "正方|反方|双方都有|双方都没有证据", "judgement": "一句话说明为什么"}}], "evidence_gaps": [{{"claim": "需要证据支撑的结论", "missing": "缺什么证据/数据", "source_role": "谁提的"}}], "draft_roles": ["未按契约输出、只给了草稿的角色"], "summary": "≤200字：这场辩论真正吵清楚的是什么，卡在什么地方"}}
+3. 每条陈述都要带 source_role（角色名/角色键），同一角色的同类陈述合并成一条，不同角色不要混在一条里。
+4. 如果你上一步的输出里确实没有任何可整理的内容，就输出 {{"pro_points": [], "con_points": [], "agreements": [], "conflicts": [], "evidence_gaps": [], "draft_roles": [], "summary": "整理失败：原文没有可用内容"}}。
+5. 直接输出 JSON 本身，前后不要有任何字符。"""
+
+
+def _digest_parse(txt: str):
+    """从模型输出里挖出整理 JSON；挖不到返回 None（不抛异常）。"""
+    if not txt or not str(txt).strip():
+        return None
+    clean = str(txt).replace("\u0060\u0060\u0060json", "").replace("\u0060\u0060\u0060", "").strip()
+    for cand in _extract_json_candidates(clean):
+        try:
+            _o = json.loads(cand)
+        except Exception:
+            continue
+        if isinstance(_o, dict) and ("pro_points" in _o or "con_points" in _o or "conflicts" in _o
+                                     or "evidence_gaps" in _o or "summary" in _o):
+            # 空壳（模型认输）也算解析成功，但上层会当成「没有可用内容」
+            return _o
+    return None
+
+
+
+def _digest_block(label: str, content: str, draft=None) -> str:
+    """整理 prompt 里的单个角色区块。draft=None 时按 [reasoning草稿 前缀自动判定。"""
+    txt = str(content or "").strip()
+    if draft is None:
+        draft = txt.startswith("[reasoning草稿")
+    head = f"### {label}"
+    if draft:
+        head += "　⚠️ 未按契约输出（草稿：只有推理过程，不是已核实的论点）"
+    if len(txt) > _DIGEST_ROLE_CHARS:
+        txt = txt[:_DIGEST_ROLE_CHARS] + "…（原文过长已截断）"
+    return head + "\n" + txt
+
+
+def _digest_section_text(dg) -> str:
+    """把整理结果拼成喂给裁判的区块；整理失败/未启用返回空串（裁决照旧走原文）。"""
+    if not isinstance(dg, dict):
+        return ""
+    obj = dg.get("digest")
+    if isinstance(obj, dict) and obj:
+        return ("## 整理稿（首席整理编辑已把各方草稿整理成清单；evidence 为 [找不到论据] = 原文没有外部证据，不得当作已证实的论点）\n"
+                + json.dumps(obj, ensure_ascii=False, indent=1)[:9000] + "\n\n")
+    if dg.get("error"):
+        return ("## 整理稿\n（首席整理编辑这一步失败了：" + str(dg.get("error"))[:140]
+                + "。请直接按原始发言判断，并注意：很多角色只给了草稿，草稿里的具体文献/数值未必可靠。）\n\n")
+    return ""
+
+
+def _judge_digest(topic: str, context: str, role_blocks, evidence_cards: str = "", cfg: dict = None,
+                  extra_note: str = "") -> dict:
+    """裁判整理阶段：把草稿/非契约输出整理成「清晰言论 + 论据清单」。
+
+    返回 {"digest": {...}|None, "raw": ..., "model": ..., "call_id": ..., "error": ...}。
+    这是增强步骤：任何失败都不抛异常、不阻断辩论，裁决退回原始 prompt 路径。
+    """
+    out = {"digest": None, "raw": "", "model": "", "call_id": "",
+           "error": "", "skipped": "", "repaired": False, "note": "", "attempts": 0}
+    try:
+        if str(os.environ.get("MEMOMICS_DEBATE_NO_DIGEST", "")).strip() == "1":
+            out["skipped"] = "env:MEMOMICS_DEBATE_NO_DIGEST=1"
+            return out
+        _flag = (cfg or {}).get("judge_digest", True)
+        if str(_flag).strip().lower() in ("0", "false", "no", "off") or _flag is False:
+            out["skipped"] = "config:judge_digest=false"
+            return out
+        blocks = [b for b in (role_blocks or []) if str(b or "").strip()]
+        if not blocks:
+            out["skipped"] = "no_arguments"
+            return out
+        prompt = _JUDGE_DIGEST_PROMPT.format(
+            topic=topic, context=context,
+            evidence_section=_evidence_block(evidence_cards),
+            raw="\n\n".join(blocks), note=extra_note or "")
+        r = _call_llm_role_resilient("judge", prompt, cfg or {}, temperature=0.2)
+        _want = _role_model_id("judge", cfg or {})
+        # 2026-09-18: 主路由失败时如实记录「真正产出整理稿的路由」，否则归档会把回退模型的
+        # 产物记成主路由模型（实验记录必须能看出真实使用的模型）。
+        _route_note = ""
+        if r.get("fallback_used"):
+            out["model"] = str(r.get("fallback_route") or _want)
+            _route_note = f"裁判主路由 {_want} 调用失败，整理稿由回退路由 {out['model']} 产出"
+        else:
+            out["model"] = _want
+        out["call_id"] = str(r.get("call_id") or "")
+        if r.get("error"):
+            out["error"] = str(r.get("error_detail") or r.get("error"))[:300]
+            return out
+        txt = str(r.get("content") or "")
+        if not txt.strip():
+            out["error"] = "整理输出为空（模型没给 content）"
+            return out
+        out["raw"] = txt[:6000]
+        out["attempts"] = 1
+        _draft = txt.lstrip().startswith("[reasoning草稿")
+        obj = _digest_parse(txt)
+        if obj is None:
+            # 修复轮（2026-09-18 实跑教训）：很多推理模型在整理步骤里也把内容全塞进 reasoning，
+            # content 只剩草稿 → 再叫它一次，只把上一步的分析格式化成 JSON（成本 1 次调用，
+            # 有 _JUDGE_ROUTE_BAD 备忘，不会对着已挂的主路由重复付超时）。
+            _fix = _JUDGE_DIGEST_REPAIR_PROMPT.format(prev=txt[:7000])
+            r2 = _call_llm_role_resilient("judge", _fix, cfg or {}, temperature=0.1)
+            out["attempts"] = 2
+            txt2 = str(r2.get("content") or "")
+            if txt2.strip():
+                out["raw_first"] = txt[:6000]
+                out["raw"] = txt2[:6000]
+                out["call_id"] = str(r2.get("call_id") or out.get("call_id") or "")
+                obj = _digest_parse(txt2)
+                if obj is not None:
+                    out["repaired"] = True
+                    out["note"] = ("整理模型第一次只给了推理草稿，第二次（仅格式化）才输出 JSON"
+                                   if _draft else "整理模型第一次输出无法解析，重试一次后成功")
+            if obj is None:
+                out["error"] = ("整理模型两次都没有给出 JSON"
+                                + ("（两次都只有推理草稿）" if _draft else "（输出无法解析）")
+                                + "，已按原文裁决" + (f"；{_route_note}" if _route_note else ""))
+                return out
+        if not any(obj.get(_k) for _k in ("pro_points", "con_points", "conflicts", "evidence_gaps", "summary")):
+            out["error"] = ("整理模型给了 JSON 但内容为空（没有可整理的论点）"
+                            + (f"；{_route_note}" if _route_note else ""))
+            return out
+        out["digest"] = obj
+        if _route_note:
+            out["note"] = _route_note + ("；" + out["note"] if out.get("note") else "")
+        return out
+    except Exception as e:
+        out["error"] = str(e)[:200]
+        return out
+
+
+def _digest_fields(dg) -> dict:
+    """整理结果 → 归档字段（只写有值的键，避免空字段噪声；整理失败也留痕便于排查）。"""
+    out = {}
+    if not isinstance(dg, dict):
+        return out
+    for _k, _v in (("judge_digest", dg.get("digest")), ("judge_digest_raw", dg.get("raw")),
+                   ("judge_digest_model", dg.get("model")), ("judge_digest_call_id", dg.get("call_id")),
+                   ("judge_digest_error", dg.get("error")), ("judge_digest_skipped", dg.get("skipped")),
+                   ("judge_digest_repaired", dg.get("repaired")), ("judge_digest_note", dg.get("note"))):
+        if _v:
+            out[_k] = _v
+    return out
+
+
+def _attach_digest(result: dict, dg) -> None:
+    """把整理结果写进结果 dict（L1 路径用；v3 路径用 **_digest_fields）。"""
+    if isinstance(result, dict):
+        result.update(_digest_fields(dg))
+
+
+def _scenario_parse(txt: str):
+    """从模型输出里解析场景预判 JSON；失败返回 None（不抛异常）。"""
+    if not txt:
+        return None
+    clean = str(txt).replace("```json", "").replace("```", "").strip()
+    for cand in [clean] + _extract_json_candidates(clean):
+        try:
+            o = json.loads(cand)
+        except Exception:
+            continue
+        if isinstance(o, dict) and (o.get("scenario") or o.get("judge_persona") or o.get("rubrics")):
+            return o
+    return None
+
+
+def _scenario_norm(obj):
+    """规范化场景预判：补默认值、裁长度、限 rubric 数量；缺关键字段返回 None。"""
+    if not isinstance(obj, dict):
+        return None
+    _sc = str(obj.get("scenario") or "general").strip().lower()
+    if _sc not in _SCENARIO_LABELS:
+        _sc = "general"
+    out = {
+        "scenario": _sc,
+        "scenario_label": str(obj.get("scenario_label") or _SCENARIO_LABELS[_sc]).strip()[:24],
+        "why": str(obj.get("why") or "").strip()[:200],
+        "judge_persona": str(obj.get("judge_persona") or "").strip()[:140],
+        "judge_focus": [str(x).strip()[:220] for x in (obj.get("judge_focus") or []) if str(x).strip()][:6],
+        "evidence_types": [str(x).strip()[:180] for x in (obj.get("evidence_types") or []) if str(x).strip()][:6],
+        "rubrics": [], "rubric_keys": [], "pro_roles": [], "con_roles": [],
+    }
+    _rs = []
+    for r in (obj.get("rubrics") or []):
+        if isinstance(r, dict) and r.get("key"):
+            _k = re.sub(r"[^0-9a-zA-Z_]", "", str(r["key"]))[:40]
+            if _k:
+                _rs.append({"key": _k, "label": str(r.get("label") or _k)[:40],
+                            "hint": str(r.get("hint") or "")[:180]})
+    _rs = _rs[:7]
+    if _rs:
+        out["rubrics"] = _rs
+        out["rubric_keys"] = [r["key"] for r in _rs]
+    else:
+        _ks = [re.sub(r"[^0-9a-zA-Z_]", "", str(k))[:40] for k in (obj.get("rubric_keys") or [])]
+        out["rubric_keys"] = [k for k in _ks if k][:7]
+        out["rubrics"] = [{"key": k, "label": k, "hint": ""} for k in out["rubric_keys"]]
+
+    def _roles(key, want):
+        got = []
+        for r in (obj.get(key) or []):
+            if isinstance(r, dict) and (r.get("title") or r.get("task")):
+                got.append({"title": str(r.get("title") or "").strip()[:70],
+                            "task": str(r.get("task") or "").strip()[:200],
+                            "questions": [str(q).strip()[:240] for q in (r.get("questions") or [])
+                                          if str(q).strip()][:6]})
+        return got[:want]
+
+    out["pro_roles"] = _roles("pro_roles", 3)
+    out["con_roles"] = _roles("con_roles", 4)
+    if not out["judge_persona"] and not out["rubrics"] and not out["pro_roles"] and not out["con_roles"]:
+        return None
+    return out
+
+
+def _analyze_scenario(topic: str, context: str, cfg: dict = None) -> dict:
+    """赛前场景预判（1 次调用，走 judge 路由 + 回退链）。
+
+    返回 {"scenario": {...}|None, "model": ..., "call_id": ..., "error": ...}。
+    任何失败都不抛异常：调用方拿到 scenario=None 就用原有生物学模板继续。
+    """
+    cfg = cfg or {}
+    out = {"scenario": None, "model": "", "call_id": "", "error": "", "raw": ""}
+    try:
+        if str(os.environ.get("MEMOMICS_DEBATE_NO_SCENARIO", "")).strip() == "1":
+            out["error"] = "skipped:env"
+            return out
+        _flag = cfg.get("scenario_analysis", True)
+        if _flag is False or str(_flag).strip().lower() in ("0", "false", "no", "off"):
+            out["error"] = "skipped:config"
+            return out
+        prompt = _SCENARIO_PROMPT.format(topic=topic, context=context)
+        r = _call_llm_role_resilient("judge", prompt, cfg, temperature=0.2)
+        out["model"] = (str(r.get("fallback_route") or _role_model_id("judge", cfg))
+                        if r.get("fallback_used") else _role_model_id("judge", cfg))
+        out["call_id"] = str(r.get("call_id") or "")
+        if r.get("error"):
+            out["error"] = "场景预判调用失败：" + str(r.get("error_detail") or r.get("error"))[:200]
+            return out
+        txt = str(r.get("content") or "")
+        if not txt.strip():
+            out["error"] = "场景预判输出为空（模型没给 content）"
+            return out
+        out["raw"] = txt[:1200]
+        obj = _scenario_parse(txt)
+        if obj is None:
+            out["error"] = "场景预判输出无法解析为 JSON（已按生物学默认标准继续）"
+            return out
+        norm = _scenario_norm(obj)
+        if norm is None:
+            out["error"] = "场景预判 JSON 缺关键字段（已按生物学默认标准继续）"
+            return out
+        norm["model"] = out["model"]
+        norm["call_id"] = out["call_id"]
+        out["scenario"] = norm
+        return out
+    except Exception as e:
+        out["error"] = "场景预判异常：" + str(e)[:200]
+        return out
+
+
+def _scenario_fields(res) -> dict:
+    """场景预判结果 → 归档字段（成功写 scenario；失败写 scenario_error 留痕，便于排查）。"""
+    if not isinstance(res, dict):
+        return {}
+    sc = res.get("scenario")
+    if isinstance(sc, dict):
+        return {"scenario": sc, "scenario_model": res.get("model", ""),
+                "scenario_call_id": res.get("call_id", "")}
+    d = {}
+    if res.get("error"):
+        d["scenario_error"] = str(res.get("error"))[:300]
+    if res.get("model"):
+        d["scenario_model"] = res["model"]
+    if res.get("raw"):
+        d["scenario_raw"] = str(res["raw"])[:1200]
+    return d
+
+
+def _scenario_role_spec(scenario, label: str):
+    """取场景预判为某个角色槽位设计的身份；没有则 None（回退生物学默认）。"""
+    if not isinstance(scenario, dict):
+        return None
+    slot = _SCENARIO_ROLE_SLOTS.get(label)
+    if not slot:
+        return None
+    key, i = slot
+    arr = scenario.get(key) or []
+    if isinstance(arr, list) and len(arr) > i and isinstance(arr[i], dict):
+        r = arr[i]
+        if r.get("title") or r.get("task") or r.get("questions"):
+            return r
+    return None
+
+
+def _scenario_line(scenario) -> str:
+    """角色 prompt 里的场景段（没有预判就返回空串）。"""
+    if not isinstance(scenario, dict):
+        return ""
+    _lab = scenario.get("scenario_label") or _SCENARIO_LABELS.get(scenario.get("scenario", ""), "")
+    if not _lab:
+        return ""
+    _t = f"\n## 本场场景（赛前预判）\n场景：{_lab}"
+    if scenario.get("why"):
+        _t += f"（判定依据：{scenario['why']}）"
+    _t += ("\n你的身份与提问清单已按该场景设定；某条问题在本场景确实不适用时可以跳过，"
+           "但要在 self_audit_failures 里写明原因。")
+    if scenario.get("evidence_types"):
+        _t += "\n本场景的证据标准：" + "；".join(scenario["evidence_types"][:4]) + "。"
+    return _t + "\n"
+
+
+def _role_title(label: str, scenario=None) -> str:
+    """角色展示名（中文）：场景预判给了本场身份就用它，否则用原 biology 默认名。"""
+    _sc = _scenario_role_spec(scenario, label)
+    if _sc and _sc.get("title"):
+        return _sc["title"]
+    return (_V2_ROLE_QUESTIONS.get(label) or {}).get("title") or label
 
 
 def _evidence_block(evidence_cards: str = "") -> str:
@@ -582,30 +1206,70 @@ def _evidence_block(evidence_cards: str = "") -> str:
 
 
 def _v2_role_prompt(label: str, topic: str, context: str, kb_info: str,
-                    history_errors: str = "", evidence_cards: str = "") -> str:
+                    history_errors: str = "", evidence_cards: str = "", scenario=None) -> str:
+    """角色 prompt。scenario=赛前场景预判结果时，用本场该槽位的身份/任务/提问替换生物学默认。"""
     spec = _V2_ROLE_QUESTIONS.get(label, _V2_ROLE_QUESTIONS["pro_biology"])
+    title, task, questions = spec["title"], spec["task"], spec["questions"]
+    _sc_role = _scenario_role_spec(scenario, label)
+    if _sc_role:
+        title = _sc_role.get("title") or title
+        task = _sc_role.get("task") or task
+        _qs = _sc_role.get("questions") or []
+        if _qs:
+            questions = "\n".join(f"{i+1}. {q}" for i, q in enumerate(_qs))
     kb_title = "历史报错记录" if label == "con_history" else "知识库参考"
     kb = history_errors if label == "con_history" else (kb_info or "无知识库参考")
     return _V2_ROLE_TEMPLATE.format(
-        title=spec["title"], task=spec["task"], topic=topic, context=context,
+        title=title, task=task, topic=topic, context=context,
+        scenario_line=_scenario_line(scenario),
         kb_title=kb_title, kb_info=kb,
         evidence_section=_evidence_block(evidence_cards),
-        contract=_EVIDENCE_CONTRACT + "\n\n", questions=spec["questions"],
+        contract=_EVIDENCE_CONTRACT + "\n\n", questions=questions,
         output_spec=_V2_OUTPUT_SPEC)
 
 
 def _v2_judge_prompt(topic: str, context: str, pro_arguments: str, con_arguments: str,
                      evidence_cards: str = "", neutral_args: str = "",
-                     roles: str = "3 正方 + 4 反方") -> str:
+                     roles: str = "3 正方 + 4 反方", digest: str = "", scenario=None) -> str:
+    """裁判 prompt。scenario=赛前场景预判结果时，裁判身份/检查要点/评分维度全部按本场场景走
+    （排版题就不再拿生信的 effect_size/confounding 去打分）。"""
+    _sc = scenario if isinstance(scenario, dict) else None
+    persona = "生信分析多角色辩论的**裁判编辑**（v2）"
+    focus_section = ""
+    rubrics_hint = _RUBRICS_HINT
+    rubric_keys = ", ".join(_SCENARIO_DEFAULT_RUBRIC_KEYS)
+    if _sc:
+        if _sc.get("judge_persona"):
+            persona = f"{_sc['judge_persona']}，本场多角色辩论的**裁判编辑**（v2）"
+        _bits = []
+        if _sc.get("scenario_label"):
+            _bits.append(f"- 本场场景：{_sc['scenario_label']}"
+                         + (f"（判定依据：{_sc['why']}）" if _sc.get("why") else ""))
+        for _f in (_sc.get("judge_focus") or [])[:6]:
+            _bits.append(f"- {_f}")
+        if _sc.get("evidence_types"):
+            _bits.append("- 本场景的证据标准：" + "；".join(_sc["evidence_types"][:5])
+                         + "（不符合这些标准的论据一律按“无证据”处理）")
+        if _bits:
+            focus_section = "## 本场裁判必须逐条检查（赛前场景预判）\n" + "\n".join(_bits) + "\n\n"
+        if _sc.get("rubrics"):
+            rubrics_hint = "\n".join(
+                f"- {r['key']}：{r.get('label') or ''}"
+                + (f"——{r['hint']}" if r.get("hint") else "") for r in _sc["rubrics"])
+            rubric_keys = ", ".join(f'"{r["key"]}": 1-10' for r in _sc["rubrics"])
     return _V2_JUDGE_PROMPT.format(
+        persona=persona,
         n_pro="7位" if not neutral_args else "9位",
         roles=roles,
         topic=topic, context=context,
         pro_arguments=pro_arguments, con_arguments=con_arguments,
+        digest_section=digest or "",
         neutral_args=neutral_args or "",
         evidence_section=_evidence_block(evidence_cards),
         contract=_EVIDENCE_CONTRACT + "\n\n",
-        rubrics_hint=_RUBRICS_HINT)
+        focus_section=focus_section,
+        rubrics_hint=rubrics_hint,
+        rubric_keys=rubric_keys)
 
 
 def _use_v2_prompts(cfg: dict) -> bool:
@@ -668,13 +1332,18 @@ def _collect_judge_consensus(judge_prompt: str, cfg: dict) -> tuple:
         count = 1
     raw = []
     objs = []
-    for i in range(count):
-        jr = _call_llm_role("judge", judge_prompt, cfg, temperature=0.3 + 0.2 * i)
-        raw.append(jr)
-        try:
-            objs.append(_parse_judge_json(jr.get("content", "")))
-        except Exception:
-            pass
+    _hb = _ProgressHeartbeat(f"裁判汇总（{count} 位裁判）").start()
+    try:
+        for i in range(count):
+            jr = _call_llm_role_resilient("judge", judge_prompt, cfg, temperature=0.3 + 0.2 * i)
+            raw.append(jr)
+            try:
+                objs.append(_parse_judge_json(jr.get("content", "")))
+            except Exception:
+                pass
+            _emit_progress(f"裁判 {i + 1}/{count} 已给出裁决（累计 {_hb.elapsed}s）", "done")
+    finally:
+        _hb.stop(f"裁判汇总完成（{len(objs)}/{count} 位有效，用时 {_hb.elapsed}s）")
     consensus = {
         "judge_count": count,
         "valid_judges": len(objs),
@@ -697,6 +1366,57 @@ def _collect_judge_consensus(judge_prompt: str, cfg: dict) -> tuple:
     return (raw[0] if raw else None), consensus
 
 
+def _provider_extra_headers(base_url: str) -> dict:
+    """按 base_url 匹配 config.yaml custom_providers[].extra_headers（2026-09-13）。
+
+    本模块用裸 httpx 直发请求，绕过 MemOmics 底座的 openai SDK 客户端，因此拿不到
+    get_custom_provider_extra_headers 注入的附加头。opencode.ai 的 zen 网关要求每个
+    请求带 x-opencode-session，缺则一律 400 MissingSessionID —— 050e0d14 只修了
+    MemOmics 底座路径，辩论链路仍 400。这里按 base_url/api_base 匹配 provider 条目并
+    返回其 extra_headers，使任何 provider 的附加头都能生效。匹配不到返回 {}。
+    """
+    if not base_url:
+        return {}
+    try:
+        import yaml
+        cfg_path = _get_config_path()
+        if not cfg_path.exists():
+            return {}
+        data = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+        target = base_url.rstrip("/").lower()
+        for entry in data.get("custom_providers") or []:
+            if not isinstance(entry, dict):
+                continue
+            for field in ("base_url", "api_base"):
+                candidate = (entry.get(field) or "").rstrip("/").lower()
+                if candidate and candidate == target:
+                    extra = entry.get("extra_headers")
+                    if isinstance(extra, dict) and extra:
+                        return {str(k): str(v) for k, v in extra.items()}
+                    return {}
+    except Exception as e:
+        logger.warning(f"Failed to load provider extra_headers for {base_url}: {e}")
+    return {}
+
+
+# 2026-09-13: 瞬时 vs 配置类失败判定 —— 只有瞬时失败才值得重跑（见 _retry_transient_roles）。
+_TRANSIENT_HINTS = ("429", "500", "502", "503", "504", "timeout", "timed out",
+                    "connect", "connection", "reset", "eof", "remotedisconnected",
+                    "readtimeout", "temporarily", "overload", "rate limit", "tpm")
+_CONFIG_HINTS = ("401", "403", "400 bad request", "unauthorized", "invalid api key",
+                 "missing", "not found", "missing_session", "model_not")
+
+
+def _is_transient_error(detail: str) -> bool:
+    """失败是否属于瞬时类（429/5xx/超时/连接中断）。配置类（400/401/403/模型不存在）返回 False。"""
+    d = str(detail or "").lower()
+    if not d:
+        return False
+    if any(t in d for t in _CONFIG_HINTS):
+        return False
+    return any(t in d for t in _TRANSIENT_HINTS)
+
+
 def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: str,
                     temperature: float = 0.7, max_tokens: int = 4096) -> dict:
     """独立 LLM 调用 — 每个角色一个独立的 messages 数组，切断上下文。
@@ -712,6 +1432,9 @@ def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: 
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
+    # 2026-09-13: 合并 config.yaml custom_providers[].extra_headers
+    # （opencode.ai zen 网关必需 x-opencode-session，缺失一律 400 MissingSessionID）
+    headers.update(_provider_extra_headers(base_url))
     # 关键：每个角色只有自己的 prompt，没有其他角色的消息
     # 这就是"切断上下文"的实现方式
     payload = {
@@ -722,13 +1445,37 @@ def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: 
     }
     call_id = f"{label}_{int(time.time() * 1000) % 1000000}"
 
+    last_error = ""
     for attempt in range(3):
+        # 总预算闸：预算耗尽就立刻放弃，不再发 HTTP（否则整场辩论能挂到 20 分钟）
+        _left = _budget_left()
+        if _left <= 0:
+            logger.warning(f"debate {label} 放弃：本场辩论总预算已耗尽（{_DEBATE_BUDGET_DEFAULT}s）")
+            return {
+                "content": f"[{label} 辩论生成失败：本场辩论超出总预算，已放弃该角色]",
+                "call_id": call_id,
+                "isolation_verified": True,
+                "messages_count": 1,
+                "error": True,
+                "error_detail": "budget_exhausted",
+                "error_model": f"{model} @ {base_url}",
+                "transient": False,
+                "budget_exhausted": True,
+            }
+        # 单次超时不许超过剩余预算，否则最后一枪还能多跑 60 秒
+        _timeout = _HTTP_TIMEOUT_DEFAULT if _left == float("inf") else max(5.0, min(_HTTP_TIMEOUT_DEFAULT, _left))
+        _detail = ""
         try:
-            with httpx.Client(timeout=120) as client:
+            with httpx.Client(timeout=_timeout) as client:
                 resp = client.post(
                     f"{base_url}/chat/completions",
                     headers=headers, json=payload
                 )
+                if resp.status_code >= 400:
+                    # 2026-09-13: 服务端错误正文是区分 400 MissingSessionID / 401 key 失效 /
+                    # 上下文超限的唯一证据。此前只留 "400 Bad Request" 一行，judge 连续失败
+                    # 4 次都无法定位（真因是缺 x-opencode-session 请求头）。
+                    _detail = f"HTTP {resp.status_code} {resp.text[:300]}"
                 resp.raise_for_status()
                 msg = resp.json()["choices"][0]["message"]
                 content = msg.get("content") or ""
@@ -745,9 +1492,20 @@ def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: 
                         "messages_count": 1,  # 只有 1 条消息 = 上下文已隔离
                         "used_reasoning_fallback": bool(not msg.get("content") or len(msg.get("content", "").strip()) < 10),
                     }
+                _detail = (f"empty content (finish_reason={msg.get('finish_reason')}, "
+                           f"reasoning={'yes' if msg.get('reasoning_content') else 'no'}, model={model})")
+                last_error = _detail[:400]
                 time.sleep(2)
         except Exception as e:
-            logger.warning(f"debate {label} attempt {attempt+1} failed: {e}")
+            if not _detail:
+                _detail = f"{type(e).__name__}: {e}"
+            last_error = _detail[:400]
+            logger.warning(f"debate {label} attempt {attempt+1} failed: {e} | detail={last_error}")
+            # 2026-09-26：配置类错误（401/403/400/MissingSessionID/模型不存在）重试
+            # 3 次纯属浪费——每次都必然同样失败，只是把 3 倍时间烧掉。
+            if not _is_transient_error(last_error):
+                logger.warning(f"debate {label} 判定为配置类错误，不再重试：{last_error[:160]}")
+                break
             time.sleep(3)
 
     return {
@@ -756,6 +1514,10 @@ def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: 
         "isolation_verified": True,
         "messages_count": 1,
         "error": True,
+        # 2026-09-13: 失败原因随结果回传（配置类 vs 瞬时类），上层据此决定重跑还是报错
+        "error_detail": last_error or "unknown",
+        "error_model": f"{model} @ {base_url}",
+        "transient": _is_transient_error(last_error),
     }
 
 
@@ -774,10 +1536,24 @@ def _call_role_parallel(tasks: list, cfg: dict = None) -> dict:
     （异构/对抗/温度模式）。cfg=None 时行为=现状（环境变量单模型）。
     """
     def _run_one(label, prompt):
+        # 预算已耗尽就别再排这一席了（否则每个席位还要各自跑一遍重试逻辑）
+        if _budget_left() <= 0:
+            _emit_progress(f"席位 {label} 跳过：辩论总预算已耗尽", "done")
+            return label, {
+                "content": f"[{label} 辩论生成失败：本场辩论超出总预算，已跳过]",
+                "call_id": f"{label}_{int(time.time() * 1000) % 1000000}",
+                "isolation_verified": True,
+                "messages_count": 1,
+                "error": True,
+                "error_detail": "budget_exhausted",
+                "transient": False,
+                "budget_exhausted": True,
+            }
         try:
             return label, _call_llm_role(label, prompt, cfg)
         except Exception as e:
             logger.warning(f"debate {label} call failed: {e}")
+            _emit_progress(f"席位 {label} 调用失败（{str(e)[:60]}），本轮该席位按失败计", "done")
             return label, {
                 "content": f"[{label} 辩论生成失败]",
                 "call_id": f"{label}_{int(time.time() * 1000) % 1000000}",
@@ -792,16 +1568,54 @@ def _call_role_parallel(tasks: list, cfg: dict = None) -> dict:
     except Exception:
         _mw = 3
     max_workers = max(1, min(_mw, len(tasks) or 1))
-    if max_workers <= 1:
-        for label, prompt in tasks:
-            _l, _r = _run_one(label, prompt)
-            results[_l] = _r
-    else:
-        with ThreadPoolExecutor(max_workers=max_workers) as _ex:
-            _futures = [_ex.submit(_run_one, label, prompt) for label, prompt in tasks]
-            for _f in _futures:
-                _l, _r = _f.result()
+    # 席位阶段最耗时（非流式 HTTP × 最多 3 次重试），全程挂心跳，别让界面死寂
+    _hb = _ProgressHeartbeat(f"席位辩论（{len(tasks)} 席 · 并发 {max_workers}）").start()
+    _t0 = time.time()
+    _done = 0
+
+    def _seat_done(_label):
+        nonlocal _done
+        _done += 1
+        _emit_progress(f"席位 {_label} 完成（{_done}/{len(tasks)}，累计 {int(time.time() - _t0)}s）", "done")
+
+    # 席位在线程池里跑，而 contextvars 不会自动跟着新线程走 —— 手工把当前上下文
+    # 复制进每个席位线程。否则子线程里 get_session_sid() 为空：总预算闸形同虚设、
+    # 席位级进度上报也会被静默丢弃（2026-09-26 被 test_debate_budget 抓出来）。
+    _ctx = _contextvars.copy_context()
+    try:
+        if max_workers <= 1:
+            for label, prompt in tasks:
+                _l, _r = _run_one(label, prompt)
                 results[_l] = _r
+                _seat_done(_l)
+        else:
+            with ThreadPoolExecutor(max_workers=max_workers) as _ex:
+                _futures = [_ex.submit(_ctx.copy().run, _run_one, label, prompt) for label, prompt in tasks]
+                for _f in _futures:
+                    _l, _r = _f.result()
+                    results[_l] = _r
+                    _seat_done(_l)
+    finally:
+        _hb.stop()
+    return results
+
+
+def _retry_transient_roles(results: dict, tasks: list, cfg: dict) -> dict:
+    """2026-09-13 加固：只重跑「瞬时失败」的角色一次。
+
+    现行策略是 8 角色任一失败即整场辩论作废（不缓存不归档），于是一个角色被 429/
+    超时抖一下，整场 8 角色辩论全废。这里对 HTTP 429/5xx/超时/连接中断这类失败再跑
+    一次（配置类失败如 400/401 重跑无意义，直接报错并带回 error_detail）。
+    """
+    try:
+        _retry_tasks = [(l, p) for l, p in tasks
+                        if results.get(l, {}).get("error") and results.get(l, {}).get("transient")]
+        if not _retry_tasks:
+            return results
+        logger.warning(f"debate 重跑瞬时失败角色: {[l for l, _ in _retry_tasks]}")
+        results.update(_call_role_parallel(_retry_tasks, cfg))
+    except Exception as e:
+        logger.warning(f"debate transient retry pass failed: {e}")
     return results
 
 
@@ -818,7 +1632,7 @@ _TEMP_POOL = [0.3, 0.5, 0.7, 0.9, 1.1]
 
 
 def _get_config_path() -> Path:
-    """定位 hermes_home/config.yaml（与 _get_debates_dir 同源）。"""
+    """定位 memomics_home/config.yaml（与 _get_debates_dir 同源）。"""
     try:
         for p in list(sys.path):
             if p.endswith('hermes-agent') or p.endswith('hermes-agent\\') or p.endswith('hermes-agent/'):
@@ -826,7 +1640,7 @@ def _get_config_path() -> Path:
         from hermes_constants import get_hermes_home
         base = Path(get_hermes_home())
     except Exception:
-        base = Path(os.environ.get("HERMES_HOME", "<安装目录>/hermes_home"))
+        base = Path(os.environ.get("MEMOMICS_HOME", "<安装目录>/memomics_home"))
     return base / "config.yaml"
 
 
@@ -837,6 +1651,7 @@ def _load_debate_config() -> dict:
       debate:
         mode: homogeneous | adversarial | multi_model | temperature
         rounds: 1
+        scenario_analysis: true   # 赛前场景预判（非生物学辩题换裁判标准）；false 关闭
         judge: {model, provider}
         pro:   {model, provider}
         con:   {model, provider}
@@ -858,6 +1673,11 @@ def _load_debate_config() -> dict:
         "rounds_max": 5,              # 上限护栏（防止 rounds=1000 打爆）
         "evidence_mode": False,       # True 时注入证据卡/做引用校验
         "prompt_version": 2,          # 2=v2 证据契约 | 1=legacy（可用 MEMOMICS_DEBATE_LEGACY_PROMPTS=1 回退）
+        "judge_digest": True,         # 2026-09-18: 裁决前先让裁判整理（草稿→清晰言论+论据；找不到证据如实写明）
+        # 2026-09-18: 赛前场景预判（+1 次调用，走 judge 路由）。用户提出「排版/技术类问题是不是该换裁判」
+        # → 辩论前先判本场属于哪类问题，再据此生成各席位身份与裁判评分维度；
+        # False 或 env MEMOMICS_DEBATE_NO_SCENARIO=1 则退回原有生物学模板。
+        "scenario_analysis": True,
         "max_tokens": {"judge": 8192, "role": 8192, "l1_role": 2048, "l1_judge": 8192},
     }
     try:
@@ -879,7 +1699,7 @@ def _load_debate_config() -> dict:
 
 
 def _load_provider_keys() -> dict:
-    """读取 hermes_home/provider_keys.json: {provider_id: {api_key, base_url}}。"""
+    """读取 memomics_home/provider_keys.json: {provider_id: {api_key, base_url}}。"""
     try:
         keys_path = _get_config_path().parent / "provider_keys.json"
         if not keys_path.exists():
@@ -890,6 +1710,152 @@ def _load_provider_keys() -> dict:
     except Exception as e:
         logger.warning(f"Failed to load provider_keys.json: {e}")
         return {}
+
+
+# ==================== 当前使用模型的提供商 / 可用提供商（2026-09-13 用户要求）====================
+# 现象：judge 走 config.yaml 里写死的单条通道（opencode-go），该通道一坏 → L2 全灭；
+# 而界面里用户"当前使用"的模型（model_config.json）从未参与辩论路由。
+# 规则：辩论角色 = 当前使用模型的提供商优先 → 再在可用提供商之间兜底。
+_PLACEHOLDER_KEY_TOKENS = ("your_api_key", "your-api-key", "yourkey", "your_key", "insert_key",
+                           "changeme", "change_me", "replace_me", "placeholder", "sk-xxx",
+                           "api_key_here", "在这里", "请填写")
+
+_model_cfg_cache = {"path": "", "mtime": -1.0, "data": {}}
+
+
+def _looks_like_placeholder_key(value) -> bool:
+    """占位符 key 判定（与 webui/server.py::_is_valid_api_key 同源口径）。"""
+    s = str(value or "").strip().lower()
+    if not s:
+        return True
+    if s in ("none", "null", "undefined", "todo", "xxx", "dummy", "test"):
+        return True
+    if s.startswith(("<", "${")):
+        return True
+    return any(tok in s for tok in _PLACEHOLDER_KEY_TOKENS)
+
+
+def _load_global_model_config() -> dict:
+    """读取 memomics_home/model_config.json —— 界面「当前模型」的落盘位置。
+
+    按 mtime 缓存重读：用户在界面换了模型/提供商，辩论下一次调用立刻生效。
+    （旧实现只在 server 启动时把 DEEPSEEK_* 注入 env 一次，换模型后辩论仍用旧通道。）
+    """
+    try:
+        p = _get_config_path().parent / "model_config.json"
+        if not p.exists():
+            return {}
+        mt = p.stat().st_mtime
+        if _model_cfg_cache["path"] == str(p) and _model_cfg_cache["mtime"] == mt:
+            return dict(_model_cfg_cache["data"])
+        data = json.loads(p.read_text(encoding="utf-8")) or {}
+        if not isinstance(data, dict):
+            return {}
+        _model_cfg_cache.update({"path": str(p), "mtime": mt, "data": data})
+        return dict(data)
+    except Exception as e:
+        logger.warning(f"Failed to load model_config.json: {e}")
+        return {}
+
+
+def _route_from_config(raw: dict, provider_keys: dict, source: str) -> dict:
+    """把 {provider, base_url, api_key, model} 规格化成路由 dict；不可用返回 {}。"""
+    raw = raw or {}
+    key = str(raw.get("api_key") or "").strip()
+    url = str(raw.get("base_url") or raw.get("api_base") or "").rstrip("/")
+    model = str(raw.get("model") or "").strip()
+    if not key or not url or _looks_like_placeholder_key(key):
+        return {}
+    pid = ""
+    for _pid, _info in (provider_keys or {}).items():
+        if str((_info or {}).get("base_url") or "").rstrip("/").lower() == url.lower():
+            pid = _pid
+            break
+    return {"api_key": key, "base_url": url,
+            "model": model or "deepseek-v4-flash", "temperature": 0.7,
+            "provider": pid or str(raw.get("provider") or source), "source": source}
+
+
+def _current_model_route(provider_keys: dict = None) -> dict:
+    """「当前使用模型的提供商」路由。优先级：会话级 → 全局 model_config.json → env。
+
+    会话级 = server.py 每回合 set_session_context(model_config=...) 注入（多会话各用各的模型）；
+    全局 = 界面下拉框当前模型（model_config.json，按 mtime 实时读）；
+    env = server 启动时 _sync_debate_env 注入的旧兼容通道（命令行/脚本调用时兜底）。
+    """
+    pk = provider_keys if provider_keys is not None else _load_provider_keys()
+    for raw, source in ((get_session_model_config(), "session"),
+                        (_load_global_model_config(), "model_config.json"),
+                        ({"api_key": os.environ.get("DEEPSEEK_API_KEY", ""),
+                          "base_url": os.environ.get("DEEPSEEK_BASE_URL", ""),
+                          "model": os.environ.get("DEEPSEEK_MODEL", "")}, "env")):
+        route = _route_from_config(raw, pk, source)
+        if route:
+            return route
+    return {}
+
+
+_prov_models_cache = {"mtime": -1.0, "data": {}}
+
+
+def _provider_default_models() -> dict:
+    """config.yaml custom_providers[].models 的模型清单 → {pid: [model_id, ...]}（按 mtime 缓存）。
+
+    用途：回退到「别的可用提供商」时要给一个该 provider 真正存在的模型 id，
+    否则拿当前模型的 id 去打（如用 dcs 的 deepseek-flash 打 opencode-go）必 400。
+    """
+    try:
+        p = _get_config_path()
+        if not p.exists():
+            return {}
+        mt = p.stat().st_mtime
+        if _prov_models_cache["mtime"] == mt:
+            return dict(_prov_models_cache["data"])
+        import yaml
+        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        out = {}
+        for entry in (data.get("custom_providers") or []):
+            if not isinstance(entry, dict):
+                continue
+            pid = str(entry.get("id") or "").strip()
+            ids = [str(m.get("id")) for m in (entry.get("models") or [])
+                   if isinstance(m, dict) and m.get("id")]
+            if pid and ids:
+                out[pid] = ids
+        _prov_models_cache.update({"mtime": mt, "data": out})
+        return dict(out)
+    except Exception as e:
+        logger.warning(f"Failed to load provider model list: {e}")
+        return {}
+
+
+def _available_routes(provider_keys: dict = None, exclude: list = None) -> list:
+    """「可用提供商」路由表：有 key + base_url、非占位符 key。
+
+    排序与 webui/server.py 一致：deepseek 官方优先，已知死通道（dcs-cloud）靠后。
+    """
+    pk = provider_keys if provider_keys is not None else _load_provider_keys()
+    _known_dead = {"dcs-cloud"}
+    _prov_default_model = {"deepseek": "deepseek-v4-flash"}
+    _env_model = os.environ.get("DEEPSEEK_MODEL") or "deepseek-v4-flash"
+    _listed = _provider_default_models()   # {pid: [该 provider 真实存在的 model id, ...]}
+    out, seen = [], set()
+    for pid in sorted(pk.keys(), key=lambda p: (p in _known_dead, p != "deepseek")):
+        info = pk.get(pid) or {}
+        key = str(info.get("api_key") or "").strip()
+        url = str(info.get("base_url") or "").rstrip("/")
+        if not key or not url or _looks_like_placeholder_key(key):
+            continue
+        # 模型 id 优先级：deepseek 官方惯例 → config.yaml 里该 provider 的模型清单 → env 模型
+        _cands = [_prov_default_model.get(pid)] + list(_listed.get(pid) or []) + [_env_model]
+        model = next((m for m in _cands if m), _env_model)
+        sig = (url.lower(), model)
+        if sig in seen or sig in (exclude or []):
+            continue
+        seen.add(sig)
+        out.append({"api_key": key, "base_url": url, "model": model, "temperature": 0.7,
+                    "provider": pid, "source": "provider_keys"})
+    return out
 
 
 def _debate_fingerprint(mode: str, rounds: int, role_model_map: dict, cfg: dict = None,
@@ -905,9 +1871,15 @@ def _debate_fingerprint(mode: str, rounds: int, role_model_map: dict, cfg: dict 
     parts = [f"mode={mode}", f"rounds={rounds}"]
     if level and level != "L2":
         parts.append(f"level={level}")
+    # 2026-09-13: 默认路由改为「当前使用模型的提供商」后，同一 topic 在不同模型下
+    # 会产出不同结论 → 当前模型必须进指纹，否则换模型后仍命中旧模型的结果。
+    _cur_route = _current_model_route()
+    if _cur_route:
+        parts.append(f"cur={_cur_route.get('provider')}/{_cur_route.get('model')}")
     if cfg:
         # v2(2026-08-27): 影响产出的新参数一并入指纹，防缓存串用
-        for key in ("role_preset", "judge_count", "rounds_max", "prompt_version", "evidence_mode"):
+        for key in ("role_preset", "judge_count", "rounds_max", "prompt_version", "evidence_mode",
+                    "judge_digest"):
             v = cfg.get(key)
             if v not in (None, ""):
                 parts.append(f"{key}={v}")
@@ -1018,6 +1990,11 @@ def _default_role_llm(env_key: str, env_url: str, env_model: str, provider_keys:
     P2-8(2026-08-10): 抽成独立函数供 temperature 模式复用（原 temperature 直接返回 env_key，
     无环境变量时 api_key 为空 → 8/8 全失败 "Illegal header value b'Bearer '"）。
     """
+    # 2026-09-13（用户要求）：默认路由 = 「当前使用模型的提供商」（会话级 → 全局
+    # model_config.json → env），pro/con 等角色全部跟随界面当前模型，不再吃启动时的旧 env。
+    _cur = _current_model_route(provider_keys)
+    if _cur:
+        return _cur
     if env_key:
         # 2026-08-15: base_url 为空时按 key 匹配 provider_keys；再不行回退 deepseek 官方
         _url = env_url or ""
@@ -1055,6 +2032,14 @@ def _default_role_llm(env_key: str, env_url: str, env_model: str, provider_keys:
 _ROLE_MAX_TOKENS = {"judge": 8192}  # 其余角色（pro/con）默认 8192（推理模型防 reasoning 吃满）
 _ROLE_MAX_TOKENS_DEFAULT = 8192
 
+# 2026-09-18：裁判主路由「已知故障」备忘。
+# 仲裁前多了一次「首席整理编辑」调用（judge_digest），它与正式裁决共用同一条 judge 路由：
+# 主路由挂掉时一次失败要付 3×120s 超时（实测 opencode-go ReadTimeout 全场约 6 分钟），
+# 若不做备忘，整理+裁决会对着同一条死路由连付两遍。这里记录刚失败过的主路由，
+# TTL 内的后续 judge 调用直接走回退链（回退链本身就是原有逻辑，只是跳过已知死亡的主路由）。
+_JUDGE_ROUTE_BAD = {}          # (base_url, model) -> 失败时间戳
+_JUDGE_ROUTE_BAD_TTL = 600.0   # 秒
+
 
 def _role_max_tokens(label: str, cfg: dict = None) -> int:
     """按角色返回 max_tokens；config debate.max_tokens 可覆盖（v2 配置化）。"""
@@ -1077,6 +2062,87 @@ def _call_llm_role(label: str, prompt: str, cfg: dict, temperature: float = None
                           max_tokens=_role_max_tokens(label, cfg))
 
 
+def _call_llm_role_resilient(label: str, prompt: str, cfg: dict, temperature: float = None) -> dict:
+    """角色 LLM 调用 + 失败回退链（2026-09-13 加固）。
+
+    judge 是整场辩论的单点故障：8 个角色里只有 judge 走 config.yaml 的 debate.judge
+    分组 provider（本机 = opencode-go/deepseek-v4-pro），该 provider 一旦 key 失效/
+    缺附加头/额度耗尽，L2 就是 100% 失败（2026-09-13 实测：7 个角色全部成功，judge
+    一律 400 MissingSessionID，4 次 L2 全部返回 error）。
+
+    回退策略（2026-09-13 用户要求）：分组路由失败后按序回退
+    ①「当前使用模型的提供商」（会话级 model_config → 全局 model_config.json → env）
+    ②「可用提供商」（provider_keys 里有非占位 key 的通道，deepseek 官方优先）
+    成功则标记 fallback_used/fallback_from/fallback_route，让「一个 provider 挂掉」不再拖垮整场辩论。
+    非 judge 角色不做回退（保持角色间模型隔离与成本可控）。
+    """
+    # 2026-09-18：若这条 judge 主路由刚刚失败过（见 _JUDGE_ROUTE_BAD），
+    # 不再重付一次 3×120s 超时，直接进入下面的回退链。
+    _primary_pre = None
+    if label == "judge":
+        try:
+            _rc_pre = _resolve_role_llm(label, cfg)
+            _primary_pre = (str(_rc_pre.get("base_url") or "").rstrip("/").lower(),
+                            str(_rc_pre.get("model") or ""))
+        except Exception:
+            _primary_pre = None
+        if _primary_pre and _JUDGE_ROUTE_BAD.get(_primary_pre, 0) > time.time() - _JUDGE_ROUTE_BAD_TTL:
+            logger.warning(f"debate judge 主路由 {_primary_pre[1]} 近期已失败"
+                           f"（{int(time.time() - _JUDGE_ROUTE_BAD[_primary_pre])}s 前），本次跳过主路由直接用回退链")
+            res = {"content": f"[{label} 辩论生成失败]", "call_id": f"{label}_skipped_primary",
+                   "isolation_verified": True, "messages_count": 1, "error": True,
+                   "error_detail": "primary judge route skipped (recent failure, see _JUDGE_ROUTE_BAD)"}
+        else:
+            res = _call_llm_role(label, prompt, cfg, temperature=temperature)
+    else:
+        res = _call_llm_role(label, prompt, cfg, temperature=temperature)
+    if not res.get("error"):
+        return res
+    if label != "judge":
+        return res
+    if _primary_pre:
+        _JUDGE_ROUTE_BAD[_primary_pre] = time.time()
+    try:
+        rc = _resolve_role_llm(label, cfg)
+        _pk = _load_provider_keys()
+        _primary_sig = (str(rc.get("base_url") or "").rstrip("/").lower(),
+                        str(rc.get("model") or ""))
+        # 回退链（2026-09-13 用户要求）：① 当前使用模型的提供商 → ② 可用提供商（deepseek 官方优先）
+        _chain = []
+        _cur = _current_model_route(_pk)
+        if _cur:
+            _chain.append(_cur)
+        _chain.extend(_available_routes(_pk, exclude=[_primary_sig]))
+        _tried = set()
+        _last = res
+        for _cand in _chain[:3]:
+            _sig = (str(_cand.get("base_url") or "").rstrip("/").lower(),
+                    str(_cand.get("model") or ""))
+            if _sig == _primary_sig or _sig in _tried:
+                continue
+            _tried.add(_sig)
+            logger.warning(
+                f"debate judge 主路由 {rc.get('provider')}/{rc.get('model')} 失败"
+                f"（{str(res.get('error_detail', ''))[:120]}）"
+                f"→ 回退 {_cand.get('provider')}/{_cand.get('model')}")
+            res2 = _call_llm_sync(prompt, label, _cand["api_key"], _cand["base_url"], _cand["model"],
+                                  temperature=_cand["temperature"] if temperature is None else temperature,
+                                  max_tokens=_role_max_tokens(label, cfg))
+            res2["fallback_from"] = f"{rc.get('provider')}/{rc.get('model')}"
+            if not res2.get("error"):
+                res2["fallback_used"] = True
+                res2["fallback_route"] = f"{_cand.get('provider')}/{_cand.get('model')}"
+                res2["fallback_detail"] = str(res.get("error_detail", ""))[:200]
+                return res2
+            res2["error_detail"] = (str(res.get("error_detail", ""))[:200]
+                                     + " || fallback: " + str(res2.get("error_detail", ""))[:200])
+            _last = res2
+        return _last
+    except Exception as e:
+        logger.warning(f"debate judge fallback attempt failed: {e}")
+        return res
+
+
 def _role_model_id(label: str, cfg: dict) -> str:
     """角色的实际模型标识（provider/model），写入结果供实验记录。"""
     rc = _resolve_role_llm(label, cfg)
@@ -1086,7 +2152,7 @@ def _role_model_id(label: str, cfg: dict) -> str:
 # ==================== 辩论结果持久化 ====================
 
 def _get_debates_dir() -> Path:
-    """获取辩论历史存储目录：hermes_home/skills/bioinformatics/_debates/"""
+    """获取辩论历史存储目录：memomics_home/skills/bioinformatics/_debates/"""
     try:
         import sys
         # hermes-agent 在 sys.path 中时优先用 get_hermes_home()
@@ -1097,7 +2163,7 @@ def _get_debates_dir() -> Path:
         base = Path(get_hermes_home())
     except Exception:
         # fallback: 环境变量或硬编码
-        base = Path(os.environ.get("HERMES_HOME", "<安装目录>/hermes_home"))
+        base = Path(os.environ.get("MEMOMICS_HOME", "<安装目录>/memomics_home"))
     debates_dir = base / "skills" / "bioinformatics" / "_debates"
     debates_dir.mkdir(parents=True, exist_ok=True)
     return debates_dir
@@ -1243,6 +2309,64 @@ def _extract_json_candidates(text: str) -> list:
 _ALLOWED_VERDICTS = {"support", "modify", "need_more_info", "ok"}
 
 
+def _extract_json_value(text: str, key: str):
+    """v3(2026-09-22): 从（可能残缺的）judge 文本里按括号平衡抽某个键的值。
+
+    用途：网关偶尔把思考链塞进 content，顶层 JSON 残缺；此时 verdict/confidence 能靠正则救回，
+    行动方案字段（decision/next_actions/fallback）也必须能救回 —— 否则又退化成"没有下一步"。
+    """
+    m = re.search(r'"%s"\s*:\s*' % re.escape(key), text)
+    if not m:
+        return None
+    i = m.end()
+    while i < len(text) and text[i] in " \t\r\n":
+        i += 1
+    if i >= len(text):
+        return None
+    ch = text[i]
+    if ch == '"':
+        j, esc = i + 1, False
+        while j < len(text):
+            if esc:
+                esc = False
+            elif text[j] == "\\":
+                esc = True
+            elif text[j] == '"':
+                break
+            j += 1
+        try:
+            return json.loads(text[i:j + 1])
+        except Exception:
+            return text[i + 1:j]
+    if ch in "[{":
+        close = "]" if ch == "[" else "}"
+        depth, in_str, esc = 0, False, False
+        for j in range(i, len(text)):
+            c = text[j]
+            if in_str:
+                if esc:
+                    esc = False
+                elif c == "\\":
+                    esc = True
+                elif c == '"':
+                    in_str = False
+                continue
+            if c == '"':
+                in_str = True
+            elif c == ch:
+                depth += 1
+            elif c == close:
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(text[i:j + 1])
+                    except Exception:
+                        return None
+        return None
+    m2 = re.match(r'(-?\d+(?:\.\d+)?|true|false|null)', text[i:])
+    return json.loads(m2.group(1)) if m2 else None
+
+
 def _parse_judge_json(text: str) -> dict:
     """解析 judge 输出为结构化裁决 dict（A3 抽取，2026-08-11）。
 
@@ -1280,8 +2404,125 @@ def _parse_judge_json(text: str) -> dict:
                 _out["recommended_params"] = json.loads(_r.group(1))
             except Exception:
                 _out["recommended_params"] = {}
+        # v3(2026-09-22): 行动方案字段同样兜底抽取（缺失就交给 _ensure_decision_block 回填）
+        _dec = _extract_json_value(text, "decision")
+        if isinstance(_dec, str) and _dec.strip():
+            _out["decision"] = _dec.strip()[:400]
+        _ro = _extract_json_value(text, "reopen_condition")
+        if isinstance(_ro, str) and _ro.strip():
+            _out["reopen_condition"] = _ro.strip()[:300]
+        for _k, _t in (("missing", list), ("next_actions", list), ("fallback", dict)):
+            _v = _extract_json_value(text, _k)
+            if isinstance(_v, _t):
+                _out[_k] = _v
         return _out
     raise ValueError("judge JSON 中无有效 verdict")
+
+
+_DECISION_BACKFILL_NOTE = ("引擎回填：judge 未按契约给出 decision/next_actions，"
+                         "已按裁决与 missing 推导最小可行方案（不返回「没有下一步」的裁决）")
+
+
+_DECISION_FIELDS = ("decision", "next_actions", "fallback", "reopen_condition", "missing")
+
+
+def _copy_decision_fields(dst: dict, obj: dict) -> None:
+    """v3(2026-09-22): 把 judge 输出里的行动方案字段搬进 result。
+
+    judge 真的给了 decision/next_actions 时，顺带清掉上一轮回填留下的标记
+    （decision_source / 回填告警），避免把 judge 的产出误标成"引擎回填"。
+    """
+    for k in _DECISION_FIELDS:
+        v = obj.get(k)
+        if v:
+            dst[k] = v
+    _has = (str(obj.get("decision") or "").strip()
+            or (isinstance(obj.get("next_actions"), list) and bool(obj.get("next_actions"))))
+    if _has:
+        dst.pop("decision_source", None)
+        _w = dst.get("decision_warnings")
+        if isinstance(_w, list):
+            dst["decision_warnings"] = [x for x in _w if x != _DECISION_BACKFILL_NOTE]
+
+
+def _ensure_decision_block(result: dict) -> dict:
+    """v3(2026-09-22): 保证每次裁决都带「下一步」——把"辩论完没有行动"从根上堵死。
+
+    背景（用户原话 2026-09-22）：
+      "辩论的时候，老是辩论了一大堆，最终得出'证据不足，先补数据再下结论'这种垃圾的结论…
+       看了半天，辩论结果有用于下一步的进程吗？没有，辩论什么？"
+    实测原因：① 裁决契约里根本没有行动字段；② 决策树还明确要求"双方接近只能 need_more_info"。
+    做法：judge 给了就用它的；没给就按 verdict + missing 推导最小可行方案，
+    并标记 decision_source="engine_backfill" + decision_warnings（不假装是 judge 给的）。
+    """
+    try:
+        verdict = str(result.get("verdict") or "").lower()
+        conf = str(result.get("confidence") or "low").lower()
+        missing = result.get("missing") if isinstance(result.get("missing"), list) else []
+        missing = [str(m).strip() for m in missing if str(m).strip()]
+        _raw = result.get("next_actions") if isinstance(result.get("next_actions"), list) else []
+        actions = [a for a in _raw if isinstance(a, dict) and str(a.get("action") or "").strip()]
+        _judge_decision = str(result.get("decision") or "").strip()
+        # 幂等：上一轮已经回填过的内容不算 judge 给的（重裁/多次调用不会把来源标错）
+        _prev_backfill = result.get("decision_source") == "engine_backfill"
+        judge_supplied = bool(_judge_decision) and bool(actions) and not _prev_backfill
+
+        def _now_action():
+            return {
+                "action": "不等证据齐：用现有证据先产出可复核的中间结论（标注置信度）并继续非阻塞步骤",
+                "owner": "ai", "why": "补齐证据需要时间，流程不该因此空转",
+                "expected": "得到带标注的中间结论 + 明确的待复核清单", "cost": "low", "blocks": [],
+            }
+
+        if not actions:
+            for m in missing[:5]:
+                actions.append({
+                    "action": "补齐证据：%s" % m, "owner": "ai",
+                    "why": "这是本次裁决仍不确定的直接原因",
+                    "expected": "补齐后可判定该争点是否成立", "cost": "medium", "blocks": [],
+                })
+            actions.append(_now_action())
+        elif not any(str(a.get("owner") or "ai").lower() != "user" for a in actions):
+            # judge 只给了"等用户提供 X"这类动作 → 补一条 ai 现在就能做的
+            actions.append(_now_action())
+            result.setdefault("decision_warnings", []).append(
+                "judge 的 next_actions 全是 user 侧动作，已补一条 ai 现在就能执行的动作")
+
+        params = result.get("recommended_params") or {}
+        if _judge_decision:
+            decision = _judge_decision
+        elif verdict == "support":
+            decision = "按当前方案执行（置信度 %s）；执行中按 reopen_condition 盯是否需要回审" % conf
+        elif verdict == "modify":
+            decision = ("按修改后的参数执行：%s" % json.dumps(params, ensure_ascii=False)
+                        if params else "按 next_actions 修改后执行")
+        else:
+            decision = "先按证据更强的一方走最小可验证步骤，并行补齐 missing 列出的证据（结论标注低置信）"
+
+        fb = result.get("fallback")
+        if not isinstance(fb, dict) or not str(fb.get("path") or "").strip():
+            if verdict == "need_more_info":
+                fb = {"path": "不等证据齐，按证据更强的一方先走最小可验证步骤",
+                      "confidence": "low", "risk": "证据补齐后可能需要返工或修正方向",
+                      "label": "临时结论（证据未齐）"}
+            else:
+                fb = {"path": "按本次裁决执行", "confidence": conf,
+                      "risk": "与裁决前提不符时需回审", "label": ""}
+
+        result["decision"] = decision
+        result["next_actions"] = actions
+        result["fallback"] = fb
+        result["reopen_condition"] = (str(result.get("reopen_condition") or "").strip()
+                                      or "missing 中任一项被补齐、或出现与裁决前提相反的证据时重审")
+        result["has_ai_action"] = any(str(a.get("owner") or "ai").lower() != "user" for a in actions)
+        if judge_supplied:
+            result["decision_source"] = "judge"
+        else:
+            result["decision_source"] = "engine_backfill"
+            result.setdefault("decision_warnings", []).append(_DECISION_BACKFILL_NOTE)
+    except Exception as e:  # 回填绝不能把辩论本身搞崩
+        logger.warning(f"_ensure_decision_block failed: {e}")
+    return result
 
 
 def _check_consistency(result: dict) -> list:
@@ -1297,6 +2538,9 @@ def _check_consistency(result: dict) -> list:
         issues.append("verdict=need_more_info 但 confidence=high（信息不足不可能高置信）")
     if verdict == "modify" and not (result.get("recommended_params") or {}):
         issues.append("verdict=modify 但 recommended_params 为空（要求修改却无建议）")
+    # v3(2026-09-22): "说了证据不足，却指不出缺什么" = 用户吐槽的垃圾结论，直接判矛盾
+    if verdict == "need_more_info" and not (result.get("missing") or []):
+        issues.append("verdict=need_more_info 但 missing 为空（说了证据不足却指不出缺什么）")
     # v2(2026-08-27): 高置信 + 缺失证据清单 = 矛盾（证据不足还自称高置信）
     if conf == "high" and result.get("missing"):
         issues.append("confidence=high 但 missing 非空（证据不足不可能高置信）")
@@ -1325,7 +2569,7 @@ def _archive_debate_to_results(topic: str, context: str, result_json: str):
 def _auto_match_skill(topic: str) -> str:
     """P2-12(2026-08-10): 从 topic 自动匹配 skill 名 — 断点 A 修复。
 
-    reflow_skill 未配置时，扫描 hermes_home/skills/bioinformatics/ 下各 skill
+    reflow_skill 未配置时，扫描 memomics_home/skills/bioinformatics/ 下各 skill
     的 SKILL.md frontmatter name + skill.json name，若 topic（小写）包含
     skill 名或其中文名，选最长匹配项。让裁决能自动沉淀到正确的 skill.json。
     匹配不到返回 ""（只归档不写 skill.json，保持安全默认）。
@@ -1445,19 +2689,26 @@ _L1_CON_PROMPT = """你是生信分析评审中的**反方编辑**。请就以�
 输出格式（严格 JSON）：
 {{"argument": "质疑理由（含风险点）", "risk_params": {{}} }}"""
 
-_L1_JUDGE_PROMPT = """你是生信分析评审的**裁判**。{n}组正反方编辑（独立评审、互不可见）对以下决策给出了意见，请总结双方并裁决。
+_L1_JUDGE_PROMPT = """你是{persona}。{n}组正反方编辑（独立评审、互不可见）对以下决策给出了意见，请总结双方并裁决。
 
 主题：{topic}
 背景：{context}
 
 {debates}
 
-输出格式（严格 JSON）：
-{{"verdict": "ok|modify|need_more_info", "confidence": "high|medium|low", "recommended_params": {{}}, "reasoning": "50字内总结"}}"""
+{digest_section}输出格式（严格 JSON）：
+{{"verdict": "ok|modify|need_more_info", "confidence": "high|medium|low",
+ "decision": "一句话：现在就该做的那件事（禁止只写'需要更多证据'）",
+ "next_actions": [{{"action": "具体动作", "owner": "ai|user", "expected": "做完能得到什么"}}],
+ "fallback": {{"path": "补不齐证据时先走哪条路", "risk": "风险", "label": "结论标注"}},
+ "missing": ["缺什么证据 + 怎么补"], "recommended_params": {{}}, "reasoning": "50字内总结"}}
+裁决要求：无论证据是否充分，都必须给出 decision 与至少 1 条 owner=ai 的 next_actions；
+证据不足时 verdict=need_more_info，但仍要写 fallback（先走哪条临时路径 + 结论标注），
+禁止只喊"需要更多信息"就结束。"""
 
 
 def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerprint: str,
-                               evidence_cards: str = "") -> str:
+                               evidence_cards: str = "", scenario=None, scenario_res=None) -> str:
     """C2(2026-08-11): L1 轻量采样辩论。
 
     架构（按用户要求）：使用当前选择的默认模型，正方与反方**上下文切断**独立采样，
@@ -1488,11 +2739,12 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
         _l1_judge_max = 8192
     # v2 结构化论据较长，记录保留 800 字（legacy 500 字）
     _keep = 800 if use_v2 else 500
+    _hb = _ProgressHeartbeat(f"L1 采样（{n_samples} 组 × 2 次调用）").start()
     for i in range(n_samples):
         temp = _TEMP_POOL[i % len(_TEMP_POOL)]
         if use_v2:
-            pro_prompt = _v2_role_prompt("pro_biology", topic, context, kb or "无", "", ev)
-            con_prompt = _v2_role_prompt("con_biology", topic, context, kb or "无", "", ev)
+            pro_prompt = _v2_role_prompt("pro_biology", topic, context, kb or "无", "", ev, scenario=scenario)
+            con_prompt = _v2_role_prompt("con_biology", topic, context, kb or "无", "", ev, scenario=scenario)
         else:
             pro_prompt = _L1_PRO_PROMPT.format(topic=topic, context=context, kb_info=kb or "无")
             con_prompt = _L1_CON_PROMPT.format(topic=topic, context=context, kb_info=kb or "无")
@@ -1508,17 +2760,37 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
                                "pro_call_id": pro["call_id"], "con_call_id": con["call_id"],
                                "pro_draft_only": str(pro["content"]).startswith("[reasoning草稿"),
                                "con_draft_only": str(con["content"]).startswith("[reasoning草稿")})
+        _emit_progress(f"L1 第 {i + 1}/{n_samples} 组采样完成（累计 {_hb.elapsed}s）", "done")
+    _hb.stop()
 
     if not debates_text:
         return _fallback_debate(topic, context, kb, "")
 
+    # 2026-09-18（用户要求）：裁决前先做一次「裁判整理」——L1 的采样同样大量返回草稿，
+    # 直接喂给裁判 → 卷面很乱、论据挂不上锚点。整理稿同时进入裁判 prompt 与归档。
+    _l1_blocks = []
+    for _i, _s in enumerate(sample_records):
+        _t = _TEMP_POOL[_i % len(_TEMP_POOL)]
+        _l1_blocks.append(_digest_block(f"第{_i+1}组 · 正方（采样温度 {_t:.1f}）", _s["pro"], _s.get("pro_draft_only")))
+        _l1_blocks.append(_digest_block(f"第{_i+1}组 · 反方（采样温度 {_t:.1f}）", _s["con"], _s.get("con_draft_only")))
+    digest_res = _judge_digest(topic, context, _l1_blocks, ev, cfg,
+                               extra_note=("## 说明\n本场是 L1 轻量采样：同一模型在不同温度下独立采样 "
+                                           f"{len(sample_records)} 组正反方，双方互不可见；请按「组」合并同类陈述，"
+                                           "不要把它们当成不同模型的观点。\n\n"))
+    _dg_section = _digest_section_text(digest_res)
+
     if use_v2:
         pro_args = "\n\n".join(s["pro"] for s in sample_records)
         con_args = "\n\n".join(s["con"] for s in sample_records)
-        judge_prompt = _v2_judge_prompt(topic, context, pro_args, con_args, ev)
+        judge_prompt = _v2_judge_prompt(topic, context, pro_args, con_args, ev, digest=_dg_section,
+                                        scenario=scenario)
     else:
-        judge_prompt = _L1_JUDGE_PROMPT.format(n=len(debates_text), topic=topic,
-                                               context=context, debates="\n\n".join(debates_text))
+        _l1_persona = ("生信分析评审的**裁判**" if not isinstance(scenario, dict)
+                       or not scenario.get("judge_persona")
+                       else f"{scenario['judge_persona']}（本场评审的裁判）")
+        judge_prompt = _L1_JUDGE_PROMPT.format(persona=_l1_persona, n=len(debates_text), topic=topic,
+                                               context=context, debates="\n\n".join(debates_text),
+                                               digest_section=_dg_section)
     judge = _call_llm_sync(judge_prompt, "l1_judge", rc["api_key"], rc["base_url"],
                            rc["model"], temperature=0.3, max_tokens=_l1_judge_max)
 
@@ -1537,12 +2809,15 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
             "note": "每组正反方独立调用（上下文切断），裁判最后总结双方裁决，全部同一模型。",
         },
     }
+    _attach_digest(result, digest_res)
+    result.update(_scenario_fields(scenario_res))
     if not judge.get("error"):
         try:
             obj = _parse_judge_json(judge["content"])
             result["verdict"] = obj.get("verdict") or "need_more_info"
             result["confidence"] = obj.get("confidence") or "low"
             result["recommended_params"] = obj.get("recommended_params", {}) or {}
+            _copy_decision_fields(result, obj)   # v3: L1 也要给"下一步"
         except Exception as e:
             result["verdict_parse_error"] = str(e)[:100]
     else:
@@ -1550,6 +2825,8 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
         result["judge_error"] = True
         result["judge_error_detail"] = "L1 judge LLM call failed (retry exhausted)"
 
+    # v3(2026-09-22): 无论 judge 给没给行动方案，裁决里必须有 decision/next_actions/fallback
+    _ensure_decision_block(result)
     # B2 一致性门禁（与 L2 同规则）
     issues = _check_consistency(result)
     if issues:
@@ -1754,14 +3031,33 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
     bioinfo_kb_val = bioinfo_kb or kb
 
     # ========== C2(2026-08-11): L1 轻量采样辩论（默认模型上下文切断正反采样 + 裁判总结） ==========
+    # ========== 赛前场景预判（2026-09-18 用户要求） ==========
+    # 用户原话：「如果辩论的东西不是生物学相关的东西，而是排版，一些技术上的，是不是需要采取
+    # 其他的裁判呢？所以辩论之前，也要分析一下场景呢？」→ 先用 1 次短调用判断本场属于哪类问题，
+    # 再据此决定各席位身份与裁判评分维度；预判失败就用原有生物学模板继续，不阻断辩论。
+    # 整场辩论的总预算（2026-09-26）：预算耗尽后 _call_llm_sync 不再发 HTTP，
+    # 剩余席位/轮次毫秒级跑完 —— 工具不会再挂 15-20 分钟
+    _set_debate_deadline()
+    _emit_progress(f"辩论开始（{level} · {rounds} 轮 · 先做场景预判）· 总预算 {int(_DEBATE_BUDGET_DEFAULT)}s", "pending")
+    _hb_scene = _ProgressHeartbeat("场景预判").start()
+    try:
+        scenario_res = _analyze_scenario(topic, context, cfg)
+    finally:
+        _hb_scene.stop()
+    scenario = scenario_res.get("scenario") if isinstance(scenario_res, dict) else None
+    _emit_progress(f"场景预判完成：{str(scenario)[:40]}（用时 {_hb_scene.elapsed}s）", "done")
+
     if level == "L1":
-        return _debate_l1_lightweight(topic, context, kb, cfg, fingerprint, evidence_cards)
+        _emit_progress("进入 L1 轻量采样辩论", "pending")
+        return _debate_l1_lightweight(topic, context, kb, cfg, fingerprint, evidence_cards,
+                                      scenario=scenario, scenario_res=scenario_res)
 
     try:
         # ========== 辩论轮次循环（P0：rounds>1 时轮间注入上一轮裁判摘要） ==========
         prev_round_summary = ""
         final_judge = None
         final_consensus = None
+        digest_res = {}          # 2026-09-18: 裁判整理结果（最后一轮为准，失败留痕）
         for round_no in range(1, rounds + 1):
             round_note = ""
             if round_no > 1 and prev_round_summary:
@@ -1777,9 +3073,9 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             # ========== 正方 3 专业编辑（互相不知道，各用专属知识库） ==========
             if use_v2:
                 pro_tasks = [
-                    ("pro_biology", _v2_role_prompt("pro_biology", topic, context, bio_kb, "", ev) + round_note),
-                    ("pro_statistics", _v2_role_prompt("pro_statistics", topic, context, stat_kb, "", ev) + round_note),
-                    ("pro_bioinformatics", _v2_role_prompt("pro_bioinformatics", topic, context, bioinfo_kb_val, "", ev) + round_note),
+                    ("pro_biology", _v2_role_prompt("pro_biology", topic, context, bio_kb, "", ev, scenario=scenario) + round_note),
+                    ("pro_statistics", _v2_role_prompt("pro_statistics", topic, context, stat_kb, "", ev, scenario=scenario) + round_note),
+                    ("pro_bioinformatics", _v2_role_prompt("pro_bioinformatics", topic, context, bioinfo_kb_val, "", ev, scenario=scenario) + round_note),
                 ]
             else:
                 pro_tasks = [
@@ -1787,7 +3083,7 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                     ("pro_statistics", PRO_STAT_PROMPT.format(topic=topic, context=context, kb_info=stat_kb) + round_note),
                     ("pro_bioinformatics", PRO_BIOINFO_PROMPT.format(topic=topic, context=context, kb_info=bioinfo_kb_val) + round_note),
                 ]
-            pro_results = _call_role_parallel(pro_tasks, cfg)
+            pro_results = _retry_transient_roles(_call_role_parallel(pro_tasks, cfg), pro_tasks, cfg)
             pro_bio = pro_results["pro_biology"]
             pro_stat = pro_results["pro_statistics"]
             pro_bioinfo = pro_results["pro_bioinformatics"]
@@ -1795,10 +3091,10 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             # ========== 反方 4 专业编辑（互相不知道，也看不到正方，各用专属知识库） ==========
             if use_v2:
                 con_tasks = [
-                    ("con_biology", _v2_role_prompt("con_biology", topic, context, bio_kb, "", ev) + round_note),
-                    ("con_statistics", _v2_role_prompt("con_statistics", topic, context, stat_kb, "", ev) + round_note),
-                    ("con_bioinformatics", _v2_role_prompt("con_bioinformatics", topic, context, bioinfo_kb_val, "", ev) + round_note),
-                    ("con_history", _v2_role_prompt("con_history", topic, context, "", hist, ev) + round_note),
+                    ("con_biology", _v2_role_prompt("con_biology", topic, context, bio_kb, "", ev, scenario=scenario) + round_note),
+                    ("con_statistics", _v2_role_prompt("con_statistics", topic, context, stat_kb, "", ev, scenario=scenario) + round_note),
+                    ("con_bioinformatics", _v2_role_prompt("con_bioinformatics", topic, context, bioinfo_kb_val, "", ev, scenario=scenario) + round_note),
+                    ("con_history", _v2_role_prompt("con_history", topic, context, "", hist, ev, scenario=scenario) + round_note),
                 ]
             else:
                 con_tasks = [
@@ -1807,7 +3103,7 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                     ("con_bioinformatics", CON_BIOINFO_PROMPT.format(topic=topic, context=context, kb_info=bioinfo_kb_val) + round_note),
                     ("con_history", CON_HISTORY_PROMPT.format(topic=topic, context=context, history_errors=hist) + round_note),
                 ]
-            con_results = _call_role_parallel(con_tasks, cfg)
+            con_results = _retry_transient_roles(_call_role_parallel(con_tasks, cfg), con_tasks, cfg)
             con_bio = con_results["con_biology"]
             con_stat = con_results["con_statistics"]
             con_bioinfo = con_results["con_bioinformatics"]
@@ -1819,11 +3115,42 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             neutral_args_v2 = ""
             if use_core9:
                 for _nl in ("design_review", "reproducibility_review"):
-                    _nr = _call_llm_role(_nl, _v2_role_prompt(_nl, topic, context, "通用知识库", "", ev), cfg)
+                    _nr = _call_llm_role(_nl, _v2_role_prompt(_nl, topic, context, "通用知识库", "", ev,
+                                                     scenario=scenario), cfg)
                     neutral_results[_nl] = _nr
                 neutral_args_v2 = "\n\n".join(
                     [f"### {_nl}\n{neutral_results[_nl]['content']}"
                      for _nl in ("design_review", "reproducibility_review")])
+
+            # ========== 裁判整理（2026-09-18 用户要求）：先把草稿整理成清晰言论+论据 ==========
+            # 实跑证据：8 个角色里常有 5-7 个不按 JSON 契约输出，只回 [reasoning草稿…]；
+            # 裁判直接读草稿 → 卷面乱、论据挂不上锚点。这里先整理一遍，再交给裁判裁决。
+            _failed_early = [
+                _role_title(_lbl, scenario) for _lbl, _r in (
+                    ("pro_biology", pro_bio), ("pro_statistics", pro_stat), ("pro_bioinformatics", pro_bioinfo),
+                    ("con_biology", con_bio), ("con_statistics", con_stat), ("con_bioinformatics", con_bioinfo),
+                    ("con_history", con_history))
+                if (_r or {}).get("error") or "辩论生成失败" in str((_r or {}).get("content", ""))
+            ]
+            _l2_blocks = [
+                _digest_block("正方 · " + _role_title("pro_biology", scenario), pro_bio.get("content", "")),
+                _digest_block("正方 · " + _role_title("pro_statistics", scenario), pro_stat.get("content", "")),
+                _digest_block("正方 · " + _role_title("pro_bioinformatics", scenario), pro_bioinfo.get("content", "")),
+                _digest_block("反方 · " + _role_title("con_biology", scenario), con_bio.get("content", "")),
+                _digest_block("反方 · " + _role_title("con_statistics", scenario), con_stat.get("content", "")),
+                _digest_block("反方 · " + _role_title("con_bioinformatics", scenario), con_bioinfo.get("content", "")),
+                _digest_block("反方 · " + _role_title("con_history", scenario), con_history.get("content", "")),
+            ]
+            for _nl, _nr in (neutral_results or {}).items():
+                _l2_blocks.append(_digest_block("中立 · " + _role_title(_nl, scenario), (_nr or {}).get("content", "")))
+            _dg_note = ("## 说明\n本场是多角色对抗（v3）：每个角色是独立 LLM 调用、上下文切断，"
+                        "正方看不到反方。请按角色整理上述发言。\n\n"
+                        + (_scenario_line(scenario) if scenario else ""))
+            if _failed_early:
+                _dg_note += ("## 注意\n以下角色本场调用失败、没有发言，请在整理结果里如实注明"
+                             "「该角色本次没有输出」，不要替它们编造观点：" + "、".join(_failed_early) + "\n\n")
+            digest_res = _judge_digest(topic, context, _l2_blocks, ev, cfg, extra_note=_dg_note)
+            _dg_section = _digest_section_text(digest_res)
 
             # ========== 裁判（唯一看到所有角色论点的，单/多裁判采样） ==========
             if use_v2:
@@ -1839,7 +3166,8 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                     "### 历史经验编辑（反方）\n" + con_history["content"],
                 ])
                 judge_prompt = _v2_judge_prompt(topic, context, pro_args_v2, con_args_v2, ev,
-                                                neutral_args=neutral_args_v2)
+                                                neutral_args=neutral_args_v2, digest=_dg_section,
+                                                scenario=scenario)
             else:
                 judge_prompt = JUDGE_PROMPT.format(
                     topic=topic, context=context,
@@ -1852,7 +3180,18 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                     con_history=con_history["content"],
                 )
             primary_judge, consensus = _collect_judge_consensus(judge_prompt, cfg)
-            judge = primary_judge or _call_llm_role("judge", judge_prompt, cfg)
+            # 2026-09-13 修复：原写法 `primary_judge or _call_llm_role(...)` 里，失败裁判结果是
+            # 非空 dict（真值）→ 回退分支永不触发，裁判故障会被当作有效裁决继续走。
+            if primary_judge and not primary_judge.get("error"):
+                judge = primary_judge
+            else:
+                # 备用裁判单跑，同样可能 3 次重试 × 120s —— 也挂心跳，别静默
+                _emit_progress("主裁判结果无效，走备用裁判重试", "pending")
+                _hb_j = _ProgressHeartbeat("备用裁判").start()
+                try:
+                    judge = _call_llm_role_resilient("judge", judge_prompt, cfg)
+                finally:
+                    _hb_j.stop()
             final_judge = judge
             final_consensus = consensus
 
@@ -1862,14 +3201,41 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             _failed_roles = [r.get("call_id", "?") for r in _all_roles if r.get("error") or "辩论生成失败" in str(r.get("content", ""))]
             if _failed_roles:
                 logger.warning(f"debate FAILED {len(_failed_roles)}/{len(_all_roles)} roles: {_failed_roles[:3]}... 不缓存不归档")
+                # 2026-09-13: 失败原因随结果回传（provider/模型 + HTTP 正文）。
+                # 之前只有一句「有角色返回占位符」，judge 连续 4 次 L2 失败都要翻日志才能定位。
+                _fail_details = {}
+                for _r in _all_roles:
+                    if not isinstance(_r, dict):
+                        continue
+                    if _r.get("error") or "辩论生成失败" in str(_r.get("content", "")):
+                        _fail_details[_r.get("call_id", "?")] = {
+                            "model": str(_r.get("error_model", "")),
+                            "detail": str(_r.get("error_detail", "placeholder content"))[:300],
+                        }
+                # 2026-09-26：失败也别把已经跑完的席位全丢了。把成功席位的论点一并回传，
+                # 上层还能接着用；预算耗尽时明确标注，便于区分「配置错」和「超时放弃」。
+                _ok_roles = {}
+                for _r in _all_roles:
+                    if not isinstance(_r, dict):
+                        continue
+                    if _r.get("error") or "辩论生成失败" in str(_r.get("content", "")):
+                        continue
+                    _ok_roles[str(_r.get("call_id", "?"))] = str(_r.get("content", ""))[:2000]
+                _budget_out = _budget_left() <= 0
                 return json.dumps({
                     "topic": topic,
                     "debate_format": "多角色对抗（v3）",
                     "error": True,
+                    "partial_seats": len(_ok_roles),
+                    "partial_arguments": _ok_roles,
+                    "budget_exhausted": _budget_out,
                     "failed_roles": len(_failed_roles),
                     "failed_role_ids": _failed_roles,
+                    "failed_role_details": _fail_details,
                     "judge_verdict": judge.get("content", "") if not judge.get("error") else "裁判也失败",
-                    "note": "辩论失败（8角色中有角色返回占位符）。未缓存未归档，Agent 应重试或检查 API key/base_url。",
+                    "judge_error_detail": str(judge.get("error_detail", ""))[:300] if judge.get("error") else "",
+                    "note": "辩论失败（8角色中有角色返回占位符）。未缓存未归档。failed_role_details 写明每个失败角色"
+                             "的 provider/模型与 HTTP 正文：400/401 多为配置或附加头问题，429/5xx 属瞬时问题（已自动重跑一次）。",
                 }, ensure_ascii=False, indent=2)
 
             # 轮间摘要（供下一轮 pro/con 参考；rounds=1 时不生效）
@@ -1922,6 +3288,14 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                 for name, nr in neutral_results.items()
             },
             "judge_verdict": judge["content"],
+            # 2026-09-18: 裁判整理稿（草稿→清晰言论+论据；[找不到论据]=原文没有外部证据）
+            **_digest_fields(digest_res),
+            # 2026-09-18: 赛前场景预判（角色身份与裁判 rubric 按本场场景生成；失败也留痕）
+            **_scenario_fields(scenario_res),
+            # 2026-09-13: 裁判走回退路由时留痕（实验记录必须能看出真实使用的模型）
+            "judge_fallback": ({"from_route": judge.get("fallback_from"),
+                                "detail": str(judge.get("fallback_detail", ""))[:200]}
+                               if judge.get("fallback_used") else None),
             "isolation_verification": {
                 "method": "每个角色独立 HTTP API 调用，messages 数组只包含该角色自己的 prompt",
                 "pro_isolated": all(r["messages_count"] == 1 for r in [pro_bio, pro_stat, pro_bioinfo]),
@@ -1985,6 +3359,7 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                 result["rubrics"] = _judge_obj.get("rubrics") or {}
             if _judge_obj.get("missing"):
                 result["missing"] = _judge_obj.get("missing") or []
+            _copy_decision_fields(result, _judge_obj)   # v3: 行动方案字段
             if final_consensus and final_consensus.get("judge_count", 1) > 1:
                 result["judge_consensus"] = final_consensus
                 if final_consensus.get("majority_verdict"):
@@ -2008,17 +3383,19 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
         # 实证 bug：_debates/ 中 3 条 need_more_info+high 矛盾裁决已进入缓存。
         # 矛盾裁决 → judge 独立重裁一次（上下文切断）→ 仍矛盾则强制降级 low，
         # 且禁止回流 skill_evolution（垃圾不得入库）。
+        _ensure_decision_block(result)   # v3: 保证裁决带"下一步"
         _issues = _check_consistency(result)
         if _issues:
             logger.warning(f"debate verdict inconsistent {_issues}; judge 重裁一次")
             try:
-                _judge2 = _call_llm_role("judge", judge_prompt, cfg)
+                _judge2 = _call_llm_role_resilient("judge", judge_prompt, cfg)
                 if not _judge2.get("error") and "辩论生成失败" not in str(_judge2.get("content", "")):
                     _obj2 = _parse_judge_json(_judge2["content"])
                     result["verdict"] = _obj2.get("verdict") or result["verdict"]
                     result["confidence"] = _obj2.get("confidence") or result["confidence"]
                     result["recommended_params"] = _obj2.get("recommended_params", {}) or {}
                     result["scores"] = _obj2.get("scores", {}) or {}
+                    _copy_decision_fields(result, _obj2)   # v3: 重裁也可能带来新的行动方案
                     result["judge_rejudged"] = True
                     result["judge_verdict"] = _judge2["content"][:3000]
                     judge = _judge2
@@ -2060,7 +3437,7 @@ def _auto_load_kb(context: str, topic: str) -> str:
     }
     tissue_map = {
         "liver": ["肝脏", "liver", "肝", "hepatocyte"],
-        "skeletal_muscle": ["骨骼肌", "skeletal muscle", "肌肉", "myofiber"],
+        "skeletal_muscle": ["示例组织", "skeletal muscle", "肌肉", "myofiber"],
         "brain": ["脑", "brain", "neuron", "cortex", "hippocampus", "海马"],
         "kidney": ["肾", "kidney", "renal"],
         "heart": ["心脏", "heart", "cardiac"],
@@ -2300,6 +3677,6 @@ def _register():
             max_result_size_chars=40_000,
         )
     except ImportError:
-        pass  # 不在 Hermes 环境中时不注册
+        pass  # 不在 MemOmics 环境中时不注册
 
 _register()

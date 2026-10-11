@@ -1,0 +1,21 @@
+{
+  "id": "gene-set-overlap-analysis",
+  "name": "基因集合交并分析（Gene Set Overlap / Venn）",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": "基因集合交并分析（韦恩图 / 多对比共表达交集 / 逆转分析）——建集合、出交集表、**做富集显著性检验**、画可交付韦恩图。触发:韦恩图/venn/画个韦恩图/交集/共表达/三组交集/共同基因/重叠基因/上调和下调分别多少/逆转分析/衰老上调运动后下调/DM上调运动后下调/交集有没有意义/UpSet。",
+  "starting_prompt": "使用 基因集合交并分析（Gene Set Overlap / Venn） 进行分析",
+  "source_dir": "skills/bioinformatics/gene-set-overlap-analysis",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "gene",
+    "set",
+    "overlap"
+  ],
+  "when_to_use": "基因集合交并分析（韦恩图 / 多对比共表达交集 / 逆转分析）——建集合、出交集表、**做富集显著性检验**、画可交付韦恩图。触发:韦恩图/venn/画个韦恩图/交集/共表达/三组交集/共同基因/重叠基因/上调和下调分别多少/逆转分析/衰老上调运动后下调/DM上调运动后下调/交集有没有意义/UpSet。"
+}

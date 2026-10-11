@@ -1,0 +1,27 @@
+{
+ "id": "go-enrichment-visualization",
+ "name": "GO / pathway enrichment visualization",
+ "category": "Visualization",
+ "language": "R",
+ "description": ">",
+ "starting_prompt": "使用 GO / pathway enrichment visualization 进行分析",
+ "source_dir": "skills/bioinformatics/go-enrichment-visualization",
+ "memomics_module": "",
+ "chains_from": [],
+ "chains_to": [],
+ "tags": [
+  "visualization",
+  "cns",
+  "enrichment",
+  "heatmap",
+  "dotplot",
+  "ComplexHeatmap"
+ ],
+ "aliases": [],
+ "trigger_level": "YEL",
+ "trigger_keywords": [
+  "enrichment",
+  "visualization"
+ ],
+ "when_to_use": "User has a curated enrichment table (Cluster / GO term / Log(q-value)) and wants a CNS-level enrichment heatmap or dotplot. e.g…"
+}

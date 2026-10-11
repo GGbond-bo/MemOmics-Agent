@@ -267,7 +267,7 @@ elif [ -f /.dockerenv ] 2>/dev/null; then
 fi
 
 # === Set environment ===
-export HERMES_HOME="$SCRIPT_DIR/hermes_home"
+export MEMOMICS_HOME="$SCRIPT_DIR/memomics_home"
 export PYTHONPATH="$SCRIPT_DIR:$SCRIPT_DIR/hermes-agent:${PYTHONPATH:-}"
 export MEMOMICS_PORT="$PORT"
 # Bind to 0.0.0.0 on servers (accessible remotely), localhost on desktop

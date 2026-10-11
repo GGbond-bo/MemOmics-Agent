@@ -1,0 +1,27 @@
+{
+  "id": "debate-core",
+  "name": "Debate Core: 何时辩、怎么辩、怎么回流",
+  "category": "Core Mechanism",
+  "language": "Python",
+  "description": ">-",
+  "starting_prompt": "使用 Debate Core: 何时辩、怎么辩、怎么回流 进行分析",
+  "source_dir": "skills/bioinformatics/debate-core",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "debate",
+    "gating",
+    "verdict",
+    "quality",
+    "self-evolution"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "debate-core",
+    "debate core",
+    "debate"
+  ],
+  "when_to_use": "任何涉及结论/参数裁决的时刻:rail_review(post) 后、结论合成前、入库/报告前 参数候选≥2 或结果冲突/重试失败时。SOUL.md 铁律 #5 强制场景。"
+}

@@ -1,0 +1,20 @@
+{
+ "id": "docx-generation",
+ "name": "docx-generation",
+ "category": "docx",
+ "language": "R+Python",
+ "description": "Auto-generated for docx-generation",
+ "tags": [],
+ "steps": [],
+ "when_to_use": "需产出或读取 Word 文档（.docx / 旧版 .doc / 扫描版文档）时使用",
+ "trigger_keywords": [
+  "Word",
+  "docx",
+  "word文档",
+  "docx-generation",
+  "docx generation",
+  "导出Word",
+  "Word文档"
+ ],
+ "trigger_level": "RED"
+}

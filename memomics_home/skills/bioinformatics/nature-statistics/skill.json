@@ -1,0 +1,26 @@
+{
+  "id": "nature-statistics",
+  "name": "Nature Statistics Reporting Skill",
+  "category": "general",
+  "language": "Python",
+  "description": "Audit or improve manuscript statistical reporting, including experimental units, replication, uncertainty, tests, and figure statistics. Use for 统计审查、统计方法小节、图注统计 and reviewer concerns; compute new ana",
+  "starting_prompt": "使用 Nature Statistics Reporting Skill 进行分析",
+  "source_dir": "skills/bioinformatics/nature-statistics",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "统计审查",
+    "统计报告",
+    "样本量",
+    "重复数",
+    "误差棒",
+    "伪重复",
+    "pseudoreplication",
+    "统计方法审查"
+  ],
+  "when_to_use": "Audit or improve manuscript statistical reporting, including experimental units, replication, uncertainty, tests, and figure statistics. Use for 统计审查、统计方法小节、图注统计 and reviewer concerns; compute new ana"
+}

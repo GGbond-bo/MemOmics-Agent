@@ -1,0 +1,30 @@
+{
+  "id": "sankey-alluvial-layout",
+  "name": "桑基图／冲积图布局与带宽保真度",
+  "category": "bioinformatics",
+  "language": "Python+R",
+  "description": "桑基图／冲积图（Sankey/Alluvial）的节点布局与带宽保真度:间隙归一化、节点最小高度与高度守恒再分配 「带宽 ∝ 权重」被破坏后的量化与图注声明、节点条↔标签的渲染像素级对齐核验。 触发:桑基图 / 冲积图 / Sankey / alluvial / 流图 / 节点太小 / 标签挂在两块之间 / 带宽 / _node height。",
+  "starting_prompt": "使用 桑基图／冲积图布局与带宽保真度 进行分析",
+  "source_dir": "skills/bioinformatics/sankey-alluvial-layout",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "visualization",
+    "sankey",
+    "alluvial",
+    "geometry",
+    "matplotlib",
+    "publication"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "sankey-alluvial-layout",
+    "sankey alluvial layout",
+    "sankey",
+    "alluvial",
+    "layout"
+  ],
+  "when_to_use": "桑基图／冲积图（Sankey/Alluvial）的节点布局与带宽保真度:间隙归一化、节点最小高度与高度守恒再分配 「带宽 ∝ 权重」被破坏后的量化与图注声明、节点条↔标签的渲染像素级对齐核验。 触发:桑基图 / 冲积图 / Sankey / alluvial / 流图 / 节点太小 / 标签挂在两块之间 / 带宽 / _node height。"
+}

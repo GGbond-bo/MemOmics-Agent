@@ -292,7 +292,7 @@ def verify_citations(results_dir: str, text: str, *,
                      check_paper_index: bool = True) -> str:
     """校验综述文本中的引用：DOI/PMID 是否在证据表（或 papers 索引）中。
 
-    check_paper_index=True 时额外对照 hermes_home/papers/.pdf_index.json
+    check_paper_index=True 时额外对照 memomics_home/papers/.pdf_index.json
     （证据表是综述产出，论文库是文献来源——两个库都认）。
     返回 {verified: [...], missing: [...], total}。
     """
@@ -308,7 +308,7 @@ def verify_citations(results_dir: str, text: str, *,
     if check_paper_index:
         try:
             _lib_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                    "..", "hermes_home", "papers")
+                                    "..", "memomics_home", "papers")
             _idx_f = os.path.join(_lib_dir, ".pdf_index.json")
             if os.path.isfile(_idx_f):
                 with open(_idx_f, "r", encoding="utf-8") as f:

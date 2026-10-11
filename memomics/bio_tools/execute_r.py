@@ -1,6 +1,6 @@
 """execute_r — R 代码执行工具，带 SCTransform 铁轨 + OOM 自动修复。
 
-从 MemOmics 老版迁移核心逻辑，适配 hermes registry 格式。
+从 MemOmics 老版迁移核心逻辑，适配 memomics registry 格式。
 """
 import json
 import os
@@ -152,7 +152,7 @@ def _session_task_id(task_id: str) -> str:
 
 
 # 2026-08-16: R 非法转义消毒 — 反斜杠后跟非转义字符（如 Windows 单反斜杠路径
-# 'D:\data\MF_AUCell_meta.csv' 中的 \骨 \M）会让 R 4.5.3 报错且错误消息
+# 'D:\data\示例评分方法_meta.csv' 中的 \骨 \M）会让 R 4.5.3 报错且错误消息
 # 含坏字节，卡死 jsonlite 序列化 → kernel worker 永久无响应（实测复现）。
 _BAD_R_ESCAPE_RE = re.compile(r'\\(?![0-7nrtbafvxuU\\\'"])')
 

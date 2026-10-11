@@ -1,0 +1,11 @@
+{
+ "name": "sctour-trajectory-inference",
+ "version": "1.1.0",
+ "when_to_use": "scTour VAE 深度潜在时间推断 + 向量场 + 跨数据集预测。无需指定起点，无监督学习细胞动力学。",
+ "trigger_keywords": [
+  "sctour",
+  "trajectory",
+  "inference"
+ ],
+ "trigger_level": "YEL"
+}

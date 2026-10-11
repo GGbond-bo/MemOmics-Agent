@@ -9,7 +9,7 @@ sys.path.insert(0, ROOT)
 
 try:
     from memomics.fix_bundle import apply_fix_bundle
-    res = apply_fix_bundle(os.path.join(ROOT, "hermes_home"))
+    res = apply_fix_bundle(os.path.join(ROOT, "memomics_home"))
     print("[FixBundle]", res)
     sys.exit(0)
 except Exception as e:  # 迁移失败绝不阻塞启动

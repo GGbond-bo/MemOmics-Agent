@@ -1,0 +1,17 @@
+{
+ "id": "coexpression-network",
+ "name": "coexpression-network",
+ "category": "scRNA",
+ "language": "R+Python",
+ "description": "Build gene co-expression networks to identify modules and hub genes from RNA-seq data.",
+ "tags": [],
+ "steps": [],
+ "when_to_use": "Build gene co-expression networks to identify modules and hub genes from RNA-seq data.",
+ "trigger_keywords": [
+  "coexpression-network",
+  "coexpression network",
+  "coexpression",
+  "network"
+ ],
+ "trigger_level": "YEL"
+}

@@ -394,7 +394,7 @@ def cua_driver_install_hint() -> str:
             'libs/cua-driver/scripts/install.sh)"'
         )
     return (
-        "cua-driver is not installed. Install with one of:\n"
+        "cua-driver is not installed. Install with one o/data/n"
         "  hermes computer-use install\n"
         "Or run the upstream installer directly:\n"
         f"{installer}\n"

@@ -4,7 +4,7 @@
 科研闭环缺口 #1：有检索/下载/解读，但没有引文管理。
 本工具把文献元数据（来自 search_papers 结果）沉淀为 BibTeX/RIS 引用库：
 - 默认库: results/<sid>/references.bib + .ris（会话级）
-- 全局库: hermes_home/references.bib（跨会话，species/tissue 场景复用）
+- 全局库: memomics_home/references.bib（跨会话，species/tissue 场景复用）
 - action: add(元数据) / list / locate(查已收录) / bibtex(转单条)
 """
 import hashlib
@@ -362,11 +362,11 @@ def _session_lib_dir():
 
 
 def _global_lib_path():
-    hh = os.environ.get("HERMES_HOME", "")
+    hh = os.environ.get("MEMOMICS_HOME", "")
     if not hh:
         try:
             hh = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
-                os.path.dirname(os.path.abspath(__file__))))), "hermes_home")
+                os.path.dirname(os.path.abspath(__file__))))), "memomics_home")
         except Exception:
             pass
     return os.path.join(hh, "references.bib") if hh else ""
@@ -490,7 +490,7 @@ SCHEMA = {
             "metadata": {"type": "object",
                          "description": "文献元数据: {title, authors(分号分隔), year, doi, journal, url, abstract, entry_type}"},
             "global_lib": {"type": "boolean", "default": False,
-                           "description": "true=写入全局库 hermes_home/references.bib(跨会话复用)"},
+                           "description": "true=写入全局库 memomics_home/references.bib(跨会话复用)"},
             "title": {"type": "string", "description": "locate 用: 按标题查重"},
             "doi": {"type": "string", "description": "locate 用: 按 DOI 查重"},
         },

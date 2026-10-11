@@ -6,6 +6,16 @@ MemOmics Benchmarker — 多场景测试 skill/rail_review/debate 触发完整�
 import json, time, sys, os
 from datetime import datetime
 
+# === P2-3b 出网闸门（2026-09-23）：本文件只打本机 8899，属 net.local（环回默认放行）===
+# 顺带把原来"没有超时"的裸 urlopen 补上超时——没有超时的探针会把测试挂死。
+try:
+    from webui import netguard             # 包内运行：python -m webui.benchmarker
+except Exception:                          # noqa: BLE001 - 直接以脚本运行时的回退
+    try:
+        import netguard                    # type: ignore
+    except Exception:
+        netguard = None                    # 环境异常：退回原来的 urllib 路径
+
 # 测试场景
 SCENARIOS = {
     "chat_greeting": {
@@ -78,8 +88,12 @@ def verify_enforcement_state(session_id: str, api_base="http://localhost:8899"):
     import urllib.request
     try:
         url = f"{api_base}/api/enforcement/{session_id}"
-        r = urllib.request.urlopen(url)
-        return json.loads(r.read())
+        if netguard is not None:
+            with netguard.urlopen(url, timeout=10.0, action="net.local",
+                                  source="benchmarker.enforcement") as r:
+                return json.loads(r.read())
+        with urllib.request.urlopen(url, timeout=10) as r:
+            return json.loads(r.read())
     except Exception as e:
         return {"error": str(e)}
 
@@ -89,8 +103,13 @@ def check_conclusions(session_id: str, api_base="http://localhost:8899"):
     import urllib.request
     try:
         url = f"{api_base}/api/results/{session_id}/tree"
-        r = urllib.request.urlopen(url)
-        data = json.loads(r.read())
+        if netguard is not None:
+            with netguard.urlopen(url, timeout=10.0, action="net.local",
+                                  source="benchmarker.results") as r:
+                data = json.loads(r.read())
+        else:
+            with urllib.request.urlopen(url, timeout=10) as r:
+                data = json.loads(r.read())
         tree = data.get("tree", {})
         for child in tree.get("children", []):
             if child.get("name") == "conclusions":

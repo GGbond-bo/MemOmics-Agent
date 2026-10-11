@@ -1,0 +1,23 @@
+{
+ "id": "bulk-rnaseq-differential-expression",
+ "name": "bulk-rnaseq-differential-expression",
+ "category": "scRNA",
+ "language": "R+Python",
+ "description": "Best practices on differential expression analysis for bulk RNA-seq data.",
+ "tags": [
+  "RNA-seq",
+  "differential expression",
+  "DESeq2",
+  "padj",
+  "FDR",
+  "fold change"
+ ],
+ "steps": [],
+ "when_to_use": "有bulk RNA-seq counts矩阵+实验设计表(treat vs control)，需做差异化(GO/KEGG/火山图/热图)",
+ "trigger_keywords": [
+  "rnaseq",
+  "differential",
+  "expression"
+ ],
+ "trigger_level": "YEL"
+}

@@ -1,0 +1,42 @@
+{
+  "id": "figure-layout-geometry",
+  "name": "版式几何与对齐自检",
+  "category": "bioinformatics",
+  "language": "Python+R",
+  "description": "程式化出图的版式几何与对齐自检（matplotlib / node-link / Sankey / 冲积图 / 手绘示意图 / 自定义绘制）: 「标签与图形元素不对齐」「色块被盖住」「节点重叠」「顶部被裁」「图例与脚注撞行」的根因定位 布局函数硬约束、三项 renderer 几何自检、像素级核验（纯色段扫描 + OCR 口径校准 + px_per_unit 标定）。 触发:标签没对齐 / 标签压住",
+  "starting_prompt": "使用 版式几何与对齐自检 进行分析",
+  "source_dir": "skills/bioinformatics/figure-layout-geometry",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "visualization",
+    "geometry",
+    "layout",
+    "matplotlib",
+    "sankey",
+    "self-check",
+    "publication"
+  ],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "标签没对齐",
+    "标签压住元素",
+    "色块被盖住",
+    "节点重叠",
+    "顶端标签掉了",
+    "看着歪了",
+    "顶部被截断",
+    "版式自检",
+    "像素核验",
+    "出图版式",
+    "对齐色块",
+    "文字重叠",
+    "文字压字",
+    "图里文字叠在一起",
+    "标注撞行",
+    "糊成一团"
+  ],
+  "when_to_use": "程式化出图的版式几何与对齐自检（matplotlib / node-link / Sankey / 冲积图 / 手绘示意图 / 自定义绘制）: 「标签与图形元素不对齐」「色块被盖住」「节点重叠」「顶部被裁」「图例与脚注撞行」的根因定位 布局函数硬约束、三项 renderer 几何自检、像素级核验（纯色段扫描 + OCR 口径校准 + px_per_unit 标定）。 触发:标签没对齐 / 标签压住"
+}
