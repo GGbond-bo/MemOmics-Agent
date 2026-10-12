@@ -224,6 +224,51 @@ def _deadline_budget() -> float:
         return _DEADLINE_BUDGETS.get(sid, _DEBATE_BUDGET_DEFAULT)
 
 
+def _judge_reserve() -> float:
+    """给「裁判整理 + 裁判」预留的秒数（2026-10-13）。"""
+    try:
+        v = float(os.environ.get("MEMOMICS_DEBATE_JUDGE_RESERVE", "150") or 150)
+    except Exception:
+        v = 150.0
+    return max(60.0, v)
+
+
+def _role_phase_begin(reserve: float = None) -> tuple:
+    """角色/采样阶段开始：把预算闸门压到「当前剩余预算 − 裁判预留」。
+
+    返回 (t0, total)。**不这么做就会出现**：角色把整场预算吃光 → 裁判一次都没跑上 →
+    judge_error=True → decision_source=engine_backfill（等于白跑一场、还慢）。
+    L1 实测（2026-10-13）：采样 106s、裁判阶段 253s、整场 303.6s、decision_source=judge。
+    """
+    reserve = _judge_reserve() if reserve is None else float(reserve)
+    _sid = get_session_sid() or ""
+    with _DEADLINE_LOCK:
+        _registered = _sid in _DEADLINES
+    if not _registered:
+        # 没登记预算（不在辩论里）→ 不许凭空设闸门
+        return (time.time(), float("inf"))
+    total = _deadline_budget()
+    t0 = time.time()
+    if total != float("inf") and total > 0:
+        _set_debate_deadline(max(60.0, total - reserve))
+    return (t0, total)
+
+
+def _role_phase_end(state: tuple, reserve: float = None) -> float:
+    """角色阶段结束：把没花完的预算还给裁判阶段（至少 reserve 秒）。返回还回去的秒数。"""
+    reserve = _judge_reserve() if reserve is None else float(reserve)
+    try:
+        t0, total = state
+    except Exception:
+        return 0.0
+    if total == float("inf") or total <= 0:
+        return 0.0
+    used = time.time() - float(t0)
+    left = max(reserve, total - used)
+    _set_debate_deadline(left)
+    return left
+
+
 def _budget_left() -> float:
     """本场辩论还剩多少秒；没登记预算返回 inf（不干预）。"""
     sid = get_session_sid() or ""
@@ -2788,15 +2833,9 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
     # v2 结构化论据较长，记录保留 800 字（legacy 500 字）
     _keep = 800 if use_v2 else 500
     _hb = _ProgressHeartbeat(f"L1 采样（{n_samples} 组 × 2 次调用）").start()
-    # 2026-10-13：给裁判留窗口 —— 采样阶段最多吃掉「总预算 - 裁判预留」。
-    # 实测（冒烟 2 跑）：2 组采样就能吃掉 240s+，裁判整理 + 裁判一轮都没跑上，
-    # 结果是 judge_error=True → decision_source=engine_backfill（等于白跑一场）。
-    # 这里先按"采样窗"登记预算，采样结束后把没花完的还给裁判（至少 _judge_reserve）。
-    _t_l1_start = time.time()
-    _l1_total = _deadline_budget()
-    _judge_reserve = float(os.environ.get("MEMOMICS_DEBATE_JUDGE_RESERVE", "150") or 150)
-    if _l1_total != float("inf"):
-        _set_debate_deadline(max(60.0, _l1_total - _judge_reserve))
+    # 2026-10-13：给裁判留窗口 —— 采样阶段最多吃掉「总预算 - 裁判预留」，
+    # 采样结束后把没花完的还回去（否则裁判整理/裁判会被掐死 → judge_error → 引擎兜底）。
+    _l1_phase = _role_phase_begin()
     for i in range(n_samples):
         temp = _TEMP_POOL[i % len(_TEMP_POOL)]
         if use_v2:
@@ -2820,11 +2859,10 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
         _emit_progress(f"L1 第 {i + 1}/{n_samples} 组采样完成（累计 {_hb.elapsed}s）", "done")
     _hb.stop()
     # 采样结束 → 把剩余预算（至少裁判预留）还给「裁判整理 + 裁判」这一段
-    if _l1_total != float("inf"):
-        _l1_used = time.time() - _t_l1_start
-        _set_debate_deadline(max(_judge_reserve, _l1_total - _l1_used))
-        _emit_progress(f"L1 采样阶段用时 {int(_l1_used)}s，裁判阶段保留 "
-                       f"{int(min(max(_judge_reserve, _l1_total - _l1_used), max(_judge_reserve, _l1_total)))}s", "done")
+    _l1_back = _role_phase_end(_l1_phase)
+    if _l1_back:
+        _emit_progress(f"L1 采样阶段用时 {int(time.time() - _l1_phase[0])}s，"
+                       f"裁判阶段保留 {int(_l1_back)}s", "done")
 
     if not debates_text:
         return _fallback_debate(topic, context, kb, "")
@@ -3136,6 +3174,9 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             ev = evidence_cards or ""
 
             # ========== 正方 3 专业编辑（互相不知道，各用专属知识库） ==========
+            # 2026-10-13：角色阶段限时（给「裁判整理 + 裁判」留 _judge_reserve 秒），
+            # 打完这一轮的角色波次再把预算还回去 —— 防止角色吃光 900s 让裁判一次都跑不上。
+            _rp = _role_phase_begin()
             if use_v2:
                 pro_tasks = [
                     ("pro_biology", _v2_role_prompt("pro_biology", topic, context, bio_kb, "", ev, scenario=scenario) + round_note),
@@ -3186,6 +3227,12 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                 neutral_args_v2 = "\n\n".join(
                     [f"### {_nl}\n{neutral_results[_nl]['content']}"
                      for _nl in ("design_review", "reproducibility_review")])
+
+            # 角色阶段结束（本轮）→ 把剩余预算还给裁判阶段（至少 _judge_reserve 秒）
+            _rp_back = _role_phase_end(_rp)
+            if _rp_back:
+                _emit_progress(f"第 {round_no} 轮角色阶段用时 {int(time.time() - _rp[0])}s，"
+                               f"裁判阶段保留 {int(_rp_back)}s", "done")
 
             # ========== 裁判整理（2026-09-18 用户要求）：先把草稿整理成清晰言论+论据 ==========
             # 实跑证据：8 个角色里常有 5-7 个不按 JSON 契约输出，只回 [reasoning草稿…]；

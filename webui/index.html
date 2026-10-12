@@ -566,6 +566,15 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .chip.scen { background:rgba(99,102,241,.16); border-color:rgba(99,102,241,.5); color:#c7d2fe; }
 
 .dcb-concl-why { margin-top:7px; font-size:12.5px; line-height:1.6; color:var(--text); }
+/* 2026-10-13：证据链状态行（裁判 chain_verdicts）—— 哪一方断链、断在哪一步 */
+.dcb-chain { margin-top:7px; font-size:12px; line-height:1.6; display:flex; flex-wrap:wrap; gap:6px; align-items:baseline; }
+.dcb-chain .k { color:var(--text-light); font-size:11.5px; flex:0 0 auto; }
+.dcb-chain .pill { padding:1px 7px; border-radius:9px; background:rgba(120,120,120,.12); border:1px solid var(--border); font-size:11.5px; }
+.dcb-chain .pill.bad { color:#b23; background:rgba(200,60,60,.10); border-color:rgba(200,60,60,.35); }
+.dcb-chain .pill.part { color:#a06a12; background:rgba(224,135,42,.10); border-color:rgba(224,135,42,.35); }
+.dcb-chain .pill.ok { color:var(--success); background:rgba(63,158,106,.10); border-color:rgba(63,158,106,.35); }
+.dcb-chain .dec { color:var(--text-light); font-size:11.5px; }
+.dcb-chain .dec b { color:var(--text); }
 .dcb-concl.tone-ok { border-color:rgba(63,158,106,.42); background:rgba(63,158,106,.08); }
 .dcb-concl.tone-ok .dcb-concl-main { color:var(--success); }
 .dcb-concl.tone-warn { border-color:rgba(224,135,42,.45); background:rgba(224,135,42,.09); }
@@ -938,7 +947,15 @@ html[data-theme="dark"] .ev-chain .ev-t, #kb-node-modal .ev-chain .ev-t { color:
 .file-item { padding:6px 12px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px; }
 .file-item:hover { background:var(--primary-light); }
 .file-item .file-icon { font-size:14px; }
-.file-item .file-name { flex:1; word-break:break-all; }
+/* 2026-10-14：长文件名「滑动推门」—— 平时单行省略号；按住名字往左拖，名字区域像推门一样被拉大，
+   盖住右侧的时间/大小/按钮，把被遮挡的文件名完整展现出来。小幅拖拽松手弹回；推过 60% 门停住（点别处收回）。 */
+.file-item .file-name { flex:1 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.file-item .file-name.fn-door { position:relative; z-index:2; overflow:hidden; text-overflow:clip; background:var(--panel); user-select:none; }
+.file-item:hover .file-name.fn-door { background:var(--primary-light); }
+.file-item .file-name.fn-door-drag { cursor:grabbing; }
+.file-item .file-name.fn-door-back { transition:width .18s ease, margin-right .18s ease; }
+/* 名字可推拉后，右侧的大小/时间/按钮不许被挤变形 */
+.file-item .file-size, .file-item .file-mtime, .file-item .view-btn, .file-item .download-btn { flex-shrink:0; }
 .file-item .file-size { font-size:10px; color:var(--text-light); }
 .file-item .file-mtime { font-size:10px; color:var(--text-light); white-space:nowrap; }
 .file-item .download-btn { font-size:11px; padding:2px 8px; border-radius:4px; background:var(--primary); color:#fff; border:none; cursor:pointer; }
@@ -4401,7 +4418,13 @@ function normalizeDebate(d) {
     fallbackPlan: (d.fallback && typeof d.fallback === 'object') ? d.fallback : null,
     reopenCondition: d.reopen_condition || '',
     decisionSource: d.decision_source || '',
-    decisionWarnings: Array.isArray(d.decision_warnings) ? d.decision_warnings : []
+    decisionWarnings: Array.isArray(d.decision_warnings) ? d.decision_warnings : [],
+    // 2026-10-13：证据链状态（裁判 chain_verdicts）—— pro/con 完整|部分|断链（断点）+ decisive
+    //（索引条目给的是扁平字段 chain_pro/chain_con/chain_decisive，这里统一成链对象）
+    chain: (d.chain_verdicts && typeof d.chain_verdicts === 'object') ? d.chain_verdicts
+           : (((d.chain_pro || d.chain_con || d.chain_decisive))
+               ? { pro: d.chain_pro || '', con: d.chain_con || '', decisive: d.chain_decisive || '' }
+               : ((d.chain && typeof d.chain === 'object') ? d.chain : null))
   };
   function mkCell(rec, model, callId, score) {
     return { arg: _dtParseArg(rec), model: model || '', callId: callId || '', score: (score === undefined ? null : score) };
@@ -5241,6 +5264,27 @@ function _dcbKeyOf(obj) {
 
 function _dcbSquash(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
 
+// 2026-10-13：裁判的证据链状态（"完整 | 部分 | 断链（断点：…）"）—— 文案与颜色档位
+function _dcbChainText(v) {
+  if (v == null) return '';
+  if (typeof v === 'object') {
+    var st = _dcbSquash(v.state || v.status || '');
+    var br = _dcbSquash(v.break_at || v.breakpoint || v['break'] || '');
+    var out = st + ((br && st.indexOf('断点') < 0) ? ('（断点：' + br + '）') : '');
+    if (out) return out;
+    try { return _dcbSquash(JSON.stringify(v)); } catch (e) { return ''; }
+  }
+  return _dcbSquash(v);
+}
+
+function _dcbChainCls(t) {
+  t = String(t || '');
+  if (t.indexOf('断链') >= 0) return 'bad';
+  if (t.indexOf('部分') >= 0) return 'part';
+  if (t.indexOf('完整') >= 0) return 'ok';
+  return '';
+}
+
 function _dcbVerdictOf(db) {
   var v = _dcbSquash((db && (db.verdict || (db.judge && db.judge.verdict))) || '');
   var conf = _dcbSquash((db && (db.confidence || (db.judge && db.judge.confidence))) || '');
@@ -5277,6 +5321,7 @@ function _dcbOneLineOf(db) {
 
 function _dcbEntry(db, meta, extra) {
   var v = _dcbVerdictOf(db);
+  var _ch = (db && db.chain && typeof db.chain === 'object') ? db.chain : null;
   var e = {
     topic: (db && db.topic) || '',
     conclusion: v.label, tone: v.tone, confCn: v.confCn,
@@ -5286,6 +5331,10 @@ function _dcbEntry(db, meta, extra) {
     hasDigest: !!(db && db.digest), failed: !!(db && db.failed),
     kind: (db && db.kind) || '', format: (db && db.format) || '', level: (db && db.level) || '',
     scenarioLabel: (db && db.scenario && (db.scenario.scenario_label || db.scenario.scenario)) || '',
+    // 2026-10-13：证据链状态（裁判 chain_verdicts；兼容索引条目的扁平字段 chain_pro/…）
+    chainPro: _dcbChainText((_ch && (_ch.pro || _ch.pro_chain)) || (db && db.chain_pro)),
+    chainCon: _dcbChainText((_ch && (_ch.con || _ch.con_chain)) || (db && db.chain_con)),
+    chainDecisive: _dcbChainText((_ch && (_ch.decisive || _ch.decision)) || (db && db.chain_decisive)),
     plan: _dcbPlanOf(db),   // v5: 卡片正面直接显示"下一步"
     mtime: (meta && meta.mtime_text) || '', idx: 0, total: 0
   };
@@ -5318,6 +5367,14 @@ function debateShellHtml(e) {
   if (mi.length) h += '<div class="dcb-concl-meta">' + mi.join(' · ') + '</div>';
   if (e.why) h += '<div class="dcb-concl-why">' + _dtEsc(e.why) + '</div>';
   h += '</div>';
+  // 2026-10-13：证据链状态（用户口径：辩论=找证据链，"哪一方断链、断在哪一步"比 verdict 更有用）
+  if (e.chainPro || e.chainCon || e.chainDecisive) {
+    h += '<div class="dcb-chain"><span class="k">🔗 证据链</span>';
+    if (e.chainPro) h += '<span class="pill ' + _dcbChainCls(e.chainPro) + '" title="正方证据链状态">正：' + _dtEsc(e.chainPro) + '</span>';
+    if (e.chainCon) h += '<span class="pill ' + _dcbChainCls(e.chainCon) + '" title="反方证据链状态">反：' + _dtEsc(e.chainCon) + '</span>';
+    if (e.chainDecisive) h += '<span class="dec">决定项：<b>' + _dtEsc(e.chainDecisive) + '</b></span>';
+    h += '</div>';
+  }
   h += _dcbPlanCompactHtml(e.plan);   // v5: 辩论必须产出下一步
   if (e.early) h += '<div class="dcb-early">⚠️ 这场辩论发生在更早的对话里（当前只加载了最近一段） · ' +
     '<span class="dcb-link" onclick="event.stopPropagation();_dcbLoadAllAndFocus(this)">📜 载入更早对话并把它放回原位</span></div>';
@@ -13770,6 +13827,7 @@ async function openFileViewer(path, name, host) {
   }
   if (el.parentNode !== panel) panel.appendChild(el);
   panel.classList.add('rv-open');
+  _rvAutoFitPanel();   // 2026-10-14：右栏太窄时自动加宽到三栏舒适视图（关闭时自动还原）
   _rvState.path = path;
   _rvState.name = name || path.split('/').pop();
   _rvState.data = null;
@@ -13804,6 +13862,7 @@ function closeFileViewer() {
   el.style.display = 'none';
   el.innerHTML = '';
   if (el.parentNode && el.parentNode.classList) el.parentNode.classList.remove('rv-open');
+  _rvRestorePanel();   // 2026-10-14：还原打开查看器前的右栏宽度（期间用户手动拖过则不还）
   _rvState.data = null;
   _rvState.path = '';
   if (_rvState._marked) {   // P5.1：打开过就刷新列表，角标/未查看计数立刻更新
@@ -13816,6 +13875,123 @@ function _rvIsOpen() {
   var el = document.getElementById('rv-viewer');
   return !!(el && el.style.display !== 'none' && el.parentNode && el.parentNode.offsetParent !== null);
 }
+
+// === 2026-10-14：文件名「滑动推门」+ 查看器自动调宽三栏视图 ===
+// (1) 长文件名平时单行省略号；按住名字往左拖 = 像推门一样把名字区域拉大（负边距盖住右侧
+//     时间/大小/按钮，布局不动），把被遮挡的文件名完整展现出来。小幅拖拽松手弹回；
+//     推过 60% 门就停住保持展开（点别的地方收回）。拖过 4px 的那次点击被吃掉，不误开文件。
+//     名字比整行还长时，推到顶后继续左拖会带着文字内滚，保证也能看到结尾。
+// (2) 点「查看」打开文件时右栏太窄 → 自动加宽（聊天区至少保留 380px，与拖拽条同一约定）；
+//     关闭查看器时若宽度仍是自动值（期间用户没拖过右栏），自动还原。
+var _rvPrevPanelW = null;  // 打开查看器前右栏的 inline 宽度（'' = CSS 默认 clamp）
+var _rvAutoPanelW = null;  // 自动设上去的宽度（px），用于判断「用户期间有没有手动拖过」
+function _rvAutoFitPanel() {
+  var panel = document.getElementById('info-panel');
+  if (!panel) return;
+  var sidebar = document.querySelector('.sidebar');
+  var sidebarW = sidebar ? sidebar.offsetWidth : 300;
+  var maxW = Math.max(340, window.innerWidth - sidebarW - 380);
+  var target = Math.min(880, maxW);   // 舒适阅读宽度：侧栏 | 聊天(≥380) | 文件查看器(≈880)
+  if (panel.offsetWidth < target - 8) {
+    if (_rvPrevPanelW === null) _rvPrevPanelW = panel.style.width || '';
+    _rvAutoPanelW = target;
+    panel.style.width = target + 'px';
+  }
+}
+function _rvRestorePanel() {
+  var panel = document.getElementById('info-panel');
+  if (!panel || _rvPrevPanelW === null) { _rvAutoPanelW = null; return; }
+  if (_rvAutoPanelW !== null && Math.abs(panel.offsetWidth - _rvAutoPanelW) > 4) {
+    _rvPrevPanelW = null; _rvAutoPanelW = null; return;  // 用户手动拖过宽度 → 尊重用户，不还原
+  }
+  panel.style.width = _rvPrevPanelW;
+  _rvPrevPanelW = null; _rvAutoPanelW = null;
+}
+var _fnDrag = null, _fnSuppressClick = false, _fnOpenDoor = null;
+/** 推开的门滑回原位（180ms 滑动动画，动画完再脱掉内联样式） */
+function _fnDoorReset(nm) {
+  if (!nm) return;
+  var w0 = nm.offsetWidth;
+  var wMin = nm._doorWMin || w0;
+  nm.classList.add('fn-door-back');
+  nm.style.width = w0 + 'px';
+  nm.style.marginRight = (wMin - w0) + 'px';
+  void nm.offsetWidth;                       // 强制 reflow：过渡才有起点
+  nm.style.width = wMin + 'px';
+  nm.style.marginRight = '0px';
+  nm.scrollLeft = 0;
+  setTimeout(function() {
+    nm.classList.remove('fn-door', 'fn-door-drag', 'fn-door-back');
+    nm.style.flex = ''; nm.style.width = ''; nm.style.marginRight = '';
+  }, 210);
+}
+document.addEventListener('mousedown', function(e) {
+  var nm = (e.target && e.target.closest) ? e.target.closest('.file-item .file-name') : null;
+  if (!nm || e.button !== 0) return;
+  var it = nm.closest('.file-item');
+  if (!it) return;
+  if (_fnOpenDoor && _fnOpenDoor !== nm) { _fnDoorReset(_fnOpenDoor); _fnOpenDoor = null; }
+  var isOpen = (nm === _fnOpenDoor);
+  if (!isOpen && nm.scrollWidth <= nm.clientWidth + 1) return;   // 短名放得下，不用推
+  if (!nm._doorWMin) nm._doorWMin = nm.offsetWidth;              // 第一次推时记下原槽位宽
+  var itR = it.getBoundingClientRect(), nmR = nm.getBoundingClientRect();
+  var wMax = Math.min(nm.scrollWidth + 2, itR.right - 12 - nmR.left);  // 最多推到行右缘
+  _fnDrag = { nm: nm, x0: e.clientX, w0: nm.offsetWidth, wMin: nm._doorWMin, wMax: Math.max(wMax, nm._doorWMin), moved: false };
+});
+document.addEventListener('mousemove', function(e) {
+  if (!_fnDrag) return;
+  var nm = _fnDrag.nm;
+  var dx = e.clientX - _fnDrag.x0;
+  if (!_fnDrag.moved && Math.abs(dx) > 4) {
+    _fnDrag.moved = true;
+    nm.classList.remove('fn-door-back');
+    nm.classList.add('fn-door', 'fn-door-drag');
+    nm.style.flex = '0 0 auto';
+  }
+  if (!_fnDrag.moved) return;
+  var want = _fnDrag.w0 - dx;                              // 往左拖 → 门变宽
+  var w = Math.max(_fnDrag.wMin, Math.min(want, _fnDrag.wMax));
+  nm.style.width = w + 'px';
+  nm.style.marginRight = (_fnDrag.wMin - w) + 'px';        // 负边距：兄弟元素不动，门面盖上去
+  var over = want - _fnDrag.wMax;                          // 推到顶还继续拖 → 文字内滚看结尾
+  nm.scrollLeft = over > 0 ? Math.min(over, nm.scrollWidth - w) : 0;
+  e.preventDefault();
+});
+document.addEventListener('mouseup', function() {
+  if (!_fnDrag) return;
+  var nm = _fnDrag.nm;
+  if (_fnDrag.moved) {
+    _fnSuppressClick = true;
+    setTimeout(function() { _fnSuppressClick = false; }, 300);  // 兜底：窗口外松手也不吃下一次点击
+    nm.classList.remove('fn-door-drag');
+    var attainable = _fnDrag.wMax - _fnDrag.wMin;
+    var revealed = nm.offsetWidth - _fnDrag.wMin;
+    if (attainable > 4 && revealed >= Math.max(40, attainable * 0.6)) {
+      _fnOpenDoor = nm;                                    // 推过 60%：门停住，保持展开
+    } else {
+      if (_fnOpenDoor === nm) _fnOpenDoor = null;
+      _fnDoorReset(nm);                                    // 小幅拖拽：松手弹回
+    }
+  }
+  _fnDrag = null;
+});
+// 捕获阶段统一处理：① 推门后的那次 click 吃掉，别误点开文件；② 点别处把停住的门收回
+document.addEventListener('click', function(e) {
+  if (_fnSuppressClick) {
+    _fnSuppressClick = false;
+    e.stopPropagation(); e.preventDefault();
+    return;
+  }
+  if (_fnOpenDoor) {
+    var nm = (e.target && e.target.closest) ? e.target.closest('.file-item .file-name') : null;
+    if (nm !== _fnOpenDoor) { _fnDoorReset(_fnOpenDoor); _fnOpenDoor = null; }
+  }
+}, true);
+// 悬停文件名 → 完整名提示（事件委托，列表重绘不丢；已有 title 的不覆盖）
+document.addEventListener('mouseover', function(e) {
+  var nm = (e.target && e.target.closest) ? e.target.closest('.file-item .file-name') : null;
+  if (nm && !nm.getAttribute('title')) nm.setAttribute('title', nm.textContent.trim());
+});
 
 function _rvBarHtml() {
   var d = _rvState.data || {};

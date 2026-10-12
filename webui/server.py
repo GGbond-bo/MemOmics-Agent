@@ -16447,13 +16447,43 @@ def _debate_roles_of(x: dict):
     return names, models
 
 
+def _debate_chain_bits(x: dict) -> dict:
+    """证据链状态（2026-10-13）：哪一方断链、断在哪一步、决定项是什么。
+
+    来源 = 裁判输出的 chain_verdicts（{"pro": "完整|部分|断链（断点：…）", "con": …,
+    "decisive": "哪条证据/哪个断点决定了本次裁决"}）。旧归档没有这个字段 → 一律空串，
+    卡片照常渲染（前端 _dcbEntry 里也做了兜底）。
+    """
+    cv = x.get("chain_verdicts")
+    if not isinstance(cv, dict):
+        cv = x.get("chain") if isinstance(x.get("chain"), dict) else {}
+
+    def _side(v):
+        if isinstance(v, dict):
+            st = str(v.get("state") or v.get("status") or "").strip()
+            br = str(v.get("break_at") or v.get("breakpoint") or v.get("break") or "").strip()
+            if br and "断点" not in st:
+                st = (st + f"（断点：{br}）").strip()
+            return st
+        return str(v or "").strip()
+
+    pro, con = _side(cv.get("pro") or cv.get("pro_chain")), _side(cv.get("con") or cv.get("con_chain"))
+    dec = _side(cv.get("decisive") or cv.get("decision"))
+    return {
+        "has_chain": bool(pro or con or dec),
+        "chain_pro": pro[:300],
+        "chain_con": con[:300],
+        "chain_decisive": dec[:300],
+    }
+
+
 def _debate_index_entry(sid: str, base: str, rel: str, abspath: str, x: dict, key: str, mt: float):
     label, tone, conf, conf_cn = _debate_verdict_bits(x)
     names, models = _debate_roles_of(x)
     d = x.get("judge_digest") if isinstance(x.get("judge_digest"), dict) else {}
     # 2026-09-18 v4：赛前场景预判（辩论前先判「这是哪类问题」→ 席位身份与裁判 rubric 按场景生成）
     sc = x.get("scenario") if isinstance(x.get("scenario"), dict) else {}
-    return {
+    entry = {
         "key": key,
         "rel_path": rel,
         "path": abspath,
@@ -16484,6 +16514,8 @@ def _debate_index_entry(sid: str, base: str, rel: str, abspath: str, x: dict, ke
         "has_scenario": bool(sc),
         "models": models[:8],
     }
+    entry.update(_debate_chain_bits(x))   # 2026-10-13：证据链状态（折叠卡片直接显示）
+    return entry
 
 
 def _load_debate_index(sid: str):
