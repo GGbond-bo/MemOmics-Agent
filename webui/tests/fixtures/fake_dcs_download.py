@@ -35,6 +35,27 @@ def main() -> int:
                                     "detail": {"business_code": 83003, "message": "请先选择项目"}},
                           "request_id": "req-fake-fail"}, ensure_ascii=True))
         return 1
+    if "webdenied" in path:
+        # 官方 CLI 的真实信封（2026-10-12 实测 945MB web 下载）：
+        # 顶层文案很泛，逐条真实原因在 data.failed_items[] 里。
+        print(json.dumps({
+            "data": {
+                "failed_count": 1, "passed_count": 0, "status": "validation_failed",
+                "total_count": 1, "type": "web",
+                "failed_items": [{
+                    "path": path, "code": 1217,
+                    "message": "网页下载仅支持 200MB 以下文件",
+                    "hint": "请改用镭速、ossutil、tosutil、aws、obsutil 或挂盘下载",
+                }],
+            },
+            "error": {"type": "business_error", "retryable": False,
+                      "detail": {"business_code": 1214, "api_code": 1214,
+                                 "message": "Batch download submission failed"},
+                      "hint": "Fix failed items and resubmit"},
+            "exit_code": 1, "message": "提交批次下载任务失败",
+            "request_id": "req-fake-faileditems",
+        }, ensure_ascii=True))
+        return 1
     os.makedirs(target, exist_ok=True)
     dest = os.path.join(target, os.path.basename(path.rstrip("/")))
     chunk = max(1, size // 4)

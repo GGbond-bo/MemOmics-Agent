@@ -2638,7 +2638,7 @@ const _sessionScopedEventTypes = new Set([
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(proto + '//' + location.host + '/ws');
-  ws.onopen = function() { setStatus('已连接', 'var(--success)'); loadModels(); loadSessions().then(function() { if (!currentSid) { autoSelectLatestSession(); } else if (ws && ws.readyState === 1) { ws.send(JSON.stringify({ type: 'switch_session', session_id: currentSid })); } }); ws.send(JSON.stringify({ type: 'weixin_subscribe' })); ws.send(JSON.stringify({ type: 'weixin_list' })); checkWeixinStatus(); refreshContextUsage(); };
+  ws.onopen = function() { setStatus('已连接', 'var(--success)'); loadModels(); loadSessions().then(function() { if (!currentSid) { autoSelectLatestSession(); } else if (ws && ws.readyState === 1) { ws.send(JSON.stringify({ type: 'switch_session', session_id: currentSid })); } _reconcileRunningState(currentSid); }); ws.send(JSON.stringify({ type: 'weixin_subscribe' })); ws.send(JSON.stringify({ type: 'weixin_list' })); checkWeixinStatus(); refreshContextUsage(); };
   ws.onclose = function() { setStatus('断开', 'var(--danger)'); setTimeout(connect, 3000); };
   ws.onmessage = function(event) { handleMessage(JSON.parse(event.data)); };
 }
@@ -3037,6 +3037,7 @@ function handleMessage(msg) {
     finishReasoningBlock();   // 收尾：💭 行转为"已完成"并标出字数，仍可点开看全文
     document.getElementById('steer-hint').style.display = 'none';
     refreshResults();  // 出错也可能已有部分产出,顺带刷一下结果面板
+    _scheduleResultsRefresh(2500);   // 2026-10-12：出错/中断后同样宽限轮询，别让最后落盘的图漏掉
   } else if (msg.type === 'todos') {
     renderTodos(msg.todos);
   } else if (msg.type === 'todos_update') {
@@ -3061,6 +3062,7 @@ function handleMessage(msg) {
     document.getElementById('steer-hint').style.display = 'none';
     _currentRunningSid = null;
     refreshResults();  // 停止时也可能已有部分产出,顺带刷一下结果面板
+    _scheduleResultsRefresh(2500);   // 2026-10-12：同上，停下来的那次也可能还有图正在落盘
   } else if (msg.type === 'context_usage') {
     renderContextUsage(msg.data, msg.error);
   }
@@ -6608,19 +6610,18 @@ async function newSession() {
 // 首次加载：优先恢复到最近活跃会话，没有历史会话时才显示企鹅欢迎画面
 function autoSelectLatestSession() {
   // 如果有历史会话，自动切换到最近活跃的（列表按 last_active 降序排列）
-  if (_allSessions && _allSessions.length > 0) {
-    // 2026-08-08：优先恢复上次会话（localStorage 记忆），否则选最近活跃的。
-    // 原来永远选 _allSessions[0]（可能是一个空配置的自检/新会话）→ 刷新后
-    // 下拉框显示全局默认 Flash，用户切过模型的会话反而选不中。
-    var _last = localStorage.getItem('memomics_last_session');
-    if (_last && _allSessions.some(function(s) { return s.id === _last; })) {
-      switchSession(_last);
-    } else {
-      switchSession(_allSessions[0].id);
-    }
-  } else {
-    newSession();  // 真的没有任何历史会话才新建
-  }
+  var list = _allSessions || [];
+  if (!list.length) { newSession(); return; }   // 真的没有任何历史会话才新建
+  function _hasMsgs(s) { return (s.msg_count || 0) > 0 || (s.messages && s.messages.length); }
+  // 2026-08-08：优先恢复上次会话（localStorage 记忆）。2026-10-12 补：**只认有内容的**——
+  // 刷新残留的空「新会话」如果被记住，回它就还是欢迎画面（用户反馈"刷新就弹欢迎框"）。
+  var _last = localStorage.getItem('memomics_last_session');
+  var lastSess = _last ? list.filter(function(s) { return s.id === _last; })[0] : null;
+  if (lastSess && _hasMsgs(lastSess)) { switchSession(lastSess.id); return; }
+  var withMsgs = list.filter(_hasMsgs);
+  if (withMsgs.length) { switchSession(withMsgs[0].id); return; }   // 优先落到最近有内容的会话
+  if (lastSess) { switchSession(lastSess.id); return; }             // 全是空会话：回记住的那条
+  switchSession(list[0].id);
 }
 
 var _loadSessionsCtl = null;
@@ -7380,6 +7381,32 @@ function showNewSessionWelcome() {
 
 // 切换序号：防止旧切换的异步渲染（fetch 回调）覆盖新会话界面
 var _switchSeq = 0;
+// 2026-10-12：用服务端 is_running 校正本地运行标志（用户反馈：任务状态和实际对不上）。
+//   方向一「界面说停了，其实还在跑」：本地 agentRunning=false → 停止按钮被 stopAgent 的
+//     `if (!agentRunning) return` 挡住，用户根本停不下来；
+//   方向二「界面显示运行中，其实早跑完」：本地标志没人清 → 发送按钮一直禁用、输入被当 steer。
+function _reconcileRunningState(sid) {
+  if (!sid) return;
+  var s = (_allSessions || []).find(function(x) { return x.id === sid; });
+  if (!s || typeof s.is_running === 'undefined') return;
+  var stopBtn = document.getElementById('stop');
+  var sendBtn = document.getElementById('send');
+  if (s.is_running) {
+    if (!agentRunning || _currentRunningSid !== sid) {
+      agentRunning = true;
+      _currentRunningSid = sid;
+      if (stopBtn) stopBtn.classList.add('active');
+      if (sendBtn) sendBtn.disabled = true;
+      addProgressItem('状态同步', 'done', '该会话仍在运行（服务端）—— 可直接发送引导或点停止', _nowTs());
+    }
+  } else if (agentRunning && _currentRunningSid === sid) {
+    agentRunning = false;
+    _currentRunningSid = null;
+    if (stopBtn) stopBtn.classList.remove('active');
+    if (sendBtn) sendBtn.disabled = false;
+  }
+}
+
 function switchSession(sid) {
   var _seq = ++_switchSeq;
   _autoScroll = true;  // 切换会话后默认自动滚动（用户未操作时）
@@ -7426,6 +7453,10 @@ function switchSession(sid) {
   _stopLiveStatusTicker();
   agentRunning = cached.running || false;
   _currentRunningSid = cached.runningSid || null;
+  // 2026-10-12：本地缓存可能是过期的（断线重连 / 后台跑 / done_callback 竞态），
+  // 用服务端 is_running 校正一次 —— 否则会出现「界面说停了其实还在跑」（连停止按钮都点不动，
+  // stopAgent 里有 !agentRunning 守卫）或反过来「显示运行中其实早跑完」。
+  _reconcileRunningState(sid);
 
   // 先同步恢复上次离开时的完整页面，再回放离开期间收到的流式事件。
   // HTTP 历史稍后只在任务已结束时覆盖它。
@@ -7976,6 +8007,38 @@ async function deleteCustomProvider(pid) {
   } catch(e) { alert('删除失败: ' + e.message); }
 }
 
+// 2026-10-12：设置页模型下拉的「使用中」识别（用户反馈：拉取模型之后认不出正在用的模型）
+//   ① 列表里有它 → 选中并打「✅使用中」标记；
+//   ② 列表里没有它（网关改了 id / 拉取列表不含）→ 保留一条「✅使用中（不在拉取列表）」，
+//      不要把别的模型顶到选中位冒充"当前使用"。
+// currentModel 是**会话级**真实当前模型（见 refreshModelUI），base_url 也一起比——
+// 多家 provider 有同名 id，只比 id 会认错人。
+function _modelInUse(m, apiBase) {
+  var cur = currentModel || {};
+  if (!cur.model || !m || m.id !== cur.model) return false;
+  var a = ((cur.base_url || '').replace(/\/+$/, '') || '').toLowerCase();
+  var b = ((apiBase || '').replace(/\/+$/, '') || '').toLowerCase();
+  return !(a && b && a !== b);
+}
+
+function _modelOptionsHtml(models, apiBase) {
+  var cur = currentModel || {};
+  var html = '', inList = false;
+  (models || []).forEach(function(m) {
+    var inUse = _modelInUse(m, apiBase);
+    if (inUse) inList = true;
+    var label = m.name + (inUse ? ' ✅使用中' : '');
+    if (m.reasoning) label += ' [推理]';
+    if (m.tool_call) label += ' [工具]';
+    html += '<option value="' + escapeHtml(m.id) + '"' + (inUse ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+  });
+  if (cur.model && !inList) {
+    html = '<option value="' + escapeHtml(cur.model) + '" selected>' + escapeHtml(cur.model) +
+           ' ✅使用中（不在拉取列表）</option>' + html;
+  }
+  return html;
+}
+
 async function onProviderSelect() {
   var pid = document.getElementById('settings-provider-select').value;
   if (!pid) return;
@@ -8019,24 +8082,21 @@ async function onProviderSelect() {
     var d = await r.json();
     currentProviderModels = d.models || [];
     var sel = document.getElementById('settings-model');
-    sel.innerHTML = currentProviderModels.map(function(m) {
-      var label = m.name;
-      if (m.reasoning) label += ' [推理]';
-      if (m.tool_call) label += ' [工具]';
-      return '<option value="' + m.id + '">' + label + '</option>';
-    }).join('');
-    // 修复 2026-08-08：按当前模型选中，而不是永远选第一个（第一个可能是 Flash）
-    var curModel = (currentModel && currentModel.model) || '';
-    if (curModel && currentProviderModels.some(function(x) { return x.id === curModel; })) {
-      sel.value = curModel;
-    } else if (currentProviderModels.length) {
-      sel.value = currentProviderModels[0].id;
-    }
-    var rSt = document.getElementById('settings-models-refresh-status');
-    if (rSt) {
-      rSt.textContent = (d.source && d.source !== 'catalog')
-        ? ('模型来源: 已拉取 (' + (d.updated_at || '') + ')')
+    // 2026-10-12：选项带「✅使用中」并按它选中；使用中的模型不在列表里也保留一条
+    // （原来不在列表就静默回退到第一个 → 界面显示的"使用的模型"其实是错的）。
+    sel.innerHTML = _modelOptionsHtml(currentProviderModels, provider.api || d.base_url || '');
+    var _rSt0 = document.getElementById('settings-models-refresh-status');
+    if (_rSt0) {
+      // 2026-10-12：把「使用中」和「模型来源」合成一行（原来来源那段会把使用中覆盖掉）。
+      var _cur0 = (currentModel || {}).model || '';
+      var _use0 = _cur0
+        ? ('使用中：' + _cur0 + (currentProviderModels.some(function(x) { return x.id === _cur0; })
+            ? '' : '（不在拉取列表，已保留）'))
         : '';
+      var _src0 = (d.source && d.source !== 'catalog')
+        ? ('模型来源：已拉取' + (d.updated_at ? ('（' + d.updated_at + '）') : ''))
+        : '';
+      _rSt0.textContent = [_use0, _src0].filter(Boolean).join(' · ');
     }
   } catch(e) {
     document.getElementById('settings-model').innerHTML = '<option value="">(无法加载模型)</option>';
@@ -8068,6 +8128,10 @@ async function saveProviderKey() {
     document.getElementById('settings-api-key').value = '';
     document.getElementById('settings-api-key').placeholder = '\u2713 已保存';
     await loadProviders();
+    // 2026-10-12：保存 Key 会**自动拉取**该 provider 的模型 → 交互框下拉/徽章/已连接列表
+    // 都要跟着重建（旧实现只刷设置页，交互框那边一直显示旧列表/旧模型）。
+    await refreshModelUI();
+    await refreshConnectedModels();
   } else {
     alert('\u274c 保存失败: ' + (d.error || ''));
   }
@@ -8085,23 +8149,29 @@ async function refreshProviderModels() {
     var r = await fetch('/api/providers/' + encodeURIComponent(pid) + '/models/refresh', { method: 'POST' });
     var d = await r.json();
     if (!r.ok || !d.ok) {
-      if (st) st.textContent = '\u274c ' + (d.error || '拉取失败');
+      // 2026-10-12：端点不支持 /v1/models 或响应过慢时，不要只丢一句"拉取失败"——
+      // 模型列表会自动沿用内置目录，不影响使用；使用中的模型仍按当前会话识别。
+      if (st) st.textContent = '\u274c ' + (d.error || '拉取失败') +
+        '（拿不到该端点的 /models 时会沿用内置模型目录；不影响「使用中」识别）';
       return;
     }
-    if (st) st.textContent = '\u2705 已拉取 ' + d.count + ' 个模型';
-    var sel = document.getElementById('settings-model');
-    var prev = sel ? sel.value : '';
     currentProviderModels = d.models || [];
-    if (sel) {
-      sel.innerHTML = currentProviderModels.map(function(m) {
-        var label = m.name;
-        if (m.reasoning) label += ' [推理]';
-        if (m.tool_call) label += ' [工具]';
-        return '<option value="' + m.id + '">' + label + '</option>';
-      }).join('');
-      if (prev && currentProviderModels.some(function(x) { return x.id === prev; })) sel.value = prev;
+    var sel = document.getElementById('settings-model');
+    var _apiBase = (document.getElementById('settings-base-url') || {}).value || '';
+    var _curM = (currentModel || {}).model || '';
+    var _hit = _curM && currentProviderModels.some(function(x) { return x.id === _curM; });
+    if (sel) sel.innerHTML = _modelOptionsHtml(currentProviderModels, _apiBase);
+    if (st) {
+      // 2026-10-12：拉取后直接把"正在用的是哪个模型"写在状态行里，
+      // 列表里找不到它也不谎报（已在上面的下拉里保留一条并选中）。
+      st.textContent = '\u2705 已拉取 ' + d.count + ' 个模型' +
+        (_curM ? (' · 使用中：' + _curM + (_hit ? '（已选中）' : '（不在拉取列表，已保留）')) : '');
     }
     await loadProviders(); // 同步「已连接的模型」列表
+    // 2026-10-12：拉取会**替换**该 provider 的模型列表，交互框下拉/顶部徽章/「已连接模型」
+    // 都是据此渲染的 —— 旧实现拉完只更新设置页那一个下拉，其它展示位仍旧值。统一刷一遍。
+    await refreshModelUI();
+    await refreshConnectedModels();
   } catch(e) {
     if (st) st.textContent = '\u274c ' + e.message;
   } finally {
@@ -13460,13 +13530,17 @@ async function refreshResults() {
 // === 出完图自动小幅刷新(轻量) ===
 // 1) 运行中:每 5 秒拉一次最新列表;内容签名没变就不动 DOM(不闪烁、滚动条不跳)
 // 2) 任务结束(complete):立即刷一次 + 2.5 秒后再补一次,等最后落盘的文件也显示出来
+// 3) 2026-10-12 补:任务结束后再**宽限轮询 60 秒** —— 最后几张图/表常常比"完成"事件晚落盘，
+//    旧逻辑只补刷一次(2.5s)就彻底停轮询，用户看到的就是"分析停了、图还没出来"。
+var _resultsGraceUntil = 0;
 function _scheduleResultsRefresh(ms) {
+  _resultsGraceUntil = Math.max(_resultsGraceUntil, Date.now() + 60000);
   if (_resultsRefreshTimer) clearTimeout(_resultsRefreshTimer);
   _resultsRefreshTimer = setTimeout(function() { refreshResults(); }, ms || 2500);
 }
 setInterval(function() {
   if (!currentSid) return;
-  if (!agentRunning && !_currentRunningSid) return; // 空闲时不轮询,靠事件触发
+  if (!agentRunning && !_currentRunningSid && Date.now() > _resultsGraceUntil) return; // 空闲时不轮询
   refreshResults();
 }, 5000);
 
@@ -15090,9 +15164,23 @@ async function checkFirstRun() {
     var r = await fetch('/api/setup/status');
     var d = await r.json();
     if (d.needs_config) {
+      // 2026-10-12：用户反馈「刷新一次就弹一次，要求重填 API Key」。
+      // 后端已在 /api/setup/status 里做了自愈（provider_keys 里有 key 就不算未配置），
+      // 这里再保一层：手动关过一次的，本次构建内刷新不再弹（换版本/换配置才会再问）。
+      var dismissed = '';
+      var build = '';
+      try { dismissed = localStorage.getItem('memomics_setup_dismissed') || ''; } catch(e) {}
+      try { build = localStorage.getItem('memomics_ui_build') || ''; } catch(e) {}
+      if (dismissed && dismissed === build) return;
       showSetupModal();
     }
   } catch(e) { /* 忽略 */ }
+}
+
+function dismissSetup() {
+  try { localStorage.setItem('memomics_setup_dismissed', localStorage.getItem('memomics_ui_build') || ''); } catch(e) {}
+  var el = document.getElementById('setup-modal');
+  if (el) el.remove();
 }
 
 function showSetupModal() {
@@ -15112,6 +15200,7 @@ function showSetupModal() {
     '<div id="setup-hint" style="font-size:11px;color:#888;margin-top:2px;"></div>' +
     '<div class="setup-err" id="setup-err"></div>' +
     '<button class="setup-btn" onclick="submitSetup()">🚀 开始使用</button>' +
+    '<div style="margin-top:8px;text-align:right;"><span style="cursor:pointer;font-size:11px;color:#888;text-decoration:underline;" onclick="dismissSetup()">稍后配置（本次不再提示）</span></div>' +
     '</div>';
   document.body.appendChild(modal);
   loadSetupProviders();
@@ -18609,6 +18698,11 @@ function refreshContextUsage() {
     showCtxError('WebSocket 未连接');
     return;
   }
+  // 2026-10-12：会话还没选好时**不要发**。旧行为在 ws.onopen 里立刻调用，此时
+  // currentSid 还是 null → 发出去的是 session_id:null → 后端 _get_or_create_session(None)
+  // 会**隐式新建一个空「新会话」**；每次刷新都多一个，下次刷新 autoSelectLatestSession
+  // 又优先选中它 → 用户看到的就是"刷新就弹欢迎画面"。
+  if (!currentSid) return;
   var btn = document.getElementById('ctx-refresh-btn');
   if (btn) btn.classList.add('spinning');
   ws.send(JSON.stringify({ type: 'get_context_usage', session_id: currentSid }));

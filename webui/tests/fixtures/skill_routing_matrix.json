@@ -849,6 +849,33 @@
         "paper-structured-extraction"
       ],
       "max_hits": 3
+    },
+    {
+      "id": "large-file-transfer-troubleshooting-01",
+      "intent": "口语",
+      "text": "云平台下载卡在 0 B，提示 Fix failed items and resubmit，重试还是失败",
+      "must_hit": [
+        "large-file-transfer-troubleshooting"
+      ],
+      "max_hits": 3
+    },
+    {
+      "id": "latex-cjk-toolchain-01",
+      "intent": "口语",
+      "text": "xelatex 编译报缺宏包，中文字体 not found，TeX 环境到底怎么装",
+      "must_hit": [
+        "latex-cjk-toolchain"
+      ],
+      "max_hits": 5
+    },
+    {
+      "id": "latex-toolchain-troubleshooting-01",
+      "intent": "直白",
+      "text": "Windows 免管理员装便携 MiKTeX，编译日志被 NUL 灌爆了读不动",
+      "must_hit": [
+        "latex-toolchain-troubleshooting"
+      ],
+      "max_hits": 5
     }
   ],
   "distractors": [

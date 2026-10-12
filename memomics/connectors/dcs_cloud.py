@@ -475,6 +475,13 @@ def _run_cli(args: list, *, cfg: dict | None = None, timeout: int | None = None,
         }
         if not ok:
             out = _attach_friendly_hint(out)
+            # 平台顶层文案很泛（「提交批次下载任务失败」/「Fix failed items and resubmit」）：
+            # 逐条的真实原因在 data.failed_items[] 里 —— 提到前台，别让用户看见空泛那句（2026-10-12）。
+            fi_msg, fi_hint = _failed_items_reason(out.get("data"))
+            if fi_msg:
+                out["platform_message"] = out.get("message") or ""
+                out["message"] = fi_msg
+                out["hint"] = _big_file_hint(fi_hint, fi_msg) or out.get("hint") or ""
         return out
 
     # 非 JSON 输出（老版本 CLI / 崩溃）：按退出码判断
@@ -489,6 +496,70 @@ def _run_cli(args: list, *, cfg: dict | None = None, timeout: int | None = None,
 
 
 _AUTH_CODES = {41201, 83002, 70102, 41104, 60003}
+
+# ---------------------------------------------------------------------------
+# 下载通道的硬上限（平台侧，2026-10-12 实测）
+#   web 通道只收**单文件 ≤200MB**：CLI 的 `data download --help` 原文写「<=200MB」，
+#   平台逐条回报 code=1217 / message=「网页下载仅支持 200MB 以下文件」。
+#   大文件必须换 raysync（镭速）/ ossutil / tosutil / obsutil / aws / mount，
+#   而通道是否可用是**账号/项目级开通状态**（本项目 raysync 实测 404/10099 未开通）。
+# ---------------------------------------------------------------------------
+WEB_DOWNLOAD_LIMIT_BYTES = 200 * 1024 * 1024
+_BIG_FILE_HINT = ("单文件超过 web 通道上限（200MB）：① 在 DCS 网页端「数据」里对该文件点"
+                  "单文件下载（浏览器流式写盘，不受 200MB 限制，实测 9.4GB 可成）；"
+                  "② 或在面板把下载通道换成 raysync / ossutil / tosutil / obsutil / aws / mount"
+                  "（需项目侧开通该通道）")
+
+
+def _upstream_message(error) -> str:
+    """平台信封里那条**最具体**的 message（detail.message > hint > 顶层）。"""
+    if not isinstance(error, dict):
+        return ""
+    detail = error.get("detail")
+    if isinstance(detail, dict):
+        for key in ("message", "api_msg"):
+            val = str(detail.get(key) or "").strip()
+            if val:
+                return val
+    return str(error.get("hint") or "").strip()
+
+
+def _failed_items_reason(data) -> tuple:
+    """从平台信封的 data.failed_items[] 里取出**逐条的真实原因**。
+
+    平台的顶层文案很泛（message=「提交批次下载任务失败」、hint=「Fix failed items and
+    resubmit」），真正可执行的那句藏在 failed_items[].message 里，例如
+    「网页下载仅支持 200MB 以下文件」（code 1217）。
+    返回 (message, hint)；没有 failed_items 时返回 ("", "")。
+    """
+    items = (data or {}).get("failed_items") if isinstance(data, dict) else None
+    if not isinstance(items, list):
+        return "", ""
+    parts, hints = [], []
+    for it in items[:3]:
+        if not isinstance(it, dict):
+            continue
+        name = str(it.get("path") or "").rsplit("/", 1)[-1] or "?"
+        msg = str(it.get("message") or "").strip()
+        code = it.get("code")
+        if code is not None and msg:
+            msg = "%s（code %s）" % (msg, code)
+        elif code is not None:
+            msg = "code %s" % code
+        if msg:
+            parts.append("%s: %s" % (name, msg))
+        hi = str(it.get("hint") or "").strip()
+        if hi and hi not in hints:
+            hints.append(hi)
+    return "；".join(parts), "；".join(hints)
+
+
+def _big_file_hint(platform_hint: str, reason: str) -> str:
+    """200MB/体积超限类拒绝 → 换成「照着做就行」的提示；其它情况保留平台自己的 hint。"""
+    text = "%s %s" % (platform_hint or "", reason or "")
+    if "200MB" in text or "200 MB" in text or "code 1217" in text:
+        return _BIG_FILE_HINT
+    return platform_hint or ""
 
 
 def _attach_friendly_hint(out: dict) -> dict:
@@ -926,7 +997,8 @@ def action_info(args: dict) -> dict:
     path = str(args.get("path") or "").strip()
     if not path:
         return _err("需要参数 path（云上路径，/Files/... 开头）")
-    res = _run_cli(["data", "info", path], cfg=cfg)
+    # 2026-10-12 修：CLI 的 info 只认 -p/--path，位置参数会被当成子命令 → unknown command
+    res = _run_cli(["data", "info", "--path", path], cfg=cfg)
     if not res.get("ok"):
         return _err(res.get("message") or "查询元数据失败", detail=res.get("error"), hint=res.get("hint"))
     return _ok({"path": path, "info": res.get("data")})
@@ -1067,6 +1139,7 @@ def _dl_job_public(job: dict) -> dict:
         "size": int(job.get("size") or 0), "got": int(job.get("got") or 0),
         "local": job.get("local") or "", "message": job.get("message") or "",
         "hint": job.get("hint") or "", "type": job.get("type") or "web",
+        "platform_message": job.get("platform_message") or "",
         "created": job.get("created"), "started": job.get("started"), "ended": job.get("ended"),
         "elapsed": job.get("elapsed") or 0,
     }
@@ -1162,6 +1235,12 @@ def _dl_run_one(job: dict) -> None:
             except Exception:
                 hint = ""
         job["hint"] = hint
+        # 逐条原因（data.failed_items[]）才是可执行的那句，顶到 message 前面（2026-10-12）
+        fi_msg, fi_hint = _failed_items_reason((parsed or {}).get("data"))
+        if fi_msg:
+            job["platform_message"] = job.get("message") or ""
+            job["message"] = fi_msg
+            job["hint"] = _big_file_hint(fi_hint, fi_msg) or job.get("hint") or ""
     job["ended"] = _dl_now()
     job["elapsed"] = round(float(job["ended"]) - t0, 1)
 
@@ -1217,29 +1296,36 @@ def _dl_default_target(cfg: dict) -> str:
 
 
 def _dl_enqueue_one(raw: dict, cfg: dict) -> tuple:
-    """把一条下载需求变成 job；返回 (job_id, error_message)。"""
+    """把一条下载需求变成 job；返回 (job_id, error_message, hint)。"""
     global _DL_SEQ, _DL_THREAD
     path = str((raw or {}).get("path") or "").strip()
     if not path:
-        return "", "需要参数 path（云上路径）"
+        return "", "需要参数 path（云上路径）", ""
     target = str((raw or {}).get("target") or "").strip()
     target = os.path.abspath(os.path.expanduser(target)) if target else _dl_default_target(cfg)
     try:
         os.makedirs(target, exist_ok=True)
     except OSError as exc:
-        return "", "本机目标目录建不出来（%s）：%s" % (target, exc)
+        return ("", "本机目标目录建不出来（%s）：%s" % (target, exc),
+                "检查目标盘是否存在 / 是否只读，或在「⬇ 队列」里换个目录")
     name = str((raw or {}).get("name") or "").strip() or path.rstrip("/").rsplit("/", 1)[-1]
     try:
         size = int((raw or {}).get("size") or 0)
     except Exception:
         size = 0
+    dtype = str((raw or {}).get("type") or "web").strip().lower() or "web"
+    # web 通道硬上限：单文件 >200MB 建单即判 failed item（实测 945MB / 0 B / 0.5s）。
+    # 与其等 0.5s 后回一句空泛的「Fix failed items and resubmit」，不如入队前就说清换哪条路。
+    if dtype == "web" and size > WEB_DOWNLOAD_LIMIT_BYTES:
+        return ("", "%s（%.1f MB）超过 web 通道单文件上限 200MB —— 这条通道建单必被拒"
+                % (name, size / 1048576.0), _BIG_FILE_HINT)
     with _DL_LOCK:
         _DL_SEQ += 1
         jid = "dl-%s-%03d" % (datetime.now().strftime("%H%M%S"), _DL_SEQ)
         job = {
             "id": jid, "path": path, "name": name, "target": target,
             "size": max(0, size), "got": 0, "state": "queued",
-            "type": str((raw or {}).get("type") or "web").strip() or "web",
+            "type": dtype,
             "created": _dl_now(), "started": None, "ended": None, "elapsed": 0,
             "local": "", "message": "", "hint": "", "cancel": False,
         }
@@ -1249,7 +1335,7 @@ def _dl_enqueue_one(raw: dict, cfg: dict) -> tuple:
         if _DL_THREAD is None or not _DL_THREAD.is_alive():
             _DL_THREAD = threading.Thread(target=_dl_worker, name="dcs-dl-queue", daemon=True)
             _DL_THREAD.start()
-    return jid, ""
+    return jid, "", ""
 
 
 def dl_start(args: dict | None = None, **kwargs) -> dict:
@@ -1261,23 +1347,26 @@ def dl_start(args: dict | None = None, **kwargs) -> dict:
     if isinstance(items, list) and items:
         if len(items) > 200:
             return _err("一次最多入队 200 个文件（收到 %d 个）" % len(items))
-        ids, errs = [], []
+        ids, errs, hints = [], [], []
         for raw in items:
             if not isinstance(raw, dict):
                 continue
-            jid, err = _dl_enqueue_one(raw, cfg)
+            jid, err, hint = _dl_enqueue_one(raw, cfg)
             if jid:
                 ids.append(jid)
             else:
                 errs.append("%s: %s" % (str((raw or {}).get("path") or "?")[:80], err))
+                if hint and hint not in hints:
+                    hints.append(hint)
         if not ids:
-            return _err(errs[0] if errs else "没有可入队的条目")
+            return _err(errs[0] if errs else "没有可入队的条目",
+                        hint=(hints[0] if hints else ""))
         with _DL_LOCK:
-            snap = {"ids": ids, "queued": len(ids), "errors": errs[:8]}
+            snap = {"ids": ids, "queued": len(ids), "errors": errs[:8], "hints": hints[:4]}
         return _ok(snap)
-    jid, err = _dl_enqueue_one(args, cfg)
+    jid, err, hint = _dl_enqueue_one(args, cfg)
     if not jid:
-        return _err(err, hint="检查云上路径是否正确、默认下载目录是否可写")
+        return _err(err, hint=hint or "检查云上路径是否正确、默认下载目录是否可写")
     with _DL_LOCK:
         job = _dl_job_public(_DL_JOBS[jid])
     return _ok({"id": jid, "job": job, "queued": 1})

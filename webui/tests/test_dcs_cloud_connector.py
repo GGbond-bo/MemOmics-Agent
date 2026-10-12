@@ -808,6 +808,48 @@ def test_dl_failure_translates_business_code(_dl_queue, monkeypatch):
     assert "项目" in job["hint"], "业务码 83003 必须翻译成可操作指引（先选项目）"
 
 
+def test_dl_surfaces_failed_items_reason_not_generic_text(_dl_queue, monkeypatch):
+    """平台的逐条原因（data.failed_items[].message）必须顶到前台。
+
+    2026-10-12 实测：945MB 走 web，平台顶层只回「提交批次下载任务失败 / Fix failed items and
+    resubmit」，真正可执行的那句是 failed_items[] 里的「网页下载仅支持 200MB 以下文件」（code 1217）。
+    """
+    monkeypatch.setenv("FAKE_SIZE", "4096")
+    monkeypatch.setenv("FAKE_DELAY", "0.05")
+    target = str(_dl_queue / "out5")
+    dc.dl_start({"path": "/Files/webdenied_x.rds", "name": "x.rds", "size": 4096, "target": target})
+    snap, _mids, _states, _mr = _dl_wait_idle()
+    job = snap["jobs"][0]
+    assert job["state"] == "failed"
+    assert "网页下载仅支持 200MB 以下文件" in job["message"], "逐条原因必须可见"
+    assert "code 1217" in job["message"], "原因要带平台业务码，便于追平台侧"
+    assert "Fix failed items" not in job["message"], "空泛那句不许占着 message"
+    assert "提交批次下载任务失败" in job["platform_message"], "平台原文要留档在 platform_message"
+    assert "单文件下载" in job["hint"], "200MB 类拒绝必须给出「网页端单文件下载」这条现实路径"
+
+
+def test_dl_refuses_oversize_web_at_enqueue(_dl_queue):
+    """>200MB 走 web：入队阶段就拒 + 说清换哪条路（不要等 0.5s 后给空泛报错）。"""
+    res = dc.dl_start({"path": "/Files/big.rds", "name": "big.rds", "size": 990920960,
+                       "target": str(_dl_queue / "out6")})
+    assert res["status"] == "error"
+    assert "200MB" in res["error"] and "945.0 MB" in res["error"]
+    assert "raysync" in res["hint"]
+    assert dc.dl_list()["jobs"] == [], "被拒的条目不要进队列"
+
+
+def test_dl_oversize_is_allowed_on_big_file_channel(_dl_queue, monkeypatch):
+    """上限是**通道**属性：同样 945MB，换 raysync 就不该被前置拦截。"""
+    monkeypatch.setenv("FAKE_SIZE", "4096")
+    monkeypatch.setenv("FAKE_DELAY", "0.05")
+    start = dc.dl_start({"path": "/Files/big2.rds", "name": "big2.rds", "size": 990920960,
+                         "type": "raysync", "target": str(_dl_queue / "out7")})
+    assert start["status"] == "ok"
+    snap, _mids, _states, _mr = _dl_wait_idle()
+    job = snap["jobs"][0]
+    assert job["type"] == "raysync" and job["state"] == "done"
+
+
 def test_dl_retry_then_clear(_dl_queue, monkeypatch):
     monkeypatch.setenv("FAKE_SIZE", "4096")
     monkeypatch.setenv("FAKE_DELAY", "0.05")

@@ -1026,7 +1026,23 @@ async def _stop_memomics_cron_ticker():
 # 挂载静态文件目录 (assets/ 下的图片等)
 _static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 if os.path.isdir(_static_dir):
-    app.mount("/assets", StaticFiles(directory=_static_dir), name="assets")
+    class _NoStoreStatic(StaticFiles):
+        """2026-10-11：静态资源一律 no-store —— 更新后浏览器不许再吃旧的图/样式。
+
+        注意：不能用 @app.middleware("http") 改头——Starlette 对 FileResponse 这类
+        流式响应在中间件里改 headers 不生效（实测 /assets/penguin.png 仍是空头），
+        必须在 StaticFiles.get_response 里、响应还没发出时改。
+        """
+
+        async def get_response(self, path, scope):
+            resp = await super().get_response(path, scope)
+            try:
+                resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+            except Exception:
+                pass
+            return resp
+
+    app.mount("/assets", _NoStoreStatic(directory=_static_dir), name="assets")
 
 # 挂载用户上传图片目录
 _uploads_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
@@ -3485,6 +3501,28 @@ def _clear_session_running(sid):
         s["running_task"] = None
 
 
+def _session_run_flags(s) -> bool:
+    """会话"真的在跑吗"（2026-10-12 修）。
+
+    旧写法 `bool(s.get("running_agent") or s.get("running_task"))` 会把**已经跑完、只是引用
+    还没清**的 asyncio.Task 也算成运行中 → /api/sessions 一直报运行中，而界面早已显示完成
+    （用户反馈「都已经停了，实际上还在跑」）。
+    判定：有 asyncio.Task 就按 task.done() 算；字符串哨兵（weixin_agent）算运行中；
+    只有 running_agent 对象（建 task 之前的窗口期）也算运行中。
+    """
+    rt = s.get("running_task")
+    if rt is not None and not isinstance(rt, str):
+        try:
+            if rt.done():
+                return False
+        except Exception:
+            pass
+        return True
+    if isinstance(rt, str):
+        return True
+    return s.get("running_agent") is not None
+
+
 def _release_lease(session_id, lease):
     """任务结束后释放资源租约（线程安全，不阻塞回调）"""
     if lease is None:
@@ -3876,6 +3914,66 @@ def _is_valid_api_key(value) -> bool:
     return True
 
 
+def _heal_current_model_from_provider_keys() -> bool:
+    """`_current_model` 残缺时，用 provider_keys.json 里已保存的 Key 自愈（2026-10-12）。
+
+    用户反馈「新版本刷新就弹欢迎界面、要求重填 API Key」。根因：`_load_model_config()`
+    只认 model_config.json / config.yaml 两处；两处缺失、或里面还是打包模板的占位符
+    （YOUR_API_KEY_HERE）时，`/api/setup/status` 就判 needs_config=true —— 可用户的 Key
+    明明已经在设置页存过（落在 provider_keys.json），于是每次刷新都被要求重填。
+
+    这里按「当前 base_url 对应的 provider → 任意有有效 key 的 provider」补齐
+    key / base_url / model（model 缺失时取该 provider 拉的模型列表或目录里的第一个）。
+    """
+    try:
+        saved_map = globals().get("_provider_keys") or {}
+        index = globals().get("_PROVIDERS_INDEX") or {}
+    except Exception:
+        return False
+    if (_is_valid_api_key(_current_model.get("api_key"))
+            and _current_model.get("base_url") and _current_model.get("model")):
+        return False
+    cand = None
+    cur_base = str(_current_model.get("base_url") or "").rstrip("/").lower()
+    if cur_base:
+        for pid, saved in saved_map.items():
+            p = index.get(pid) or {}
+            if (str(p.get("api") or "").rstrip("/").lower() == cur_base
+                    and _is_valid_api_key((saved or {}).get("api_key"))):
+                cand = (pid, saved or {}, p)
+                break
+    if cand is None:
+        for pid, saved in saved_map.items():
+            if _is_valid_api_key((saved or {}).get("api_key")):
+                cand = (pid, saved or {}, index.get(pid) or {})
+                break
+    if cand is None:
+        return False
+    pid, saved, p = cand
+    if not _is_valid_api_key(_current_model.get("api_key")):
+        _current_model["api_key"] = saved.get("api_key") or ""
+    if not _current_model.get("base_url"):
+        _current_model["base_url"] = saved.get("base_url") or p.get("api") or ""
+    if not _current_model.get("model"):
+        first = ""
+        pulled = saved.get("models") if isinstance(saved.get("models"), list) else None
+        for m in (pulled or p.get("models") or []):
+            if isinstance(m, dict) and m.get("id"):
+                first = m["id"]
+                break
+            if isinstance(m, str) and m.strip():
+                first = m.strip()
+                break
+        _current_model["model"] = first
+    try:
+        _save_model_config()
+    except Exception as exc:
+        print(f"[WARN] 自愈写配置失败: {exc}")
+    print(f"[INFO] 已按 provider_keys 自愈当前模型配置: provider={pid} "
+          f"model={_current_model.get('model') or '(空)'} base_url={( _current_model.get('base_url') or '')[:40]}")
+    return True
+
+
 def _load_provider_keys():
     global _provider_keys
     try:
@@ -4052,7 +4150,8 @@ if _is_valid_api_key(_current_model.get("api_key")) and not _provider_keys:
             print(f"[INFO] 已自动同步 provider key: {_p['id']} (从 model_config.json)")
             break
 
-# 为 debate_analysis 等需要独立 LLM 调用的模块注入环境变量
+# 为 debate_analysis 等需要独立 LLM 调用的模块注入环境变量（先自愈当前模型，再注入）
+_heal_current_model_from_provider_keys()
 _sync_debate_env()
 
 
@@ -8207,7 +8306,7 @@ async def list_sessions():
         result.append({
             "id": s["id"], "title": s["title"], "created": s["created"],
             "bg_running": s.get("bg_running", False),
-            "is_running": bool(s.get("running_agent") or s.get("running_task")),
+            "is_running": _session_run_flags(s),
             "restored": s.get("restored", False),
             "msg_count": _count,
             "model": (s.get("model_config") or {}).get("model", ""),
@@ -9013,6 +9112,24 @@ async def switch_model(payload: dict):
     api_key = payload.get("api_key", "")
     provider = payload.get("provider", "")
 
+    # 2026-10-11：前端已不再持有明文 key（后端永不外发明文，见 _mask_keys_deep）。
+    # 前端只传 base_url/provider 时，这里按已保存的 provider 记录把 key 查补回来，
+    # 否则"换提供商但沿用上一个 key"会静默失败。
+    if not api_key and model:
+        _need = str(base_url or "").rstrip("/")
+        _hint = str(payload.get("provider_id") or provider or "")
+        for _pid, _saved in _provider_keys.items():
+            _s2 = _saved or {}
+            if not _s2.get("api_key"):
+                continue
+            if _hint and _pid != _hint:
+                continue
+            _p2 = _PROVIDERS_INDEX.get(_pid) or {}
+            _api2 = str(_p2.get("api") or "").rstrip("/")
+            if not _need or _api2 == _need:
+                api_key = _s2["api_key"]
+                break
+
     # ── 自动补全（2026-08-08 重新设计）：前端只需传 model id（+可选 provider_id）。
     # 原来要求前端把 base_url/api_key 都传全，旧页面/简化调用方缺字段时切换
     # 静默失败或串 key。现在后端按 model id 在已配置的 provider 里查补。
@@ -9163,6 +9280,34 @@ def _mask_key(k):
     if len(k) <= 10:
         return "****"
     return k[:4] + "…" + k[-4:]
+
+
+_SECRET_FIELD_NAMES = ("api_key", "apikey", "pat", "token", "access_token", "refresh_token",
+                       "secret", "password", "passwd", "passphrase", "authorization")
+
+
+def _mask_keys_deep(obj):
+    """递归把响应里任何密钥字段换成掩码，并补 has_<字段> 布尔（2026-10-11）。
+
+    背景：用户报"迎接弹窗里看到我的密码"——查证是若干接口把明文 key 直接回给了
+    浏览器（前端一渲染就可见、F12 也能看到）。这里做统一收口：任何含密钥的响应
+    结构经过它就只剩 sk-1234…abcd 形态；前端要"是否已配置"看 has_<字段>。
+    """
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            if isinstance(v, str) and k.lower() in _SECRET_FIELD_NAMES and v:
+                out[k] = _mask_key(v)
+                out["has_" + k] = True
+                continue
+            if isinstance(v, (dict, list)):
+                out[k] = _mask_keys_deep(v)
+            else:
+                out[k] = v
+        return out
+    if isinstance(obj, list):
+        return [_mask_keys_deep(x) for x in obj]
+    return obj
 
 
 @app.get("/api/imagegen/config")
@@ -9741,7 +9886,9 @@ async def list_available_models(session_id: str = ""):
             models.append({
                 "id": m["id"], "name": m["name"],
                 "provider_id": pid, "provider_name": p["name"].split("(")[0].strip(),
-                "base_url": p["api"], "api_key": saved["api_key"],
+                "base_url": p["api"],
+                "api_key": _mask_key(saved.get("api_key") or ""),   # 2026-10-11：明文不出后端
+                "has_key": bool(saved.get("api_key")),
                 "reasoning": m.get("reasoning", False),
                 "tool_call": m.get("tool_call", False),
                 "is_current": is_current and cur_cfg.get("model") == m["id"],
@@ -9790,7 +9937,7 @@ async def usage_overview(fresh: int = 0, days: int = 30):
             days=max(1, min(int(days or 30), 90)), fresh=bool(fresh))
     except Exception as exc:
         return JSONResponse({"error": f"用量查询失败: {exc}"}, status_code=500)
-    return data
+    return _mask_keys_deep(data)
 
 
 # --- 微信 iLink 连接 ---
@@ -11265,6 +11412,26 @@ def _pkg_version_on_disk() -> str:
 _CODE_VERSION_AT_START = _pkg_version_on_disk()
 
 
+def _ui_build_stamp() -> str:
+    """界面构建指纹：webui/ 下 index.html + server.py 的大小与修改时间做哈希。
+
+    2026-10-11 用户报"怎么还有之前的缓存"：更新包同名版本（同一天重建）时，
+    浏览器里的旧 localStorage（主题/背景/片头/集群命令历史/上次会话）会被
+    新安装原样继承，看起来就像"软件在缓存你的东西"。前端拿这个指纹比对，
+    变化就清一次旧界面状态并自动刷新。按文件 mtime+size 算，同日重建也能区分。
+    """
+    import hashlib as _hl
+    h = _hl.sha1()
+    for _f in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"),
+               os.path.abspath(__file__)):
+        try:
+            st = os.stat(_f)
+            h.update(("%s|%d|%.3f|" % (os.path.basename(_f), st.st_size, st.st_mtime)).encode())
+        except OSError:
+            continue
+    return h.hexdigest()[:16]
+
+
 @app.get("/api/version")
 async def api_version():
     """前端版本标识：git commit + server 启动时间 + 修复包级别。
@@ -11306,6 +11473,7 @@ async def api_version():
     return {"version": rev, "started": _SERVER_STARTED_STR,
             "fix_bundle": _level, "fix_bundle_latest": _bundle, "outdated": _outdated,
             "pkg_version": _pkg_now, "code_version_at_start": _code_at_start,
+            "ui_build": _ui_build_stamp(),
             "restart_required": _stale, "migration_notice": _notice}
 
 
@@ -12124,13 +12292,20 @@ async def update_apply(payload: dict):
 
 @app.get("/api/setup/status")
 async def setup_status():
-    """检查是否需要首次配置"""
+    """检查是否需要首次配置
+
+    2026-10-12：判定前先自愈一次 —— 用户明明在设置页存过 Key（provider_keys.json），
+    但 model_config.json / config.yaml 是空或还是模板占位符时，旧逻辑每次都判
+    needs_config=true → 刷新一次弹一次「欢迎使用 / 请配置 API Key」。
+    """
+    healed = _heal_current_model_from_provider_keys()
     _has_valid_key = _is_valid_api_key(_current_model.get("api_key"))
     needs_config = (not _has_valid_key
                     or not _current_model.get("base_url")
                     or not _current_model.get("model"))
     return {
         "needs_config": needs_config,
+        "healed": healed,
         "current": {
             "provider": _current_model.get("provider", "openai"),
             "base_url": _current_model.get("base_url", ""),
@@ -18213,6 +18388,24 @@ async def ws_endpoint(ws: WebSocket):
 
             sid = msg.get("session_id")
             prev_sid = current_sid  # 保存上一轮的 sid（switch_session 需要）
+            # 2026-10-12：只读/控制类消息不再**隐式新建会话**。
+            # 前端 ws.onopen 会立刻发 get_context_usage（此时 currentSid 还是 null），
+            # 旧逻辑落到 _get_or_create_session(None) → 每刷新一次就多一个空「新会话」，
+            # 下次刷新 autoSelectLatestSession 又优先选中它 → 用户看到"刷新就弹欢迎画面"。
+            # 只有真正要跑活的 chat / steer 才允许隐式建会话。
+            if msg_type not in ("chat", "steer"):
+                if not sid:
+                    await ws.send_text(json.dumps({
+                        "type": "error",
+                        "content": "该消息需要 session_id（type=%s）；本次不新建会话" % msg_type,
+                    }, ensure_ascii=False))
+                    continue
+                if sid not in _sessions and not _restore_single_session(sid):
+                    await ws.send_text(json.dumps({
+                        "type": "error",
+                        "content": "会话不存在：%s" % sid,
+                    }, ensure_ascii=False))
+                    continue
             session = _get_or_create_session(sid)
             current_sid = session["id"]
 
@@ -20346,6 +20539,17 @@ def _cluster_view() -> dict:
     out["enabled"] = bool(cfg.get("enabled"))
     key = str(cfg.get("key") or "")
     out["key_exists"] = bool(key) and os.path.exists(os.path.expanduser(key))
+    try:      # 2026-10-11：没配私钥也能用——告诉前端探测到哪把/没有会帮你生成
+        _det_keys = rc.detect_private_keys()
+    except Exception:
+        _det_keys = []
+    out["key_detected"] = _det_keys[0] if _det_keys else ""
+    if key:
+        out["key_auto_note"] = "私钥：%s" % key
+    elif _det_keys:
+        out["key_auto_note"] = "已自动探测到本机私钥：%s（无需手填，留空即用）" % _det_keys[0]
+    else:
+        out["key_auto_note"] = "本机还没有 SSH 密钥：输一次密码点「🔑 安装公钥」，会自动生成 ed25519 并装好"
     out["config_path"] = str(rc._get_config_path())
     out["tool_visible"] = bool(rc.remote_cluster_enabled())
     out["job_dir_effective"] = cfg.get("job_dir")
@@ -20358,8 +20562,7 @@ def _cluster_view() -> dict:
         _miss.append("登录节点")
     if not cfg.get("user"):
         _miss.append("用户名")
-    if not cfg.get("key"):
-        _miss.append("私钥路径")
+    # 私钥路径不再算缺项：探测不到会自动生成（2026-10-11）
     out["missing"] = _miss
     # 命名节点：既回显「用户显式写了什么」（spec），也回显「实际会连什么」（effective）。
     # effective 由 remote_cluster._node_table 算出来，和真正连的时候用的是同一份逻辑。
