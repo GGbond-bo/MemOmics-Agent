@@ -547,14 +547,23 @@ class TestGateExtreme:
         lvl, _, _ = enf.debate_gate(_mk_es("lightweight"), "conclusion")
         assert lvl == enf.DEBATE_L0
 
-    def test_statistical_high_impact_l2(self):
+    def test_statistical_high_impact_capped_l1(self):
+        """P3(2026-10-12)：统计线即使高影响也只到 L1（用户：统计最多 L1，不要拖时间）。"""
         lvl, _, force = enf.debate_gate(_mk_es("statistical"), "conclusion",
-                                        {"high_impact": True})
-        assert lvl == enf.DEBATE_L2 and force
+                                        {"topic_kind": enf._DEBATE_KIND_STATS,
+                                         "deviation": "结果太离谱", "high_impact": True})
+        assert lvl == enf.DEBATE_L1 and not force
+
+    def test_statistical_without_anomaly_skips(self):
+        lvl, _, _ = enf.debate_gate(_mk_es("statistical"), "conclusion",
+                                    {"topic_kind": enf._DEBATE_KIND_STATS})
+        assert lvl == enf.DEBATE_L0
 
     def test_token_budget_depleted_l0(self):
-        lvl, reasons, _ = enf.debate_gate(_mk_es("analysis", token_used=10, token_budget=5),
-                                          "conclusion")
+        lvl, reasons, _ = enf.debate_gate(
+            _mk_es("analysis", token_used=10, token_budget=5), "conclusion",
+            {"topic_kind": enf._DEBATE_KIND_BIOINFO, "important_params": True,
+             "deviation": "远超预期"})
         assert lvl == enf.DEBATE_L0
         assert any("token" in r.lower() for r in reasons)
 
@@ -563,26 +572,35 @@ class TestGateExtreme:
                                         "conclusion", {"high_impact": True})
         assert lvl == enf.DEBATE_L2 and force
 
-    def test_uncertainty_escalates_before_script(self):
+    def test_uncertainty_alone_no_longer_debates(self):
+        """P3(2026-10-12)：单独的 uncertainty 不作为辩论理由（它现在也不是生产信号）；
+        生信+重要参数+分歧 才走 L1（见 test_debate_gate_v3）。"""
         lvl, reasons, _ = enf.debate_gate(_mk_es("analysis"), "before_script",
                                           {"uncertainty": True})
-        assert lvl == enf.DEBATE_L2
+        assert lvl == enf.DEBATE_L0
+        assert reasons
 
     def test_conflict_escalates(self):
         lvl, reasons, force = enf.debate_gate(_mk_es("analysis"), "after_script",
                                               {"conflict": True})
         assert lvl == enf.DEBATE_L2
 
-    def test_budget_exact_boundary_still_l2(self):
-        # P1(2026-09-22): 结论级默认已改为"有分歧才 L2"，此测试只验证预算边界
-        lvl, _, _ = enf.debate_gate(_mk_es("analysis", count=2, budget=3), "conclusion",
-                                    {"has_fork": True})
+    def test_budget_boundary_not_yet_exceeded_is_l2(self):
+        """P3(2026-10-12)：预算边界 —— 还没超（2 < 3）该辩的照辩。"""
+        lvl, _, _ = enf.debate_gate(
+            _mk_es("analysis", count=2, budget=3), "conclusion",
+            {"topic_kind": enf._DEBATE_KIND_BIOINFO, "important_params": True,
+             "deviation": "差异非常大"})
         assert lvl == enf.DEBATE_L2
 
-    def test_budget_zero_downgrades_all_non_force(self):
-        lvl, reasons, force = enf.debate_gate(_mk_es("analysis", count=0, budget=0), "conclusion",
-                                              {"has_fork": True})
-        assert lvl == enf.DEBATE_L1 and not force
+    def test_budget_zero_stops_all_non_force(self):
+        """P3(2026-10-12)：budget=0 → 非强制场次一律停辨（旧行为是只降级 L1）。"""
+        lvl, reasons, force = enf.debate_gate(
+            _mk_es("analysis", count=0, budget=0), "conclusion",
+            {"topic_kind": enf._DEBATE_KIND_BIOINFO, "important_params": True,
+             "deviation": "差异非常大"})
+        assert lvl == enf.DEBATE_L0 and not force
+        assert any("预算护栏" in r for r in reasons)
 
     def test_force_with_budget_zero_stays_l2(self):
         lvl, _, force = enf.debate_gate(_mk_es("analysis", count=99, budget=0),

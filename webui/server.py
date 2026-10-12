@@ -13308,6 +13308,7 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
         _level = _enf3.detect_analysis_level(text)
         _es = _enf3.get_enforcement(sid)
         _es.analysis_level = _level
+        _es.topic_hint = text  # P3(2026-10-12): 辩论门控据此判断题目类型（方案/图/统计/生信）
         _es.results_dir = session.get("results_dir", "")
         
         # 用 WebUI 同款的 _create_agent 工厂函数
@@ -18536,6 +18537,7 @@ async def ws_endpoint(ws: WebSocket):
                 _level = _enf2.detect_analysis_level(user_text)
                 _es = _enf2.get_enforcement(session["id"])
                 _es.analysis_level = _level
+                _es.topic_hint = user_text  # P3(2026-10-12): 辩论门控据此判断题目类型
                 _es.results_dir = session.get("results_dir", "")
                 # 2026-08-16: 用户新消息 = 新指令 → 解除审查硬阻断残留（12G Seurat 案例：
                 # rail_review(post) 未通过残留使 execute_r/terminal 一直被拦，死锁）

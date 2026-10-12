@@ -367,24 +367,30 @@ class TestDebateGate:
         lvl, reasons, force = enf.debate_gate(_mk_es("chat"), "conclusion")
         assert lvl == enf.DEBATE_L0
 
-    def test_statistical_default_l1(self):
-        lvl, _, _ = enf.debate_gate(_mk_es("statistical"), "conclusion")
-        assert lvl == enf.DEBATE_L1
+    def test_statistical_without_anomaly_skips(self):
+        """P3(2026-10-12) 用户口径：统计线只有"结果离谱"才辩，默认不辩。"""
+        lvl, reasons, _ = enf.debate_gate(_mk_es("statistical"), "conclusion",
+                                          {"topic_kind": enf._DEBATE_KIND_STATS})
+        assert lvl == enf.DEBATE_L0
+        assert any("未见离谱" in r for r in reasons)
 
-    def test_analysis_conclusion_without_fork_is_l1(self):
-        """P1(2026-09-22): 没分歧的结论不再无条件 L2（用户：不要为了辩论而辩论）"""
+    def test_analysis_conclusion_without_signal_skips(self):
+        """P3(2026-10-12)：结论阶段不再"无条件 L1"——没有题类信号/异常就不辩。"""
         lvl, reasons, _ = enf.debate_gate(_mk_es("analysis"), "conclusion")
+        assert lvl == enf.DEBATE_L0
+        assert any("未识别到" in r for r in reasons)
+
+    def test_conclusion_with_fork_is_l1_for_bioinfo(self):
+        """活选项只在**生信+重要参数**语境下才值一场轻量证据链辩论（P3）。"""
+        lvl, reasons, _ = enf.debate_gate(
+            _mk_es("analysis"), "conclusion",
+            {"topic_kind": enf._DEBATE_KIND_BIOINFO, "important_params": True, "has_fork": True})
         assert lvl == enf.DEBATE_L1
-        assert any("没有分歧" in r for r in reasons)
 
-    def test_conclusion_with_fork_is_l2(self):
-        lvl, reasons, _ = enf.debate_gate(_mk_es("analysis"), "conclusion", {"has_fork": True})
-        assert lvl == enf.DEBATE_L2
-
-    def test_conclusion_with_two_options_is_l2(self):
+    def test_fork_without_anomaly_skips_for_unknown_kind(self):
         lvl, _, _ = enf.debate_gate(_mk_es("analysis"), "conclusion",
                                     {"fork_options": ["harmony", "scanorama"]})
-        assert lvl == enf.DEBATE_L2
+        assert lvl == enf.DEBATE_L0
 
     # ---- P1 "值不值得辩"过滤 ----
 
@@ -428,9 +434,11 @@ class TestDebateGate:
                                      {"linear": True, "failed_retries": 2})
         assert lvl2 == enf.DEBATE_L2
 
-    def test_analysis_before_script_l1(self):
-        lvl, _, _ = enf.debate_gate(_mk_es("analysis"), "before_script")
-        assert lvl == enf.DEBATE_L1
+    def test_analysis_before_script_without_signal_skips(self):
+        """P3(2026-10-12)：动手前只有"生信+重要参数+已出现离谱/冲突"才辩，其它一律不辩。"""
+        lvl, reasons, _ = enf.debate_gate(_mk_es("analysis"), "before_script")
+        assert lvl == enf.DEBATE_L0
+        assert any("未识别到" in r for r in reasons)
 
     def test_failures_escalate_l2(self):
         lvl, reasons, _ = enf.debate_gate(_mk_es("analysis"), "before_script",
@@ -443,12 +451,14 @@ class TestDebateGate:
                                         "conclusion", {"high_impact": True})
         assert lvl == enf.DEBATE_L2 and force is True
 
-    def test_budget_guard_downgrades(self):
-        """预算护栏：超预算的非强制 L2（有分歧）→ 降 L1"""
-        lvl, reasons, force = enf.debate_gate(_mk_es("analysis", count=3, budget=3),
-                                              "conclusion", {"has_fork": True})
-        assert lvl == enf.DEBATE_L1 and force is False
-        assert any("预算" in r for r in reasons)
+    def test_budget_guard_stops_debate(self):
+        """P3(2026-10-12)：超预算的非强制场次**停辨**（旧行为只降 L2→L1 = 没停）。"""
+        lvl, reasons, force = enf.debate_gate(
+            _mk_es("analysis", count=3, budget=3), "conclusion",
+            {"topic_kind": enf._DEBATE_KIND_BIOINFO, "important_params": True,
+             "deviation": "远超预期"})
+        assert lvl == enf.DEBATE_L0 and force is False
+        assert any("预算护栏" in r for r in reasons)
 
 
 # ==================== P2: 裁决驱动下一步 ====================
@@ -570,13 +580,25 @@ class TestCallbacks:
         return [m for m in emitted if m.get("action") == "require"
                 and "debate_analysis" in (m.get("require") or [])]
 
-    def test_before_script_gate_and_hint_inject(self, tmp_path):
-        """缺口①②回归：execute_r 首次执行 → L1 require + _pending_steer 注入"""
+    def test_before_script_design_script_no_debate(self, tmp_path):
+        """P3(2026-10-12) 用户口径：方案/脚本/设计类不辩（旧行为=首次执行就 L1 require）。"""
         agent = FakeAgent()
         cbs, es, emitted = self._mk(tmp_path, agent)
         cbs["tool_start_callback"]("c1", "execute_r", {"code": "FindClusters(res=0.5)"})
+        assert not self._reqs(emitted), "脚本设计类不该再开辩论"
+        assert any("不辩论" in (m.get("message") or "") for m in emitted), emitted
+
+    def test_before_script_bioinfo_absurd_result_debates(self, tmp_path):
+        """生信 + 重要参数 + 上一轮结果离谱 → 证据链辩论（L2）+ 强制提示注入。"""
+        agent = FakeAgent()
+        cbs, es, emitted = self._mk(tmp_path, agent)
+        es._exec_retries.clear()  # 同会话 id 的 es 在同一测试类里共享，先清重试计数（首执才判）
+        es.topic_hint = "snRNA-seq 差异表达 DEG 分析"
+        es._last_terminal_result = "85% 基因显著，结果太离谱"
+        cbs["tool_start_callback"]("c1", "execute_r",
+                                   {"code": "DEG 差异表达：FindClusters(res=0.6)"})
         reqs = self._reqs(emitted)
-        assert reqs and reqs[-1]["level"] == "L1-轻量辩论"
+        assert reqs and reqs[-1]["level"] == "L2-完整辩论", emitted
         assert agent._pending_steer and "系统强制提示" in agent._pending_steer
 
     def test_same_command_no_repeat(self, tmp_path):
@@ -591,7 +613,9 @@ class TestCallbacks:
         """P2 回归：参数键兼容 code（execute_r）与 command（terminal）"""
         agent = FakeAgent()
         cbs, es, emitted = self._mk(tmp_path, agent)
-        cbs["tool_start_callback"]("c1", "execute_python", {"code": "scanpy.leiden()"})
+        es.topic_hint = "snRNA-seq DEG 分析"
+        es._last_terminal_result = "结果与预期不符"
+        cbs["tool_start_callback"]("c1", "execute_python", {"code": "scanpy.leiden(resolution=1.0)"})
         assert self._reqs(emitted), "execute_python 的 code 参数必须被识别"
 
     def test_no_agent_ref_no_crash(self, tmp_path):

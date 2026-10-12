@@ -186,6 +186,9 @@ class _ProgressHeartbeat:
 # >480s 占 15.7%、>600s 占 8.6%。所以硬上限定 900s：只砍真正病态的长尾
 # （p90 以上约 8%），不会把正常的长辩论一起误杀。
 _DEBATE_BUDGET_DEFAULT = float(os.environ.get("MEMOMICS_DEBATE_BUDGET", "900") or 900)
+# L1 限时（2026-10-12 用户口径：「统计分析最多触发 L1 辩论，但是不要拖延时间」）——
+# L1 只是"够用就好"的采样辩论，不该像 L2 那样耗满总预算。
+_L1_BUDGET_DEFAULT = float(os.environ.get("MEMOMICS_DEBATE_L1_BUDGET", "180") or 180)
 _HTTP_TIMEOUT_DEFAULT = float(os.environ.get("MEMOMICS_DEBATE_HTTP_TIMEOUT", "60") or 60)
 _DEADLINES: dict = {}
 _DEADLINE_LOCK = threading.Lock()
@@ -3036,9 +3039,11 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
     # 其他的裁判呢？所以辩论之前，也要分析一下场景呢？」→ 先用 1 次短调用判断本场属于哪类问题，
     # 再据此决定各席位身份与裁判评分维度；预判失败就用原有生物学模板继续，不阻断辩论。
     # 整场辩论的总预算（2026-09-26）：预算耗尽后 _call_llm_sync 不再发 HTTP，
-    # 剩余席位/轮次毫秒级跑完 —— 工具不会再挂 15-20 分钟
-    _set_debate_deadline()
-    _emit_progress(f"辩论开始（{level} · {rounds} 轮 · 先做场景预判）· 总预算 {int(_DEBATE_BUDGET_DEFAULT)}s", "pending")
+    # 剩余席位/轮次毫秒级跑完 —— 工具不会再挂 15-20 分钟。
+    # 2026-10-12 用户口径：L1 限时 180s（"不要拖延时间"），L2 才用总预算。
+    _budget_used = _L1_BUDGET_DEFAULT if str(level).upper() == "L1" else _DEBATE_BUDGET_DEFAULT
+    _set_debate_deadline(_budget_used)
+    _emit_progress(f"辩论开始（{level} · {rounds} 轮 · 先做场景预判）· 总预算 {int(_budget_used)}s", "pending")
     _hb_scene = _ProgressHeartbeat("场景预判").start()
     try:
         scenario_res = _analyze_scenario(topic, context, cfg)
