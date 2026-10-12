@@ -282,7 +282,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .app { display:flex; height:100vh; }
 
 /* === 左侧栏 === */
-.sidebar { width:300px; min-height:0; background:var(--panel); border-right:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; transition:background 0.3s; }
+.sidebar { width:300px; min-height:0; background:var(--panel); border-right:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; transition:background 0.3s; overflow:hidden; }
 .sidebar-header { padding:16px 18px; border-bottom:1px solid var(--border); }
 .sidebar-header h1 { font-size:18px; color:var(--primary); display:flex; align-items:center; gap:8px; }
 .sidebar-header .subtitle { font-size:11px; color:var(--text-light); margin-top:3px; }
@@ -305,10 +305,40 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .session-batch-bar button { font-size:11px; padding:3px 8px; border-radius:4px; border:1px solid var(--border); background:var(--bg); color:var(--text); cursor:pointer; }
 .session-batch-bar button:hover { border-color:var(--primary); color:var(--primary); }
 .session-batch-bar button:disabled { opacity:0.4; cursor:not-allowed; }
-.sidebar-nav { padding:4px 0; border-top:1px solid var(--border); }
+/* 2026-10-12: 小屏自适应 —— 功能栏永不挤出侧栏（内部滚动），会话列表保留可读高度 */
+.sidebar-nav { padding:4px 0; border-top:1px solid var(--border); flex:0 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; }
 .nav-item { padding:9px 18px; cursor:pointer; display:flex; align-items:center; gap:10px; font-size:13px; color:var(--text); transition:background 0.2s; border-left:3px solid transparent; }
 .nav-item:hover { background:var(--primary-light); }
 .nav-item.active { background:var(--primary-light); color:var(--primary); font-weight:500; border-left-color:var(--primary); }
+
+/* === 2026-10-12 小屏自适应（笔记本/小窗口：功能栏变紧凑并在内部滚动，不再遮住会话）=== */
+/* ① 高度偏紧（<900px）：先压缩页眉、按钮与功能栏行高 */
+@media (max-height: 900px) {
+  .sidebar-header { padding:10px 16px; }
+  .sidebar-header .subtitle { display:none; }
+  .sidebar-header h1 { font-size:16px; }
+  .new-session-btn { margin:8px 14px; padding:6px; font-size:12.5px; }
+  .session-search { margin:0 12px 4px; }
+  .nav-item { padding:6px 14px; font-size:12.5px; gap:8px; }
+  .sidebar-footer { padding:7px 16px; }
+}
+/* ② 高度紧张（<780px）：功能栏改两列网格（12 项 → 6 行），会话列表保底 88px */
+@media (max-height: 780px) {
+  .sidebar-nav { display:grid; grid-template-columns:1fr 1fr; column-gap:2px; }
+  .nav-item { padding:5px 10px; font-size:12px; gap:6px; border-left-width:2px; }
+  .session-list { min-height:88px; }
+}
+/* ③ 极矮（<660px）：版本行让位，只保留「检查更新」；会话列表保底 72px */
+@media (max-height: 660px) {
+  #footer-info { display:none; }
+  .sidebar-footer { padding:5px 14px; }
+  .session-list { min-height:72px; }
+  .session-batch-bar { padding:0 12px 3px; }
+}
+/* ④ 小宽度（<900px）：侧栏收窄，给会话区让出空间 */
+@media (max-width: 900px) {
+  .sidebar { width:250px; }
+}
 .sidebar-footer { padding:10px 18px; border-top:1px solid var(--border); font-size:11px; color:var(--text-light); }
 
 /* === 中间聊天区 === */
@@ -1416,7 +1446,7 @@ html[data-theme="dark"] .ev-chain .ev-t, #kb-node-modal .ev-chain .ev-t { color:
 .cc-console .dcs-loadmore { text-align:center; padding:8px; }
 .cc-console .dcs-form { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px; }
 .cc-console .dcs-input { flex:1; min-width:220px; padding:4px 7px; border-radius:6px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:12px; }
-.cc-console .dcs-note { font-size:11px; color:var(--text-light); margin-top:6px; }
+.cc-console .dcs-note { font-size:11px; color:var(--text-light); margin-top:6px; white-space:pre-line; }
 .cc-console .dcs-row .dcs-pick { width:13px; height:13px; flex:none; cursor:pointer; accent-color:var(--primary); }
 .cc-console .dcs-qbadge { margin-left:5px; padding:0 5px; border-radius:9px; background:var(--primary); color:#fff; font-size:10px; font-weight:600; }
 .cc-console .dcs-selbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:6px 14px; border-bottom:1px solid var(--border); background:var(--bg); font-size:11px; color:var(--text-light); }
@@ -8113,7 +8143,7 @@ async function loadImageGenConfig() {
     document.getElementById('imagegen-model-dash').value = ds.model || 'qwen-image-3.0';
     document.getElementById('imagegen-size-dash').value = ds.size || '1024*1024';
     document.getElementById('imagegen-api-key').value = '';
-    document.getElementById('imagegen-api-key').placeholder = oc.has_key ? '\u2713 已保存 (' + oc.api_key + ')，留空不修改' : 'sk-...';
+    document.getElementById('imagegen-api-key').placeholder = oc.has_key ? '\u2713 已保存（已脱敏，留空不修改）' : 'sk-...';
     statusEl.textContent = d.ready ? '\u2705 图像生成已就绪' : '\u26a0\ufe0f 未配置完整（选 provider 填 key 保存即可）';
     statusEl.style.color = d.ready ? '#4caf50' : 'var(--text-light)';
   } catch (e) {
@@ -8307,15 +8337,16 @@ async function saveModel() {
   var baseUrl = document.getElementById('settings-base-url').value;
   var apiKey = document.getElementById('settings-api-key').value.trim();
   var provider = document.getElementById('settings-provider').value;
+  // 2026-10-11：后端不再把明文 key 发给浏览器（迎接弹窗/设置页曾能看到它）。
+  // 这里只判断"该 provider 是否已存过 key"，真正的 key 由后端从 provider_keys 里取。
   if (!apiKey) {
     try {
       var r = await fetch('/api/models/available');
       var d = await r.json();
       var found = (d.models || []).find(function(m) { return m.provider_id === pid; });
-      if (found) apiKey = found.api_key;
+      if (!found || !found.has_key) { alert('\u26a0\ufe0f 请先输入并保存 API Key'); return; }
     } catch(e) {}
   }
-  if (!apiKey) { alert('\u26a0\ufe0f 请先输入并保存 API Key'); return; }
   if (!modelId) { alert('\u26a0\ufe0f 请选择模型'); return; }
   // 同时把 Key 保存到 provider_keys，这样交互框下拉框能立即看到模型
   try {
@@ -15032,7 +15063,29 @@ chatInputEl.addEventListener('drop', handleDrop);
 connect();
 
 // === 首次启动配置检测 ===
+async function ensureFreshUI() {
+  // 2026-10-11：更新/重装后，浏览器里留的旧界面状态（主题/背景/片头/集群命令历史/上次会话）
+  // 会让"全新安装"看起来像"还带着旧缓存"。这里按后端构建指纹清一次，换过版本才自动刷新一次。
+  try {
+    var r = await fetch('/api/version');
+    var d = await r.json();
+    var build = String(d.ui_build || '');
+    if (!build) return;
+    var seen = '';
+    try { seen = localStorage.getItem('memomics_ui_build') || ''; } catch(e) {}
+    if (seen === build) return;
+    var wipe = ['memomics-theme', 'memomics-bg', 'memomics-intro', 'memomics-intro-lastday',
+                'memomics_cluster_hist', 'memomics_last_session', 'memomics_last_provider',
+                'memomics_lit_box', 'memomics-task-scope', 'memomics.resultsSort',
+                'memomics.resultsUnreadOnly', 'memomics_ui_lang', 'dgsize'];
+    for (var i = 0; i < wipe.length; i++) { try { localStorage.removeItem(wipe[i]); } catch(e) {} }
+    try { localStorage.setItem('memomics_ui_build', build); } catch(e) {}
+    if (seen) { location.reload(); }   // 首次访问（seen 为空）不刷；换版本才刷一次
+  } catch(e) { /* 忽略 */ }
+}
+
 async function checkFirstRun() {
+  await ensureFreshUI();
   try {
     var r = await fetch('/api/setup/status');
     var d = await r.json();
@@ -17207,14 +17260,41 @@ function dcsTabQueue() {
 }
 
 // ---------- 入队 ----------
+// ---------- 下载通道（type）----------
+// 2026-10-12：平台 web 通道只收单文件 ≤200MB（建单即判 failed item）；
+// 大文件必须换 raysync / ossutil / tosutil / obsutil / aws / mount（通道是否开通是项目级）。
+var _dcsDlType = 'web';
+var DCS_DL_TYPES = [
+  ['web', 'web（小文件 ≤200MB）'],
+  ['raysync', 'raysync 镭速（大文件，需项目开通）'],
+  ['ossutil', 'ossutil（对象存储）'],
+  ['tosutil', 'tosutil'],
+  ['obsutil', 'obsutil'],
+  ['aws', 'aws cli'],
+  ['mount', '挂盘 mount']
+];
+function dcsSelect(id, opts, value) {
+  var s = document.createElement('select');
+  s.id = id;
+  s.style.cssText = 'font-size:12px;padding:4px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;';
+  (opts || []).forEach(function (o) {
+    var op = document.createElement('option');
+    op.value = o[0]; op.textContent = o[1];
+    if (o[0] === value) op.selected = true;
+    s.appendChild(op);
+  });
+  return s;
+}
+
 function dcsEnqueue(items) {
   items = (items || []).filter(function (x) { return x && x.path; });
   if (!items.length) { dcsPrint('没有可下载的条目', 'err'); return; }
   var dir = _dcsLastDir || '';
   dcsSetView('queue');
-  dcsPrint('⬇ 加入下载队列：' + items.length + ' 个文件 → ' + (dir || '（默认下载目录）'), 'sys');
+  dcsPrint('⬇ 加入下载队列：' + items.length + ' 个文件（通道 ' + _dcsDlType + '）→ ' + (dir || '（默认下载目录）'), 'sys');
   dcsQPost('/api/dcs/dl/start', { items: items.map(function (it) {
-    return { path: it.path, name: it.name || '', size: it.size || 0, target: it.target || dir };
+    return { path: it.path, name: it.name || '', size: it.size || 0, target: it.target || dir,
+             type: it.type || _dcsDlType };
   }) }).then(function (res) {
     if (res.__err) { dcsPrint('✗ 入队失败：' + res.__err + (res.hint ? ('\n' + res.hint) : ''), 'err'); return; }
     var n = (res.ids || []).length || res.queued || items.length;
@@ -17233,7 +17313,8 @@ function dcsQCancel(id) {
 
 function dcsQRetry(id) {
   dcsQPost('/api/dcs/dl/retry', { id: id }).then(function (r) {
-    if (r.__err) dcsPrint('✗ 重试失败：' + r.__err, 'err'); else dcsPrint('已重新入队（原任务 ' + id + ' 的副本）', 'sys');
+    if (r.__err) { dcsPrint('✗ 重试失败：' + r.__err + (r.hint ? ('\n' + r.hint) : ''), 'err'); }
+    else { dcsPrint('已重新入队（原任务 ' + id + ' 的副本）', 'sys'); }
     dcsQRefresh();
   });
 }
@@ -17275,6 +17356,15 @@ function dcsQRender() {
     var dl = document.createElement('span'); dl.textContent = '下载到：' + (_dcsLastDir || '（默认下载目录）');
     head.appendChild(dl);
     head.appendChild(dcsBtn('📂 换目录', '', function () { dcsPickDir(); }));
+    // 通道（type）：web 只收 ≤200MB，大文件要换通道 —— 队列入队前就能改（2026-10-12）
+    var tp = dcsSelect('dcs-qtype', DCS_DL_TYPES, _dcsDlType);
+    tp.title = '下载通道：web 通道只支持单文件 ≤200MB；大文件要换成已开通的其它通道';
+    tp.onchange = function () {
+      _dcsDlType = tp.value;
+      dcsPrint('下载通道已切换：' + tp.value +
+               (tp.value === 'web' ? '（单文件 ≤200MB）' : '（大文件通道，需项目侧开通）'), 'sys');
+    };
+    head.appendChild(tp);
     if ((c.active || 0) > 0) head.appendChild(dcsBtn('✕ 全部取消', '', dcsQCancelAll));
     if ((c.done || 0) + (c.failed || 0) + (c.cancelled || 0) > 0) {
       head.appendChild(dcsBtn('🧹 清空已结束', '', dcsQClear));
@@ -17829,16 +17919,26 @@ function dcsInput(id, value, placeholder, width) {
 }
 
 function dcsDownloadFile(path, name, size) {
-  var f = dcsFormShell('⬇ 加入下载队列', '目标目录：可以手填，也可以点「📂 选择文件夹」用系统对话框选；下载完在「⬇ 队列」里看进度。');
+  var big = (size || 0) > 200 * 1024 * 1024;
+  var note = '目标目录：可以手填，也可以点「📂 选择文件夹」用系统对话框选；下载完在「⬇ 队列」里看进度。';
+  if (big) {
+    note += '\n⚠ 本文件 ' + (size / 1048576).toFixed(1) + ' MB 超过 web 通道单文件上限（200MB）：web 建单即拒。'
+          + '请用 DCS 网页端对该文件点单文件下载（浏览器流式写盘，不受此上限约束），'
+          + '或在下面换成大文件通道（raysync/ossutil/…，需项目侧开通）。';
+  }
+  var f = dcsFormShell('⬇ 加入下载队列', note);
   if (!f) return;
   f.appendChild(dcsInput('dcs-dl-dir', _dcsLastDir || '', '本机目标目录，例 E:/data'));
   f.appendChild(dcsBtn('📂 选择文件夹', '', function () { dcsPickInto('dcs-dl-dir', 'dir'); }));
+  f.appendChild(dcsSelect('dcs-dl-type', DCS_DL_TYPES, _dcsDlType));
   f.appendChild(dcsBtn('⬇ 加入队列', 'primary', function () {
     var dir = (document.getElementById('dcs-dl-dir') || {}).value || '';
     if (!dir) { alert('先选或填一个本机目录'); return; }
+    var se = document.getElementById('dcs-dl-type');
+    _dcsDlType = (se && se.value) || 'web';
     _dcsLastDir = dir;
     dcsSaveDownloadDir(dir, true);
-    dcsEnqueue([{ path: path, name: name || '', size: size || 0, target: dir }]);
+    dcsEnqueue([{ path: path, name: name || '', size: size || 0, target: dir, type: _dcsDlType }]);
     var dt = document.getElementById('dcs-detail'); if (dt) dt.style.display = 'none';
   }));
   f.appendChild(dcsBtn('📌 设为默认', '', function () {
@@ -18008,26 +18108,50 @@ async function dcsDiagnose() {
 function dcsBind() {
   var el = document.getElementById('dcs-pat');
   var pat = el ? el.value.trim() : '';
-  if (!pat) { dcsPrint('✗ 先粘贴 PAT（个人中心 → 访问令牌 → 创建）', 'err'); return; }
+  var note = document.getElementById('dcs-bind-note');
+  var btn = document.getElementById('dcs-bind-btn');
+  if (!pat) { dcsPrint('✗ 先粘贴 PAT（个人中心 → 访问令牌 → 创建）', 'err'); if (note) { note.textContent = '⚠️ 请先粘贴 PAT'; note.style.color = '#e6a23c'; } return; }
+  var t0 = Date.now();
+  var _timer = null;
+  function setState(kind, text) {
+    if (note) { note.textContent = text; note.style.color = kind === 'busy' ? 'var(--text-light)' : (kind === 'ok' ? '#4caf50' : '#f56c6c'); }
+    if (btn) {
+      btn.disabled = (kind === 'busy');
+      btn.textContent = kind === 'busy' ? '⏳ 正在绑定…' : '🔗 绑定';
+    }
+    if (kind !== 'busy' && _timer) { clearInterval(_timer); _timer = null; }
+  }
+  setState('busy', '⏳ 正在绑定中…（首次会自动安装官方 dcs 命令行工具，约 30–60 秒，别重复点）');
   dcsPrint('⏳ 正在校验并绑定…（首次会自动安装官方 dcs 命令行工具，约 30–60 秒）', 'sys');
+  _timer = setInterval(function () {
+    var s = Math.round((Date.now() - t0) / 1000);
+    if (note && btn && btn.disabled) note.textContent = '⏳ 正在绑定中… 已 ' + s + ' 秒（首次装 CLI 会久一点）';
+  }, 1000);
   fetch('/api/dcs/bind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pat: pat }) })
     .then(function (r) { return r.json(); })
     .then(function (d) {
       var res = (d && d.result) || {};
+      var secs = Math.round((Date.now() - t0) / 1000);
       if (res.status === 'ok') {
         if (el) el.value = '';
+        setState('ok', '✅ 绑定成功：' + (res.user || res.pat_masked || '') + (res.expires_at ? ('，有效期至 ' + res.expires_at) : '') + '（' + secs + ' 秒）');
         dcsPrint('✓ 绑定成功：' + (res.user || res.pat_masked || '') + (res.expires_at ? ('，有效期至 ' + res.expires_at) : '') +
                  (res.cli_installed ? '（已自动安装命令行工具）' : ''), 'ok');
         dcsLoad();
         dcsShowProjects(1);
       } else {
-        dcsPrint('✗ 绑定失败：' + (res.error || (d && d.error) || '未知'), 'err');
+        var why = res.error || (d && d.error) || '未知原因';
+        setState('err', '❌ 绑定失败：' + why);
+        dcsPrint('✗ 绑定失败：' + why, 'err');
         if (res.hint) dcsPrint('提示：' + res.hint, 'sys');
-        if (/命令行|cli_missing|自动安装/.test(String(res.error || ''))) {
+        if (/命令行|cli_missing|自动安装/.test(String(why))) {
           dcsPrint('可点右上「⚙️ 设置」→「🔧 一键安装命令行工具」重试。', 'sys');
         }
       }
-    }).catch(function (e) { dcsPrint('✗ 请求失败：' + e.message, 'err'); });
+    }).catch(function (e) {
+      setState('err', '❌ 绑定失败：请求异常（' + e.message + '）');
+      dcsPrint('✗ 请求失败：' + e.message, 'err');
+    });
 }
 
 function dcsInstallCli() {
@@ -19225,6 +19349,8 @@ async function saveUpdateConfig(mode) {
       <div class="cc-cfg-note" style="border-top:1px dashed var(--border); padding-top:8px; margin-top:2px;">
         <b>🔑 一键装公钥（打通免密）</b>：第一次接集群在这里输一次密码，MemOmics 会把本机公钥写进目标节点的
         <code>~/.ssh/authorized_keys</code>，装完<b>永久免密</b>、再也不用输密码。
+        <b>本机没有密钥也不用管</b>：私钥路径留空即可（会自动探测 <code>~/.ssh/id_ed25519</code>）；
+        一把都没有时点下去会<b>自动生成</b>一对 ed25519（无口令）再装。
         密码只在内存里用这一次，<b>不保存</b>、不进日志。装的目标 = 底部输入栏左边选中的节点（留空 = 默认节点）；
         走跳板的节点会顺手把公钥也装到跳板上，一次搞定两跳。
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
@@ -19380,7 +19506,7 @@ async function saveUpdateConfig(mode) {
         令牌只存本机 <code id="dcs-vault-path">memomics_home/dcs_cloud.json</code>（不进日志、不随包分发），DCS 侧删除即刻失效；MemOmics 从不保存账号密码。
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
           <input id="dcs-pat" type="password" placeholder="dcs_pat_…" style="flex:1;min-width:240px;padding:4px 7px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:12px;">
-          <button class="cc-btn primary" onclick="dcsBind()">🔗 绑定</button>
+          <button class="cc-btn primary" id="dcs-bind-btn" onclick="dcsBind()">🔗 绑定</button>
           <button class="cc-btn" onclick="dcsUnbind()">解除绑定</button>
           <span id="dcs-bind-note" class="cc-cfg-note" style="flex:1;"></span>
         </div>
