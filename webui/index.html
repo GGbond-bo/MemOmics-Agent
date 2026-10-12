@@ -398,6 +398,20 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .message .copy-btn:hover { background:var(--primary-light); border-color:var(--primary); color:var(--primary); }
 .message .copy-btn.copied { color:var(--success); border-color:var(--success); }
 
+/* === 2026-10-14：过程/结论分层 —— 用户反馈"回答一半过程一半结论，太乱" ===
+   同一条回答里：中间过程收进「关键过程」折叠块（短过程默认展开），结论正常突出显示；
+   被辩论卡片等截断分出去的旧气泡整格瘦身（.msg-process），视觉上退为过程记录。 */
+.message.assistant.msg-process .bubble { font-size:12px; padding:8px 14px 24px; opacity:0.78; border-style:dashed; }
+.message.assistant.msg-process .role { font-size:10px; opacity:0.8; }
+.proc-block { margin:0 0 8px; border:1px dashed var(--border); border-radius:8px; background:rgba(128,128,128,0.05); font-size:12px; }
+.proc-block > summary { padding:4px 12px; cursor:pointer; color:var(--text-light); font-size:11px; user-select:none; list-style:none; }
+.proc-block > summary::-webkit-details-marker { display:none; }
+.proc-block > summary::before { content:'▸ '; }
+.proc-block[open] > summary::before { content:'▾ '; }
+.proc-block > summary:hover { color:var(--primary); }
+.proc-block .proc-body { padding:2px 12px 8px; color:var(--text-light); line-height:1.6; white-space:normal; }
+.proc-block .proc-body p { margin:3px 0; }
+
 /* 思考折叠 */
 .reasoning-block { margin:6px 0; border:1px solid var(--border); border-radius:6px; overflow:hidden; }
 .reasoning-block summary { padding:6px 12px; font-size:12px; color:var(--text-light); cursor:pointer; background:var(--tool-bg); }
@@ -1858,6 +1872,7 @@ var I18N = {
      'rv_col':'列 {0}','rv_sort_col_title':'点击按此列排序','rv_rows_note':'显示 {0} / {1} 行{2}　（点表头排序）','rv_cols_n':' · {0} 列',
      'rv_nb_empty':'空 notebook','rv_nb_no_cells':'没有单元格。','rv_out_err':'❌ 报错','rv_out_img':'🖼️ 图片输出','rv_out':'▶ 输出',
      'rv_nb_cells':'共 {0} 个单元格{1}','rv_truncated':'（已截断）',
+     'proc_block':'📋 关键过程 · {0} 段（点击展开/收起）',
     'af_kind_intent':'开工前意图确认',
     'af_kind_plan':'方案选择',
     'af_kind_clarify':'需要你确认',
@@ -1948,6 +1963,7 @@ var I18N = {
      'rv_col':'Col {0}','rv_sort_col_title':'Click to sort by this column','rv_rows_note':'Showing {0} / {1} rows{2}　(click a header to sort)','rv_cols_n':' · {0} cols',
      'rv_nb_empty':'Empty notebook','rv_nb_no_cells':'No cells.','rv_out_err':'❌ Error','rv_out_img':'🖼️ Image output','rv_out':'▶ Output',
      'rv_nb_cells':'{0} cells{1}','rv_truncated':' (truncated)',
+     'proc_block':'📋 Key steps · {0} (click to expand/collapse)',
     'af_kind_intent':'Confirm intent before starting',
     'af_kind_plan':'Choose a plan',
     'af_kind_clarify':'Needs your confirmation',
@@ -2597,6 +2613,10 @@ let currentSid = null;
 let currentAssistantEl = null;
 let currentBubble = null;
 let fullText = '';
+// 2026-10-14 过程/结论分层：fullSegs 按「模型回合」分段记录本轮全部文本
+// （工具调用 = 分段边界），收尾时前面的段收进「关键过程」折叠块、最后一段作为结论突出。
+let fullSegs = [];
+let _segBreak = false;   // tool_start 后下一段 delta 开新段
 let reasoningText = '';
 let agentRunning = false;  // agent 运行状态标志，用于 steer 检测
 var mermaidIdx = 0;  // Mermaid 渲染计数器
@@ -2874,13 +2894,22 @@ function handleMessage(msg) {
       currentAssistantEl = addAssistantMsg('');
       currentBubble = currentAssistantEl.querySelector('.bubble');
       fullText = msg.content || '';
+      fullSegs = [msg.content || ''];
+      _segBreak = false;
     } else if (currentAssistantEl.classList.contains('thinking')) {
       currentAssistantEl.remove();
       currentAssistantEl = addAssistantMsg('');
       currentBubble = currentAssistantEl.querySelector('.bubble');
       fullText = msg.content || '';
+      fullSegs = [msg.content || ''];
+      _segBreak = false;
     } else {
       fullText += (msg.content || '');
+      // 2026-10-14 过程/结论分层：工具调用后的第一段文字开新段（模型回合边界）
+      if (_segBreak && fullSegs.length && fullSegs[fullSegs.length - 1].trim()) { fullSegs.push(''); }
+      _segBreak = false;
+      if (!fullSegs.length) fullSegs.push('');
+      fullSegs[fullSegs.length - 1] += (msg.content || '');
     }
     if (currentBubble) {
       // 2026-08-27 防闪烁：节流合并（150ms），不再每个 token 重建 DOM；
@@ -2903,6 +2932,7 @@ function handleMessage(msg) {
   } else if (msg.type === 'tool_start') {
     // 不在聊天区创建大块, 只进进度时间线
     addProgressItem(msg.tool, 'pending', _fmtToolDesc(msg.tool, msg.args), msg.ts || _nowTs());
+    if (fullSegs.length && fullSegs[fullSegs.length - 1].trim()) _segBreak = true;   // 2026-10-14：回合边界
   } else if (msg.type === 'tool_complete') {
     // 更新时间线中对应行为 done, 附带结果摘要
     addProgressItem(msg.tool, 'done', _fmtToolResult(msg.tool, msg.result), msg.ts || _nowTs());
@@ -3021,6 +3051,7 @@ function handleMessage(msg) {
       if (completeContent && completeContent.length > fullText.length) fullText = completeContent;
       if (!fullText) fullText = completeContent;
       _flushStreamRender();
+      _splitProcessConclusion();   // 2026-10-14：过程/结论分层 —— 收尾时把中间过程收进折叠块，结论突出
     }
     else if (!currentBubble) { addAssistantMsg(completeContent); }
     // 完成时自动折叠进度时间线
@@ -3273,6 +3304,8 @@ async function send(background) {
   if (currentSid === targetSid) addUserMsg(text, imageUrls);
   clearPendingImages();
   fullText = '';
+  fullSegs = [];
+  _segBreak = false;
   reasoningText = '';
   currentAssistantEl = null;
   currentBubble = null;
@@ -3584,7 +3617,9 @@ function addAssistantMsg(text, meta) {
     foot = '<div class="msg-meta">' + parts.join(' · ') + '</div>';
   }
   // P1-3: 回答里的 [KB源:x] / [数据:y] / [DOI:z] 渲染成可点击的引用标签
-  div.innerHTML = '<div class="role"><span>🧬 MemOmics</span></div><div class="bubble">' + _citeWrapHtml(renderMarkdown(text)) + foot + '<button class="copy-btn" onclick="copyMessage(this)" title="复制此消息">📋 复制</button></div>';
+  // 2026-10-14：meta.procSegs = 本轮的中间过程段 → 收进「关键过程」折叠块，正文（最后一段=结论）突出
+  var procHtml = (meta && meta.procSegs && meta.procSegs.length) ? _procBlockHtml(meta.procSegs) : '';
+  div.innerHTML = '<div class="role"><span>🧬 MemOmics</span></div><div class="bubble">' + procHtml + _citeWrapHtml(renderMarkdown(text)) + foot + '<button class="copy-btn" onclick="copyMessage(this)" title="复制此消息">📋 复制</button></div>';
   document.getElementById('messages').appendChild(div);
   // P1-4: 回答归到当前轮次（历史回放用后端给的 turn，实时消息用当前轮）
   _registerTurnEl(div, (meta && meta.turn && meta.turn > 0) ? meta.turn : _turnSeq, 'assistant');
@@ -5501,9 +5536,13 @@ function renderDebateCard(payload) {
 function _dcbBreakBubble() {
   if (!currentAssistantEl && !currentBubble) return;
   try { _flushStreamRender(); } catch (e) {}
+  // 2026-10-14：被截断分出去的旧气泡通常是过程叙述 —— 标成过程样式，视觉退居二线
+  if (currentAssistantEl) currentAssistantEl.classList.add('msg-process');
   currentAssistantEl = null;
   currentBubble = null;
   fullText = '';
+  fullSegs = [];
+  _segBreak = false;
 }
 
 // 时间线：把该会话每一场辩论插回它真正发生的位置（after_index = 那一刻已有多少条对话消息）
@@ -5744,6 +5783,7 @@ var _streamRenderTimer = null;
 var _streamRenderPending = false;
 function _doStreamRender() {
   if (!currentBubble) return;
+  if (currentBubble._splitDone) return;   // 2026-10-14：已按「过程/结论」重建过，残留定时器别把合并稿渲染回来
   var _msgs = document.getElementById('messages');
   var _anchor = (_msgs && _autoScroll === false) ? (currentBubble.offsetTop - _msgs.scrollTop) : null;
   renderBubbleIncremental(currentBubble, fullText);
@@ -5762,6 +5802,36 @@ function _flushStreamRender() {
   if (_streamRenderTimer) clearTimeout(_streamRenderTimer);
   _streamRenderPending = false;
   _doStreamRender();
+}
+
+// === 2026-10-14 过程/结论分层 ===
+// 一轮回答 = 若干「模型回合」文本段（工具调用为界）。收尾时：前面的段 = 中间过程，
+// 收进「📋 关键过程」折叠块（短过程默认展开，长过程折叠成一行）；最后一段 = 结论，
+// 正常突出显示 —— 用户一眼看到结果，过程可追溯但不刷屏。
+function _procBlockHtml(segs) {
+  var joined = segs.join('\n\n');
+  // 短过程（≤2 段且 ≤200 字）默认展开，长过程折叠成一行摘要
+  var open = (segs.length <= 2 && joined.length <= 200) ? ' open' : '';
+  return '<details class="proc-block"' + open + '><summary>' + escapeHtml(tf('proc_block', segs.length)) + '</summary>' +
+         '<div class="proc-body">' + renderMarkdown(joined) + '</div></details>';
+}
+
+function _splitProcessConclusion() {
+  if (!currentBubble || !currentAssistantEl) return;
+  // 一致性守卫：complete 若用更长的整稿替换过 fullText（少见），段边界不可信 → 不拆，保内容完整
+  if (fullSegs.join('').trim() !== (fullText || '').trim()) return;
+  var segs = [];
+  for (var i = 0; i < fullSegs.length; i++) {
+    var s = (fullSegs[i] || '').trim();
+    if (s && s !== '(empty)') segs.push(fullSegs[i]);
+  }
+  if (segs.length < 2) return;   // 单段回答本来就是一整块，无需分层
+  var concl = segs.pop();
+  currentBubble._incr = null;            // 增量渲染块缓存作废（DOM 已整格重建）
+  currentBubble._splitDone = true;       // 防残留流式定时器把合并稿重新渲染回来
+  currentBubble.innerHTML = _procBlockHtml(segs) + _citeWrapHtml(renderMarkdown(concl)) +
+    '<button class="copy-btn" onclick="copyMessage(this)" title="复制此消息">📋 复制</button>';
+  initMermaid();
 }
 
 // === 块级增量渲染（2026-08-27，对齐 DSH MarkdownText 思路） ===
@@ -6947,15 +7017,12 @@ function _renderHistoryFlow(msgs) {
   var group = null;
   function flushGroup() {
     if (!group) return;
-    var text = '', elapsed = 0, hasElapsed = false, tools = 0, names = [];
+    var segs = [], elapsed = 0, hasElapsed = false, tools = 0, names = [];
     group.items.forEach(function(m) {
       var seg = String(m.content == null ? '' : m.content);
       // MemOmics 对「空响应」写入的哨兵 "(empty)"（run_agent.py / conversation_loop.py）：
       // 实时流里这种片段什么都不显示，回放也不能把它当正文拼进去。
-      if (seg.trim() && seg.trim() !== '(empty)') {
-        if (!text) text = seg;
-        else text += (/[\n\r]$/.test(text) ? '' : '\n\n') + seg;
-      }
+      if (seg.trim() && seg.trim() !== '(empty)') segs.push(seg);
       if (m.elapsed !== undefined && m.elapsed !== null) {
         elapsed += Number(m.elapsed) || 0;
         hasElapsed = true;
@@ -6967,12 +7034,17 @@ function _renderHistoryFlow(msgs) {
       }
     });
     var el = null;
-    if (text) {
+    if (segs.length) {
+      // 2026-10-14 过程/结论分层：一轮多段时，前面的段 = 中间过程（折叠块），
+      // 最后一段 = 结论（正文突出）。单段则与旧行为一致（整段即正文）。
+      var text = segs[segs.length - 1];
+      var procSegs = segs.length >= 2 ? segs.slice(0, -1) : null;
       el = addAssistantMsg(text, {
         turn: group.turn,
         elapsed: hasElapsed ? Math.round(elapsed * 10) / 10 : undefined,
         tool_count: tools,
-        tool_names: names
+        tool_names: names,
+        procSegs: procSegs
       });
     }
     if (el) lastEl = el;
@@ -7054,6 +7126,8 @@ function _snapshotCurrentSession() {
   cache.hasSnapshot = true;
   cache.messageHtml = messagesEl.innerHTML;
   cache.fullText = fullText;
+  cache.fullSegs = (typeof fullSegs !== 'undefined' && fullSegs) ? fullSegs.slice() : [];   // 2026-10-14：分段也入快照
+  cache.segBreak = (typeof _segBreak !== 'undefined') ? _segBreak : false;
   cache.reasoningText = reasoningText;
   cache.items = progressItems.slice();
   cache.running = agentRunning;
@@ -7071,6 +7145,8 @@ function _restoreSessionSnapshot(cache) {
   messagesEl.innerHTML = cache.messageHtml || '';
   var _htmlOnAssign = messagesEl.innerHTML;   // 还原瞬间的画面（自检用）
   fullText = cache.fullText || '';
+  fullSegs = Array.isArray(cache.fullSegs) ? cache.fullSegs.slice() : [];   // 2026-10-14：分段随快照还原
+  _segBreak = !!cache.segBreak;
   reasoningText = cache.reasoningText || '';
   if (!reasoningText) {
     // 记录里没带思考全文（被缩水过）→ 从还原出来的 💭 行里取，保证"展开 · N 字"和展开内容对得上

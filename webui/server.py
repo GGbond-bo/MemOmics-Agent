@@ -6955,6 +6955,33 @@ IMPORTANT:
 """
 
 
+# === 回复排版策略（2026-10-14）===
+# 用户反馈：交互框的回答"太乱，一半过程一半结论"。规定过程播报与最终结论分层：
+# 中间回合一句话播报、不写半成品结论；收尾回答结论先行、干净有逻辑、自成一体。
+_REPLY_STYLE = """
+
+## 回复排版（可读性铁律 · 严格执行）
+
+### 中间回合（接下来还要调工具的回合）
+- 最多 1–2 句话，动词开头，只说「在做什么 + 为什么」（如"先核实云上文件是否存在"）。
+- **不要**在中间回合写半成品结论、不要罗列数据细节、不要用表格/标题/长列表。
+- 前端会把这些播报自动收进「关键过程」折叠块，所以尽管简短，不必担心用户看不到。
+
+### 最终回答（本回合不再调工具、向用户交付的回合）
+结论先行，按此顺序组织（按用户实际需求取舍，没有的环节不写）：
+1. **一句话答案**：直接回答用户的问题或本次任务结果（成功/失败/关键数字），加粗。
+2. **结果要点**：列表或表格给出用户最关心的内容（产物路径、关键指标、对比结论），
+   按用户提问的顺序组织，不堆砌无关细节。
+3. **关键过程**：一段话讲清怎么得到的（做了什么 → 排除了什么 → 关键证据），≤3 行。
+4. **后续建议**（可选，1–2 条）：用户下一步可以做什么。
+
+### 禁止
+- 禁止过程与结论混杂：不在结论里夹流水账，不把"我打算/我去查/接下来"写进最终回答。
+- 禁止重复：中间播报说过的细节，最终回答只提炼引用，不整段复制。
+- 禁止半截交付：最终回答必须自成一体——用户只看最后这一条也能完全看懂结果。
+"""
+
+
 _FACT_RECALL_STOP = {
     "的", "了", "和", "是", "在", "我", "你", "要", "与", "或", "一个", "这个", "那个",
     "我们", "请", "帮", "怎么", "什么", "为什么", "如何", "这个", "进行", "一下",
@@ -8262,7 +8289,7 @@ def _create_agent(model_config=None, session_id=None, session=None):
                           # 长输出(大 dsh-ui JSON/mermaid) 会被 max_tokens 截断成半截 JSON。
                           # 显式 8192，与 checkpoint writer 2026-08-22 加固经验一致。
         enabled_toolsets=["terminal", "file", "code_execution", "memomics", "todo", "memory", "skills", "web", "computer_use", "cronjob", "delegation", "image_gen", "session_search", "browser"],
-        ephemeral_system_prompt=skills_index + _PLANNING_PROMPT + "\n\n" + _EXECUTION_POLICY + _env_digest_block(),
+        ephemeral_system_prompt=skills_index + _PLANNING_PROMPT + "\n\n" + _EXECUTION_POLICY + _REPLY_STYLE + _env_digest_block(),
         quiet_mode=True,
         tool_progress_mode="all",
         session_id=session_id or f"memomics-{uuid.uuid4().hex[:8]}",
@@ -18808,7 +18835,7 @@ async def ws_endpoint(ws: WebSocket):
                     pass
                 _skills = _read_skills_index()
                 agent.ephemeral_system_prompt = (_soul_detail + "\n\n" + _skills + _PLANNING_PROMPT
-                                                 + "\n\n" + _EXECUTION_POLICY)
+                                                 + "\n\n" + _EXECUTION_POLICY + _REPLY_STYLE)
                 if rd:
                     agent.ephemeral_system_prompt += f"\n\n## 当前会话输出目录\n所有 R/Python/终端脚本的输出文件（图片、表格、报告）请保存到：\n`{rd.replace(chr(92), '/')}`\n请使用绝对路径或在脚本开头 `setwd()` / `os.chdir()` 到此目录。\n**脚本落盘约定**：分析/绘图脚本(.py/.r/.sh)统一保存到 `{rd}/scripts/`(用描述性文件名)；重复跑图/统计时，先 `search_files` 查看 `{rd}/scripts/` 已有脚本再复用，不要每次重写。\n"
                     agent.ephemeral_system_prompt += (
