@@ -642,10 +642,11 @@ class TestCostGovernance:
         assert hasattr(es, "token_used") and hasattr(es, "token_budget")
 
     def test_l1_sampling_mode_config(self):
-        """C2 回归：L1 采样架构 = 单模型 3 温度采样（默认模型上下文切断不变）"""
+        """C2 回归：L1 采样架构 = 单模型多次温度采样（默认模型上下文切断不变）。
+        2026-10-13：采样组数按证据链提示词的成本调到 2（session_ctx 见 config debate.l1）。"""
         cfg = da._load_debate_config()
         l1 = cfg.get("l1", {})
-        assert l1.get("samples", 3) == 3
+        assert 1 <= int(l1.get("samples", 3)) <= 3
         assert l1.get("strategy") == "sampling"
 
     def test_level_param_accepted(self):
