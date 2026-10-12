@@ -268,7 +268,7 @@
 | 73 | summarize | 智能总结分析结果/文献/对话/数据:自动识别用户想总结什么（分析结果、文献、对话历史、数据概况），生成结构化摘要。支持生信分析结果总结、文献要点提取、长对话浓缩、数据统计概览。 | summarize | YEL 讨论触发 |
 | 74 | windows-com-app-automation | 用 Windows COM + 脚本引擎确定性地驱动桌面应用（Illustrator/Photoshop/InDesign/Word/Excel）:cscript→VBScript→CreateObject→DoJavaScriptFile/DoScript 桥，ExtendScript ES3 手拼 JSON、隔离文档写操作的安全模式、可复制的 doctor/探测脚手架。 | Illustrator自动化, 操控Illustrator, 批量改Illustrator, Illustrator脚本, ExtendScript, JSX脚本, COM自动化, Photoshop自动化, InDesign自动化, 脚本控制软件, 软件没有CLI, 桌面软件自动化, 图内文字批量改, cscript, DoJavaScriptFile, 画板操作 | RED 必触发 |
 
-## 09_内置 - MemOmics系统 (18 skills)
+## 09_内置 - MemOmics系统 (17 skills)
 
 | # | Skill | 使用场景 | 触发词 | Trigger |
 |---|---|---|---|---|
@@ -276,20 +276,19 @@
 | 2 | adobe-illustrator | 用户提到 Illustrator / 操控AI / 操作AI / AI文件 / 画板 / ExtendScript / JSX脚本，或要在 Adobe Illustrator 里画图、改字、批量统一字号、导入 PDF/SVG 面板排版、导出 PNG/PDF/SVG、看图后调整时加载… | Illustrator, 操控AI, 操作AI, AI里, AI文件, AI脚本, AI画板, 画板, ExtendScript, JSX脚本 | RED 必触发 |
 | 3 | code-writer | 当你需要 代码编写 时触发 —— 编写Python/R脚本，数据分析代码，函数封装，程序开发 | code-writer, code writer, code, writer | GRN 按需触发 |
 | 4 | computer-use | 用户要截屏、看屏幕、点按钮、在桌面软件里输入文字、切换窗口时触发；唯一入口是 MemOmics 的 computer_use 工具 | computer-use, computer use, computer, 截屏, 截图, 截个屏, 屏幕截图, 看屏幕, 操作电脑, 控制电脑, 桌面软件, 键盘输入, 点击按钮 | GRN 按需触发 |
-| 5 | create-bio-skill | 当 skill_view 返回 not found 且没有相似 skill，或用户指定了特定包需要创建新 skill 时触发 | 安装, 创建skill, 没有这个工具, 新工具, 做一个skill, 建个skill, 没有对应的skill, create-bio-skill | RED 必触发 |
-| 6 | data-analysis-best-practices | Best practices for data analyses with focused on user supplied data. | 最佳实践, best practice, guideline, practices | RED 必触发 |
-| 7 | data-viz | 当你需要 数据可视化 时触发 —— 绘制高质量数据可视化图表:UMAP/tSNE/热图/火山图/小提琴图等 | data-viz, data viz, viz | GRN 按需触发 |
-| 8 | deg-updown-counts-by-subcluster | 已有算好的「比较组 × 亚群 × 方向」基因计数矩阵，要出各亚群上下调基因数量对比柱状图（如 5 个比较组并排展示） | DEG 各比较组亚群基因数量图, updown 8sub 柱状图, 上调下调数量柱状图, 五面板统一 symlog 柱状图 | GRN 按需触发 |
-| 9 | deg-volcano-5comps-8sub-R | 已有多个比较组的 DEG 表（每 sheet 一对比），要出「一对比一张、图内含 8 个亚群色块」的火山图；或需要给某基因补标 | 火山图 R 版, 5 比较组 8 亚群火山图, DEG 火山图带亚群标签块, volcano 8sub FINAL | GRN 按需触发 |
-| 10 | error-recovery | 当终端运行脚本报错，或用户说'报错了'/'error'/'出错了'/'报错怎么修'/'这什么错'时触发 | 报错, 报错信息, 出错, 报错怎么修, 不工作, 跑不了, 调试, traceback, error message | RED 必触发 |
-| 11 | experimental-design-statistics | 当你需要 实验设计统计 时触发 —— 实验设计+统计检验: 样本量估算 → 方法选择 → 结果检验 | 样本量, 功效分析, power analysis, 实验设计, 统计方法, 统计检验 | RED 必触发 |
-| 12 | fig-split-program-heatmap-R | 用户要求把 fig_split_v10.py 式矩阵热图（18 程序打分 × 6组/5效应/亚群）转成 R，或直接用 R 出这套图 | fig_split_v10 的 R 版, 18 程序打分热图出 R 版, 6组×亚群矩阵热图 R | GRN 按需触发 |
-| 13 | file-convert | 当你需要 格式转换 时触发 —— 数据格式转换:CSV/Excel/TSV/H5AD/MTX等常见格式互转 | file-convert, file convert, file, convert | GRN 按需触发 |
-| 14 | find-skill | 智能搜索可用技能:当用户需要某个分析功能但不确定有没有现成技能时，自动搜索239个内置技能+外部蓝图，找到最匹配的并推荐安装。也支持用户说'有没有XXX的技能'时触发。 | find-skill, find skill, find | GRN 按需触发 |
-| 15 | heart-conference-monitor | 心脏会议监控:追踪心脏病学会议→提取关键发现→监控研究趋势→生成报告 | heart-conference-monitor, heart conference monitor, heart, conference, monitor | GRN 按需触发 |
-| 16 | ml-classification | 适用于: disease, 有标签数据, 分类/预测 —— LASSO+RandomForest+SVM+SHAP解释, 支持bulk和scRNA | ml-classification, ml classification, classification | GRN 按需触发 |
-| 17 | phylo-create-skill | Create, test, package, and present reusable skills for Phylo's Biomni platform and bioinformatics workflows. | phylo-create-skill, phylo create skill, phylo | GRN 按需触发 |
-| 18 | self-improving-agent | 自进化能力:分析成功后自动沉淀经验为新技能；分析失败后自动学习错误模式避免重复犯错；根据使用频率自动优化参数。包括技能沉淀、错误学习、参数进化三大子系统。 | self-improving-agent, self improving agent, self, improving, agent | GRN 按需触发 |
+| 5 | data-analysis-best-practices | Best practices for data analyses with focused on user supplied data. | 最佳实践, best practice, guideline, practices | RED 必触发 |
+| 6 | data-viz | 当你需要 数据可视化 时触发 —— 绘制高质量数据可视化图表:UMAP/tSNE/热图/火山图/小提琴图等 | data-viz, data viz, viz | GRN 按需触发 |
+| 7 | deg-updown-counts-by-subcluster | 已有算好的「比较组 × 亚群 × 方向」基因计数矩阵，要出各亚群上下调基因数量对比柱状图（如 5 个比较组并排展示） | DEG 各比较组亚群基因数量图, updown 8sub 柱状图, 上调下调数量柱状图, 五面板统一 symlog 柱状图 | GRN 按需触发 |
+| 8 | deg-volcano-5comps-8sub-R | 已有多个比较组的 DEG 表（每 sheet 一对比），要出「一对比一张、图内含 8 个亚群色块」的火山图；或需要给某基因补标 | 火山图 R 版, 5 比较组 8 亚群火山图, DEG 火山图带亚群标签块, volcano 8sub FINAL | GRN 按需触发 |
+| 9 | error-recovery | 当终端运行脚本报错，或用户说'报错了'/'error'/'出错了'/'报错怎么修'/'这什么错'时触发 | 报错, 报错信息, 出错, 报错怎么修, 不工作, 跑不了, 调试, traceback, error message | RED 必触发 |
+| 10 | experimental-design-statistics | 当你需要 实验设计统计 时触发 —— 实验设计+统计检验: 样本量估算 → 方法选择 → 结果检验 | 样本量, 功效分析, power analysis, 实验设计, 统计方法, 统计检验 | RED 必触发 |
+| 11 | fig-split-program-heatmap-R | 用户要求把 fig_split_v10.py 式矩阵热图（18 程序打分 × 6组/5效应/亚群）转成 R，或直接用 R 出这套图 | fig_split_v10 的 R 版, 18 程序打分热图出 R 版, 6组×亚群矩阵热图 R | GRN 按需触发 |
+| 12 | file-convert | 当你需要 格式转换 时触发 —— 数据格式转换:CSV/Excel/TSV/H5AD/MTX等常见格式互转 | file-convert, file convert, file, convert | GRN 按需触发 |
+| 13 | find-skill | 智能搜索可用技能:当用户需要某个分析功能但不确定有没有现成技能时，自动搜索239个内置技能+外部蓝图，找到最匹配的并推荐安装。也支持用户说'有没有XXX的技能'时触发。 | find-skill, find skill, find | GRN 按需触发 |
+| 14 | heart-conference-monitor | 心脏会议监控:追踪心脏病学会议→提取关键发现→监控研究趋势→生成报告 | heart-conference-monitor, heart conference monitor, heart, conference, monitor | GRN 按需触发 |
+| 15 | ml-classification | 适用于: disease, 有标签数据, 分类/预测 —— LASSO+RandomForest+SVM+SHAP解释, 支持bulk和scRNA | ml-classification, ml classification, classification | GRN 按需触发 |
+| 16 | phylo-create-skill | Create, test, package, and present reusable skills for Phylo's Biomni platform and bioinformatics workflows. | phylo-create-skill, phylo create skill, phylo | GRN 按需触发 |
+| 17 | self-improving-agent | 自进化能力:分析成功后自动沉淀经验为新技能；分析失败后自动学习错误模式避免重复犯错；根据使用频率自动优化参数。包括技能沉淀、错误学习、参数进化三大子系统。 | self-improving-agent, self improving agent, self, improving, agent | GRN 按需触发 |
 
 ## 10_多组学整合 - 多组学整合 (11 skills)
 

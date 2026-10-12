@@ -282,7 +282,7 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .app { display:flex; height:100vh; }
 
 /* === 左侧栏 === */
-.sidebar { width:300px; min-height:0; background:var(--panel); border-right:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; transition:background 0.3s; }
+.sidebar { width:300px; min-height:0; background:var(--panel); border-right:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; transition:background 0.3s; overflow:hidden; }
 .sidebar-header { padding:16px 18px; border-bottom:1px solid var(--border); }
 .sidebar-header h1 { font-size:18px; color:var(--primary); display:flex; align-items:center; gap:8px; }
 .sidebar-header .subtitle { font-size:11px; color:var(--text-light); margin-top:3px; }
@@ -305,10 +305,40 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .session-batch-bar button { font-size:11px; padding:3px 8px; border-radius:4px; border:1px solid var(--border); background:var(--bg); color:var(--text); cursor:pointer; }
 .session-batch-bar button:hover { border-color:var(--primary); color:var(--primary); }
 .session-batch-bar button:disabled { opacity:0.4; cursor:not-allowed; }
-.sidebar-nav { padding:4px 0; border-top:1px solid var(--border); }
+/* 2026-10-12: 小屏自适应 —— 功能栏永不挤出侧栏（内部滚动），会话列表保留可读高度 */
+.sidebar-nav { padding:4px 0; border-top:1px solid var(--border); flex:0 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; }
 .nav-item { padding:9px 18px; cursor:pointer; display:flex; align-items:center; gap:10px; font-size:13px; color:var(--text); transition:background 0.2s; border-left:3px solid transparent; }
 .nav-item:hover { background:var(--primary-light); }
 .nav-item.active { background:var(--primary-light); color:var(--primary); font-weight:500; border-left-color:var(--primary); }
+
+/* === 2026-10-12 小屏自适应（笔记本/小窗口：功能栏变紧凑并在内部滚动，不再遮住会话）=== */
+/* ① 高度偏紧（<900px）：先压缩页眉、按钮与功能栏行高 */
+@media (max-height: 900px) {
+  .sidebar-header { padding:10px 16px; }
+  .sidebar-header .subtitle { display:none; }
+  .sidebar-header h1 { font-size:16px; }
+  .new-session-btn { margin:8px 14px; padding:6px; font-size:12.5px; }
+  .session-search { margin:0 12px 4px; }
+  .nav-item { padding:6px 14px; font-size:12.5px; gap:8px; }
+  .sidebar-footer { padding:7px 16px; }
+}
+/* ② 高度紧张（<780px）：功能栏改两列网格（12 项 → 6 行），会话列表保底 88px */
+@media (max-height: 780px) {
+  .sidebar-nav { display:grid; grid-template-columns:1fr 1fr; column-gap:2px; }
+  .nav-item { padding:5px 10px; font-size:12px; gap:6px; border-left-width:2px; }
+  .session-list { min-height:88px; }
+}
+/* ③ 极矮（<660px）：版本行让位，只保留「检查更新」；会话列表保底 72px */
+@media (max-height: 660px) {
+  #footer-info { display:none; }
+  .sidebar-footer { padding:5px 14px; }
+  .session-list { min-height:72px; }
+  .session-batch-bar { padding:0 12px 3px; }
+}
+/* ④ 小宽度（<900px）：侧栏收窄，给会话区让出空间 */
+@media (max-width: 900px) {
+  .sidebar { width:250px; }
+}
 .sidebar-footer { padding:10px 18px; border-top:1px solid var(--border); font-size:11px; color:var(--text-light); }
 
 /* === 中间聊天区 === */
@@ -1416,7 +1446,7 @@ html[data-theme="dark"] .ev-chain .ev-t, #kb-node-modal .ev-chain .ev-t { color:
 .cc-console .dcs-loadmore { text-align:center; padding:8px; }
 .cc-console .dcs-form { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px; }
 .cc-console .dcs-input { flex:1; min-width:220px; padding:4px 7px; border-radius:6px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:12px; }
-.cc-console .dcs-note { font-size:11px; color:var(--text-light); margin-top:6px; }
+.cc-console .dcs-note { font-size:11px; color:var(--text-light); margin-top:6px; white-space:pre-line; }
 .cc-console .dcs-row .dcs-pick { width:13px; height:13px; flex:none; cursor:pointer; accent-color:var(--primary); }
 .cc-console .dcs-qbadge { margin-left:5px; padding:0 5px; border-radius:9px; background:var(--primary); color:#fff; font-size:10px; font-weight:600; }
 .cc-console .dcs-selbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:6px 14px; border-bottom:1px solid var(--border); background:var(--bg); font-size:11px; color:var(--text-light); }
@@ -17230,14 +17260,41 @@ function dcsTabQueue() {
 }
 
 // ---------- 入队 ----------
+// ---------- 下载通道（type）----------
+// 2026-10-12：平台 web 通道只收单文件 ≤200MB（建单即判 failed item）；
+// 大文件必须换 raysync / ossutil / tosutil / obsutil / aws / mount（通道是否开通是项目级）。
+var _dcsDlType = 'web';
+var DCS_DL_TYPES = [
+  ['web', 'web（小文件 ≤200MB）'],
+  ['raysync', 'raysync 镭速（大文件，需项目开通）'],
+  ['ossutil', 'ossutil（对象存储）'],
+  ['tosutil', 'tosutil'],
+  ['obsutil', 'obsutil'],
+  ['aws', 'aws cli'],
+  ['mount', '挂盘 mount']
+];
+function dcsSelect(id, opts, value) {
+  var s = document.createElement('select');
+  s.id = id;
+  s.style.cssText = 'font-size:12px;padding:4px 8px;border-radius:4px;background:var(--border);color:var(--text);border:none;';
+  (opts || []).forEach(function (o) {
+    var op = document.createElement('option');
+    op.value = o[0]; op.textContent = o[1];
+    if (o[0] === value) op.selected = true;
+    s.appendChild(op);
+  });
+  return s;
+}
+
 function dcsEnqueue(items) {
   items = (items || []).filter(function (x) { return x && x.path; });
   if (!items.length) { dcsPrint('没有可下载的条目', 'err'); return; }
   var dir = _dcsLastDir || '';
   dcsSetView('queue');
-  dcsPrint('⬇ 加入下载队列：' + items.length + ' 个文件 → ' + (dir || '（默认下载目录）'), 'sys');
+  dcsPrint('⬇ 加入下载队列：' + items.length + ' 个文件（通道 ' + _dcsDlType + '）→ ' + (dir || '（默认下载目录）'), 'sys');
   dcsQPost('/api/dcs/dl/start', { items: items.map(function (it) {
-    return { path: it.path, name: it.name || '', size: it.size || 0, target: it.target || dir };
+    return { path: it.path, name: it.name || '', size: it.size || 0, target: it.target || dir,
+             type: it.type || _dcsDlType };
   }) }).then(function (res) {
     if (res.__err) { dcsPrint('✗ 入队失败：' + res.__err + (res.hint ? ('\n' + res.hint) : ''), 'err'); return; }
     var n = (res.ids || []).length || res.queued || items.length;
@@ -17256,7 +17313,8 @@ function dcsQCancel(id) {
 
 function dcsQRetry(id) {
   dcsQPost('/api/dcs/dl/retry', { id: id }).then(function (r) {
-    if (r.__err) dcsPrint('✗ 重试失败：' + r.__err, 'err'); else dcsPrint('已重新入队（原任务 ' + id + ' 的副本）', 'sys');
+    if (r.__err) { dcsPrint('✗ 重试失败：' + r.__err + (r.hint ? ('\n' + r.hint) : ''), 'err'); }
+    else { dcsPrint('已重新入队（原任务 ' + id + ' 的副本）', 'sys'); }
     dcsQRefresh();
   });
 }
@@ -17298,6 +17356,15 @@ function dcsQRender() {
     var dl = document.createElement('span'); dl.textContent = '下载到：' + (_dcsLastDir || '（默认下载目录）');
     head.appendChild(dl);
     head.appendChild(dcsBtn('📂 换目录', '', function () { dcsPickDir(); }));
+    // 通道（type）：web 只收 ≤200MB，大文件要换通道 —— 队列入队前就能改（2026-10-12）
+    var tp = dcsSelect('dcs-qtype', DCS_DL_TYPES, _dcsDlType);
+    tp.title = '下载通道：web 通道只支持单文件 ≤200MB；大文件要换成已开通的其它通道';
+    tp.onchange = function () {
+      _dcsDlType = tp.value;
+      dcsPrint('下载通道已切换：' + tp.value +
+               (tp.value === 'web' ? '（单文件 ≤200MB）' : '（大文件通道，需项目侧开通）'), 'sys');
+    };
+    head.appendChild(tp);
     if ((c.active || 0) > 0) head.appendChild(dcsBtn('✕ 全部取消', '', dcsQCancelAll));
     if ((c.done || 0) + (c.failed || 0) + (c.cancelled || 0) > 0) {
       head.appendChild(dcsBtn('🧹 清空已结束', '', dcsQClear));
@@ -17852,16 +17919,26 @@ function dcsInput(id, value, placeholder, width) {
 }
 
 function dcsDownloadFile(path, name, size) {
-  var f = dcsFormShell('⬇ 加入下载队列', '目标目录：可以手填，也可以点「📂 选择文件夹」用系统对话框选；下载完在「⬇ 队列」里看进度。');
+  var big = (size || 0) > 200 * 1024 * 1024;
+  var note = '目标目录：可以手填，也可以点「📂 选择文件夹」用系统对话框选；下载完在「⬇ 队列」里看进度。';
+  if (big) {
+    note += '\n⚠ 本文件 ' + (size / 1048576).toFixed(1) + ' MB 超过 web 通道单文件上限（200MB）：web 建单即拒。'
+          + '请用 DCS 网页端对该文件点单文件下载（浏览器流式写盘，不受此上限约束），'
+          + '或在下面换成大文件通道（raysync/ossutil/…，需项目侧开通）。';
+  }
+  var f = dcsFormShell('⬇ 加入下载队列', note);
   if (!f) return;
   f.appendChild(dcsInput('dcs-dl-dir', _dcsLastDir || '', '本机目标目录，例 E:/data'));
   f.appendChild(dcsBtn('📂 选择文件夹', '', function () { dcsPickInto('dcs-dl-dir', 'dir'); }));
+  f.appendChild(dcsSelect('dcs-dl-type', DCS_DL_TYPES, _dcsDlType));
   f.appendChild(dcsBtn('⬇ 加入队列', 'primary', function () {
     var dir = (document.getElementById('dcs-dl-dir') || {}).value || '';
     if (!dir) { alert('先选或填一个本机目录'); return; }
+    var se = document.getElementById('dcs-dl-type');
+    _dcsDlType = (se && se.value) || 'web';
     _dcsLastDir = dir;
     dcsSaveDownloadDir(dir, true);
-    dcsEnqueue([{ path: path, name: name || '', size: size || 0, target: dir }]);
+    dcsEnqueue([{ path: path, name: name || '', size: size || 0, target: dir, type: _dcsDlType }]);
     var dt = document.getElementById('dcs-detail'); if (dt) dt.style.display = 'none';
   }));
   f.appendChild(dcsBtn('📌 设为默认', '', function () {

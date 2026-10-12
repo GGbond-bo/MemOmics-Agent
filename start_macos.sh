@@ -192,4 +192,20 @@ fi
 echo ""
 echo "[START] http://localhost:$PORT"
 echo ""
+# 2026-10-12: 等 WebUI 真正就绪（/api/health 返回 MemOmics）再打开浏览器。
+# 旧行为是启动即提示地址，端口已监听但 startup 未完成时打开会看到报错页（用户反馈）。
+# 用后台子 shell 等待，不阻塞、不影响 exec 的服务进程；无图形环境（HPC/服务器）自动跳过。
+(
+    _i=0
+    while [ "$_i" -lt 180 ]; do
+        if command -v curl >/dev/null 2>&1 && curl -s -m 3 "http://127.0.0.1:$PORT/api/health" 2>/dev/null | grep -q MemOmics; then
+            if command -v open >/dev/null 2>&1; then open "http://127.0.0.1:$PORT" >/dev/null 2>&1
+            elif command -v xdg-open >/dev/null 2>&1; then xdg-open "http://127.0.0.1:$PORT" >/dev/null 2>&1
+            fi
+            break
+        fi
+        _i=$((_i + 1))
+        sleep 1
+    done
+) &
 exec "$VENV_PY" webui/server.py
