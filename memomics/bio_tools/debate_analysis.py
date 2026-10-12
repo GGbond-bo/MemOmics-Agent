@@ -83,6 +83,36 @@ def get_session_results_dir() -> str:
     """获取当前结果目录（ContextVar，跨工具 worker 线程传播）。"""
     return _results_dir_var.get()
 
+
+def _persist_decision_channel(result: dict) -> None:
+    """2026-10-14：辩论跑完把「参数决策」落到 claims/params.json。
+
+    用户口径：辩论不能只产出"辩论结果"，重要参数的裁决必须**能用于后面的分析**。
+    落地位置 = 会话 results 目录下的 claims/params.json（append-only history），
+    后续脚本/agent 读它即可采用；同时把 claim 级溯源接到同一条账本上。
+    失败**绝不影响辩论本身**（只是少一条通道记录）。
+    """
+    try:
+        rd = get_session_results_dir()
+        if not rd or not isinstance(result, dict):
+            return
+        from memomics.bio_tools import claim_ledger as _cl
+        _cl.record_decision_from_result(rd, result)
+        result["params_channel"] = "claims/params.json"
+        _p = (result.get("recommended_params") or {})
+        _dg = (result.get("judge_digest") or {}) if isinstance(result.get("judge_digest"), dict) else {}
+        result["params_channel_hint"] = (
+            "重要参数决策已写入 claims/params.json（含裁决/证据/历史）："
+            "后续分析请先 claim_ledger(action='params') 读取并采用，"
+            "结论用 claim_ledger(action='add_claim') 登记" + (f"；本场整理稿：{_dg.get('summary','')[:80]}" if _dg.get('summary') else "")
+        ) if _p else (
+            "本场未产出 recommended_params（裁决只给了 decision/next_actions）："
+            "下一步动作已写入 claims/params.json，执行完请把实际参数用 claim_ledger(action='params_from_decision') 补登记"
+        )
+    except Exception as e:
+        logger.warning(f"记录参数决策通道失败（不影响辩论）: {e}")
+
+
 def get_session_model_config() -> dict:
     """获取当前会话「正在使用的模型配置」（ContextVar，跨工具 worker 线程传播）。"""
     cfg = _model_cfg_var.get()
@@ -2934,6 +2964,7 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
         result["confidence"] = "low"
         result["consistency_issues"] = issues
 
+    _persist_decision_channel(result)   # 2026-10-14：参数决策 → claims/params.json（后续分析要用）
     result_json = json.dumps(result, ensure_ascii=False, indent=2)
     # 2026-08-14 修复：矛盾裁决（consistency_issues 非空）不入全局缓存，
     # 否则下次同 topic+context 命中会直接返回 low 结果，污染 72h 复用。
@@ -3453,6 +3484,7 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                 "general_kb_used_as_fallback": not (biology_kb or statistics_kb or bioinfo_kb),
             },
         }
+        _persist_decision_channel(result)   # 同上：L2 也把参数决策落通道
         result_json = json.dumps(result, ensure_ascii=False, indent=2)
         # 🔧 P1-2 修复(2026-08-01): 解析 judge JSON → 结构化 verdict 供 Agent 直接使用
         # 之前: judge_verdict 是原始文本(含```json围栏)，verdict=modify 的 recommended_params 无法结构化回传
@@ -3519,6 +3551,7 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             result["consistency_issues"] = _issues
             logger.warning(f"debate verdict still inconsistent after re-judge: {_issues} → confidence=low, 禁止回流")
 
+        _persist_decision_channel(result)   # 重裁后也刷新参数通道（以最新裁决为准）
         result_json = json.dumps(result, ensure_ascii=False, indent=2)
         # 持久化辩论结果（优化2：全局缓存用于去重；P0：指纹隔离）
         # 2026-08-14 修复：矛盾裁决不入缓存，否则下次命中直接返回 low 结果。
