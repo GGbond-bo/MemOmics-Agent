@@ -474,6 +474,15 @@ def _run_cli(args: list, *, cfg: dict | None = None, timeout: int | None = None,
             "stdout_tail": stdout[-2000:] if not ok else "",
         }
         if not ok:
+            # 2026-10-13：平台把真实拒绝原因藏在 data.error / data.api_msg
+            # （「--image 必填」「匹配不到计算资源 vf=2g… 可选择以下机型…」），
+            # 顶层 message 只有泛泛的「任务运行失败」——把内层原因提到前台。
+            _d = parsed.get("data")
+            if isinstance(_d, dict):
+                _inner = str(_d.get("error") or _d.get("api_msg") or "").strip()
+                if _inner:
+                    out["platform_message"] = out.get("message") or ""
+                    out["message"] = _inner
             out = _attach_friendly_hint(out)
             # 平台顶层文案很泛（「提交批次下载任务失败」/「Fix failed items and resubmit」）：
             # 逐条的真实原因在 data.failed_items[] 里 —— 提到前台，别让用户看见空泛那句（2026-10-12）。
@@ -1852,11 +1861,17 @@ def action_images(args: dict) -> dict:
     images = []
     for r in recs:
         nm = str(r.get("name") or "").strip()
-        tag = str(r.get("tags") or "").strip().strip(":") or "latest"
-        if nm:
-            images.append({"name": nm, "ref": "%s:%s" % (nm, tag),
-                           "prog_env": str(r.get("prog_env") or ""),
-                           "build_type": str(r.get("build_type") or "")})
+        # 2026-10-13 修：--image 要的是 registry 路径（url 字段），不是 name:tags。
+        # 实测坑：centos-7 的 url 是 workflow/centos:latest（平台已失效，报 image_url不存在），
+        # 真实可用的形如 stereonote_hpc/<hash>_public:latest。url 残缺（":latest"）时回退 name:tags。
+        url = str(r.get("url") or "").strip()
+        tag = str(r.get("tags") or "").strip().strip(":\t ").split(",")[0] or "latest"
+        if not nm and not url:
+            continue
+        ref = url if (url and not url.startswith(":")) else ("%s:%s" % (nm, tag))
+        images.append({"name": nm, "ref": ref, "url": url,
+                       "prog_env": str(r.get("prog_env") or ""),
+                       "build_type": str(r.get("build_type") or "")})
     return _ok({"images": images, "total": (d.get("total") if isinstance(d, dict) else len(images)) or len(images)})
 
 
