@@ -1,0 +1,26 @@
+{
+  "id": "input-data-integrity-audit",
+  "name": "输入数据完整性审计",
+  "category": "bioinformatics",
+  "language": "Python+R",
+  "description": "分析输入定义文件的完整性审计（分析前必做）：比对原始 vs 「修复版/CLEAN/v2」派生文件、用官方 cardinality 指纹识别静默截断、区分来源分类与显示分组。触发：用户给一份基因集/通路/打分/元数据定义表要用它算分或做溯源、用户问「这个文件是不是我要的那份」、目录里同时存在原始与修复版文件。",
+  "starting_prompt": "使用 输入数据完整性审计 进行分析",
+  "source_dir": "skills/bioinformatics/input-data-integrity-audit",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "data-quality",
+    "provenance",
+    "geneset",
+    "input-validation"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "input",
+    "integrity",
+    "audit"
+  ],
+  "when_to_use": "拿到任何分析输入定义文件（基因集定义、通路清单、打分矩阵、样本元数据表）准备用它做打分/富集/溯源前；或用户问「这个是不是？」「该用哪份文件」；或你发现某组条目数整齐得可疑时。"
+}

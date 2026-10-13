@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{TITLE}} — 技术路线图</title>
+<style>
+/* ====== 双主题: 亮色 (研究方案) / 暗色 (管线流程) ====== */
+/* 默认暗色主题，适合管线可视化。研究方案场景可用亮色变量覆盖 */
+:root {
+  --bg: #0d1117; --card-bg: #161b22; --text: #c9d1d9; --heading: #f0f6fc;
+  --border: #30363d; --accent: #58a6ff; --green: #3fb950; --red: #f85149;
+  --phase-colors: #1565C0, #E65100, #2E7D32, #6A1B9A, #006064, #F57F17, #4E342E;
+}
+/* 覆盖为亮色: 在 body 加 class="light" */
+body.light {
+  --bg: #fafafa; --card-bg: #fff; --text: #333; --heading: #222;
+  --border: #e0e0e0; --accent: #1565c0; --green: #2e7d32; --red: #c62828;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 40px 20px; line-height: 1.6; }
+.container { max-width: 1200px; margin: 0 auto; }
+h1 { text-align: center; color: var(--accent); margin-bottom: 8px; font-size: 28px; }
+.subtitle { text-align: center; color: #8b949e; font-size: .95rem; margin-bottom: 32px; }
+h2 { color: var(--heading); margin: 40px 0 16px; padding-left: 10px; border-left: 4px solid var(--accent); font-size: 18px; }
+
+/* ====== 布局 A: Phase 卡片流 (暗色管线可视化) ====== */
+.phase-flow { display: flex; flex-direction: column; gap: 0; }
+.phase-card { border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 0; }
+.phase-card .phase-label { font-weight: 700; font-size: 13px; margin-bottom: 14px; padding: 4px 12px; border-radius: 6px; display: inline-block; }
+.phase-card .phase-items { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.phase-node { padding: 8px 14px; border-radius: 8px; font-size: 12px; border: 1px solid; white-space: nowrap; }
+.phase-node.decision { font-style: italic; }
+.flow-arrow { color: var(--accent); font-size: 20px; font-weight: 700; padding: 0 4px; display: inline-flex; align-items: center; }
+.flow-connector { display: flex; justify-content: center; padding: 6px 0; color: #484f58; font-size: 22px; }
+.branch-stack { display: flex; flex-direction: column; gap: 4px; margin-left: 12px; }
+.branch-row { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8b949e; }
+
+/* ====== 布局 B: 水平卡片 Pipeline (亮色研究方案) ====== */
+.pipeline-h { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; align-items: stretch; margin-bottom: 40px; }
+.pipeline-h .phase-h { background: var(--card-bg); border-radius: 12px; padding: 18px 14px; box-shadow: 0 2px 8px rgba(0,0,0,.06); flex: 1 1 170px; min-width: 160px; border-top: 4px solid #ccc; }
+.pipeline-h .phase-h h3 { font-size: .8rem; color: #888; margin-bottom: 4px; text-transform: uppercase; }
+.pipeline-h .phase-h h2 { font-size: 1rem; margin-bottom: 6px; border: none; padding: 0; }
+.pipeline-h .phase-h ul { list-style: none; font-size: .82rem; } .pipeline-h .phase-h li { padding: 2px 0; border-bottom: 1px solid var(--border); } .pipeline-h .phase-h li:last-child { border-bottom: none; }
+.pipeline-arrow { display: flex; align-items: center; font-size: 1.4rem; color: #999; flex-shrink: 0; }
+
+/* ====== 思维导图列 ====== */
+.mindmap { display: flex; gap: 16px; }
+.mindmap-col { flex: 1; min-width: 0; }
+.mindmap-col-title { font-weight: 700; font-size: 13px; margin-bottom: 10px; padding: 6px 12px; border-radius: 8px; text-align: center; color: #fff; }
+.mindmap-item { background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; margin-bottom: 5px; font-size: 12px; }
+.mindmap-sub { margin-left: 10px; padding-left: 6px; border-left: 2px solid var(--border); font-size: 11px; color: #8b949e; margin-bottom: 3px; }
+
+/* ====== 表格 / 细节卡片 ====== */
+.detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-bottom: 32px; }
+.detail-card { background: var(--card-bg); border-radius: 10px; padding: 18px; border: 1px solid var(--border); }
+.detail-card h3 { font-size: 1rem; margin-bottom: 10px; }
+.detail-card table { width: 100%; font-size: .82rem; border-collapse: collapse; }
+.detail-card th, .detail-card td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+.detail-card th { color: #888; font-weight: 500; }
+.params-table { max-width: 1200px; margin: 20px auto; }
+.params-table table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.params-table th { background: #21262d; color: var(--accent); padding: 10px 14px; text-align: left; border: 1px solid var(--border); }
+.params-table td { padding: 8px 14px; border: 1px solid var(--border); }
+.params-table code { background: #21262d; padding: 2px 6px; border-radius: 3px; color: #ffa657; font-size: 12px; }
+body.light .params-table th, body.light .params-table code { background: #f0f0f0; }
+
+/* ====== Figure 面板 ====== */
+.figure-layout { background: var(--card-bg); border-radius: 12px; padding: 24px; border: 1px solid var(--border); margin-bottom: 32px; }
+.panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.panel { border: 2px dashed var(--border); border-radius: 8px; padding: 12px; font-size: .82rem; text-align: center; min-height: 50px; display: flex; align-items: center; justify-content: center; flex-direction: column; }
+.panel.full { grid-column: 1 / -1; }
+
+/* ====== 目录树 ====== */
+.dir-tree { font-family: 'Fira Code', 'Consolas', monospace; font-size: 13px; line-height: 1.8; margin: 20px 0; }
+.dir-tree .dir { color: var(--accent); } .dir-tree .file { color: #7ee787; } .dir-tree .comment { color: #8b949e; }
+
+/* ====== 上游下游衔接 ====== */
+.flow-bridge { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; margin: 20px 0; }
+.flow-bridge .bridge-node { padding: 14px 20px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; text-align: center; font-size: 13px; }
+.flow-bridge .bridge-arrow { font-size: 26px; color: var(--accent); }
+
+.footer { text-align: center; color: #484f58; margin-top: 40px; font-size: 12px; }
+</style>
+</head>
+<body class="{{THEME_CLASS}}">
+<div class="container">
+
+<h1>{{TITLE}}</h1>
+<p class="subtitle">{{SUBTITLE}}</p>
+
+<!-- ============ 主图: Phase 卡片流 ============ -->
+{{#if PHASE_CARDS}}
+<h2>📊 {{SECTION1_TITLE}}</h2>
+<div class="phase-flow">
+  {{PHASE_CARDS}}
+</div>
+{{/if}}
+
+<!-- ============ 水平 Pipeline (备选) ============ -->
+{{#if PIPELINE_H}}
+<h2>{{SECTION1_TITLE}}</h2>
+<div class="pipeline-h">
+  {{PIPELINE_H}}
+</div>
+{{/if}}
+
+<!-- ============ 全景思维导图 ============ -->
+{{#if MINDMAP}}
+<h2>🧠 {{SECTION2_TITLE}}</h2>
+<div class="mindmap">
+  {{MINDMAP}}
+</div>
+{{/if}}
+
+<!-- ============ 参数速查表 ============ -->
+{{#if PARAMS_TABLE}}
+<h2>📋 关键参数速查表</h2>
+<div class="params-table">{{PARAMS_TABLE}}</div>
+{{/if}}
+
+<!-- ============ 细节卡片 ============ -->
+{{#if DETAIL_CARDS}}
+<h2>📋 各阶段详细说明</h2>
+<div class="detail-grid">
+  {{DETAIL_CARDS}}
+</div>
+{{/if}}
+
+<!-- ============ Figure 布局 ============ -->
+{{#if FIGURE_LAYOUT}}
+<div class="figure-layout">
+  <h2 style="border:none;text-align:center;">🎨 最终 Figure 布局</h2>
+  <div class="panel-grid">
+    {{FIGURE_LAYOUT}}
+  </div>
+</div>
+{{/if}}
+
+<!-- ============ 数据流 ============ -->
+{{#if DATAFLOW}}
+<h2>📊 数据流</h2>
+<table style="width:100%;font-size:.85rem;border-collapse:collapse;">
+  <thead><tr><th style="padding:10px;border-bottom:2px solid var(--border);">Phase</th><th style="padding:10px;border-bottom:2px solid var(--border);">输入</th><th style="padding:10px;border-bottom:2px solid var(--border);">操作</th><th style="padding:10px;border-bottom:2px solid var(--border);">输出</th></tr></thead>
+  <tbody>{{DATAFLOW}}</tbody>
+</table>
+{{/if}}
+
+<!-- ============ 输出目录树 ============ -->
+{{#if DIR_TREE}}
+<h2>📂 输出目录结构</h2>
+<div class="dir-tree">{{DIR_TREE}}</div>
+{{/if}}
+
+<!-- ============ 上下游衔接 ============ -->
+{{#if BRIDGE}}
+<h2>🔗 上下游衔接</h2>
+<div class="flow-bridge">{{BRIDGE}}</div>
+{{/if}}
+
+<!-- ============ 下一步 ============ -->
+{{#if NEXT_STEPS}}
+<div style="text-align:center;padding:24px;">
+  <p style="font-size:1.1rem;color:var(--accent);">{{NEXT_STEPS}}</p>
+</div>
+{{/if}}
+
+<p class="footer">MemOmics · {{PIPELINE_NAME}} · {{DATE}}</p>
+</div>
+</body>
+</html>

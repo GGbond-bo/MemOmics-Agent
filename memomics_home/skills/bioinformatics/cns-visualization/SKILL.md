@@ -110,6 +110,9 @@ Nature/Cell/Science级别出图模板: UMAP+DotPlot+Violin+Heatmap+Sankey
 | human | skeletal_muscle | aging | 2026-10-08 | fig_A2_5effects_v5_rawp.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-10-08 | fig_A3_CNS_v6.R | - | - |  |
 | human | skeletal_muscle | exercise | 2026-10-08 | cluster_umap_replot_MuSC.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-13 | go_heatmap_v15.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-13 | go_heatmap_v16_words_only.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-13 | go_heatmap_v16_words_only.R | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

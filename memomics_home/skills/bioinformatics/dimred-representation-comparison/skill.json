@@ -1,0 +1,30 @@
+{
+  "id": "dimred-representation-comparison",
+  "name": "降维表示对比与分群质量定级",
+  "category": "scRNA",
+  "language": "R+Python",
+  "description": "降维/embedding 表示对比与分群质量定级（PCA vs scVI vs Harmony 等）。触发:'哪个分群更干净'、'scVI 和 PCA 对比'、'换个 embedding 会不会更好'、'降维方法对比'、'embedding 对比'、'用 scVI 做个 embedding 和 PCA 的 UMAP 比一下'。含严格同参原则、输入路线解耦归因、指标集与 sklearn 陷阱、多 s",
+  "starting_prompt": "使用 降维表示对比与分群质量定级 进行分析",
+  "source_dir": "skills/bioinformatics/dimred-representation-comparison",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "dimensionality-reduction",
+    "scvi",
+    "pca",
+    "harmony",
+    "clustering-quality",
+    "benchmark",
+    "conclusion-grading",
+    "02_基础分析"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "dimred",
+    "representation",
+    "comparison"
+  ],
+  "when_to_use": "降维/embedding 表示对比与分群质量定级（PCA vs scVI vs Harmony 等）。触发:'哪个分群更干净'、'scVI 和 PCA 对比'、'换个 embedding 会不会更好'、'降维方法对比'、'embedding 对比'、'用 scVI 做个 embedding 和 PCA 的 UMAP 比一下'。含严格同参原则、输入路线解耦归因、指标集与 sklearn 陷阱、多 s"
+}

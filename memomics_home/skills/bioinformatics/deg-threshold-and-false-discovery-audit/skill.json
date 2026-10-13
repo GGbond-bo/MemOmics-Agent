@@ -1,0 +1,31 @@
+{
+  "id": "deg-threshold-and-false-discovery-audit",
+  "name": "DEG 阈值与假发现审计",
+  "category": "bioinformatics",
+  "language": "R+Python",
+  "description": "DEG 效应量阈值的溯源与假发现审计:任何 /logFC///coef/ 阈值取多少、要不要筛、为什么显著基因数异常多时使用。含 Seurat FindMarkers 默认值的版本差异、MAST 官方无阈值参数的源码级实证、pseudobulk vs 细胞级方法的权威文献结论、正对照校准法。",
+  "starting_prompt": "使用 DEG 阈值与假发现审计 进行分析",
+  "source_dir": "skills/bioinformatics/deg-threshold-and-false-discovery-audit",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "deg",
+    "threshold",
+    "logFC",
+    "MAST",
+    "Seurat",
+    "pseudobulk",
+    "false-discovery",
+    "provenance"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "deg",
+    "threshold",
+    "false",
+    "discovery"
+  ],
+  "when_to_use": "DEG 效应量阈值的溯源与假发现审计:任何 /logFC///coef/ 阈值取多少、要不要筛、为什么显著基因数异常多时使用。含 Seurat FindMarkers 默认值的版本差异、MAST 官方无阈值参数的源码级实证、pseudobulk vs 细胞级方法的权威文献结论、正对照校准法。"
+}

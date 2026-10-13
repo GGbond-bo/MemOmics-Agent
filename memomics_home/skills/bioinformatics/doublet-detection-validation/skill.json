@@ -1,0 +1,27 @@
+{
+  "id": "doublet-detection-validation",
+  "name": "双细胞检测验证与剔除决策协议",
+  "category": "bioinformatics",
+  "language": "R+Python",
+  "description": "双细胞检测结果的**可信度验证与剔除决策**。触发:检测一下双细胞 / 双细胞比例高不高 / 要不要剔除 / doublet 比例 / DoubletFinder、scrublet、scDblFinder 的结果怎么解读 / 两个方法结论不一致。核心立场:双细胞检出率是需要被验证的量，不是能直接读出来的量 —— 弱信号数据上算法标签可错到 F1≈0.3，据标签直接剔除等于删掉约 2/3 真细胞。",
+  "starting_prompt": "使用 双细胞检测验证与剔除决策协议 进行分析",
+  "source_dir": "skills/bioinformatics/doublet-detection-validation",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "doublet",
+    "scrna",
+    "qc",
+    "benchmark",
+    "decision"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "doublet",
+    "detection",
+    "validation"
+  ],
+  "when_to_use": "双细胞检测结果的**可信度验证与剔除决策**。触发:检测一下双细胞 / 双细胞比例高不高 / 要不要剔除 / doublet 比例 / DoubletFinder、scrublet、scDblFinder 的结果怎么解读 / 两个方法结论不一致。核心立场:双细胞检出率是需要被验证的量，不是能直接读出来的量 —— 弱信号数据上算法标签可错到 F1≈0.3，据标签直接剔除等于删掉约 2/3 真细胞。"
+}

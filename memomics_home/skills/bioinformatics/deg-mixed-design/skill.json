@@ -1,0 +1,41 @@
+{
+ "id": "deg-mixed-design",
+ "name": "混合设计 DEG：组间独立 + 组内配对（split-plot / repeated measures）",
+ "category": "scRNA",
+ "language": "R",
+ "description": "混合设计差异表达分析（组间独立比较 + 组内配对/重复测量）。使用场景：多组（如 Young/Old/T2D）× 运动前后取样的 scRNA/bulk 数据，需同时算组间主效应、配对时间效应与组×时间交互。推荐 pseudobulk + dream/muscat 混合模型，MAST 作敏感性验证",
+ "starting_prompt": "使用 混合设计 DEG：组间独立 + 组内配对（split-plot / repeated measures） 进行分析",
+ "source_dir": "skills/bioinformatics/deg-mixed-design",
+ "memomics_module": "",
+ "chains_from": [],
+ "chains_to": [],
+ "tags": [
+  "deg",
+  "mixed-design",
+  "paired",
+  "repeated-measures",
+  "pseudobulk",
+  "dream",
+  "muscat",
+  "03_高级分析"
+ ],
+ "aliases": [],
+ "trigger_level": "YEL",
+ "trigger_keywords": [
+  "deg-mixed-design",
+  "deg mixed design",
+  "deg",
+  "mixed"
+ ],
+ "when_to_use": "多组独立比较 + 组内前后/多点配对取样的 DEG。用户提到'配对'、'运动前后'、'前后比较'、'重复测量'、'独立+配对'、'随机效应'、'组×时间交互'时优先本 skill；纯两组简单比较走 deg-analysis",
+ "debate_verdicts": [
+  {
+   "topic": "",
+   "verdict": "",
+   "recommended_params": "",
+   "confidence": 0.9,
+   "evidence": "Lakens 2013 [PMID:24324449] 给出 d_z/d_av/d_rm 三式：d_z 受个体内相关 r 影响、不可与独立 d 共用色标，d_av 与独立 d 同尺度、为跨设计比较推荐式；Hedges 1981 小样本校正 J=1-3/(4df-1)。本项目实测：ExYoung/ExOld 配对组 r 中位 +0.495/+0.413（正，配对有增益），ExT2D r 中位 −0.195（负，配对反而不如独立）；>50 细胞子集 r 中位仍 −0.208 → 非低细胞噪声所致，是数据稳健特征。实现经手算 + statsmodels 双重校验（差 ≤1e-16）。功效模拟：n=7",
+   "date": "2026-09-25 22:57:52"
+  }
+ ]
+}

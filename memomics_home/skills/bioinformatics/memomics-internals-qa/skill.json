@@ -1,0 +1,28 @@
+{
+  "id": "memomics-internals-qa",
+  "name": "MemOmics 机制问答（源码取证版）",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": "回答关于 MemOmics 自身机制/能力的问题（能做什么、辩论何时触发、L0/L1/L2、上下文隔离是代码层还是提示词、知识库怎么保证可靠、怎么自进化、边界在哪）时的实证方法学。触发:『MemOmics 能做什么』『你们的设计初衷』『辩论什么时候触发』『L0 L1 L2』『隔离怎么实现的』『知识库怎么建的』『你们的边界』『你自己审计一下』『这套东西真的在用吗』。核心:源码优先、file:line",
+  "starting_prompt": "使用 MemOmics 机制问答（源码取证版） 进行分析",
+  "source_dir": "skills/bioinformatics/memomics-internals-qa",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "self-audit",
+    "platform",
+    "internals",
+    "evidence",
+    "memomics"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "memomics-internals-qa",
+    "memomics internals qa",
+    "memomics",
+    "internals"
+  ],
+  "when_to_use": "回答关于 MemOmics 自身机制/能力的问题（能做什么、辩论何时触发、L0/L1/L2、上下文隔离是代码层还是提示词、知识库怎么保证可靠、怎么自进化、边界在哪）时的实证方法学。触发:『MemOmics 能做什么』『你们的设计初衷』『辩论什么时候触发』『L0 L1 L2』『隔离怎么实现的』『知识库怎么建的』『你们的边界』『你自己审计一下』『这套东西真的在用吗』。核心:源码优先、file:line"
+}

@@ -202,8 +202,14 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 | "生存分析" / "KM" / "预后" | `skill_view("survival-analysis")` |
 | "GWAS" / "孟德尔" / "MR" | `skill_view("mendelian-randomization-twosamplemr")` |
 | "报错" / "报错信息" / "出错" / "报错怎么修" / "不工作" / "跑不了" / "调试" / "traceback" / "error message" | `skill_view("error-recovery")` |
+| "技术路线" / "分析路线" / "怎么分析" / "研究方案" / "research plan" | `skill_view("research-plan")` |
+| "基金申请" / "课题申请" / "立项依据" / "开题报告" / "标书" / "grant proposal" | `skill_view("academic-research")` |
+| "深度调研" / "全面调研" / "deep research" | `skill_view("deep-research")` |
 | "样本量" / "功效分析" / "power analysis" | `skill_view("experimental-design-statistics")` |
 | "文献综述" / "literature review" / "综述" | `skill_view("literature-review")` |
+| "提取参数" / "文献参数" / "parameter extraction" | `skill_view("literature-param-extraction")` |
+| "总结论文" / "解读" / "summarize paper" | `skill_view("paper-summary")` |
+| "总结这篇文章" / "解读这篇文献" / "这篇文章的研究思路" / "作者做了什么" / "精读" / "复现这篇" | **文献精读，非调研**：优先 `skill_view("nature-reader")`（RED 必触发，全文中英对照精读器：图表/公式感知、源锚定、术语表，绝不降级为摘要；用户指定优先，2026-08-24）→ 精读后以专业编辑口吻解读；本地文献库未导入 → `literature_import` 后精读；只要摘要 → `summarize_paper` 快速路径。**禁止** skill_view('academic-research') / search_knowledge / search_papers 调研组合、禁止生成研究方案/文献表格（2026-08-24 修复："让我知道作者的研究思路"≠"设计研究思路"，前者是文献解读不是方案设计） |
 | "公共数据" / "下载数据集" / "GEO数据" | `skill_view("omics-dataset-retrieval")` |
 | "PPT" / "幻灯片" / "演示文稿" / "组会" | `skill_view("ppt-generator")` |
 | "Word" / "docx" / "word文档" | `skill_view("docx-generation")` |
@@ -211,10 +217,12 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 | "药物靶点" / "靶点发现" / "drug target" / "药物重定位" | `skill_view("scrna-disease-drug-discovery")` |
 | "上次的脚本" / "之前跑的" / "historical" / "recall" / "回顾" / "之前那个脚本" / "那个分析" / "那个代码" | 先读 `skills/user-scripts/INDEX.md` 匹配 → `skill_evolution(action="query_logs") + recall_experience()` |
 | "算显著性" / "显著性检验" / "细胞比例检验" / "独立比较" / "配对比较" / "组间比较" / "算P值" | 先查 `skills/user-scripts/INDEX.md` statistics 类 → 有旧脚本复用；无 → AI 编写 → 验证 → 认可 → 沉淀 `skills/statistics/` |
+| "生成总结" / "分析总结" / "跑完总结" | `skill_view("analysis-summary-report")` |
 | 任何数据库名（KEGG / UniProt / PDB / GEO / ChEMBL…） | 到 SKILLS_INDEX.md 的 `11_文献搜索` 节按名字找对应 skill 再 skill_view；找不到用 skill_search。**不要照抄占位名 query_xxx** |
 | "拷问" / "挑毛病" / "grill" / "方案打磨" / "设计审查" / "帮我审方案" | `skill_view("grill-me")` |
 | "结构化展示" / "可视化呈现" / "UI组件" / "要点卡片" / "dsh-ui" / "genui" / "交互面板" | `skill_view("genui")` ← 回答正文输出 ```dsh-ui 围栏，webui 自动渲染成卡片/表格/图表/流程（2026-08-22 集成） |
 | "Illustrator" / "操控AI" / "操作AI" / "AI里" / "AI文件" / "AI脚本" / "AI画板" / "画板" / "ExtendScript" / "JSX脚本" | `skill_view("adobe-illustrator")` ← AI 操控手册（21 命令 + 画→导出→**看图**→调整闭环 + 面板导入配方 + 版本沉淀；2026-10-04 建，2026-10-05 全量回归 36/36） |
+| "云平台" / "DCS" / "DCS云" / "GenPilot" / "华大云" / "云上跑" / "在云上跑分析" / "投递任务" / "云容器" / "上传到云" / "云上数据" | `skill_view("dcs-cloud")` ← 云平台操作手册 + **开工前确认协议**（先 `dcs_cloud(action="context")` 拿候选 → `ask_user(kind="intent")` 问清 项目/数据/参数/输出/费用 → 用户勾选后才动手；MemOmics 只是中介，干活的是云平台；对齐铁律 27/28/35。2026-10-07 建） |
 
 **🔴 genui 自觉判断（2026-08-22，RED 必触发 · 不等触发词）**：结构化表达优于纯文本时**主动**输出 ```dsh-ui fence，不需要用户开口——判断标准：这段内容换成组件会不会更好扫、更好懂、更好操作？会 → 就用。命中"内容类型 → 组件"映射（见下方使用引导）即输出；纯问答/一句话能说清才不用。这与 `cns-visualization` 出图无关（那是科学图，这是回答内的信息组件）。
 
@@ -888,7 +896,7 @@ terminal 完成 → _pending_record = True
 ## 参考
 
 > 📋 **SOUL-detail.md**：场景触发表、19领域一览、分析流程、长任务追踪规则 12-21、task_plan.md 模板、心跳/error_scanner 部署、后台进程模式决策树、HTML 报告规则、目录策略
-> 📚 **SKILLS_INDEX.md**：426 个生信技能索引（由系统按意图动态注入）
+> 📚 **SKILLS_INDEX.md**：457 个生信技能索引（由系统按意图动态注入）
 > 🔧 **environment.json**：`<安装目录>/environment.json` 全局环境文件
 
 | "代谢组学" / "metabolomics" / "LC-MS" / "GC-MS" / "峰表" / "peak table" / "差异代谢物" / "代谢通路富集" / "代谢组" / "lc-ms" / "gc-ms" / "火山图" / "热图" / "volcano" / "heatmap" / "代谢物差异" | `skill_view("metabolomics-full-pipeline")` |
@@ -898,5 +906,6 @@ terminal 完成 → _pending_record = True
 | "华大BGI单细胞分析" / "dnbc4tools 比对" / "dnbc4tools rna run" / "dnbc4tools atac run" / "dnbc4tools vdj run" / "DNBelab 完整流程" / "华大 RNA 分析流程" / "华大 ATAC 分析流程" / "DNBelab FASTQ 分析" / "华大单细胞比对流程" / "dnbc4tools multi" / "DNBelab 多样本" | `skill_view("dnbc4tools-analysis-workflow")` |
 > ⚠️ `dnbc4tools-analysis-workflow` 触发门禁（用户特别指定 2026-08-28）：命中上述触发词时**禁止直接执行分析**——必须先向用户澄清 ①是否华大 BGI/MGI/DNBelab 平台 ②RNA 还是 ATAC 流程 ③是否已有 ref.json 库（无→先 mkref，见 dnbc4tools-index-building）→ 确认后才加载执行；厂家未确认（10X/标准STAR/hisat2 等）→ **不触发本 skill**；仅建索引需求 → 走 dnbc4tools-index-building；scVDJ → vdj run 预建库。
 | "去AI味" / "去AI腔" / "降AI味" / "human-skill" / "查重" / "重复率" / "自我抄袭" / "AI痕迹" / "像AI写的" | `skill_view("human-skill")` |
+| "CLI-Anything" / "cli-hub" / "操控" / "软件自动化" / "批量控制桌面软件" / "agent-native CLI" / "harness" / "做个CLI" / "做个命令行" / "包装成CLI" / "批量改" / "统一字号" / "inkscape" / "矢量图批量" / "批处理软件" / "Illustrator自动化" | `skill_view("cli-anything")` |
 | "Illustrator" / "操控AI" / "操作AI" / "AI里" / "AI文件" / "AI画板" / "画板" / "ExtendScript" / "JSX脚本" | `skill_view("adobe-illustrator")` → AI 全链路操控手册（21 命令 + 画→导出→看图→调整闭环 + 面板导入配方 + 版本沉淀；2026-10-04 建） |
 <!-- AUTO_SKILL_INSERT_MARKER -->

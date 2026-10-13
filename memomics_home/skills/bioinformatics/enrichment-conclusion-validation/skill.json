@@ -1,0 +1,28 @@
+{
+  "id": "enrichment-conclusion-validation",
+  "name": "富集结论验证（定稿前四项门禁）",
+  "category": "bioinformatics",
+  "language": "R",
+  "description": "DEG→GO/KEGG/GSEA 结论的定稿前四项验证:推断单位（细胞 vs 样本）、多重检验可达性、细胞类型构成混杂、通路冗余合并。触发:富集结果要下结论/出图/入库前，debate 判 need_more_info，样本级与细胞级显著性冲突，KEGG 榜单出现一堆疾病名通路，跨组富集出线粒体/能量代谢类通路。",
+  "starting_prompt": "使用 富集结论验证（定稿前四项门禁） 进行分析",
+  "source_dir": "skills/bioinformatics/enrichment-conclusion-validation",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "enrichment",
+    "KEGG",
+    "GO",
+    "pseudobulk",
+    "statistics",
+    "03_高级分析"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "enrichment",
+    "conclusion",
+    "validation"
+  ],
+  "when_to_use": "DEG→GO/KEGG/GSEA 结论的定稿前四项验证:推断单位（细胞 vs 样本）、多重检验可达性、细胞类型构成混杂、通路冗余合并。触发:富集结果要下结论/出图/入库前，debate 判 need_more_info，样本级与细胞级显著性冲突，KEGG 榜单出现一堆疾病名通路，跨组富集出线粒体/能量代谢类通路。"
+}
