@@ -12218,6 +12218,127 @@ async def update_check():
     return result
 
 
+_RESTART_DELAY_SEC = 1.2
+
+
+def _restart_busy_items() -> list:
+    """列出会因重启而中断的在跑任务（2026-10-13）：会话任务 / 更新任务 / DCS 下载队列。"""
+    items = []
+    try:
+        for sid, s in list(_sessions.items()):
+            try:
+                if _session_run_flags(s):
+                    items.append({"kind": "session", "id": str(sid),
+                                  "title": str(s.get("title") or "")[:60]})
+            except Exception:
+                pass
+    except Exception:
+        pass
+    try:
+        if _UPDATE_TASK.get("running"):
+            items.append({"kind": "update", "id": "update", "title": "正在应用更新包"})
+    except Exception:
+        pass
+    try:
+        d = _dcs_dl_call("dl_list", {}) or {}
+        for j in (d.get("jobs") or d.get("items") or []):
+            st = str(j.get("status") or "").lower()
+            if st in ("running", "pending", "downloading", "queued"):
+                items.append({"kind": "dcs_download", "id": str(j.get("id") or j.get("job_id") or ""),
+                              "title": str(j.get("name") or j.get("target") or "")[:60]})
+    except Exception:
+        pass
+    return items
+
+
+_SUPERVISED_MARKER = ".launcher_supervised"      # 启动器启动时写，退出时删（存在=有启动器在等本进程）
+_RESTART_PENDING = ".restart_pending"            # 重启请求落盘兜底（防某层转发器吞掉退出码 77）
+_RESTART_EXIT_CODE = 77
+_SUPERVISED_MAX_AGE_SEC = 6 * 3600
+
+
+def _home_file(name: str) -> str:
+    return os.path.join(MEMOMICS_HOME_DIR, name)
+
+
+def _supervised_marker_path() -> str:
+    return _home_file(_SUPERVISED_MARKER)
+
+
+def _restart_pending_path() -> str:
+    return _home_file(_RESTART_PENDING)
+
+
+def _is_supervised() -> bool:
+    """是否由启动器监管运行：环境变量 == 1，或监管标记文件新鲜（< 6 小时）。
+
+    标记文件是必须的：Windows 上 .venv/Scripts/python.exe 可能只是转发器，
+    会再起一个基础解释器承载真实进程；那条链路上环境变量可能丢，文件不会。
+    """
+    if (os.environ.get("MEMOMICS_SUPERVISED") or "").strip() == "1":
+        return True
+    try:
+        mp = _supervised_marker_path()
+        age = time.time() - os.path.getmtime(mp)
+        return 0 <= age < _SUPERVISED_MAX_AGE_SEC
+    except OSError:
+        return False
+
+
+def _schedule_restart_exit(delay: float | None = None) -> None:
+    """延迟退出（退出码 77 = 重启请求），由启动器（start.bat / start*.sh）自动重跑。"""
+    wait = float(_RESTART_DELAY_SEC if delay is None else delay)
+
+    # 落盘兜底：即使 77 被上层的转发器吞掉，启动器看到这个文件也会重跑
+    try:
+        with open(_restart_pending_path(), "w", encoding="utf-8") as f:
+            f.write("%s pid=%s port=%s\n" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                              os.getpid(), os.environ.get("MEMOMICS_PORT", "")))
+    except OSError:
+        pass
+
+    def _worker(sec: float) -> None:
+        try:
+            time.sleep(sec)
+        except Exception:
+            pass
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+        except Exception:
+            pass
+        os._exit(_RESTART_EXIT_CODE)
+
+    import threading as _threading_local
+    _t = _threading_local.Thread(target=_worker, args=(wait,), daemon=True)
+    _t.start()
+
+
+@app.post("/api/system/restart")
+async def api_system_restart(payload: dict):
+    """应用内重启（2026-10-13）：更新后一键生效 / 顶部横幅按钮。
+
+    - 监管模式：启动器设 MEMOMICS_SUPERVISED=1；服务以退出码 77 退出后由启动器自动重跑；
+    - 忙守卫：有任务在跑（会话任务 / 更新任务 / DCS 下载队列）默认 409 拒绝并列出；
+      force=true 才强制（前端会二次确认）；
+    - 非监管模式：返回可操作指引，绝不"自己关掉自己"。
+    """
+    force = bool((payload or {}).get("force"))
+    busy = _restart_busy_items()
+    if busy and not force:
+        return JSONResponse({"ok": False, "error": "有 %d 个任务在跑，已按策略拒绝重启" % len(busy),
+                             "busy": busy,
+                             "hint": "等它们跑完再重启；确需强制可带 force=true"}, status_code=409)
+    if not _is_supervised():
+        return JSONResponse({"ok": False,
+                             "error": "当前不是由启动器（start.bat / start.sh）监管运行，无法自动重启",
+                             "hint": "请关闭窗口后重新运行 启动.bat / start.sh，或在终端手工重启服务",
+                             "busy": busy}, status_code=400)
+    _schedule_restart_exit()
+    print("[restart] 收到应用内重启请求：%.1fs 后以退出码 77 退出，等待启动器重跑" % _RESTART_DELAY_SEC, flush=True)
+    return {"ok": True, "restart_in": _RESTART_DELAY_SEC, "busy": busy, "pid": os.getpid()}
+
+
 @app.post("/api/update/apply")
 async def update_apply(payload: dict):
     """执行更新（用户已确认）：下载平台安装包 → 校验 → 差异覆盖代码（保留用户数据）→ fix_bundle。

@@ -122,6 +122,7 @@
   "/api/skills/{name}": "public",
   "/api/skills/{name}/files": "public",
   "/api/skills/{name}/toggle": "public",
+  "/api/system/restart": "public",
   "/api/tasks": "public",
   "/api/tasks/cleanup": "public",
   "/api/tasks/{task_id}": "public",

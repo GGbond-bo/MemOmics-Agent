@@ -266,11 +266,24 @@ if exist "F:\CellBender_v2\heartbeat_v2.py" (
     start "CellBender-Heartbeat" /MIN "%PYTHON%" "F:\CellBender_v2\heartbeat_v2.py" --task "CellBender_26samples" --output-dir "F:\CellBender_v2\cellbender_output" --seurat-dir "F:\CellBender_v2\seurat_h5" --interval 120 --output "F:\CellBender_v2\monitor_v2.log"
 )
 
+set "MEMOMICS_SUPERVISED=1"
+> "%MEMOMICS_HOME%\.launcher_supervised" echo supervised
+:mm_supervised_run
 "%PYTHON%" webui\server.py
+set "MMRC=%errorlevel%"
+if "%MMRC%"=="77" goto :mm_restart
+if exist "%MEMOMICS_HOME%\.restart_pending" goto :mm_restart
+del "%MEMOMICS_HOME%\.launcher_supervised" >nul 2>&1
 echo.
-echo Exit code: %errorlevel%
+echo Exit code: %MMRC%
 pause
 exit /b 0
+:mm_restart
+del "%MEMOMICS_HOME%\.restart_pending" >nul 2>&1
+echo.
+echo [restart] 收到应用内重启请求，3 秒后自动重启...
+timeout /t 3 /nobreak >nul
+goto :mm_supervised_run
 
 :mm_probe_port
 REM  %1=端口；回填 PORT_STATE=free|memomics|busy 与 PORT_OWNER

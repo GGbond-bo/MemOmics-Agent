@@ -7987,8 +7987,10 @@ async function checkStaleVersion() {
       mmTopBanner('mm-stale-banner',
         '⚠️ 代码已更新到 <b>' + (d.pkg_version || '') + '</b>，但当前运行的还是旧版本 <b>' +
         (d.code_version_at_start || '') + '</b> —— 新版功能（API 供应商、结果文件查看等）不会生效。' +
-        '请<b>完全关闭 MemOmics 窗口</b>后重新双击「启动.bat」，然后刷新本页。' +
-        '<span style="cursor:pointer;text-decoration:underline;margin-left:8px" onclick="location.reload()">我已重启，刷新页面</span>',
+        '<span id="mm-stale-restart" style="cursor:pointer;text-decoration:underline;margin-left:8px;font-weight:600" onclick="mmRestartNow()">♻️ 立即重启并生效</span>' +
+        '<span style="cursor:pointer;text-decoration:underline;margin-left:8px" onclick="location.reload()">我已重启，刷新页面</span>' +
+        '<span id="mm-stale-hint" style="display:block;margin-top:4px;font-size:11px;opacity:.85;">' +
+        '点「立即重启并生效」会原地自动重启（无需关窗口）；若当前不是由 启动.bat / start.sh 监管运行，会给出提示。</span>',
         '#fff4e5', '#7a4b00', '#ffd08a');
     }
   } catch (e) {}
@@ -19506,7 +19508,7 @@ async function checkForUpdate(showAll) {
         } else {
           html += '<div style="margin-top:8px;color:var(--text-light);">将自动下载 <b>完整安装包</b> <code>' + escapeHtml(remote.asset_name) + '</code>（' + (remote.asset_size_mb || '?') + ' MB）→ 差异覆盖代码文件（自动保留 memomics_home/ 配置、记忆、results/ 分析结果、运行环境）。</div>';
         }
-        html += '<div style="margin-top:6px;color:var(--text-light);">更新完成后请自行重启 MemOmics 生效。</div>';
+        html += '<div style="margin-top:6px;color:var(--text-light);">更新完成后可一键自动重启生效（也可稍后从顶部横幅重启）。</div>';
         btn.style.display = 'inline-block';
         updateStatusDot('有更新', 'var(--warning)');
       } else {
@@ -19601,9 +19603,16 @@ async function applyUpdate() {
       '<div style="margin-top:6px;">' + escapeHtml(d.message || '代码已覆盖') + '</div>' +
       '<div style="margin-top:6px;">新版本：<code>' + escapeHtml(d.new_version || '?') + '</code></div>' +
       (d.fix_log ? '<div style="margin-top:6px;color:var(--text-light);">迁移：' + escapeHtml(d.fix_log.slice(0, 200)) + '</div>' : '') +
-      '<div style="margin-top:10px;color:var(--warning);font-weight:600;">⚠️ 请自行重启 MemOmics 使更新生效</div>' +
-      '<div style="margin-top:6px;color:var(--text-light);">关闭窗口后重新运行 start.bat（或 server-start.cmd / start.sh）。</div>';
+      '<div id="mm-restart-box" style="margin-top:12px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;">' +
+        '<div id="mm-restart-msg" style="color:var(--warning);font-weight:600;">⚠️ 需要重启 MemOmics 使更新生效</div>' +
+        '<div id="mm-restart-busy" style="margin-top:6px;color:var(--text-light);font-size:12px;"></div>' +
+        '<div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
+          '<button id="mm-restart-btn" class="btn-primary" style="padding:6px 12px;" onclick="mmRestartNow()">♻️ 立即重启并生效</button>' +
+          '<span id="mm-restart-count" style="color:var(--text-light);font-size:12px;"></span>' +
+        '</div>' +
+      '</div>';
     updateStatusDot('已更新待重启', 'var(--warning)');
+    mmScheduleAutoRestart(10);
   } catch (e) {
     if (_updatePollTimer) { clearInterval(_updatePollTimer); _updatePollTimer = null; }
     cancelBtn.textContent = '取消';
@@ -19611,6 +19620,93 @@ async function applyUpdate() {
     updateStatusDot('更新失败', 'var(--danger)');
   }
   _updateApplying = false;
+}
+
+// === 应用内重启（2026-10-13）：更新后一键生效 / 忙时拒绝并列出任务 ===
+var _mmRestartTimer = null, _mmRestartLeft = 0;
+function mmScheduleAutoRestart(sec) {
+  mmCancelAutoRestart();
+  _mmRestartLeft = sec;
+  var tick = function () {
+    var el = document.getElementById('mm-restart-count');
+    if (!el) { mmCancelAutoRestart(); return; }
+    if (_mmRestartLeft <= 0) { mmCancelAutoRestart(); mmDoRestart(false); return; }
+    el.textContent = _mmRestartLeft + ' 秒后自动重启（也可点左边按钮立即重启）';
+    _mmRestartLeft--;
+  };
+  tick();
+  _mmRestartTimer = setInterval(tick, 1000);
+}
+function mmCancelAutoRestart() {
+  if (_mmRestartTimer) { clearInterval(_mmRestartTimer); _mmRestartTimer = null; }
+}
+function mmRestartNow() { mmCancelAutoRestart(); mmDoRestart(false); }
+function mmRestartForce() { mmCancelAutoRestart(); mmDoRestart(true); }
+async function mmDoRestart(force) {
+  var msg = document.getElementById('mm-restart-msg');
+  var busyEl = document.getElementById('mm-restart-busy');
+  try {
+    var r = await fetch('/api/system/restart', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force: !!force })
+    });
+    var d = {};
+    try { d = await r.json(); } catch (e) {}
+    if (r.status === 409) {
+      var lines = (d.busy || []).map(function (b) { return '• ' + (b.kind || '') + '：' + (b.title || b.id || ''); });
+      if (msg) msg.textContent = '⏸ 现在有任务在跑，已按策略暂不重启';
+      if (busyEl) busyEl.innerHTML = escapeHtml(lines.join('\n')).replace(/\n/g, '<br>') +
+        '<div style="margin-top:6px;">等它们跑完再点「立即重启并生效」；确需中断可点「强制重启」。</div>';
+      var box = document.getElementById('mm-restart-box');
+      if (box && !document.getElementById('mm-restart-force-btn')) {
+        var fb = document.createElement('button');
+        fb.id = 'mm-restart-force-btn'; fb.style.cssText = 'padding:6px 12px;';
+        fb.className = 'btn-danger';
+        fb.textContent = '⚠️ 强制重启（会中断任务）';
+        fb.onclick = mmRestartForce;
+        (box.querySelector('div:last-child') || box).appendChild(fb);
+      }
+      return;
+    }
+    if (!r.ok || !d.ok) {
+      if (msg) msg.textContent = '⚠️ 无法自动重启：' + (d.error || ('HTTP ' + r.status));
+      if (busyEl) busyEl.textContent = d.hint || '';
+      return;
+    }
+    mmShowRestartOverlay();
+  } catch (e) {
+    mmShowRestartOverlay();   // 服务端可能已退出（正在重启）
+  }
+}
+function mmShowRestartOverlay() {
+  var ov = document.getElementById('mm-restart-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'mm-restart-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);color:#fff;z-index:99999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;font-size:14px;';
+    ov.innerHTML = '<div style="font-size:26px;">♻️</div><div id="mm-restart-status">正在重启 MemOmics…</div>' +
+      '<div id="mm-restart-sub" style="color:#bbb;font-size:12px;">启动完成后页面会自动恢复，无需手动刷新</div>';
+    document.body.appendChild(ov);
+  }
+  ov.style.display = 'flex';
+  var t0 = Date.now();
+  var timer = setInterval(async function () {
+    var st = document.getElementById('mm-restart-status');
+    var sub = document.getElementById('mm-restart-sub');
+    var sec = Math.round((Date.now() - t0) / 1000);
+    try {
+      var r = await fetch('/api/health', { cache: 'no-store' });
+      var j = await r.json();
+      if (r.ok && j && j.status === 'ok') {
+        clearInterval(timer);
+        if (st) st.textContent = '✅ 重启完成，正在刷新页面…';
+        setTimeout(function () { location.reload(); }, 800);
+        return;
+      }
+    } catch (e) {}
+    if (st) st.textContent = '正在重启 MemOmics…（已等待 ' + sec + ' 秒）';
+    if (sub && sec > 40) sub.textContent = '启动较慢（首次自检/索引重建），继续等待中…';
+  }, 1500);
 }
 
 async function cancelUpdate() {
