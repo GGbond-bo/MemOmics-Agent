@@ -3501,6 +3501,28 @@ def _clear_session_running(sid):
         s["running_task"] = None
 
 
+def _session_run_flags(s) -> bool:
+    """会话"真的在跑吗"（2026-10-12 修）。
+
+    旧写法 `bool(s.get("running_agent") or s.get("running_task"))` 会把**已经跑完、只是引用
+    还没清**的 asyncio.Task 也算成运行中 → /api/sessions 一直报运行中，而界面早已显示完成
+    （用户反馈「都已经停了，实际上还在跑」）。
+    判定：有 asyncio.Task 就按 task.done() 算；字符串哨兵（weixin_agent）算运行中；
+    只有 running_agent 对象（建 task 之前的窗口期）也算运行中。
+    """
+    rt = s.get("running_task")
+    if rt is not None and not isinstance(rt, str):
+        try:
+            if rt.done():
+                return False
+        except Exception:
+            pass
+        return True
+    if isinstance(rt, str):
+        return True
+    return s.get("running_agent") is not None
+
+
 def _release_lease(session_id, lease):
     """任务结束后释放资源租约（线程安全，不阻塞回调）"""
     if lease is None:
@@ -3892,6 +3914,66 @@ def _is_valid_api_key(value) -> bool:
     return True
 
 
+def _heal_current_model_from_provider_keys() -> bool:
+    """`_current_model` 残缺时，用 provider_keys.json 里已保存的 Key 自愈（2026-10-12）。
+
+    用户反馈「新版本刷新就弹欢迎界面、要求重填 API Key」。根因：`_load_model_config()`
+    只认 model_config.json / config.yaml 两处；两处缺失、或里面还是打包模板的占位符
+    （YOUR_API_KEY_HERE）时，`/api/setup/status` 就判 needs_config=true —— 可用户的 Key
+    明明已经在设置页存过（落在 provider_keys.json），于是每次刷新都被要求重填。
+
+    这里按「当前 base_url 对应的 provider → 任意有有效 key 的 provider」补齐
+    key / base_url / model（model 缺失时取该 provider 拉的模型列表或目录里的第一个）。
+    """
+    try:
+        saved_map = globals().get("_provider_keys") or {}
+        index = globals().get("_PROVIDERS_INDEX") or {}
+    except Exception:
+        return False
+    if (_is_valid_api_key(_current_model.get("api_key"))
+            and _current_model.get("base_url") and _current_model.get("model")):
+        return False
+    cand = None
+    cur_base = str(_current_model.get("base_url") or "").rstrip("/").lower()
+    if cur_base:
+        for pid, saved in saved_map.items():
+            p = index.get(pid) or {}
+            if (str(p.get("api") or "").rstrip("/").lower() == cur_base
+                    and _is_valid_api_key((saved or {}).get("api_key"))):
+                cand = (pid, saved or {}, p)
+                break
+    if cand is None:
+        for pid, saved in saved_map.items():
+            if _is_valid_api_key((saved or {}).get("api_key")):
+                cand = (pid, saved or {}, index.get(pid) or {})
+                break
+    if cand is None:
+        return False
+    pid, saved, p = cand
+    if not _is_valid_api_key(_current_model.get("api_key")):
+        _current_model["api_key"] = saved.get("api_key") or ""
+    if not _current_model.get("base_url"):
+        _current_model["base_url"] = saved.get("base_url") or p.get("api") or ""
+    if not _current_model.get("model"):
+        first = ""
+        pulled = saved.get("models") if isinstance(saved.get("models"), list) else None
+        for m in (pulled or p.get("models") or []):
+            if isinstance(m, dict) and m.get("id"):
+                first = m["id"]
+                break
+            if isinstance(m, str) and m.strip():
+                first = m.strip()
+                break
+        _current_model["model"] = first
+    try:
+        _save_model_config()
+    except Exception as exc:
+        print(f"[WARN] 自愈写配置失败: {exc}")
+    print(f"[INFO] 已按 provider_keys 自愈当前模型配置: provider={pid} "
+          f"model={_current_model.get('model') or '(空)'} base_url={( _current_model.get('base_url') or '')[:40]}")
+    return True
+
+
 def _load_provider_keys():
     global _provider_keys
     try:
@@ -4068,7 +4150,8 @@ if _is_valid_api_key(_current_model.get("api_key")) and not _provider_keys:
             print(f"[INFO] 已自动同步 provider key: {_p['id']} (从 model_config.json)")
             break
 
-# 为 debate_analysis 等需要独立 LLM 调用的模块注入环境变量
+# 为 debate_analysis 等需要独立 LLM 调用的模块注入环境变量（先自愈当前模型，再注入）
+_heal_current_model_from_provider_keys()
 _sync_debate_env()
 
 
@@ -6872,6 +6955,33 @@ IMPORTANT:
 """
 
 
+# === 回复排版策略（2026-10-14）===
+# 用户反馈：交互框的回答"太乱，一半过程一半结论"。规定过程播报与最终结论分层：
+# 中间回合一句话播报、不写半成品结论；收尾回答结论先行、干净有逻辑、自成一体。
+_REPLY_STYLE = """
+
+## 回复排版（可读性铁律 · 严格执行）
+
+### 中间回合（接下来还要调工具的回合）
+- 最多 1–2 句话，动词开头，只说「在做什么 + 为什么」（如"先核实云上文件是否存在"）。
+- **不要**在中间回合写半成品结论、不要罗列数据细节、不要用表格/标题/长列表。
+- 前端会把这些播报自动收进「关键过程」折叠块，所以尽管简短，不必担心用户看不到。
+
+### 最终回答（本回合不再调工具、向用户交付的回合）
+结论先行，按此顺序组织（按用户实际需求取舍，没有的环节不写）：
+1. **一句话答案**：直接回答用户的问题或本次任务结果（成功/失败/关键数字），加粗。
+2. **结果要点**：列表或表格给出用户最关心的内容（产物路径、关键指标、对比结论），
+   按用户提问的顺序组织，不堆砌无关细节。
+3. **关键过程**：一段话讲清怎么得到的（做了什么 → 排除了什么 → 关键证据），≤3 行。
+4. **后续建议**（可选，1–2 条）：用户下一步可以做什么。
+
+### 禁止
+- 禁止过程与结论混杂：不在结论里夹流水账，不把"我打算/我去查/接下来"写进最终回答。
+- 禁止重复：中间播报说过的细节，最终回答只提炼引用，不整段复制。
+- 禁止半截交付：最终回答必须自成一体——用户只看最后这一条也能完全看懂结果。
+"""
+
+
 _FACT_RECALL_STOP = {
     "的", "了", "和", "是", "在", "我", "你", "要", "与", "或", "一个", "这个", "那个",
     "我们", "请", "帮", "怎么", "什么", "为什么", "如何", "这个", "进行", "一下",
@@ -8179,7 +8289,7 @@ def _create_agent(model_config=None, session_id=None, session=None):
                           # 长输出(大 dsh-ui JSON/mermaid) 会被 max_tokens 截断成半截 JSON。
                           # 显式 8192，与 checkpoint writer 2026-08-22 加固经验一致。
         enabled_toolsets=["terminal", "file", "code_execution", "memomics", "todo", "memory", "skills", "web", "computer_use", "cronjob", "delegation", "image_gen", "session_search", "browser"],
-        ephemeral_system_prompt=skills_index + _PLANNING_PROMPT + "\n\n" + _EXECUTION_POLICY + _env_digest_block(),
+        ephemeral_system_prompt=skills_index + _PLANNING_PROMPT + "\n\n" + _EXECUTION_POLICY + _REPLY_STYLE + _env_digest_block(),
         quiet_mode=True,
         tool_progress_mode="all",
         session_id=session_id or f"memomics-{uuid.uuid4().hex[:8]}",
@@ -8223,7 +8333,7 @@ async def list_sessions():
         result.append({
             "id": s["id"], "title": s["title"], "created": s["created"],
             "bg_running": s.get("bg_running", False),
-            "is_running": bool(s.get("running_agent") or s.get("running_task")),
+            "is_running": _session_run_flags(s),
             "restored": s.get("restored", False),
             "msg_count": _count,
             "model": (s.get("model_config") or {}).get("model", ""),
@@ -12209,13 +12319,20 @@ async def update_apply(payload: dict):
 
 @app.get("/api/setup/status")
 async def setup_status():
-    """检查是否需要首次配置"""
+    """检查是否需要首次配置
+
+    2026-10-12：判定前先自愈一次 —— 用户明明在设置页存过 Key（provider_keys.json），
+    但 model_config.json / config.yaml 是空或还是模板占位符时，旧逻辑每次都判
+    needs_config=true → 刷新一次弹一次「欢迎使用 / 请配置 API Key」。
+    """
+    healed = _heal_current_model_from_provider_keys()
     _has_valid_key = _is_valid_api_key(_current_model.get("api_key"))
     needs_config = (not _has_valid_key
                     or not _current_model.get("base_url")
                     or not _current_model.get("model"))
     return {
         "needs_config": needs_config,
+        "healed": healed,
         "current": {
             "provider": _current_model.get("provider", "openai"),
             "base_url": _current_model.get("base_url", ""),
@@ -13218,6 +13335,7 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
         _level = _enf3.detect_analysis_level(text)
         _es = _enf3.get_enforcement(sid)
         _es.analysis_level = _level
+        _es.topic_hint = text  # P3(2026-10-12): 辩论门控据此判断题目类型（方案/图/统计/生信）
         _es.results_dir = session.get("results_dir", "")
         
         # 用 WebUI 同款的 _create_agent 工厂函数
@@ -16356,13 +16474,43 @@ def _debate_roles_of(x: dict):
     return names, models
 
 
+def _debate_chain_bits(x: dict) -> dict:
+    """证据链状态（2026-10-13）：哪一方断链、断在哪一步、决定项是什么。
+
+    来源 = 裁判输出的 chain_verdicts（{"pro": "完整|部分|断链（断点：…）", "con": …,
+    "decisive": "哪条证据/哪个断点决定了本次裁决"}）。旧归档没有这个字段 → 一律空串，
+    卡片照常渲染（前端 _dcbEntry 里也做了兜底）。
+    """
+    cv = x.get("chain_verdicts")
+    if not isinstance(cv, dict):
+        cv = x.get("chain") if isinstance(x.get("chain"), dict) else {}
+
+    def _side(v):
+        if isinstance(v, dict):
+            st = str(v.get("state") or v.get("status") or "").strip()
+            br = str(v.get("break_at") or v.get("breakpoint") or v.get("break") or "").strip()
+            if br and "断点" not in st:
+                st = (st + f"（断点：{br}）").strip()
+            return st
+        return str(v or "").strip()
+
+    pro, con = _side(cv.get("pro") or cv.get("pro_chain")), _side(cv.get("con") or cv.get("con_chain"))
+    dec = _side(cv.get("decisive") or cv.get("decision"))
+    return {
+        "has_chain": bool(pro or con or dec),
+        "chain_pro": pro[:300],
+        "chain_con": con[:300],
+        "chain_decisive": dec[:300],
+    }
+
+
 def _debate_index_entry(sid: str, base: str, rel: str, abspath: str, x: dict, key: str, mt: float):
     label, tone, conf, conf_cn = _debate_verdict_bits(x)
     names, models = _debate_roles_of(x)
     d = x.get("judge_digest") if isinstance(x.get("judge_digest"), dict) else {}
     # 2026-09-18 v4：赛前场景预判（辩论前先判「这是哪类问题」→ 席位身份与裁判 rubric 按场景生成）
     sc = x.get("scenario") if isinstance(x.get("scenario"), dict) else {}
-    return {
+    entry = {
         "key": key,
         "rel_path": rel,
         "path": abspath,
@@ -16393,6 +16541,8 @@ def _debate_index_entry(sid: str, base: str, rel: str, abspath: str, x: dict, ke
         "has_scenario": bool(sc),
         "models": models[:8],
     }
+    entry.update(_debate_chain_bits(x))   # 2026-10-13：证据链状态（折叠卡片直接显示）
+    return entry
 
 
 def _load_debate_index(sid: str):
@@ -18298,6 +18448,24 @@ async def ws_endpoint(ws: WebSocket):
 
             sid = msg.get("session_id")
             prev_sid = current_sid  # 保存上一轮的 sid（switch_session 需要）
+            # 2026-10-12：只读/控制类消息不再**隐式新建会话**。
+            # 前端 ws.onopen 会立刻发 get_context_usage（此时 currentSid 还是 null），
+            # 旧逻辑落到 _get_or_create_session(None) → 每刷新一次就多一个空「新会话」，
+            # 下次刷新 autoSelectLatestSession 又优先选中它 → 用户看到"刷新就弹欢迎画面"。
+            # 只有真正要跑活的 chat / steer 才允许隐式建会话。
+            if msg_type not in ("chat", "steer"):
+                if not sid:
+                    await ws.send_text(json.dumps({
+                        "type": "error",
+                        "content": "该消息需要 session_id（type=%s）；本次不新建会话" % msg_type,
+                    }, ensure_ascii=False))
+                    continue
+                if sid not in _sessions and not _restore_single_session(sid):
+                    await ws.send_text(json.dumps({
+                        "type": "error",
+                        "content": "会话不存在：%s" % sid,
+                    }, ensure_ascii=False))
+                    continue
             session = _get_or_create_session(sid)
             current_sid = session["id"]
 
@@ -18428,6 +18596,7 @@ async def ws_endpoint(ws: WebSocket):
                 _level = _enf2.detect_analysis_level(user_text)
                 _es = _enf2.get_enforcement(session["id"])
                 _es.analysis_level = _level
+                _es.topic_hint = user_text  # P3(2026-10-12): 辩论门控据此判断题目类型
                 _es.results_dir = session.get("results_dir", "")
                 # 2026-08-16: 用户新消息 = 新指令 → 解除审查硬阻断残留（12G Seurat 案例：
                 # rail_review(post) 未通过残留使 execute_r/terminal 一直被拦，死锁）
@@ -18666,7 +18835,7 @@ async def ws_endpoint(ws: WebSocket):
                     pass
                 _skills = _read_skills_index()
                 agent.ephemeral_system_prompt = (_soul_detail + "\n\n" + _skills + _PLANNING_PROMPT
-                                                 + "\n\n" + _EXECUTION_POLICY)
+                                                 + "\n\n" + _EXECUTION_POLICY + _REPLY_STYLE)
                 if rd:
                     agent.ephemeral_system_prompt += f"\n\n## 当前会话输出目录\n所有 R/Python/终端脚本的输出文件（图片、表格、报告）请保存到：\n`{rd.replace(chr(92), '/')}`\n请使用绝对路径或在脚本开头 `setwd()` / `os.chdir()` 到此目录。\n**脚本落盘约定**：分析/绘图脚本(.py/.r/.sh)统一保存到 `{rd}/scripts/`(用描述性文件名)；重复跑图/统计时，先 `search_files` 查看 `{rd}/scripts/` 已有脚本再复用，不要每次重写。\n"
                     agent.ephemeral_system_prompt += (

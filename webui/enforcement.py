@@ -261,6 +261,113 @@ _LINEAR_CMD_RE = re.compile(
     r"find|grep|rg|sed|awk|sort|uniq|tree|stat|echo)\b", re.I)
 
 
+# ==================== P3 辩论门控 v3（2026-10-12 用户口径重写）====================
+# 用户原话（2026-10-12）：
+#   「方案/脚本/设计 … 图/绘图/配色 —— 这些不需要辩论，意义不大。
+#    统计分析，这类结果有问题，grill me 进行询问即可，最多触发 L1 辩论，但是不要拖延时间；
+#    什么时候辩论呢，就是得到的结果太离谱。
+#    重要辩论在什么时候触发：生信分析 + 有重要参数 + 结论跟实际/预期不一样、真实数据差异很大
+#    → 正方反方找证据链，这才是辩论。
+#    辩论是从不同方向寻找证据链：知识库已验知识（L0/L1/L2/L3）、统计学（统计方法和过程有没有问题）、
+#    生信（步骤有没有错误、方法有没有错误）。」
+#
+# 决定"辩不辩"的是**题目类型**（kind），不是"有没有结论"：
+#   design  方案/脚本/设计/流程/参数选型/排版       → 永不辩（L0）
+#   figure  图/绘图/配色/版式/可视化                → 永不辩（L0）
+#   stats   统计分析                                → 只有"结果离谱"才先 grill 用户；最多 L1 且限时
+#   bioinfo 生信分析                                → 有重要参数 + 结论与预期/实际不符 → L2 证据链辩论
+#   other   其它                                    → 仅硬信号（高影响/失败重试/冲突/离谱）才辩
+_DEBATE_KIND_DESIGN = "design"
+_DEBATE_KIND_FIGURE = "figure"
+_DEBATE_KIND_STATS = "stats"
+_DEBATE_KIND_BIOINFO = "bioinfo"
+_DEBATE_KIND_OTHER = "other"
+_DEBATE_KIND_LABELS = {
+    _DEBATE_KIND_DESIGN: "方案/脚本/设计",
+    _DEBATE_KIND_FIGURE: "图/绘图/配色",
+    _DEBATE_KIND_STATS: "统计分析",
+    _DEBATE_KIND_BIOINFO: "生信分析",
+    _DEBATE_KIND_OTHER: "其它",
+}
+
+_KIND_FIGURE_RE = re.compile(
+    r"绘图|画图|出图|做图|配色|色标|色板|palette|版式|布局|可视化|热图|火山图|箱线图|"
+    r"点图|小提琴|面板|figure|plot|colou?r|layout|matplotlib|ggplot", re.I)
+_KIND_DESIGN_RE = re.compile(
+    r"方案|脚本|代码|设计|流程|架构|重构|依赖|环境配置|参数(选型|选择|决策)|口径|"
+    r"命名规范|目录结构|重构|模板|写作|润色|排版|schedule|design|refactor", re.I)
+_KIND_STATS_RE = re.compile(
+    r"统计|检验|显著性|fdr|p\s*[-_ ]?值|p-?value|效应量|功效|样本量|多重比较|混杂|"
+    r"模型(选择|假设|拟合)|自由度|置信区间|贝叶斯|permutation|null 分布", re.I)
+_KIND_BIOINFO_RE = re.compile(
+    r"生信|测序|snrna|scrna|单细胞|atac|deg|差异表达|差异基因|比对|比对率|注释|富集|"
+    r"聚类|降维|拟时序|变异|甲基化|grn|细胞类型|marker|表达矩阵|counts?|归一化|批次校正|"
+    r"h5ad|seurat|scanpy|star|cellranger|featurecounts|deseq|edger|limma", re.I)
+
+
+def classify_topic_kind(text: str) -> str:
+    """按用户口径给辩题分类（决定"要不要辩"）。
+
+    顺序很关键：**图 > 设计 > 统计 > 生信**。画图的脚本里也会出现"统计/生信"字样，
+    但按用户口径图类不辩；脚本设计类里也可能写"统计方法"，同样不辩。
+    """
+    t = str(text or "")
+    if not t.strip():
+        return _DEBATE_KIND_OTHER
+    if _KIND_FIGURE_RE.search(t):
+        return _DEBATE_KIND_FIGURE
+    if _KIND_DESIGN_RE.search(t):
+        return _DEBATE_KIND_DESIGN
+    if _KIND_STATS_RE.search(t):
+        return _DEBATE_KIND_STATS
+    if _KIND_BIOINFO_RE.search(t):
+        return _DEBATE_KIND_BIOINFO
+    return _DEBATE_KIND_OTHER
+
+
+# "结果离谱"信号：统计线的唯一辩论入口；生信线也要它才算"结论对不上"
+_ABSURD_RESULT_RE = re.compile(
+    r"与预期(不符|相反|不一致)|不符合预期|预期之外|远超预期|超出预期|"
+    r"差异(极|很|非常|特别|巨)大|结果(太|极其|非常|有点)?离谱|离谱|荒唐|"
+    r"(异常|意外)(偏高|偏低|升高|降低|增高|变大|变小)|假阳性|假阴性|"
+    r"自相矛盾|互相矛盾|矛盾|不可能(出现|发生)|反直觉|说不通|"
+    r"unexpected|contradict\w*|discrepan\w*|absurd|outlier|inconsistent|too good to be true",
+    re.I)
+
+
+def looks_absurd(text: str) -> str:
+    """"结果离谱/与预期不符"的具体措辞（空串 = 没这信号）。"""
+    m = _ABSURD_RESULT_RE.search(str(text or ""))
+    return m.group(0) if m else ""
+
+
+def _debate_require_payload(kind: str, level: int, reasons: list) -> tuple:
+    """按「辩什么」生成 require 工具 + 给模型的指令文本（用户口径：辩论 = 找证据链）。
+
+    stats  → 先 ask_user grill 用户（带选项表单）；用户答复后无明显分歧就不辩
+    bioinfo→ debate_analysis，且必须按"证据链对抗"出结论（KB 分级 / 统计线 / 生信线）
+    """
+    if kind == _DEBATE_KIND_STATS:
+        qs = [
+            "这批结果里哪些数字/现象与您的预期或已有结论不一致？（指标 + 数值）",
+            "统计方法与流程里有没有您已知的可疑环节（批次、配对、多重检验、过滤阈值、样本量、模型假设）？",
+            "您期望的方向/量级是什么（用来判定“离谱”的基线）？",
+        ]
+        return ["ask_user"], (
+            "\n❓ 统计线规矩（用户口径）：先把上面这几点用 ask_user 弹确认表单问清楚，别猜、别直接开辩论：\n"
+            + "\n".join(f"  • {q}" for q in qs)
+            + "\n  用户答复后：若仍无明显分歧 → 结论标注低置信直接给，**不开辩论**；"
+              "确有分歧才 debate_analysis(level='L1')，限时（≤180s），且每条论点必须带证据链。")
+    if kind == _DEBATE_KIND_BIOINFO:
+        return ["debate_analysis"], (
+            "\n🧬 辩论形态 = **证据链对抗**（不是观点辩论）：正反方各自独立取证，每条论点必须挂证据节点 ——\n"
+            "  • 知识库已验知识：标注证据级别（L0 无来源 / L1 有来源未验证 / L2 湿实验验证 / L3 临床级）+ locator；\n"
+            "  • 统计线：统计方法与过程有没有问题（混杂/批次/多重检验/样本量/模型假设/效应量）；\n"
+            "  • 生信线：步骤与方法有没有错误（上游质控/注释版本/参考基因组/工具与参数/可复现性）。\n"
+            "  裁判只按证据链完整度出分并列 missing；无证据的论点必须标 [仅是推理]。")
+    return [], ""
+
+
 def _debate_worthiness(signals: dict):
     """P1(2026-09-22): "值不值得辩"前置判断 —— 返回跳过理由字符串（None = 值得辩）。
 
@@ -327,53 +434,81 @@ def debate_gate(es: "EnforcementState", stage: str = "conclusion",
     if es.analysis_level in ("chat", "lightweight"):
         return DEBATE_L0, ["chat/lightweight 级：无分析对象，跳过辩论"], force
 
-    # P1: 先判断"值不值得辩" —— 高影响/失败重试/冲突这些硬信号不受此过滤影响
-    _hard = (bool(signals.get("high_impact")) or int(signals.get("failed_retries", 0) or 0) >= 2
-             or bool(signals.get("last_error")) or bool(signals.get("conflict")))
-    if not _hard:
+    # ① 题目类型决定"要不要辩"（用户口径 2026-10-12）
+    kind = signals.get("topic_kind") or classify_topic_kind(
+        signals.get("topic") or signals.get("cmd") or signals.get("text")
+        or getattr(es, "topic_hint", ""))
+    dev = str(signals.get("deviation") or "").strip()
+    if not dev:
+        _scan = " ".join([str(getattr(es, "_last_terminal_result", "") or ""),
+                          str(getattr(es, "topic_hint", "") or "")])
+        dev = looks_absurd(_scan)
+    has_dev = bool(dev)
+    impact = bool(signals.get("high_impact"))
+    failures = int(signals.get("failed_retries", 0) or 0) + (1 if signals.get("last_error") else 0)
+    conflict = bool(signals.get("conflict"))
+    uncertainty = bool(signals.get("uncertainty"))
+    _opts = signals.get("fork_options") or []
+    _fork = bool(signals.get("has_fork")) or (isinstance(_opts, (list, tuple, set)) and len(_opts) >= 2)
+    _hard = impact or failures >= 2 or conflict
+
+    # ② 方案/脚本/设计、图/绘图/配色 —— 永不辩（用户原话："这些不需要辩论，意义不大"）
+    if kind in (_DEBATE_KIND_DESIGN, _DEBATE_KIND_FIGURE):
+        return DEBATE_L0, [
+            f"{_DEBATE_KIND_LABELS[kind]}类不辩论（用户口径：辩论=找证据链，这类辩不出证据）"], force
+
+    # ③ 值不值得辩（事实查询/只读/线性/活选项<2/重复议题/显式 no_debate）—— 硬信号/离谱信号豁免
+    if not (_hard or has_dev):
         _skip = _debate_worthiness(signals)
         if _skip:
             return DEBATE_L0, [_skip], force
 
-    impact = bool(signals.get("high_impact"))
-    if impact:
-        reasons.append("高影响（入库/报告/结论产物）：强制 L2")
-        level = DEBATE_L2
-        force = True
-
-    if not force:
-        if es.analysis_level == "statistical":
-            level = DEBATE_L1
-            reasons.append("statistical 级：默认 L1 轻量辩论")
-        else:  # analysis
-            failures = int(signals.get("failed_retries", 0)) + (1 if signals.get("last_error") else 0)
-            conflict = bool(signals.get("conflict"))
-            uncertainty = bool(signals.get("uncertainty"))
-            # P1: 有没有 ≥2 条"选哪条会改变下一步"的活选项
-            _opts = signals.get("fork_options") or []
-            _fork = bool(signals.get("has_fork")) or (isinstance(_opts, (list, tuple, set)) and len(_opts) >= 2)
-            if failures >= 2:
-                level = DEBATE_L2
-                reasons.append(f"失败重试≥2（retries={failures}）：升级 L2")
-            elif conflict:
-                level = DEBATE_L2
-                reasons.append("rail_review(post) 未通过/结果冲突：升级 L2")
-            elif uncertainty or _fork:
-                level = DEBATE_L2
-                reasons.append("结论合成且有 ≥2 条活选项/高不确定性：L2")
-            elif stage == "conclusion":
-                # P1(2026-09-22): 没有分歧的结论不再无条件升 L2（避免"为辩论而辩论"）
-                level = DEBATE_L1
-                reasons.append("结论合成但没有分歧、没有高风险：L1（不升 L2）")
-            else:
-                level = DEBATE_L1
-                reasons.append("analysis 级脚本设计/执行后：L1 轻量辩论")
-
-    # 预算护栏：单会话辩论次数上限（config debate.budget，默认 3）
-    # 强制（高影响）不降级；超预算的非强制降为 L1 并提示
-    if not force and level == DEBATE_L2 and es.debate_count >= es.debate_budget:
+    if kind == _DEBATE_KIND_STATS:
+        # ④ 统计线：只有"结果离谱/与预期不符"才辩；先 grill 用户；最多 L1 且限时（不要拖延时间）
+        if not (has_dev or conflict or failures >= 2):
+            return DEBATE_L0, ["统计分析未见离谱/冲突信号：不辩论（结果有问题时先问用户）"], force
         level = DEBATE_L1
-        reasons.append(f"预算护栏：本会话已辩论 {es.debate_count} 次 ≥ budget={es.debate_budget}，降级 L1")
+        reasons.append("统计分析结果离谱/与预期不符：先 grill 用户澄清，最多 L1 且限时 180s"
+                       + (f"（信号：{dev}）" if dev else ""))
+        if impact:
+            reasons.append("高影响工具（入库/报告）：统计线仍只用 L1 限时辩，不做 8 角色")
+    elif kind == _DEBATE_KIND_BIOINFO:
+        # ⑤ 生信线（用户指定的"重要辩论"）：重要参数 + 结论与预期/实际不符（数据差异大）→ L2 证据链辩论
+        _params = bool(signals.get("important_params")) or bool(signals.get("param_checklist"))
+        if not _params:
+            return DEBATE_L0, ["生信分析但无重要参数分歧：不辩论"], force
+        if has_dev or conflict or failures >= 2:
+            level = DEBATE_L2
+            reasons.append("生信分析 + 重要参数 + 结论与预期/实际不符（数据差异大）→ L2 证据链辩论"
+                           + (f"（信号：{dev}）" if dev else ""))
+            # 只有高影响才"强制不可降级"；"结果离谱"虽然值一场 L2，但仍受会话预算护栏约束
+            # （用户口径：一个重要话题辩一场，但一个会话别辩几十场）
+            force = bool(impact)
+        elif uncertainty or _fork:
+            level = DEBATE_L1
+            reasons.append("生信分析 + 重要参数 + 存在分歧：L1 轻量证据链辩论")
+        else:
+            return DEBATE_L0, ["生信分析：参数与结果一致、无异常信号：不辩论"], force
+    else:
+        # ⑥ 其它类型：只有硬信号（高影响/失败重试/冲突）或"结果离谱"才辩
+        if not (_hard or has_dev):
+            return DEBATE_L0, ["未识别到需要证据链对抗的信号：不辩论"], force
+        if impact:
+            level = DEBATE_L2
+            reasons.append("高影响（入库/报告/结论产物）：强制 L2")
+            force = True
+        elif has_dev or failures >= 2 or conflict:
+            level = DEBATE_L2
+            reasons.append("结果离谱/冲突/连续失败：升级证据链辩论")
+        else:
+            level = DEBATE_L1
+            reasons.append("存在分歧/不确定性：L1 轻量辩论")
+
+    # ⑦ 预算护栏：非强制时**真停**（用户口径：一个会话不要辩几十场；旧实现只降 L2→L1 等于没停）
+    if not force and level >= DEBATE_L1 and es.debate_count >= es.debate_budget:
+        level = DEBATE_L0
+        reasons.append(f"预算护栏：本会话已辩论 {es.debate_count} 次 ≥ budget={es.debate_budget}，"
+                       "停止辩论（非强制场次不再降级续辩）")
 
     # C3(2026-08-11): token 预算护栏（cost 治理）— token_budget>0 时生效
     if not force and level >= DEBATE_L1 and es.token_budget > 0 and es.token_used >= es.token_budget:
@@ -444,6 +579,9 @@ class EnforcementState:
         self._last_terminal_result: str = ""  # 最近 terminal 输出（提取参数用）
         self._exec_retries: dict = {}  # P2: 命令/脚本重试计数 {cmd: n}
         self._last_exec_error: bool = False  # P2: 最近一次执行是否报错
+        # P3(2026-10-12): 最近一条用户消息 —— 辩论门控据此判断题目类型
+        # （方案/脚本/图 → 不辩；统计 → 结果离谱才 grill；生信 → 重要参数+结论对不上才辩）
+        self.topic_hint: str = ""
         self.terminal_count: int = 0
         self.tool_history: list = []
         self.warnings: list = []
@@ -716,33 +854,33 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                       message=("🔄 这段代码此前已连续多次相同报错（已标记）。"
                                "请勿原样重试——先排查根因（环境/依赖/数据/编码），"
                                "修改代码或换方案后再执行。"))
-            # P2-7(2026-08-10): 钩子① — 执行前脚本设计辩论。
-            # analysis 级 + 该命令首次执行 + 门控判定 L1/L2 → 提示先辩脚本设计
-            if (es.analysis_level == "analysis" and es._exec_retries[_key] == 1
+            # P2-7(2026-08-10): 钩子① — 执行前辩论门控（P3 2026-10-12 按用户口径重写）。
+            # 用户口径：**方案/脚本/设计类不辩**；生信类要"重要参数 + 已经出现离谱结果/冲突/
+            # 连续失败"才在动手前先辩（证据链）；统计类先 grill 用户，最多 L1 且限时。
+            if (es.analysis_level in ("analysis", "statistical") and es._exec_retries[_key] == 1
                     and not es.debated_topics):
-                # P1(2026-09-22): 先分情况 —— 脚本里没有任何"可争议的参数选择"就别辩了
-                _b_sig = {"cmd": _cmd}
-                if not _param_checklist(_cmd):
-                    _b_sig["linear"] = True
+                _checks = _param_checklist(_cmd)
+                _b_kind = classify_topic_kind(_cmd)
+                _b_sig = {"cmd": _cmd, "topic_kind": _b_kind,
+                          "important_params": bool(_checks), "param_checklist": _checks}
                 if _is_readonly_terminal(_cmd):
                     _b_sig["readonly"] = True
                 _b_level, _b_reasons, _b_force = debate_gate(es, stage="before_script", signals=_b_sig)
                 if _b_level < DEBATE_L1 and _b_reasons:
                     # 不辩也要说清楚为什么不辩（用户要求"分清楚情况"，不是静默跳过）
                     _emit("enforcement", action="info",
-                          message=f"💬 执行前不辩论：{_b_reasons[0]}")
+                          message=f"💬 执行前不辩论（{_DEBATE_KIND_LABELS.get(_b_kind, '')}）：{_b_reasons[0]}")
                 if _b_level >= DEBATE_L1:
-                    _checks = _param_checklist(_cmd)
+                    _req_tools, _req_text = _debate_require_payload(_b_kind, _b_level, _b_reasons)
                     _check_txt = ""
                     if _checks:
-                        _check_txt = ("\n🔍 参数核查清单（辩脚本设计时必逐项核查，用工具实查，不许猜）：\n"
+                        _check_txt = ("\n🔍 参数核查清单（找证据链时必逐项核查，用工具实查，不许猜）：\n"
                                       + "\n".join(f"  • {c}" for c in _checks))
                     _emit("enforcement", action="require",
                           level=DEBATE_LEVEL_NAMES[_b_level],
                           reasons=_b_reasons,
-                          message=(f"💬 执行前辩论门控 → {DEBATE_LEVEL_NAMES[_b_level]}：{'；'.join(_b_reasons[:2])}。"
-                                   f"先 debate_analysis 辩脚本设计与参数选择，再执行。{_check_txt}"),
-                          require=["debate_analysis"])
+                          message=(f"💬 执行前辩论门控 → {DEBATE_LEVEL_NAMES[_b_level]}：{'；'.join(_b_reasons[:2])}。{_check_txt}{_req_text}"),
+                          require=_req_tools or ["debate_analysis"])
             # 🔧 2026-08-22: 自进化门禁扩展 — execute_r/execute_python 完成后未 record_run
             # 时，下一次执行调用注入软提醒（不阻断执行，避免持久内核迭代被卡死）：
             # 提醒模型自检目标产物 → 已完成则 record_run 沉淀；未完成则【继续完成目标】。
@@ -1037,35 +1175,45 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                     except Exception as _e:
                         _emit("enforcement", action="warning",
                               message=f"⚠️ record_run 失败: {_e}")
-                # 触发 debate（P2(2026-08-10): 三级门控替代固定布尔触发）
+                # 触发 debate（P3 2026-10-12：按用户口径只在这几种情况辩）
+                _g_topic = (getattr(es, "topic_hint", "") or str(es._last_terminal_result or "")[:200])
+                _g_kind = classify_topic_kind(_g_topic)
                 _g_signals = {
                     "high_impact": getattr(es, "_pending_high_impact", False),
                     "failed_retries": max(es._exec_retries.values()) if es._exec_retries else 0,
                     "last_error": es._last_exec_error,
                     "conflict": not should_proceed if es.rail_post_done else False,
                     "uncertainty": False,
+                    # 用户口径的关键两票：题目类型 + "结果离谱/与预期不符"
+                    "topic_kind": _g_kind,
+                    "important_params": bool(_param_checklist(str(es._last_terminal_result or ""))),
+                    "deviation": looks_absurd(str(es._last_terminal_result or "")),
                 }
                 _g_level, _g_reasons, _g_force = debate_gate(es, stage="after_script", signals=_g_signals)
                 es._pending_high_impact = False
-                # 钩子③ 结论辩论（对齐 docs/debate-core-design.md §钩子③）：
-                # rail_review(post) 后 + analysis 级 → 结论合成前默认 L2（最终结论
-                # 比过程更重要）。与钩子②取最高级：无异常信号的 analysis 任务
-                # after=L1（轻量）、conclusion=L2（完整）→ 升级 L2；statistical
-                # 两者都 L1；chat 都 L0。共享 es.debated_topics 去重，不重复辩。
+                # 钩子③ 结论辩论（P3 2026-10-12 重写）：结论阶段不再"无条件 L1"，
+                # 只有 生信+重要参数+结论对不上 / 统计+结果离谱 / 其它硬信号 才辩；
+                # 方案/脚本/图 一律不辩；超预算非强制直接停（见 debate_gate ⑦）。
                 _c_level, _c_reasons, _c_force = debate_gate(es, stage="conclusion", signals=_g_signals)
                 if _c_level > _g_level:
                     _g_level, _g_reasons, _g_force = _c_level, _c_reasons, _c_force
                 if _g_level >= DEBATE_L1:
                     _mode_hint = {
                         # C2(2026-08-11): L1 轻量采样 / L2 完整 8 角色，都默认单模型上下文切断
-                        DEBATE_L1: "level='L1'（轻量采样辩论，成本约 1/3）",
-                        DEBATE_L2: "level='L2'（完整 8 角色辩论）",
+                        DEBATE_L1: "level='L1'（轻量采样辩论，成本约 1/3，限时 180s）",
+                        DEBATE_L2: "level='L2'（完整 8 角色证据链辩论）",
                     }[_g_level]
+                    _req_tools, _req_text = _debate_require_payload(_g_kind, _g_level, _g_reasons)
                     _emit("enforcement", action="require",
                           level=DEBATE_LEVEL_NAMES[_g_level],
                           reasons=_g_reasons,
-                          message=f"💬 辩论门控 → {DEBATE_LEVEL_NAMES[_g_level]}：{'；'.join(_g_reasons[:2])}。请调用 debate_analysis（{_mode_hint}）。",
-                          require=["debate_analysis"])
+                          message=(f"💬 辩论门控（{_DEBATE_KIND_LABELS.get(_g_kind, '')}）→ {DEBATE_LEVEL_NAMES[_g_level]}："
+                                   f"{'；'.join(_g_reasons[:2])}。{_mode_hint}。{_req_text}"),
+                          require=_req_tools or ["debate_analysis"])
+                elif _g_reasons:
+                    # 用户要求可见：为什么这次不辩
+                    _emit("enforcement", action="info",
+                          message=f"💬 不辩论（{_DEBATE_KIND_LABELS.get(_g_kind, '')}）：{_g_reasons[0]}")
 
         elif tool_name == "debate_analysis":
             es.debate_done = True

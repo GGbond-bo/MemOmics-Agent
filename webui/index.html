@@ -398,6 +398,20 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .message .copy-btn:hover { background:var(--primary-light); border-color:var(--primary); color:var(--primary); }
 .message .copy-btn.copied { color:var(--success); border-color:var(--success); }
 
+/* === 2026-10-14：过程/结论分层 —— 用户反馈"回答一半过程一半结论，太乱" ===
+   同一条回答里：中间过程收进「关键过程」折叠块（短过程默认展开），结论正常突出显示；
+   被辩论卡片等截断分出去的旧气泡整格瘦身（.msg-process），视觉上退为过程记录。 */
+.message.assistant.msg-process .bubble { font-size:12px; padding:8px 14px 24px; opacity:0.78; border-style:dashed; }
+.message.assistant.msg-process .role { font-size:10px; opacity:0.8; }
+.proc-block { margin:0 0 8px; border:1px dashed var(--border); border-radius:8px; background:rgba(128,128,128,0.05); font-size:12px; }
+.proc-block > summary { padding:4px 12px; cursor:pointer; color:var(--text-light); font-size:11px; user-select:none; list-style:none; }
+.proc-block > summary::-webkit-details-marker { display:none; }
+.proc-block > summary::before { content:'▸ '; }
+.proc-block[open] > summary::before { content:'▾ '; }
+.proc-block > summary:hover { color:var(--primary); }
+.proc-block .proc-body { padding:2px 12px 8px; color:var(--text-light); line-height:1.6; white-space:normal; }
+.proc-block .proc-body p { margin:3px 0; }
+
 /* 思考折叠 */
 .reasoning-block { margin:6px 0; border:1px solid var(--border); border-radius:6px; overflow:hidden; }
 .reasoning-block summary { padding:6px 12px; font-size:12px; color:var(--text-light); cursor:pointer; background:var(--tool-bg); }
@@ -566,6 +580,15 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .chip.scen { background:rgba(99,102,241,.16); border-color:rgba(99,102,241,.5); color:#c7d2fe; }
 
 .dcb-concl-why { margin-top:7px; font-size:12.5px; line-height:1.6; color:var(--text); }
+/* 2026-10-13：证据链状态行（裁判 chain_verdicts）—— 哪一方断链、断在哪一步 */
+.dcb-chain { margin-top:7px; font-size:12px; line-height:1.6; display:flex; flex-wrap:wrap; gap:6px; align-items:baseline; }
+.dcb-chain .k { color:var(--text-light); font-size:11.5px; flex:0 0 auto; }
+.dcb-chain .pill { padding:1px 7px; border-radius:9px; background:rgba(120,120,120,.12); border:1px solid var(--border); font-size:11.5px; }
+.dcb-chain .pill.bad { color:#b23; background:rgba(200,60,60,.10); border-color:rgba(200,60,60,.35); }
+.dcb-chain .pill.part { color:#a06a12; background:rgba(224,135,42,.10); border-color:rgba(224,135,42,.35); }
+.dcb-chain .pill.ok { color:var(--success); background:rgba(63,158,106,.10); border-color:rgba(63,158,106,.35); }
+.dcb-chain .dec { color:var(--text-light); font-size:11.5px; }
+.dcb-chain .dec b { color:var(--text); }
 .dcb-concl.tone-ok { border-color:rgba(63,158,106,.42); background:rgba(63,158,106,.08); }
 .dcb-concl.tone-ok .dcb-concl-main { color:var(--success); }
 .dcb-concl.tone-warn { border-color:rgba(224,135,42,.45); background:rgba(224,135,42,.09); }
@@ -938,7 +961,15 @@ html[data-theme="dark"] .ev-chain .ev-t, #kb-node-modal .ev-chain .ev-t { color:
 .file-item { padding:6px 12px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px; }
 .file-item:hover { background:var(--primary-light); }
 .file-item .file-icon { font-size:14px; }
-.file-item .file-name { flex:1; word-break:break-all; }
+/* 2026-10-14：长文件名「滑动推门」—— 平时单行省略号；按住名字往左拖，名字区域像推门一样被拉大，
+   盖住右侧的时间/大小/按钮，把被遮挡的文件名完整展现出来。小幅拖拽松手弹回；推过 60% 门停住（点别处收回）。 */
+.file-item .file-name { flex:1 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.file-item .file-name.fn-door { position:relative; z-index:2; overflow:hidden; text-overflow:clip; background:var(--panel); user-select:none; }
+.file-item:hover .file-name.fn-door { background:var(--primary-light); }
+.file-item .file-name.fn-door-drag { cursor:grabbing; }
+.file-item .file-name.fn-door-back { transition:width .18s ease, margin-right .18s ease; }
+/* 名字可推拉后，右侧的大小/时间/按钮不许被挤变形 */
+.file-item .file-size, .file-item .file-mtime, .file-item .view-btn, .file-item .download-btn { flex-shrink:0; }
 .file-item .file-size { font-size:10px; color:var(--text-light); }
 .file-item .file-mtime { font-size:10px; color:var(--text-light); white-space:nowrap; }
 .file-item .download-btn { font-size:11px; padding:2px 8px; border-radius:4px; background:var(--primary); color:#fff; border:none; cursor:pointer; }
@@ -1841,6 +1872,7 @@ var I18N = {
      'rv_col':'列 {0}','rv_sort_col_title':'点击按此列排序','rv_rows_note':'显示 {0} / {1} 行{2}　（点表头排序）','rv_cols_n':' · {0} 列',
      'rv_nb_empty':'空 notebook','rv_nb_no_cells':'没有单元格。','rv_out_err':'❌ 报错','rv_out_img':'🖼️ 图片输出','rv_out':'▶ 输出',
      'rv_nb_cells':'共 {0} 个单元格{1}','rv_truncated':'（已截断）',
+     'proc_block':'📋 关键过程 · {0} 段（点击展开/收起）',
     'af_kind_intent':'开工前意图确认',
     'af_kind_plan':'方案选择',
     'af_kind_clarify':'需要你确认',
@@ -1931,6 +1963,7 @@ var I18N = {
      'rv_col':'Col {0}','rv_sort_col_title':'Click to sort by this column','rv_rows_note':'Showing {0} / {1} rows{2}　(click a header to sort)','rv_cols_n':' · {0} cols',
      'rv_nb_empty':'Empty notebook','rv_nb_no_cells':'No cells.','rv_out_err':'❌ Error','rv_out_img':'🖼️ Image output','rv_out':'▶ Output',
      'rv_nb_cells':'{0} cells{1}','rv_truncated':' (truncated)',
+     'proc_block':'📋 Key steps · {0} (click to expand/collapse)',
     'af_kind_intent':'Confirm intent before starting',
     'af_kind_plan':'Choose a plan',
     'af_kind_clarify':'Needs your confirmation',
@@ -2580,6 +2613,10 @@ let currentSid = null;
 let currentAssistantEl = null;
 let currentBubble = null;
 let fullText = '';
+// 2026-10-14 过程/结论分层：fullSegs 按「模型回合」分段记录本轮全部文本
+// （工具调用 = 分段边界），收尾时前面的段收进「关键过程」折叠块、最后一段作为结论突出。
+let fullSegs = [];
+let _segBreak = false;   // tool_start 后下一段 delta 开新段
 let reasoningText = '';
 let agentRunning = false;  // agent 运行状态标志，用于 steer 检测
 var mermaidIdx = 0;  // Mermaid 渲染计数器
@@ -2638,7 +2675,7 @@ const _sessionScopedEventTypes = new Set([
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(proto + '//' + location.host + '/ws');
-  ws.onopen = function() { setStatus('已连接', 'var(--success)'); loadModels(); loadSessions().then(function() { if (!currentSid) { autoSelectLatestSession(); } else if (ws && ws.readyState === 1) { ws.send(JSON.stringify({ type: 'switch_session', session_id: currentSid })); } }); ws.send(JSON.stringify({ type: 'weixin_subscribe' })); ws.send(JSON.stringify({ type: 'weixin_list' })); checkWeixinStatus(); refreshContextUsage(); };
+  ws.onopen = function() { setStatus('已连接', 'var(--success)'); loadModels(); loadSessions().then(function() { if (!currentSid) { autoSelectLatestSession(); } else if (ws && ws.readyState === 1) { ws.send(JSON.stringify({ type: 'switch_session', session_id: currentSid })); } _reconcileRunningState(currentSid); }); ws.send(JSON.stringify({ type: 'weixin_subscribe' })); ws.send(JSON.stringify({ type: 'weixin_list' })); checkWeixinStatus(); refreshContextUsage(); };
   ws.onclose = function() { setStatus('断开', 'var(--danger)'); setTimeout(connect, 3000); };
   ws.onmessage = function(event) { handleMessage(JSON.parse(event.data)); };
 }
@@ -2857,13 +2894,22 @@ function handleMessage(msg) {
       currentAssistantEl = addAssistantMsg('');
       currentBubble = currentAssistantEl.querySelector('.bubble');
       fullText = msg.content || '';
+      fullSegs = [msg.content || ''];
+      _segBreak = false;
     } else if (currentAssistantEl.classList.contains('thinking')) {
       currentAssistantEl.remove();
       currentAssistantEl = addAssistantMsg('');
       currentBubble = currentAssistantEl.querySelector('.bubble');
       fullText = msg.content || '';
+      fullSegs = [msg.content || ''];
+      _segBreak = false;
     } else {
       fullText += (msg.content || '');
+      // 2026-10-14 过程/结论分层：工具调用后的第一段文字开新段（模型回合边界）
+      if (_segBreak && fullSegs.length && fullSegs[fullSegs.length - 1].trim()) { fullSegs.push(''); }
+      _segBreak = false;
+      if (!fullSegs.length) fullSegs.push('');
+      fullSegs[fullSegs.length - 1] += (msg.content || '');
     }
     if (currentBubble) {
       // 2026-08-27 防闪烁：节流合并（150ms），不再每个 token 重建 DOM；
@@ -2886,6 +2932,7 @@ function handleMessage(msg) {
   } else if (msg.type === 'tool_start') {
     // 不在聊天区创建大块, 只进进度时间线
     addProgressItem(msg.tool, 'pending', _fmtToolDesc(msg.tool, msg.args), msg.ts || _nowTs());
+    if (fullSegs.length && fullSegs[fullSegs.length - 1].trim()) _segBreak = true;   // 2026-10-14：回合边界
   } else if (msg.type === 'tool_complete') {
     // 更新时间线中对应行为 done, 附带结果摘要
     addProgressItem(msg.tool, 'done', _fmtToolResult(msg.tool, msg.result), msg.ts || _nowTs());
@@ -3004,6 +3051,7 @@ function handleMessage(msg) {
       if (completeContent && completeContent.length > fullText.length) fullText = completeContent;
       if (!fullText) fullText = completeContent;
       _flushStreamRender();
+      _splitProcessConclusion();   // 2026-10-14：过程/结论分层 —— 收尾时把中间过程收进折叠块，结论突出
     }
     else if (!currentBubble) { addAssistantMsg(completeContent); }
     // 完成时自动折叠进度时间线
@@ -3037,6 +3085,7 @@ function handleMessage(msg) {
     finishReasoningBlock();   // 收尾：💭 行转为"已完成"并标出字数，仍可点开看全文
     document.getElementById('steer-hint').style.display = 'none';
     refreshResults();  // 出错也可能已有部分产出,顺带刷一下结果面板
+    _scheduleResultsRefresh(2500);   // 2026-10-12：出错/中断后同样宽限轮询，别让最后落盘的图漏掉
   } else if (msg.type === 'todos') {
     renderTodos(msg.todos);
   } else if (msg.type === 'todos_update') {
@@ -3061,6 +3110,7 @@ function handleMessage(msg) {
     document.getElementById('steer-hint').style.display = 'none';
     _currentRunningSid = null;
     refreshResults();  // 停止时也可能已有部分产出,顺带刷一下结果面板
+    _scheduleResultsRefresh(2500);   // 2026-10-12：同上，停下来的那次也可能还有图正在落盘
   } else if (msg.type === 'context_usage') {
     renderContextUsage(msg.data, msg.error);
   }
@@ -3254,6 +3304,8 @@ async function send(background) {
   if (currentSid === targetSid) addUserMsg(text, imageUrls);
   clearPendingImages();
   fullText = '';
+  fullSegs = [];
+  _segBreak = false;
   reasoningText = '';
   currentAssistantEl = null;
   currentBubble = null;
@@ -3565,7 +3617,9 @@ function addAssistantMsg(text, meta) {
     foot = '<div class="msg-meta">' + parts.join(' · ') + '</div>';
   }
   // P1-3: 回答里的 [KB源:x] / [数据:y] / [DOI:z] 渲染成可点击的引用标签
-  div.innerHTML = '<div class="role"><span>🧬 MemOmics</span></div><div class="bubble">' + _citeWrapHtml(renderMarkdown(text)) + foot + '<button class="copy-btn" onclick="copyMessage(this)" title="复制此消息">📋 复制</button></div>';
+  // 2026-10-14：meta.procSegs = 本轮的中间过程段 → 收进「关键过程」折叠块，正文（最后一段=结论）突出
+  var procHtml = (meta && meta.procSegs && meta.procSegs.length) ? _procBlockHtml(meta.procSegs) : '';
+  div.innerHTML = '<div class="role"><span>🧬 MemOmics</span></div><div class="bubble">' + procHtml + _citeWrapHtml(renderMarkdown(text)) + foot + '<button class="copy-btn" onclick="copyMessage(this)" title="复制此消息">📋 复制</button></div>';
   document.getElementById('messages').appendChild(div);
   // P1-4: 回答归到当前轮次（历史回放用后端给的 turn，实时消息用当前轮）
   _registerTurnEl(div, (meta && meta.turn && meta.turn > 0) ? meta.turn : _turnSeq, 'assistant');
@@ -4399,7 +4453,13 @@ function normalizeDebate(d) {
     fallbackPlan: (d.fallback && typeof d.fallback === 'object') ? d.fallback : null,
     reopenCondition: d.reopen_condition || '',
     decisionSource: d.decision_source || '',
-    decisionWarnings: Array.isArray(d.decision_warnings) ? d.decision_warnings : []
+    decisionWarnings: Array.isArray(d.decision_warnings) ? d.decision_warnings : [],
+    // 2026-10-13：证据链状态（裁判 chain_verdicts）—— pro/con 完整|部分|断链（断点）+ decisive
+    //（索引条目给的是扁平字段 chain_pro/chain_con/chain_decisive，这里统一成链对象）
+    chain: (d.chain_verdicts && typeof d.chain_verdicts === 'object') ? d.chain_verdicts
+           : (((d.chain_pro || d.chain_con || d.chain_decisive))
+               ? { pro: d.chain_pro || '', con: d.chain_con || '', decisive: d.chain_decisive || '' }
+               : ((d.chain && typeof d.chain === 'object') ? d.chain : null))
   };
   function mkCell(rec, model, callId, score) {
     return { arg: _dtParseArg(rec), model: model || '', callId: callId || '', score: (score === undefined ? null : score) };
@@ -5239,6 +5299,27 @@ function _dcbKeyOf(obj) {
 
 function _dcbSquash(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
 
+// 2026-10-13：裁判的证据链状态（"完整 | 部分 | 断链（断点：…）"）—— 文案与颜色档位
+function _dcbChainText(v) {
+  if (v == null) return '';
+  if (typeof v === 'object') {
+    var st = _dcbSquash(v.state || v.status || '');
+    var br = _dcbSquash(v.break_at || v.breakpoint || v['break'] || '');
+    var out = st + ((br && st.indexOf('断点') < 0) ? ('（断点：' + br + '）') : '');
+    if (out) return out;
+    try { return _dcbSquash(JSON.stringify(v)); } catch (e) { return ''; }
+  }
+  return _dcbSquash(v);
+}
+
+function _dcbChainCls(t) {
+  t = String(t || '');
+  if (t.indexOf('断链') >= 0) return 'bad';
+  if (t.indexOf('部分') >= 0) return 'part';
+  if (t.indexOf('完整') >= 0) return 'ok';
+  return '';
+}
+
 function _dcbVerdictOf(db) {
   var v = _dcbSquash((db && (db.verdict || (db.judge && db.judge.verdict))) || '');
   var conf = _dcbSquash((db && (db.confidence || (db.judge && db.judge.confidence))) || '');
@@ -5275,6 +5356,7 @@ function _dcbOneLineOf(db) {
 
 function _dcbEntry(db, meta, extra) {
   var v = _dcbVerdictOf(db);
+  var _ch = (db && db.chain && typeof db.chain === 'object') ? db.chain : null;
   var e = {
     topic: (db && db.topic) || '',
     conclusion: v.label, tone: v.tone, confCn: v.confCn,
@@ -5284,6 +5366,10 @@ function _dcbEntry(db, meta, extra) {
     hasDigest: !!(db && db.digest), failed: !!(db && db.failed),
     kind: (db && db.kind) || '', format: (db && db.format) || '', level: (db && db.level) || '',
     scenarioLabel: (db && db.scenario && (db.scenario.scenario_label || db.scenario.scenario)) || '',
+    // 2026-10-13：证据链状态（裁判 chain_verdicts；兼容索引条目的扁平字段 chain_pro/…）
+    chainPro: _dcbChainText((_ch && (_ch.pro || _ch.pro_chain)) || (db && db.chain_pro)),
+    chainCon: _dcbChainText((_ch && (_ch.con || _ch.con_chain)) || (db && db.chain_con)),
+    chainDecisive: _dcbChainText((_ch && (_ch.decisive || _ch.decision)) || (db && db.chain_decisive)),
     plan: _dcbPlanOf(db),   // v5: 卡片正面直接显示"下一步"
     mtime: (meta && meta.mtime_text) || '', idx: 0, total: 0
   };
@@ -5316,6 +5402,14 @@ function debateShellHtml(e) {
   if (mi.length) h += '<div class="dcb-concl-meta">' + mi.join(' · ') + '</div>';
   if (e.why) h += '<div class="dcb-concl-why">' + _dtEsc(e.why) + '</div>';
   h += '</div>';
+  // 2026-10-13：证据链状态（用户口径：辩论=找证据链，"哪一方断链、断在哪一步"比 verdict 更有用）
+  if (e.chainPro || e.chainCon || e.chainDecisive) {
+    h += '<div class="dcb-chain"><span class="k">🔗 证据链</span>';
+    if (e.chainPro) h += '<span class="pill ' + _dcbChainCls(e.chainPro) + '" title="正方证据链状态">正：' + _dtEsc(e.chainPro) + '</span>';
+    if (e.chainCon) h += '<span class="pill ' + _dcbChainCls(e.chainCon) + '" title="反方证据链状态">反：' + _dtEsc(e.chainCon) + '</span>';
+    if (e.chainDecisive) h += '<span class="dec">决定项：<b>' + _dtEsc(e.chainDecisive) + '</b></span>';
+    h += '</div>';
+  }
   h += _dcbPlanCompactHtml(e.plan);   // v5: 辩论必须产出下一步
   if (e.early) h += '<div class="dcb-early">⚠️ 这场辩论发生在更早的对话里（当前只加载了最近一段） · ' +
     '<span class="dcb-link" onclick="event.stopPropagation();_dcbLoadAllAndFocus(this)">📜 载入更早对话并把它放回原位</span></div>';
@@ -5442,9 +5536,13 @@ function renderDebateCard(payload) {
 function _dcbBreakBubble() {
   if (!currentAssistantEl && !currentBubble) return;
   try { _flushStreamRender(); } catch (e) {}
+  // 2026-10-14：被截断分出去的旧气泡通常是过程叙述 —— 标成过程样式，视觉退居二线
+  if (currentAssistantEl) currentAssistantEl.classList.add('msg-process');
   currentAssistantEl = null;
   currentBubble = null;
   fullText = '';
+  fullSegs = [];
+  _segBreak = false;
 }
 
 // 时间线：把该会话每一场辩论插回它真正发生的位置（after_index = 那一刻已有多少条对话消息）
@@ -5685,6 +5783,7 @@ var _streamRenderTimer = null;
 var _streamRenderPending = false;
 function _doStreamRender() {
   if (!currentBubble) return;
+  if (currentBubble._splitDone) return;   // 2026-10-14：已按「过程/结论」重建过，残留定时器别把合并稿渲染回来
   var _msgs = document.getElementById('messages');
   var _anchor = (_msgs && _autoScroll === false) ? (currentBubble.offsetTop - _msgs.scrollTop) : null;
   renderBubbleIncremental(currentBubble, fullText);
@@ -5703,6 +5802,36 @@ function _flushStreamRender() {
   if (_streamRenderTimer) clearTimeout(_streamRenderTimer);
   _streamRenderPending = false;
   _doStreamRender();
+}
+
+// === 2026-10-14 过程/结论分层 ===
+// 一轮回答 = 若干「模型回合」文本段（工具调用为界）。收尾时：前面的段 = 中间过程，
+// 收进「📋 关键过程」折叠块（短过程默认展开，长过程折叠成一行）；最后一段 = 结论，
+// 正常突出显示 —— 用户一眼看到结果，过程可追溯但不刷屏。
+function _procBlockHtml(segs) {
+  var joined = segs.join('\n\n');
+  // 短过程（≤2 段且 ≤200 字）默认展开，长过程折叠成一行摘要
+  var open = (segs.length <= 2 && joined.length <= 200) ? ' open' : '';
+  return '<details class="proc-block"' + open + '><summary>' + escapeHtml(tf('proc_block', segs.length)) + '</summary>' +
+         '<div class="proc-body">' + renderMarkdown(joined) + '</div></details>';
+}
+
+function _splitProcessConclusion() {
+  if (!currentBubble || !currentAssistantEl) return;
+  // 一致性守卫：complete 若用更长的整稿替换过 fullText（少见），段边界不可信 → 不拆，保内容完整
+  if (fullSegs.join('').trim() !== (fullText || '').trim()) return;
+  var segs = [];
+  for (var i = 0; i < fullSegs.length; i++) {
+    var s = (fullSegs[i] || '').trim();
+    if (s && s !== '(empty)') segs.push(fullSegs[i]);
+  }
+  if (segs.length < 2) return;   // 单段回答本来就是一整块，无需分层
+  var concl = segs.pop();
+  currentBubble._incr = null;            // 增量渲染块缓存作废（DOM 已整格重建）
+  currentBubble._splitDone = true;       // 防残留流式定时器把合并稿重新渲染回来
+  currentBubble.innerHTML = _procBlockHtml(segs) + _citeWrapHtml(renderMarkdown(concl)) +
+    '<button class="copy-btn" onclick="copyMessage(this)" title="复制此消息">📋 复制</button>';
+  initMermaid();
 }
 
 // === 块级增量渲染（2026-08-27，对齐 DSH MarkdownText 思路） ===
@@ -6608,19 +6737,18 @@ async function newSession() {
 // 首次加载：优先恢复到最近活跃会话，没有历史会话时才显示企鹅欢迎画面
 function autoSelectLatestSession() {
   // 如果有历史会话，自动切换到最近活跃的（列表按 last_active 降序排列）
-  if (_allSessions && _allSessions.length > 0) {
-    // 2026-08-08：优先恢复上次会话（localStorage 记忆），否则选最近活跃的。
-    // 原来永远选 _allSessions[0]（可能是一个空配置的自检/新会话）→ 刷新后
-    // 下拉框显示全局默认 Flash，用户切过模型的会话反而选不中。
-    var _last = localStorage.getItem('memomics_last_session');
-    if (_last && _allSessions.some(function(s) { return s.id === _last; })) {
-      switchSession(_last);
-    } else {
-      switchSession(_allSessions[0].id);
-    }
-  } else {
-    newSession();  // 真的没有任何历史会话才新建
-  }
+  var list = _allSessions || [];
+  if (!list.length) { newSession(); return; }   // 真的没有任何历史会话才新建
+  function _hasMsgs(s) { return (s.msg_count || 0) > 0 || (s.messages && s.messages.length); }
+  // 2026-08-08：优先恢复上次会话（localStorage 记忆）。2026-10-12 补：**只认有内容的**——
+  // 刷新残留的空「新会话」如果被记住，回它就还是欢迎画面（用户反馈"刷新就弹欢迎框"）。
+  var _last = localStorage.getItem('memomics_last_session');
+  var lastSess = _last ? list.filter(function(s) { return s.id === _last; })[0] : null;
+  if (lastSess && _hasMsgs(lastSess)) { switchSession(lastSess.id); return; }
+  var withMsgs = list.filter(_hasMsgs);
+  if (withMsgs.length) { switchSession(withMsgs[0].id); return; }   // 优先落到最近有内容的会话
+  if (lastSess) { switchSession(lastSess.id); return; }             // 全是空会话：回记住的那条
+  switchSession(list[0].id);
 }
 
 var _loadSessionsCtl = null;
@@ -6889,15 +7017,12 @@ function _renderHistoryFlow(msgs) {
   var group = null;
   function flushGroup() {
     if (!group) return;
-    var text = '', elapsed = 0, hasElapsed = false, tools = 0, names = [];
+    var segs = [], elapsed = 0, hasElapsed = false, tools = 0, names = [];
     group.items.forEach(function(m) {
       var seg = String(m.content == null ? '' : m.content);
       // MemOmics 对「空响应」写入的哨兵 "(empty)"（run_agent.py / conversation_loop.py）：
       // 实时流里这种片段什么都不显示，回放也不能把它当正文拼进去。
-      if (seg.trim() && seg.trim() !== '(empty)') {
-        if (!text) text = seg;
-        else text += (/[\n\r]$/.test(text) ? '' : '\n\n') + seg;
-      }
+      if (seg.trim() && seg.trim() !== '(empty)') segs.push(seg);
       if (m.elapsed !== undefined && m.elapsed !== null) {
         elapsed += Number(m.elapsed) || 0;
         hasElapsed = true;
@@ -6909,12 +7034,17 @@ function _renderHistoryFlow(msgs) {
       }
     });
     var el = null;
-    if (text) {
+    if (segs.length) {
+      // 2026-10-14 过程/结论分层：一轮多段时，前面的段 = 中间过程（折叠块），
+      // 最后一段 = 结论（正文突出）。单段则与旧行为一致（整段即正文）。
+      var text = segs[segs.length - 1];
+      var procSegs = segs.length >= 2 ? segs.slice(0, -1) : null;
       el = addAssistantMsg(text, {
         turn: group.turn,
         elapsed: hasElapsed ? Math.round(elapsed * 10) / 10 : undefined,
         tool_count: tools,
-        tool_names: names
+        tool_names: names,
+        procSegs: procSegs
       });
     }
     if (el) lastEl = el;
@@ -6996,6 +7126,8 @@ function _snapshotCurrentSession() {
   cache.hasSnapshot = true;
   cache.messageHtml = messagesEl.innerHTML;
   cache.fullText = fullText;
+  cache.fullSegs = (typeof fullSegs !== 'undefined' && fullSegs) ? fullSegs.slice() : [];   // 2026-10-14：分段也入快照
+  cache.segBreak = (typeof _segBreak !== 'undefined') ? _segBreak : false;
   cache.reasoningText = reasoningText;
   cache.items = progressItems.slice();
   cache.running = agentRunning;
@@ -7013,6 +7145,8 @@ function _restoreSessionSnapshot(cache) {
   messagesEl.innerHTML = cache.messageHtml || '';
   var _htmlOnAssign = messagesEl.innerHTML;   // 还原瞬间的画面（自检用）
   fullText = cache.fullText || '';
+  fullSegs = Array.isArray(cache.fullSegs) ? cache.fullSegs.slice() : [];   // 2026-10-14：分段随快照还原
+  _segBreak = !!cache.segBreak;
   reasoningText = cache.reasoningText || '';
   if (!reasoningText) {
     // 记录里没带思考全文（被缩水过）→ 从还原出来的 💭 行里取，保证"展开 · N 字"和展开内容对得上
@@ -7380,6 +7514,32 @@ function showNewSessionWelcome() {
 
 // 切换序号：防止旧切换的异步渲染（fetch 回调）覆盖新会话界面
 var _switchSeq = 0;
+// 2026-10-12：用服务端 is_running 校正本地运行标志（用户反馈：任务状态和实际对不上）。
+//   方向一「界面说停了，其实还在跑」：本地 agentRunning=false → 停止按钮被 stopAgent 的
+//     `if (!agentRunning) return` 挡住，用户根本停不下来；
+//   方向二「界面显示运行中，其实早跑完」：本地标志没人清 → 发送按钮一直禁用、输入被当 steer。
+function _reconcileRunningState(sid) {
+  if (!sid) return;
+  var s = (_allSessions || []).find(function(x) { return x.id === sid; });
+  if (!s || typeof s.is_running === 'undefined') return;
+  var stopBtn = document.getElementById('stop');
+  var sendBtn = document.getElementById('send');
+  if (s.is_running) {
+    if (!agentRunning || _currentRunningSid !== sid) {
+      agentRunning = true;
+      _currentRunningSid = sid;
+      if (stopBtn) stopBtn.classList.add('active');
+      if (sendBtn) sendBtn.disabled = true;
+      addProgressItem('状态同步', 'done', '该会话仍在运行（服务端）—— 可直接发送引导或点停止', _nowTs());
+    }
+  } else if (agentRunning && _currentRunningSid === sid) {
+    agentRunning = false;
+    _currentRunningSid = null;
+    if (stopBtn) stopBtn.classList.remove('active');
+    if (sendBtn) sendBtn.disabled = false;
+  }
+}
+
 function switchSession(sid) {
   var _seq = ++_switchSeq;
   _autoScroll = true;  // 切换会话后默认自动滚动（用户未操作时）
@@ -7426,6 +7586,10 @@ function switchSession(sid) {
   _stopLiveStatusTicker();
   agentRunning = cached.running || false;
   _currentRunningSid = cached.runningSid || null;
+  // 2026-10-12：本地缓存可能是过期的（断线重连 / 后台跑 / done_callback 竞态），
+  // 用服务端 is_running 校正一次 —— 否则会出现「界面说停了其实还在跑」（连停止按钮都点不动，
+  // stopAgent 里有 !agentRunning 守卫）或反过来「显示运行中其实早跑完」。
+  _reconcileRunningState(sid);
 
   // 先同步恢复上次离开时的完整页面，再回放离开期间收到的流式事件。
   // HTTP 历史稍后只在任务已结束时覆盖它。
@@ -7976,6 +8140,38 @@ async function deleteCustomProvider(pid) {
   } catch(e) { alert('删除失败: ' + e.message); }
 }
 
+// 2026-10-12：设置页模型下拉的「使用中」识别（用户反馈：拉取模型之后认不出正在用的模型）
+//   ① 列表里有它 → 选中并打「✅使用中」标记；
+//   ② 列表里没有它（网关改了 id / 拉取列表不含）→ 保留一条「✅使用中（不在拉取列表）」，
+//      不要把别的模型顶到选中位冒充"当前使用"。
+// currentModel 是**会话级**真实当前模型（见 refreshModelUI），base_url 也一起比——
+// 多家 provider 有同名 id，只比 id 会认错人。
+function _modelInUse(m, apiBase) {
+  var cur = currentModel || {};
+  if (!cur.model || !m || m.id !== cur.model) return false;
+  var a = ((cur.base_url || '').replace(/\/+$/, '') || '').toLowerCase();
+  var b = ((apiBase || '').replace(/\/+$/, '') || '').toLowerCase();
+  return !(a && b && a !== b);
+}
+
+function _modelOptionsHtml(models, apiBase) {
+  var cur = currentModel || {};
+  var html = '', inList = false;
+  (models || []).forEach(function(m) {
+    var inUse = _modelInUse(m, apiBase);
+    if (inUse) inList = true;
+    var label = m.name + (inUse ? ' ✅使用中' : '');
+    if (m.reasoning) label += ' [推理]';
+    if (m.tool_call) label += ' [工具]';
+    html += '<option value="' + escapeHtml(m.id) + '"' + (inUse ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+  });
+  if (cur.model && !inList) {
+    html = '<option value="' + escapeHtml(cur.model) + '" selected>' + escapeHtml(cur.model) +
+           ' ✅使用中（不在拉取列表）</option>' + html;
+  }
+  return html;
+}
+
 async function onProviderSelect() {
   var pid = document.getElementById('settings-provider-select').value;
   if (!pid) return;
@@ -8019,24 +8215,21 @@ async function onProviderSelect() {
     var d = await r.json();
     currentProviderModels = d.models || [];
     var sel = document.getElementById('settings-model');
-    sel.innerHTML = currentProviderModels.map(function(m) {
-      var label = m.name;
-      if (m.reasoning) label += ' [推理]';
-      if (m.tool_call) label += ' [工具]';
-      return '<option value="' + m.id + '">' + label + '</option>';
-    }).join('');
-    // 修复 2026-08-08：按当前模型选中，而不是永远选第一个（第一个可能是 Flash）
-    var curModel = (currentModel && currentModel.model) || '';
-    if (curModel && currentProviderModels.some(function(x) { return x.id === curModel; })) {
-      sel.value = curModel;
-    } else if (currentProviderModels.length) {
-      sel.value = currentProviderModels[0].id;
-    }
-    var rSt = document.getElementById('settings-models-refresh-status');
-    if (rSt) {
-      rSt.textContent = (d.source && d.source !== 'catalog')
-        ? ('模型来源: 已拉取 (' + (d.updated_at || '') + ')')
+    // 2026-10-12：选项带「✅使用中」并按它选中；使用中的模型不在列表里也保留一条
+    // （原来不在列表就静默回退到第一个 → 界面显示的"使用的模型"其实是错的）。
+    sel.innerHTML = _modelOptionsHtml(currentProviderModels, provider.api || d.base_url || '');
+    var _rSt0 = document.getElementById('settings-models-refresh-status');
+    if (_rSt0) {
+      // 2026-10-12：把「使用中」和「模型来源」合成一行（原来来源那段会把使用中覆盖掉）。
+      var _cur0 = (currentModel || {}).model || '';
+      var _use0 = _cur0
+        ? ('使用中：' + _cur0 + (currentProviderModels.some(function(x) { return x.id === _cur0; })
+            ? '' : '（不在拉取列表，已保留）'))
         : '';
+      var _src0 = (d.source && d.source !== 'catalog')
+        ? ('模型来源：已拉取' + (d.updated_at ? ('（' + d.updated_at + '）') : ''))
+        : '';
+      _rSt0.textContent = [_use0, _src0].filter(Boolean).join(' · ');
     }
   } catch(e) {
     document.getElementById('settings-model').innerHTML = '<option value="">(无法加载模型)</option>';
@@ -8068,6 +8261,10 @@ async function saveProviderKey() {
     document.getElementById('settings-api-key').value = '';
     document.getElementById('settings-api-key').placeholder = '\u2713 已保存';
     await loadProviders();
+    // 2026-10-12：保存 Key 会**自动拉取**该 provider 的模型 → 交互框下拉/徽章/已连接列表
+    // 都要跟着重建（旧实现只刷设置页，交互框那边一直显示旧列表/旧模型）。
+    await refreshModelUI();
+    await refreshConnectedModels();
   } else {
     alert('\u274c 保存失败: ' + (d.error || ''));
   }
@@ -8085,23 +8282,29 @@ async function refreshProviderModels() {
     var r = await fetch('/api/providers/' + encodeURIComponent(pid) + '/models/refresh', { method: 'POST' });
     var d = await r.json();
     if (!r.ok || !d.ok) {
-      if (st) st.textContent = '\u274c ' + (d.error || '拉取失败');
+      // 2026-10-12：端点不支持 /v1/models 或响应过慢时，不要只丢一句"拉取失败"——
+      // 模型列表会自动沿用内置目录，不影响使用；使用中的模型仍按当前会话识别。
+      if (st) st.textContent = '\u274c ' + (d.error || '拉取失败') +
+        '（拿不到该端点的 /models 时会沿用内置模型目录；不影响「使用中」识别）';
       return;
     }
-    if (st) st.textContent = '\u2705 已拉取 ' + d.count + ' 个模型';
-    var sel = document.getElementById('settings-model');
-    var prev = sel ? sel.value : '';
     currentProviderModels = d.models || [];
-    if (sel) {
-      sel.innerHTML = currentProviderModels.map(function(m) {
-        var label = m.name;
-        if (m.reasoning) label += ' [推理]';
-        if (m.tool_call) label += ' [工具]';
-        return '<option value="' + m.id + '">' + label + '</option>';
-      }).join('');
-      if (prev && currentProviderModels.some(function(x) { return x.id === prev; })) sel.value = prev;
+    var sel = document.getElementById('settings-model');
+    var _apiBase = (document.getElementById('settings-base-url') || {}).value || '';
+    var _curM = (currentModel || {}).model || '';
+    var _hit = _curM && currentProviderModels.some(function(x) { return x.id === _curM; });
+    if (sel) sel.innerHTML = _modelOptionsHtml(currentProviderModels, _apiBase);
+    if (st) {
+      // 2026-10-12：拉取后直接把"正在用的是哪个模型"写在状态行里，
+      // 列表里找不到它也不谎报（已在上面的下拉里保留一条并选中）。
+      st.textContent = '\u2705 已拉取 ' + d.count + ' 个模型' +
+        (_curM ? (' · 使用中：' + _curM + (_hit ? '（已选中）' : '（不在拉取列表，已保留）')) : '');
     }
     await loadProviders(); // 同步「已连接的模型」列表
+    // 2026-10-12：拉取会**替换**该 provider 的模型列表，交互框下拉/顶部徽章/「已连接模型」
+    // 都是据此渲染的 —— 旧实现拉完只更新设置页那一个下拉，其它展示位仍旧值。统一刷一遍。
+    await refreshModelUI();
+    await refreshConnectedModels();
   } catch(e) {
     if (st) st.textContent = '\u274c ' + e.message;
   } finally {
@@ -13460,13 +13663,17 @@ async function refreshResults() {
 // === 出完图自动小幅刷新(轻量) ===
 // 1) 运行中:每 5 秒拉一次最新列表;内容签名没变就不动 DOM(不闪烁、滚动条不跳)
 // 2) 任务结束(complete):立即刷一次 + 2.5 秒后再补一次,等最后落盘的文件也显示出来
+// 3) 2026-10-12 补:任务结束后再**宽限轮询 60 秒** —— 最后几张图/表常常比"完成"事件晚落盘，
+//    旧逻辑只补刷一次(2.5s)就彻底停轮询，用户看到的就是"分析停了、图还没出来"。
+var _resultsGraceUntil = 0;
 function _scheduleResultsRefresh(ms) {
+  _resultsGraceUntil = Math.max(_resultsGraceUntil, Date.now() + 60000);
   if (_resultsRefreshTimer) clearTimeout(_resultsRefreshTimer);
   _resultsRefreshTimer = setTimeout(function() { refreshResults(); }, ms || 2500);
 }
 setInterval(function() {
   if (!currentSid) return;
-  if (!agentRunning && !_currentRunningSid) return; // 空闲时不轮询,靠事件触发
+  if (!agentRunning && !_currentRunningSid && Date.now() > _resultsGraceUntil) return; // 空闲时不轮询
   refreshResults();
 }, 5000);
 
@@ -13696,6 +13903,7 @@ async function openFileViewer(path, name, host) {
   }
   if (el.parentNode !== panel) panel.appendChild(el);
   panel.classList.add('rv-open');
+  _rvAutoFitPanel();   // 2026-10-14：右栏太窄时自动加宽到三栏舒适视图（关闭时自动还原）
   _rvState.path = path;
   _rvState.name = name || path.split('/').pop();
   _rvState.data = null;
@@ -13730,6 +13938,7 @@ function closeFileViewer() {
   el.style.display = 'none';
   el.innerHTML = '';
   if (el.parentNode && el.parentNode.classList) el.parentNode.classList.remove('rv-open');
+  _rvRestorePanel();   // 2026-10-14：还原打开查看器前的右栏宽度（期间用户手动拖过则不还）
   _rvState.data = null;
   _rvState.path = '';
   if (_rvState._marked) {   // P5.1：打开过就刷新列表，角标/未查看计数立刻更新
@@ -13742,6 +13951,123 @@ function _rvIsOpen() {
   var el = document.getElementById('rv-viewer');
   return !!(el && el.style.display !== 'none' && el.parentNode && el.parentNode.offsetParent !== null);
 }
+
+// === 2026-10-14：文件名「滑动推门」+ 查看器自动调宽三栏视图 ===
+// (1) 长文件名平时单行省略号；按住名字往左拖 = 像推门一样把名字区域拉大（负边距盖住右侧
+//     时间/大小/按钮，布局不动），把被遮挡的文件名完整展现出来。小幅拖拽松手弹回；
+//     推过 60% 门就停住保持展开（点别的地方收回）。拖过 4px 的那次点击被吃掉，不误开文件。
+//     名字比整行还长时，推到顶后继续左拖会带着文字内滚，保证也能看到结尾。
+// (2) 点「查看」打开文件时右栏太窄 → 自动加宽（聊天区至少保留 380px，与拖拽条同一约定）；
+//     关闭查看器时若宽度仍是自动值（期间用户没拖过右栏），自动还原。
+var _rvPrevPanelW = null;  // 打开查看器前右栏的 inline 宽度（'' = CSS 默认 clamp）
+var _rvAutoPanelW = null;  // 自动设上去的宽度（px），用于判断「用户期间有没有手动拖过」
+function _rvAutoFitPanel() {
+  var panel = document.getElementById('info-panel');
+  if (!panel) return;
+  var sidebar = document.querySelector('.sidebar');
+  var sidebarW = sidebar ? sidebar.offsetWidth : 300;
+  var maxW = Math.max(340, window.innerWidth - sidebarW - 380);
+  var target = Math.min(880, maxW);   // 舒适阅读宽度：侧栏 | 聊天(≥380) | 文件查看器(≈880)
+  if (panel.offsetWidth < target - 8) {
+    if (_rvPrevPanelW === null) _rvPrevPanelW = panel.style.width || '';
+    _rvAutoPanelW = target;
+    panel.style.width = target + 'px';
+  }
+}
+function _rvRestorePanel() {
+  var panel = document.getElementById('info-panel');
+  if (!panel || _rvPrevPanelW === null) { _rvAutoPanelW = null; return; }
+  if (_rvAutoPanelW !== null && Math.abs(panel.offsetWidth - _rvAutoPanelW) > 4) {
+    _rvPrevPanelW = null; _rvAutoPanelW = null; return;  // 用户手动拖过宽度 → 尊重用户，不还原
+  }
+  panel.style.width = _rvPrevPanelW;
+  _rvPrevPanelW = null; _rvAutoPanelW = null;
+}
+var _fnDrag = null, _fnSuppressClick = false, _fnOpenDoor = null;
+/** 推开的门滑回原位（180ms 滑动动画，动画完再脱掉内联样式） */
+function _fnDoorReset(nm) {
+  if (!nm) return;
+  var w0 = nm.offsetWidth;
+  var wMin = nm._doorWMin || w0;
+  nm.classList.add('fn-door-back');
+  nm.style.width = w0 + 'px';
+  nm.style.marginRight = (wMin - w0) + 'px';
+  void nm.offsetWidth;                       // 强制 reflow：过渡才有起点
+  nm.style.width = wMin + 'px';
+  nm.style.marginRight = '0px';
+  nm.scrollLeft = 0;
+  setTimeout(function() {
+    nm.classList.remove('fn-door', 'fn-door-drag', 'fn-door-back');
+    nm.style.flex = ''; nm.style.width = ''; nm.style.marginRight = '';
+  }, 210);
+}
+document.addEventListener('mousedown', function(e) {
+  var nm = (e.target && e.target.closest) ? e.target.closest('.file-item .file-name') : null;
+  if (!nm || e.button !== 0) return;
+  var it = nm.closest('.file-item');
+  if (!it) return;
+  if (_fnOpenDoor && _fnOpenDoor !== nm) { _fnDoorReset(_fnOpenDoor); _fnOpenDoor = null; }
+  var isOpen = (nm === _fnOpenDoor);
+  if (!isOpen && nm.scrollWidth <= nm.clientWidth + 1) return;   // 短名放得下，不用推
+  if (!nm._doorWMin) nm._doorWMin = nm.offsetWidth;              // 第一次推时记下原槽位宽
+  var itR = it.getBoundingClientRect(), nmR = nm.getBoundingClientRect();
+  var wMax = Math.min(nm.scrollWidth + 2, itR.right - 12 - nmR.left);  // 最多推到行右缘
+  _fnDrag = { nm: nm, x0: e.clientX, w0: nm.offsetWidth, wMin: nm._doorWMin, wMax: Math.max(wMax, nm._doorWMin), moved: false };
+});
+document.addEventListener('mousemove', function(e) {
+  if (!_fnDrag) return;
+  var nm = _fnDrag.nm;
+  var dx = e.clientX - _fnDrag.x0;
+  if (!_fnDrag.moved && Math.abs(dx) > 4) {
+    _fnDrag.moved = true;
+    nm.classList.remove('fn-door-back');
+    nm.classList.add('fn-door', 'fn-door-drag');
+    nm.style.flex = '0 0 auto';
+  }
+  if (!_fnDrag.moved) return;
+  var want = _fnDrag.w0 - dx;                              // 往左拖 → 门变宽
+  var w = Math.max(_fnDrag.wMin, Math.min(want, _fnDrag.wMax));
+  nm.style.width = w + 'px';
+  nm.style.marginRight = (_fnDrag.wMin - w) + 'px';        // 负边距：兄弟元素不动，门面盖上去
+  var over = want - _fnDrag.wMax;                          // 推到顶还继续拖 → 文字内滚看结尾
+  nm.scrollLeft = over > 0 ? Math.min(over, nm.scrollWidth - w) : 0;
+  e.preventDefault();
+});
+document.addEventListener('mouseup', function() {
+  if (!_fnDrag) return;
+  var nm = _fnDrag.nm;
+  if (_fnDrag.moved) {
+    _fnSuppressClick = true;
+    setTimeout(function() { _fnSuppressClick = false; }, 300);  // 兜底：窗口外松手也不吃下一次点击
+    nm.classList.remove('fn-door-drag');
+    var attainable = _fnDrag.wMax - _fnDrag.wMin;
+    var revealed = nm.offsetWidth - _fnDrag.wMin;
+    if (attainable > 4 && revealed >= Math.max(40, attainable * 0.6)) {
+      _fnOpenDoor = nm;                                    // 推过 60%：门停住，保持展开
+    } else {
+      if (_fnOpenDoor === nm) _fnOpenDoor = null;
+      _fnDoorReset(nm);                                    // 小幅拖拽：松手弹回
+    }
+  }
+  _fnDrag = null;
+});
+// 捕获阶段统一处理：① 推门后的那次 click 吃掉，别误点开文件；② 点别处把停住的门收回
+document.addEventListener('click', function(e) {
+  if (_fnSuppressClick) {
+    _fnSuppressClick = false;
+    e.stopPropagation(); e.preventDefault();
+    return;
+  }
+  if (_fnOpenDoor) {
+    var nm = (e.target && e.target.closest) ? e.target.closest('.file-item .file-name') : null;
+    if (nm !== _fnOpenDoor) { _fnDoorReset(_fnOpenDoor); _fnOpenDoor = null; }
+  }
+}, true);
+// 悬停文件名 → 完整名提示（事件委托，列表重绘不丢；已有 title 的不覆盖）
+document.addEventListener('mouseover', function(e) {
+  var nm = (e.target && e.target.closest) ? e.target.closest('.file-item .file-name') : null;
+  if (nm && !nm.getAttribute('title')) nm.setAttribute('title', nm.textContent.trim());
+});
 
 function _rvBarHtml() {
   var d = _rvState.data || {};
@@ -15090,9 +15416,23 @@ async function checkFirstRun() {
     var r = await fetch('/api/setup/status');
     var d = await r.json();
     if (d.needs_config) {
+      // 2026-10-12：用户反馈「刷新一次就弹一次，要求重填 API Key」。
+      // 后端已在 /api/setup/status 里做了自愈（provider_keys 里有 key 就不算未配置），
+      // 这里再保一层：手动关过一次的，本次构建内刷新不再弹（换版本/换配置才会再问）。
+      var dismissed = '';
+      var build = '';
+      try { dismissed = localStorage.getItem('memomics_setup_dismissed') || ''; } catch(e) {}
+      try { build = localStorage.getItem('memomics_ui_build') || ''; } catch(e) {}
+      if (dismissed && dismissed === build) return;
       showSetupModal();
     }
   } catch(e) { /* 忽略 */ }
+}
+
+function dismissSetup() {
+  try { localStorage.setItem('memomics_setup_dismissed', localStorage.getItem('memomics_ui_build') || ''); } catch(e) {}
+  var el = document.getElementById('setup-modal');
+  if (el) el.remove();
 }
 
 function showSetupModal() {
@@ -15112,6 +15452,7 @@ function showSetupModal() {
     '<div id="setup-hint" style="font-size:11px;color:#888;margin-top:2px;"></div>' +
     '<div class="setup-err" id="setup-err"></div>' +
     '<button class="setup-btn" onclick="submitSetup()">🚀 开始使用</button>' +
+    '<div style="margin-top:8px;text-align:right;"><span style="cursor:pointer;font-size:11px;color:#888;text-decoration:underline;" onclick="dismissSetup()">稍后配置（本次不再提示）</span></div>' +
     '</div>';
   document.body.appendChild(modal);
   loadSetupProviders();
@@ -17509,7 +17850,12 @@ function dcsPickDir(cb) {
 // ==== 下载队列块结束 ====
 
 // 「🗂 数据」标签 = 云上文件浏览：不管当前在看项目还是任务，点它都回到数据视图
-function dcsOpenData() { return dcsNav(_dcsLastPath || '/Files', 1); }
+function dcsOpenData() {
+  // 2026-10-13：记住的目录要带着范围记忆 —— 上次是在别的项目里逛，这次回来别开错项目
+  var cur = _dcsScope ? _dcsScope.id : '';
+  var p = (cur === (_dcsLastPathScope || '')) ? (_dcsLastPath || '/Files') : '/Files';
+  return dcsNav(p, 1);
+}
 
 // 2026-10-07（用户）：「📁 项目」挪到工具行最左；点「☁️ DCS 云」默认展示项目信息。
 function dcsTabProjects() { dcsSetView('browse'); dcsShowProjects(1); }
@@ -17687,6 +18033,9 @@ function dcsCrumbs(items) {
 function dcsCrumbsFromPath(path) {
   var parts = String(path || '/Files').split('/').filter(Boolean);
   var acc = '', items = [], start = (parts[0] === 'Files') ? 1 : 0;
+  // 2026-10-13 修：起始前缀 '/Files' 不能丢 —— 旧代码从 '/'+parts[1] 开始累积，
+  // 点 ≥2 级深的父目录名会导航到 '/FOR_COCO' 这种无根路径 → 云上查不到 → 目录变空
+  if (start) acc = '/Files';
   for (var i = start; i < parts.length; i++) {
     acc += '/' + parts[i];
     var target = acc;
@@ -17697,7 +18046,7 @@ function dcsCrumbsFromPath(path) {
     var up = '/' + parts.slice(0, -1).join('/');
     items.push({ label: '⬆ 上级', fn: function () { dcsNav(up, 1); } });
   }
-  dcsCrumbs(items);
+  dcsCrumbs(dcsScopeCrumbs().concat(items));   // 2026-10-13：浏览别的项目时最左钉范围徽章
 }
 
 function dcsDetail(pairs, actions) {
@@ -17766,9 +18115,11 @@ function dcsProjectDetail(p) {
     ['欠费', p.is_arrears ? '是（先充值再投递）' : '否'],
     ['状态', p.current ? '当前项目' : '未选中']
   ], [
-    p.current ? null : ['📌 设为当前项目', function () { dcsRun('use_project', { project: p.project_id }, '切换到 ' + p.project_id); }],
-    ['🗂 浏览它的数据', function () { dcsNav('/Files', 1); }],
-    ['📋 它的任务', function () { dcsShowTasks(1); }]
+    p.current ? null : ['📌 设为当前项目', function () { _dcsScope = null; dcsRun('use_project', { project: p.project_id }, '切换到 ' + p.project_id); }],
+    // 2026-10-13：浏览数据/任务 = 面板级范围浏览（不动 CLI 当前项目），用户原话：
+    // 「点击哪个项目，就能显示和浏览该项目的数据和任务」
+    ['🗂 浏览它的数据', function () { dcsScopeEnter(p); dcsNav('/Files', 1); }],
+    ['📋 它的任务', function () { dcsScopeEnter(p); dcsShowTasks(1); }]
   ].filter(Boolean));
 }
 
@@ -17779,10 +18130,13 @@ function dcsNav(path, page) {
   else _dcsState.page = page;
   var st = _dcsState;
   _dcsLastPath = st.path;
+  _dcsLastPathScope = _dcsScope ? _dcsScope.id : '';
   dcsSetView('browse');
   dcsCrumbsFromPath(st.path);
   if (page === 1) dcsClearRows();
-  dcsCall({ action: 'ls', path: st.path, long: true, page: page }, function (res) {
+  var args = { action: 'ls', path: st.path, long: true, page: page };
+  if (_dcsScope) args.project = _dcsScope.id;   // 2026-10-13：浏览别的项目（隔离 CLI 配置，不动默认项目）
+  dcsCall(args, function (res) {
     var box = res.entries || {};
     var items = box.items || [];
     st.total = (box.total === null || box.total === undefined) ? (st.rows.length + items.length) : box.total;
@@ -17798,14 +18152,20 @@ function dcsNav(path, page) {
         };
       }
       var meta = [dcsFmtSize(it.size), it.create_time].filter(Boolean).join(' · ');
+      // 浏览别的项目时不给「加队列」：下载走默认项目的 CLI 配置，范围对不上会下错/失败
+      var dlAction = _dcsScope
+        ? [['🔒 下载', function () {
+            dcsPrint('⚠ 正在浏览「' + _dcsScope.name + '」—— 下载/队列只支持默认项目。先「📌 设为当前项目」，或 ✕ 退出项目范围后再下载。', 'err');
+          }, '浏览别的项目时下载不可用']]
+        : [['⬇ 加队列', function () {
+            dcsEnqueue([{ path: child, name: it.name, size: it.size || 0 }]);
+          }, '加入下载队列（可批量勾选）']];
       return {
         icon: '📄', name: it.name, meta: meta,
         badges: it.sn ? [[it.sn, '']] : [],
-        pick: { path: child, name: it.name, size: it.size || 0 },
+        pick: _dcsScope ? null : { path: child, name: it.name, size: it.size || 0 },
         onOpen: function () { dcsFileDetail(it, child); },
-        actions: [['⬇ 加队列', function () {
-          dcsEnqueue([{ path: child, name: it.name, size: it.size || 0 }]);
-        }, '加入下载队列（可批量勾选）']]
+        actions: dlAction
       };
     });
     dcsRender(rows, {
@@ -17825,7 +18185,9 @@ function dcsFileDetail(it, full) {
   ], [
     ['⬇ 下载到本机', function () { dcsDownloadFile(full, it.name, it.size); }],
     ['ℹ️ 刷新元数据', function () {
-      dcsCall({ action: 'info', path: full }, function (r) {
+      var iArgs = { action: 'info', path: full };
+      if (_dcsScope) iArgs.project = _dcsScope.id;   // 2026-10-13：元数据也在浏览范围内查
+      dcsCall(iArgs, function (r) {
         dcsDetail([['元数据', JSON.stringify(r.info || r, null, 2)]], [['🧾 在日志里看', function () { dcsSetView('log'); }]]);
       });
     }]
@@ -17836,6 +18198,33 @@ var _dcsLastDir = '';
 var _dcsLastPath = '/Files';
 var _dcsOpenDefault = false;   // 面板打开时是否强制回项目视图
 var _dcsCfgBack = 'browse';    // 关设置时回到哪个视图   // 最后浏览过的数据路径（数据标签每次都回到它）
+
+// === 2026-10-13 面板级「浏览别的项目」===
+// 用户口径：「点哪个项目，就能显示和浏览该项目的数据和任务；退出 DCS 云/刷新/交互框的
+// 默认 DCS 项目，还是『设为当前项目』设定的那个。」实现：_dcsScope 只影响面板的
+// ls/find/info/tasks/task_logs 查询（后端用隔离 CLI 配置跑，不动 CLI 当前项目）。
+var _dcsScope = null;          // {id, name} 正在浏览的项目范围；null = 默认项目
+var _dcsLastPathScope = '';    // _dcsLastPath 是哪个范围下的（换范围后不回错目录）
+
+function dcsScopeEnter(p) {
+  // 点「当前项目」自己的数据 = 没换范围，清掉即可
+  _dcsScope = (p && !p.current && p.project_id) ? { id: p.project_id, name: p.project_name || p.project_id } : null;
+}
+function dcsScopeExit() {
+  _dcsScope = null;
+  var st = _dcsState || {};
+  if (st.kind === 'ls') dcsNav('/Files', 1);
+  else if (st.kind === 'tasks') dcsShowTasks(1);
+  else if (st.kind === 'find') dcsShowProjects(1);
+}
+function dcsScopeCrumbs() {
+  // 范围徽章：固定在面包屑最左，✕ 退出回默认项目
+  if (!_dcsScope) return [];
+  return [
+    { label: '📦 ' + _dcsScope.name },
+    { label: '✕ 退出项目范围', fn: dcsScopeExit }
+  ];
+}
 
 // 调本机原生选择框（宿主进程弹 Windows 对话框），把结果填回输入框
 function dcsPickInto(inputId, kind) {
@@ -17975,9 +18364,11 @@ function dcsShowFind(name, page) {
   else _dcsState.page = page;
   var st = _dcsState;
   dcsSetView('browse');
-  dcsCrumbs([{ label: '🔍 搜索 ' + name, fn: function () { dcsShowFind(name, 1); } }, { label: '第 ' + page + ' 页' }]);
+  dcsCrumbs(dcsScopeCrumbs().concat([{ label: '🔍 搜索 ' + name, fn: function () { dcsShowFind(name, 1); } }, { label: '第 ' + page + ' 页' }]));
   if (page === 1) dcsClearRows();
-  dcsCall({ action: 'find', name: name, page: page, page_size: 50 }, function (res) {
+  var fArgs = { action: 'find', name: name, page: page, page_size: 50 };
+  if (_dcsScope) fArgs.project = _dcsScope.id;   // 2026-10-13：在浏览的项目范围里搜
+  dcsCall(fArgs, function (res) {
     var box = res.matches || {};
     var items = box.items || [];
     st.total = box.total || (st.rows.length + items.length);
@@ -17989,7 +18380,11 @@ function dcsShowFind(name, page) {
         icon: '📄', name: it.name || '', meta: full + (it.size ? (' · ' + dcsFmtSize(it.size)) : ''),
         badges: it.entity_id ? [[it.entity_id, '']] : [],
         onOpen: function () { dcsFileDetail(it, full); },
-        actions: [['⬇ 下载', function () { dcsDownloadFile(full); }]]
+        actions: [_dcsScope
+          ? ['🔒 下载', function () {
+              dcsPrint('⚠ 正在浏览「' + _dcsScope.name + '」—— 下载只支持默认项目。先「📌 设为当前项目」，或 ✕ 退出项目范围。', 'err');
+            }, '浏览别的项目时下载不可用']
+          : ['⬇ 下载', function () { dcsDownloadFile(full); }]]
       };
     });
     dcsRender(rows, {
@@ -18006,9 +18401,11 @@ function dcsShowTasks(page) {
   else _dcsState.page = page;
   var st = _dcsState;
   dcsSetView('browse');
-  dcsCrumbs([{ label: '📋 离线任务', fn: function () { dcsShowTasks(1); } }, { label: '第 ' + page + ' 页' }]);
+  dcsCrumbs(dcsScopeCrumbs().concat([{ label: '📋 离线任务', fn: function () { dcsShowTasks(1); } }, { label: '第 ' + page + ' 页' }]));
   if (page === 1) dcsClearRows();
-  dcsCall({ action: 'tasks', page_size: 20, page: page }, function (res) {
+  var args = { action: 'tasks', page_size: 20, page: page };
+  if (_dcsScope) args.project = _dcsScope.id;   // 2026-10-13：浏览别的项目的任务
+  dcsCall(args, function (res) {
     var box = res.tasks || {};
     var recs = box.records || [];
     st.total = box.total || (st.rows.length + recs.length);
@@ -18227,6 +18624,7 @@ function openDcsConsole() {
 function dcsClose() {
   var el = document.getElementById('dcs-console');
   if (el) el.style.display = 'none';
+  _dcsScope = null;   // 2026-10-13：关面板 = 退出项目范围浏览，下次从默认项目开始
 }
 
 function dcsToggleCfg() {
@@ -18265,6 +18663,8 @@ function dcsKey(e) {
 function dcsRun(action, extra, label) {
   var args = { action: action };
   if (extra) { for (var k in extra) { if (extra[k] !== undefined && extra[k] !== null && extra[k] !== '') args[k] = extra[k]; } }
+  // 2026-10-13：只读类动作跟随面板的浏览范围（看别的项目的任务日志等）
+  if (_dcsScope && ['task_logs', 'ls', 'find', 'info', 'tasks'].indexOf(action) >= 0 && !args.project) args.project = _dcsScope.id;
   dcsPrint('▶ ' + (label || action), 'sys');
   return dcsCall(args, function () {
     if (action === 'use_project') { dcsLoad(); dcsShowProjects(1); }
@@ -18586,9 +18986,14 @@ function dcsSwrFollowup(res, args) {
     fetch('/api/dcs/status').then(function (r) { return r.json(); }).then(function (d) {
       var c = (d && d.config) || {};
       if (!(c.enabled && c.bound)) return;
+      // 2026-10-13 预热加宽：项目列表 + 默认项目 /Files 首屏一起进缓存，点开面板零等待
       fetch('/api/dcs/exec', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'projects', page: 1 })
+      }).catch(function () {});
+      fetch('/api/dcs/exec', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'ls', path: '/Files', long: true, page: 1 })
       }).catch(function () {});
     }).catch(function () {});
   }
@@ -18609,6 +19014,11 @@ function refreshContextUsage() {
     showCtxError('WebSocket 未连接');
     return;
   }
+  // 2026-10-12：会话还没选好时**不要发**。旧行为在 ws.onopen 里立刻调用，此时
+  // currentSid 还是 null → 发出去的是 session_id:null → 后端 _get_or_create_session(None)
+  // 会**隐式新建一个空「新会话」**；每次刷新都多一个，下次刷新 autoSelectLatestSession
+  // 又优先选中它 → 用户看到的就是"刷新就弹欢迎画面"。
+  if (!currentSid) return;
   var btn = document.getElementById('ctx-refresh-btn');
   if (btn) btn.classList.add('spinning');
   ws.send(JSON.stringify({ type: 'get_context_usage', session_id: currentSid }));

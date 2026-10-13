@@ -38,6 +38,7 @@
 
 ### 场景 5：安装/创建新工具
 
+→ `skill_view("create-bio-skill")` → 讨论需求 → 生成 → 注册到 SOUL.md + SKILLS_INDEX.md
 
 ### 场景 5.5：用户给脚本 / 给数据无 skill / 找之前的脚本（2026-08-22 用户脚本铁律）
 
@@ -48,6 +49,7 @@
   → record_run 留档 + 登记 skills/user-scripts/INDEX.md
 
 用户给了数据 + 任务但无 skill，主题有文章/官网/教程
+  → create-bio-skill 自动创建正式 skill（查官方文档≥3页 + 文献）→ 注册触发 → 立即可用（source: memomics-created）
 
 用户说"之前那个脚本/那个分析/那个代码"
   → 先读 skills/user-scripts/INDEX.md 匹配 → 定位复用；无匹配再查 MEMORY.md [脚本库] 记忆

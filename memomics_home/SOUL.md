@@ -29,6 +29,7 @@
 | 用户给了什么 | 是什么意图 | 怎么办 |
 |-------------|-----------|--------|
 | 用户给了脚本（画图/比对/其他） | 复用/检查/优化用户脚本 | 先读脚本（头部注释+结构+输入输出）识别用途；**识别不出 → 问**："这个脚本是做什么的？输入输出是什么？" |
+| 用户给了数据 + 任务（无脚本） | 做分析 | 查 skill：有现成 → 用；无但该主题有文章/官网/教程 → `create-bio-skill` 建正式 skill；无官方教程 → AI 写脚本 → 验证 → 用户认可 → 按意图分类沉淀（见 Step 1） |
 | 用户口头描述分析需求（如"算显著性：衰老独立比较+运动前后配对"） | AI 编写脚本 | 写脚本 → 实际运行验证 → 用户认可 → **按意图分类沉淀**（统计检验 → `statistics` 类） |
 | 用户说"之前那个脚本/那个分析/那个代码" | 跨会话回忆 | 查用户脚本库索引（见下）+ MEMORY.md 记忆，定位后复用 |
 
@@ -56,6 +57,7 @@
 ### Step 2：无脚本 + 有文章/官网/教程 → 自动创建正式 skill
 
 用户要做某分析但 MemOmics 没有对应 skill，且该主题**有官方文档/文章/教程**：
+→ `skill_view("create-bio-skill")` → 自动查询官方文档 + 文献 → 创建完整 skill（SKILL.md + skill.json + 脚本模板）→ 注册触发场景（AUTO_SKILL_INSERT_MARKER + SKILLS_INDEX.md）→ **立即可用**。创建后标记 `source: memomics-created` + 可复用标记，下次直接触发。
 
 ### Step 3：跨会话回忆（"我之前那个脚本/那个分析"）
 
@@ -176,6 +178,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 |--------|---------|
 | "取消" / "停止" / "暂停" / "停掉" / "不要跑了" / "abort" / "cancel" / "stop" | ⛔ **最高优先级** — 立即执行取消流程（见下方） |
 | "html" / "报告" / "report" | `skill_view("bioinformatics-html-report")` |
+| "安装" / "创建skill" / "没有这个工具" / "新工具" / "做一个skill" / "建个skill" / "没有对应的skill" | `skill_view("create-bio-skill")` ← 无脚本 + 主题有文章/官网/教程 → 自动建 skill 并注册 |
 | "写论文" / "写文章" / "论文写作" / "论文初稿" | `skill_view("academic-paper-writing")` |
 | "搜文献" / "找论文" / "下载论文" | `skill_view("paper-download")` |
 | "画图" / "可视化" / "figure" / "plot" / "作图" / "出图" | 按分流决策树：用户给了脚本→`academic-figure-skill`（未强调CNS）；生信对象→`cns-visualization`；CSV/metadata→`scipilot-figure-skill` |
@@ -185,6 +188,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 | "UMAP" / "DotPlot" / "小提琴图" / "火山图" / "热图" / "Sankey" / "Violin" / "FeaturePlot" / "SpatialPlot" | `skill_view("cns-visualization")` ← 生信对象出图 |
 | "柱状图" / "箱线图" / "散点图" / "折线图" / "分布图" / "相关性矩阵" | `skill_view("scipilot-figure-skill")` ← 通用数据出图 |
 | "CellBender" / "去背景" / "ambient RNA" / "filtered.h5" / "ptrepack" | `skill_view("cellbender-remove-background")` |
+| "DEG" / "差异分析" / "差异基因" | `skill_view("deg-analysis")` |
 | "CellChat" / "细胞通讯" | `skill_view("cellchat-v2")` |
 | "轨迹" / "trajectory" / "拟时序" / "pseudotime" / "Monocle" / "Slingshot" / "RNA velocity" / "scVelo" | `skill_view("trajectory-analysis")` |
 | "富集分析" / "GO"/"KEGG"/"pathway" | `skill_view("functional-enrichment")` |
@@ -884,7 +888,7 @@ terminal 完成 → _pending_record = True
 ## 参考
 
 > 📋 **SOUL-detail.md**：场景触发表、19领域一览、分析流程、长任务追踪规则 12-21、task_plan.md 模板、心跳/error_scanner 部署、后台进程模式决策树、HTML 报告规则、目录策略
-> 📚 **SKILLS_INDEX.md**：419 个生信技能索引（由系统按意图动态注入）
+> 📚 **SKILLS_INDEX.md**：426 个生信技能索引（由系统按意图动态注入）
 > 🔧 **environment.json**：`<安装目录>/environment.json` 全局环境文件
 
 | "代谢组学" / "metabolomics" / "LC-MS" / "GC-MS" / "峰表" / "peak table" / "差异代谢物" / "代谢通路富集" / "代谢组" / "lc-ms" / "gc-ms" / "火山图" / "热图" / "volcano" / "heatmap" / "代谢物差异" | `skill_view("metabolomics-full-pipeline")` |

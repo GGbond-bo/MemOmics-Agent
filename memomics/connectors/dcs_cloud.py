@@ -406,7 +406,7 @@ def _cli_env() -> dict:
 
 
 def _run_cli(args: list, *, cfg: dict | None = None, timeout: int | None = None,
-             with_json_output: bool = True) -> dict:
+             with_json_output: bool = True, env_override: dict | None = None) -> dict:
     """跑一条 dcs 命令，返回结构化结果（永不抛）。
 
     返回：{"ok": bool, "exit_code": int|None, "data": Any, "error": dict|None,
@@ -432,7 +432,7 @@ def _run_cli(args: list, *, cfg: dict | None = None, timeout: int | None = None,
     try:
         proc = subprocess.run(
             argv, capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=t, env=_cli_env(), creationflags=creationflags,
+            timeout=t, env=(env_override or _cli_env()), creationflags=creationflags,
         )
     except subprocess.TimeoutExpired:
         return {"ok": False, "exit_code": None, "data": None,
@@ -474,6 +474,15 @@ def _run_cli(args: list, *, cfg: dict | None = None, timeout: int | None = None,
             "stdout_tail": stdout[-2000:] if not ok else "",
         }
         if not ok:
+            # 2026-10-13：平台把真实拒绝原因藏在 data.error / data.api_msg
+            # （「--image 必填」「匹配不到计算资源 vf=2g… 可选择以下机型…」），
+            # 顶层 message 只有泛泛的「任务运行失败」——把内层原因提到前台。
+            _d = parsed.get("data")
+            if isinstance(_d, dict):
+                _inner = str(_d.get("error") or _d.get("api_msg") or "").strip()
+                if _inner:
+                    out["platform_message"] = out.get("message") or ""
+                    out["message"] = _inner
             out = _attach_friendly_hint(out)
             # 平台顶层文案很泛（「提交批次下载任务失败」/「Fix failed items and resubmit」）：
             # 逐条的真实原因在 data.failed_items[] 里 —— 提到前台，别让用户看见空泛那句（2026-10-12）。
@@ -493,6 +502,76 @@ def _run_cli(args: list, *, cfg: dict | None = None, timeout: int | None = None,
         "cmd": argv[1:], "stdout_tail": stdout[-2000:],
     }
     return out
+
+
+# ---------------------------------------------------------------------------
+# 面板级「浏览别的项目」（2026-10-13）
+# 用户口径：「点哪个项目，就能看它的数据和任务；但交互框/投递的默认项目不动。」
+# CLI 没有 --project 参数，当前项目写在 ~/.dcs/config.yaml（current_project）。
+# 做法：为被浏览的项目复制一份配置到 memomics_home/dcs_scopes/<pid>/.dcs/config.yaml，
+# 只改 current_project，跑 CLI 时用 USERPROFILE/HOME/HOMEDRIVE/HOMEPATH 指过去 ——
+# 全局 CLI 状态零改动、与正在进行的默认项目操作零竞态（实测 dcs CLI 认 USERPROFILE）。
+# ---------------------------------------------------------------------------
+_SCOPE_ROOT = "dcs_scopes"
+
+
+def _cli_config_path() -> Path:
+    return Path.home() / ".dcs" / "config.yaml"
+
+
+def _current_project_id() -> str:
+    """CLI 当前项目 id（直读 ~/.dcs/config.yaml；失败返回 ''）。"""
+    try:
+        import re as _re
+        m = _re.search(r"(?m)^current_project:\s*(\S+)\s*$",
+                       _cli_config_path().read_text(encoding="utf-8"))
+        return m.group(1) if m else ""
+    except Exception:
+        return ""
+
+
+def _scoped_env(project_id: str):
+    """构造「浏览别的项目」的隔离 CLI 环境。主配置更新过（换 token/换片区）就重抄。"""
+    main = _cli_config_path()
+    if not main.is_file():
+        return None
+    try:
+        import re as _re
+        scope_home = _memomics_home() / _SCOPE_ROOT / project_id
+        scope_cfg = scope_home / ".dcs" / "config.yaml"
+        need = (not scope_cfg.is_file()
+                or scope_cfg.stat().st_mtime < main.stat().st_mtime)
+        if need:
+            scope_cfg.parent.mkdir(parents=True, exist_ok=True)
+            text = main.read_text(encoding="utf-8")
+            text = _re.sub(r"(?m)^current_project:.*$", "current_project: " + project_id, text)
+            scope_cfg.write_text(text, encoding="utf-8")
+        env = _cli_env()
+        home = str(scope_home)
+        env["USERPROFILE"] = home
+        env["HOME"] = home
+        env["HOMEDRIVE"] = home[:2] if len(home) >= 2 and home[1] == ":" else "C:"
+        env["HOMEPATH"] = home[2:] if len(home) >= 2 and home[1] == ":" else home
+        return env
+    except Exception:
+        return None
+
+
+def _run_scoped_or_normal(args: dict, cfg: dict, argv: list):
+    """args.project 给了且 ≠ CLI 当前项目 → 用隔离配置跑（面板浏览别的项目）。
+
+    返回 (res, scope_pid)：scope_pid 非空表示本次是在别的项目范围里查的。"""
+    pid = str((args or {}).get("project") or "").strip()
+    if not pid or pid == _current_project_id():
+        return _run_cli(argv, cfg=cfg), ""
+    env = _scoped_env(pid)
+    if env is None:
+        return {"ok": False, "exit_code": None, "data": None,
+                "error": {"type": "scope_failed"},
+                "message": "构造项目浏览环境失败",
+                "hint": "重试一次；仍不行就先「📌 设为当前项目」再浏览",
+                "cmd": argv, "stdout_tail": ""}, ""
+    return _run_cli(argv, cfg=cfg, env_override=env), pid
 
 
 _AUTH_CODES = {41201, 83002, 70102, 41104, 60003}
@@ -964,10 +1043,13 @@ def action_ls(args: dict) -> dict:
         argv.append("-l")
     if args.get("page"):
         argv += ["--page", str(int(args["page"]))]
-    res = _run_cli(argv, cfg=cfg)
+    res, scope = _run_scoped_or_normal(args, cfg, argv)
     if not res.get("ok"):
         return _err(res.get("message") or "列目录失败", detail=res.get("error"), hint=res.get("hint"))
-    return _ok({"path": path or "(当前目录)", "entries": res.get("data")})
+    out = _ok({"path": path or "(当前目录)", "entries": res.get("data")})
+    if scope:
+        out["project_scope"] = scope   # 面板浏览别的项目：前端据此显示范围徽章
+    return out
 
 
 def action_find(args: dict) -> dict:
@@ -986,10 +1068,13 @@ def action_find(args: dict) -> dict:
         argv += ["--page-size", str(args["page_size"])]
     if args.get("page"):
         argv += ["--page", str(int(args["page"]))]
-    res = _run_cli(argv, cfg=cfg)
+    res, scope = _run_scoped_or_normal(args, cfg, argv)
     if not res.get("ok"):
         return _err(res.get("message") or "搜索失败", detail=res.get("error"), hint=res.get("hint"))
-    return _ok({"matches": res.get("data")})
+    out = _ok({"matches": res.get("data")})
+    if scope:
+        out["project_scope"] = scope
+    return out
 
 
 def action_info(args: dict) -> dict:
@@ -998,10 +1083,13 @@ def action_info(args: dict) -> dict:
     if not path:
         return _err("需要参数 path（云上路径，/Files/... 开头）")
     # 2026-10-12 修：CLI 的 info 只认 -p/--path，位置参数会被当成子命令 → unknown command
-    res = _run_cli(["data", "info", "--path", path], cfg=cfg)
+    res, scope = _run_scoped_or_normal(args, cfg, ["data", "info", "--path", path])
     if not res.get("ok"):
         return _err(res.get("message") or "查询元数据失败", detail=res.get("error"), hint=res.get("hint"))
-    return _ok({"path": path, "info": res.get("data")})
+    out = _ok({"path": path, "info": res.get("data")})
+    if scope:
+        out["project_scope"] = scope
+    return out
 
 
 def _write_guard(cfg: dict, action: str) -> dict | None:
@@ -1545,10 +1633,13 @@ def action_tasks(args: dict) -> dict:
         argv += ["-n", str(args["name"])]
     if args.get("page_size"):
         argv += ["--page-size", str(args["page_size"])]
-    res = _run_cli(argv, cfg=cfg)
+    res, scope = _run_scoped_or_normal(args, cfg, argv)
     if not res.get("ok"):
         return _err(res.get("message") or "查询任务失败", detail=res.get("error"), hint=res.get("hint"))
-    return _ok({"tasks": res.get("data")})
+    out = _ok({"tasks": res.get("data")})
+    if scope:
+        out["project_scope"] = scope
+    return out
 
 
 def action_task_logs(args: dict) -> dict:
@@ -1556,10 +1647,13 @@ def action_task_logs(args: dict) -> dict:
     tid = str(args.get("task_id") or args.get("id") or "").strip()
     if not tid:
         return _err("需要参数 task_id（先用 action='tasks' 查）")
-    res = _run_cli(["analysis", "log", "-i", tid], cfg=cfg)
+    res, scope = _run_scoped_or_normal(args, cfg, ["analysis", "log", "-i", tid])
     if not res.get("ok"):
         return _err(res.get("message") or "取日志失败", detail=res.get("error"), hint=res.get("hint"))
-    return _ok({"task_id": tid, "log": res.get("data")})
+    out = _ok({"task_id": tid, "log": res.get("data")})
+    if scope:
+        out["project_scope"] = scope
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -1767,11 +1861,17 @@ def action_images(args: dict) -> dict:
     images = []
     for r in recs:
         nm = str(r.get("name") or "").strip()
-        tag = str(r.get("tags") or "").strip().strip(":") or "latest"
-        if nm:
-            images.append({"name": nm, "ref": "%s:%s" % (nm, tag),
-                           "prog_env": str(r.get("prog_env") or ""),
-                           "build_type": str(r.get("build_type") or "")})
+        # 2026-10-13 修：--image 要的是 registry 路径（url 字段），不是 name:tags。
+        # 实测坑：centos-7 的 url 是 workflow/centos:latest（平台已失效，报 image_url不存在），
+        # 真实可用的形如 stereonote_hpc/<hash>_public:latest。url 残缺（":latest"）时回退 name:tags。
+        url = str(r.get("url") or "").strip()
+        tag = str(r.get("tags") or "").strip().strip(":\t ").split(",")[0] or "latest"
+        if not nm and not url:
+            continue
+        ref = url if (url and not url.startswith(":")) else ("%s:%s" % (nm, tag))
+        images.append({"name": nm, "ref": ref, "url": url,
+                       "prog_env": str(r.get("prog_env") or ""),
+                       "build_type": str(r.get("build_type") or "")})
     return _ok({"images": images, "total": (d.get("total") if isinstance(d, dict) else len(images)) or len(images)})
 
 
@@ -1838,10 +1938,12 @@ def action_task_cancel(args: dict) -> dict:
 #   面板每开一次至少一次 `project ls`。策略：只读结果缓存；过期先回旧值、后台刷新；
 #   写动作清空整表（宁旧勿错）；fresh=true 强制真跑；失败结果不入缓存。
 # ---------------------------------------------------------------------------
+# 2026-10-13 放宽：TTL 太短导致面板每次切换都重新打云（用户：「每次都要刷新，能不能快一点」）。
+# 有 SWR（先给旧值 + 后台刷新 + 前端「⟳ 重拉」按钮）兜底，TTL 放到分钟级也新鲜。
 _CACHE_TTL = {
-    "projects": 45, "current": 30, "context": 30, "ls": 10, "find": 10, "info": 60,
-    "tasks": 20, "task_logs": 15, "flows": 90, "flow_form": 180, "images": 600,
-    "flow_tasks": 20, "flow_task_info": 15,
+    "projects": 300, "current": 120, "context": 120, "ls": 120, "find": 30, "info": 300,
+    "tasks": 60, "task_logs": 60, "flows": 300, "flow_form": 300, "images": 600,
+    "flow_tasks": 60, "flow_task_info": 60,
 }
 # 这些动作会改动云端或本地状态 → 清空缓存
 _CACHE_CLEAR_ON = {

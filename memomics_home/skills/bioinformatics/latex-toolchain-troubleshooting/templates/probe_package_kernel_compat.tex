@@ -1,0 +1,29 @@
+% ============================================================================
+% 探针：判定「某个宏包 / 某个环境」是否与本机 LaTeX 内核兼容
+%
+% 用法：
+%   1) 把 PACKAGE 换成待测宏包（tabu / tabularray / …）
+%   2) 把 BODY 换成该宏包官方示例里的**最小用法**
+%   3) xelatex probe_package_kernel_compat.tex
+%      exit 0 + 产出 pdf  => 兼容（问题不在宏包层，去查资源/字体路径层）
+%
+% 判据（2026-10-12 实测 tabu 案例）：
+%   `\end{<env>}` 报 `Undefined control sequence`，宏体停在宏包自己的内部宏上
+%   （如 `\tabu@cleanup … \tabu@naturalX =\tabu@naturalX@save`）
+%   => 是**宏包与本机内核不兼容**，不是你的模板写法错。
+%      修法 = 换等价且维护中的宏包，不要去改模板里的排版写法。
+%
+% 常见迁移：
+%   tabu -> array + tabular（列式 `c l r` 零改动；multirow/progressbar 照用）
+%        或 tabularray（注意：不支持 \multirow，要换 \SetCell[r=n]）
+%
+% 排查纪律（详见 SKILL.md「六-补、分层最小复现」）：
+%   宏包层用本文档判定；资源/字体路径层用 templates/probe_font_dir_resolution.tex
+%   判定 —— **两类问题分开验证通过后再合跑整篇**，不要叠加着一起改。
+% ============================================================================
+\documentclass{article}
+\usepackage{PACKAGE}              % <-- 替换为待测宏包
+\setlength{\parindent}{0pt}
+\begin{document}
+BODY                              % <-- 替换为该宏包的最小用法
+\end{document}

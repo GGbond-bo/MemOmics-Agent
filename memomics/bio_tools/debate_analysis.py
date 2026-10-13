@@ -83,6 +83,36 @@ def get_session_results_dir() -> str:
     """获取当前结果目录（ContextVar，跨工具 worker 线程传播）。"""
     return _results_dir_var.get()
 
+
+def _persist_decision_channel(result: dict) -> None:
+    """2026-10-14：辩论跑完把「参数决策」落到 claims/params.json。
+
+    用户口径：辩论不能只产出"辩论结果"，重要参数的裁决必须**能用于后面的分析**。
+    落地位置 = 会话 results 目录下的 claims/params.json（append-only history），
+    后续脚本/agent 读它即可采用；同时把 claim 级溯源接到同一条账本上。
+    失败**绝不影响辩论本身**（只是少一条通道记录）。
+    """
+    try:
+        rd = get_session_results_dir()
+        if not rd or not isinstance(result, dict):
+            return
+        from memomics.bio_tools import claim_ledger as _cl
+        _cl.record_decision_from_result(rd, result)
+        result["params_channel"] = "claims/params.json"
+        _p = (result.get("recommended_params") or {})
+        _dg = (result.get("judge_digest") or {}) if isinstance(result.get("judge_digest"), dict) else {}
+        result["params_channel_hint"] = (
+            "重要参数决策已写入 claims/params.json（含裁决/证据/历史）："
+            "后续分析请先 claim_ledger(action='params') 读取并采用，"
+            "结论用 claim_ledger(action='add_claim') 登记" + (f"；本场整理稿：{_dg.get('summary','')[:80]}" if _dg.get('summary') else "")
+        ) if _p else (
+            "本场未产出 recommended_params（裁决只给了 decision/next_actions）："
+            "下一步动作已写入 claims/params.json，执行完请把实际参数用 claim_ledger(action='params_from_decision') 补登记"
+        )
+    except Exception as e:
+        logger.warning(f"记录参数决策通道失败（不影响辩论）: {e}")
+
+
 def get_session_model_config() -> dict:
     """获取当前会话「正在使用的模型配置」（ContextVar，跨工具 worker 线程传播）。"""
     cfg = _model_cfg_var.get()
@@ -186,8 +216,14 @@ class _ProgressHeartbeat:
 # >480s 占 15.7%、>600s 占 8.6%。所以硬上限定 900s：只砍真正病态的长尾
 # （p90 以上约 8%），不会把正常的长辩论一起误杀。
 _DEBATE_BUDGET_DEFAULT = float(os.environ.get("MEMOMICS_DEBATE_BUDGET", "900") or 900)
+# L1 限时（2026-10-12 用户口径：「统计分析最多触发 L1 辩论，但是不要拖延时间」）。
+# 实测（2026-10-13 冒烟）：dcs-cloud/deepseek-flash 上 L1 = 2~3 组正反采样 + 裁判整理 + 裁判，
+# 单次调用约 25-40s，整场 200-300s。最初定 180s 会把裁判掐死（judge_error → 引擎兜底，
+# 等于白跑一场）。现定 360s：够跑完整场并留余量，又远小于 L2 的 900s。
+_L1_BUDGET_DEFAULT = float(os.environ.get("MEMOMICS_DEBATE_L1_BUDGET", "360") or 360)
 _HTTP_TIMEOUT_DEFAULT = float(os.environ.get("MEMOMICS_DEBATE_HTTP_TIMEOUT", "60") or 60)
 _DEADLINES: dict = {}
+_DEADLINE_BUDGETS: dict = {}
 _DEADLINE_LOCK = threading.Lock()
 
 
@@ -203,8 +239,64 @@ def _set_debate_deadline(seconds: float = 0.0) -> float:
         # 顺手清掉两小时前的僵尸登记，别让 dict 无限长
         for _k in [k for k, v in _DEADLINES.items() if v < _now - 7200]:
             _DEADLINES.pop(_k, None)
+            _DEADLINE_BUDGETS.pop(_k, None)
         _DEADLINES[sid] = dl
+        # 记下本场**实际登记**的预算，供日志/放弃消息显示（L1=300s 与 L2=900s 不同，
+        # 之前日志一律写 900s，排查时看不懂到底掐在哪）
+        _DEADLINE_BUDGETS[sid] = budget
     return dl
+
+
+def _deadline_budget() -> float:
+    """本场登记的预算秒数（没登记则回报默认值）。"""
+    sid = get_session_sid() or ""
+    with _DEADLINE_LOCK:
+        return _DEADLINE_BUDGETS.get(sid, _DEBATE_BUDGET_DEFAULT)
+
+
+def _judge_reserve() -> float:
+    """给「裁判整理 + 裁判」预留的秒数（2026-10-13）。"""
+    try:
+        v = float(os.environ.get("MEMOMICS_DEBATE_JUDGE_RESERVE", "150") or 150)
+    except Exception:
+        v = 150.0
+    return max(60.0, v)
+
+
+def _role_phase_begin(reserve: float = None) -> tuple:
+    """角色/采样阶段开始：把预算闸门压到「当前剩余预算 − 裁判预留」。
+
+    返回 (t0, total)。**不这么做就会出现**：角色把整场预算吃光 → 裁判一次都没跑上 →
+    judge_error=True → decision_source=engine_backfill（等于白跑一场、还慢）。
+    L1 实测（2026-10-13）：采样 106s、裁判阶段 253s、整场 303.6s、decision_source=judge。
+    """
+    reserve = _judge_reserve() if reserve is None else float(reserve)
+    _sid = get_session_sid() or ""
+    with _DEADLINE_LOCK:
+        _registered = _sid in _DEADLINES
+    if not _registered:
+        # 没登记预算（不在辩论里）→ 不许凭空设闸门
+        return (time.time(), float("inf"))
+    total = _deadline_budget()
+    t0 = time.time()
+    if total != float("inf") and total > 0:
+        _set_debate_deadline(max(60.0, total - reserve))
+    return (t0, total)
+
+
+def _role_phase_end(state: tuple, reserve: float = None) -> float:
+    """角色阶段结束：把没花完的预算还给裁判阶段（至少 reserve 秒）。返回还回去的秒数。"""
+    reserve = _judge_reserve() if reserve is None else float(reserve)
+    try:
+        t0, total = state
+    except Exception:
+        return 0.0
+    if total == float("inf") or total <= 0:
+        return 0.0
+    used = time.time() - float(t0)
+    left = max(reserve, total - used)
+    _set_debate_deadline(left)
+    return left
 
 
 def _budget_left() -> float:
@@ -590,15 +682,29 @@ JUDGE_PROMPT = """你是生信分析多角色辩论的**裁判编辑**。7位专
 
 # ==================== v2 证据审查器提示词（2026-08-27） ====================
 
-_EVIDENCE_CONTRACT = """## 证据契约（必须遵守）
-1. 每个观点必须有证据锚点：[PMID:xxx] / [DOI:xxx] / [KB源:文件] / [数据:具体数值]。
-2. 无直接证据的推理必须标注 [仅是推理]，且不得作为论点计分。
-3. 证据等级：P=文献/实验证据，C=证据卡/KB，I=纯推理。
-4. 你的专业领域内若存在失败条件/已知反例，必须写入 self_audit_failures。
-5. 若证据不足，明确写“本领域证据不足，不可下结论”，并列出 needed_evidence。"""
+_EVIDENCE_CONTRACT = """## 证据契约 v3 · 证据链（必须遵守）
+0. **这场辩论的唯一目标是“找证据链”，不是说服对方、也不是比谁语气强**。每个 claim 都要给出
+   「结论 → 证据节点 → 反证/失效条件 → 缺什么」这条链；只写一句断言不算论据。
+1. 每个证据节点必须挂锚点 + 级别：
+   - 知识库已验知识：L0 无来源 / L1 有来源未验证 / L2 湿实验验证 / L3 临床级（对齐 kb-evidence-v1）；
+   - 文献：P（有 PMID/DOI、可查） / 实验记录 C / 纯推理 I；
+   - 数据：写具体数值与出处（文件 / 字段 / 行号），例：[数据: DEG 表 n=1246, FDR<0.05]。
+2. **三条证据线各自表态**（不属于本场的写“本场不适用”，属于本场的必须给针对性判断，不许空着）：
+   - 知识库线：既有已验知识支不支持这个结论？（给条目 + 级别）
+   - 统计线：统计方法与过程有没有问题（设计 / 模型假设 / 多重检验 / 样本量 / 混杂 / 效应量 / 模型诊断）
+   - 生信线：步骤与方法有没有错误（上游 QC / 比对与定量 / 注释与参考版本 / 工具与参数 / 可复现性）
+3. 无直接证据的推理必须标注 [仅是推理]（I 级），且不得作为论点计分。
+4. 你的专业领域内若存在失败条件/已知反例，必须写入 self_audit_failures（这是链条的“反证”一环）。
+5. 若证据不足，明确写“本领域证据不足，不可下结论”，并列出 needed_evidence（缺什么 + 怎么补 +
+   补到什么程度算够）。**宁可不结论，也不要给一条挂不上锚点的链。**"""
 
 _V2_OUTPUT_SPEC = """## 输出格式（严格 JSON，不要输出任何其他文字）
-{{"claims": [{{"claim": "…", "evidence": "[PMID:…] / [KB源:…] / [数据:…]", "level": "P|C|I", "confidence": "high|medium|low", "risk_boundary": "失效条件…"}}], "self_audit_failures": ["…"], "alternative_hypothesis": "若…则结论可能为…（可检验）", "needed_evidence": ["…"]}}"""
+{{"claims": [{{"claim": "…", "evidence": "[PMID:…] / [KB源:… L2] / [数据:…]", "level": "L0|L1|L2|L3 / P|C|I", "confidence": "high|medium|low", "risk_boundary": "失效条件…",
+   "evidence_chain": [{{"step": "这一步在推什么", "anchor": "[PMID:…] / [KB源:… L2] / [数据:…]", "level": "L0|L1|L2|L3 / P|C|I", "counter": "这一步的反证或它不成立的条件"}}]}}],
+ "lineage_audit": {{"kb": "知识库线：既有已验知识支持/不支持/无相关条目（给条目+级别）|本场不适用",
+                    "statistics": "统计线：统计方法与过程有无问题（具体到环节）|本场不适用",
+                    "bioinformatics": "生信线：步骤与方法有无错误（具体到步骤）|本场不适用"}},
+ "self_audit_failures": ["…"], "alternative_hypothesis": "若…则结论可能为…（可检验）", "needed_evidence": ["…"]}}"""
 
 _V2_ROLE_QUESTIONS = {
     "pro_biology": {
@@ -691,8 +797,10 @@ _V2_ROLE_TEMPLATE = """你是**{title}**。你的任务是从你的专业视角{
 {questions}
 
 ## 要求
-- 严格按“输出格式”输出 JSON；每个 claim 必须带证据锚点与等级。
-- 不编造证据；无证据写 [仅是推理] 并计入 needed_evidence。
+- 严格按“输出格式”输出 JSON；每个 claim 必须带证据锚点与级别，并给出 evidence_chain
+  （结论 → 证据节点 → 反证/失效条件 → 缺什么），链条断在哪一步就写进 needed_evidence。
+- lineage_audit 里三条证据线（知识库 / 统计 / 生信）逐条表态；属于本场的线必须给针对性判断，不许空着。
+- 不编造证据；无证据写 [仅是推理]（I）并计入 needed_evidence。
 - 控制在 500 字以内（结构化字段总长度）。
 - 你不知道其他编辑的观点，请独立思考。
 {output_spec}"""
@@ -732,6 +840,9 @@ _V2_JUDGE_PROMPT = """你是{persona}。{n_pro}位专业编辑（{roles}）进�
    至少 1 条必须是 ai 现在能自己做的（查文献/查库/补对照/算指标/先出草图/先跑小样本）。
 6. blocks 字段写清"这条不做的话哪些动作必须停"（例：不做批次校正就不许出差异结论），
    它是后续流程的硬约束，写不出就说明 next_action 还不够具体。
+7. **按证据链判，不按语气判**：先逐条检查双方链条断在哪一步（证据缺失 / 级别不足 / 反证没处理 /
+   统计线或生信线环节没查），写进 chain_verdicts；一方链条完整、另一方断链 → 直接按完整的一方给
+   decision；双方都断链 → verdict=need_more_info，并按第 1 条照样给 decision/next_actions/fallback。
 
 ## 输出格式（严格 JSON）
 {{"rubrics": {{{rubric_keys}}}, "verdict": "support|modify|need_more_info", "confidence": "high|medium|low",
@@ -740,11 +851,13 @@ _V2_JUDGE_PROMPT = """你是{persona}。{n_pro}位专业编辑（{roles}）进�
                    "cost": "low|medium|high", "blocks": ["不做则必须停的动作"]}}],
  "fallback": {{"path": "补不齐证据时先走哪条路", "confidence": "low|medium", "risk": "这么做的风险",
                "label": "临时结论要带的标注（例：临时结论/低置信）"}},
+ "chain_verdicts": {{"pro": "链完整|部分|断链（断点：…）", "con": "链完整|部分|断链（断点：…）",
+                     "decisive": "哪条证据/哪个断点决定了本次裁决"}},
  "reopen_condition": "出现什么新证据要回来重审",
- "recommended_params": {{}}, "missing": ["缺什么证据 + 怎么补 + 补到什么程度算够"],
- "reasoning": "≤500字，说明哪些论点挂在哪条证据上"}}"""
+ "recommended_params": {{}}, "missing": ["缺什么证据 + 怎么补 + 补到什么程度算够（含断链的那一环）"],
+ "reasoning": "≤500字，说明哪些论点挂在哪条证据上、哪一环断了"}}"""
 
-_RUBRICS_HINT = """- evidence_quality：论点是否锚定 PMID/DOI/数据
+_RUBRICS_HINT = """- evidence_quality：论点是否锚定 PMID/DOI/数据（**看证据链是否走通：结论→证据→反证→缺失；断点写进 missing**）
 - effect_size：效应量大小与生物学意义
 - confounding_control：批次/混杂/对照是否被考虑
 - prior_literature：是否参考相关文献
@@ -1450,7 +1563,8 @@ def _call_llm_sync(prompt: str, label: str, api_key: str, base_url: str, model: 
         # 总预算闸：预算耗尽就立刻放弃，不再发 HTTP（否则整场辩论能挂到 20 分钟）
         _left = _budget_left()
         if _left <= 0:
-            logger.warning(f"debate {label} 放弃：本场辩论总预算已耗尽（{_DEBATE_BUDGET_DEFAULT}s）")
+            logger.warning(f"debate {label} 放弃：本场辩论总预算已耗尽"
+                           f"（{_deadline_budget()}s）")
             return {
                 "content": f"[{label} 辩论生成失败：本场辩论超出总预算，已放弃该角色]",
                 "call_id": call_id,
@@ -2098,6 +2212,11 @@ def _call_llm_role_resilient(label: str, prompt: str, cfg: dict, temperature: fl
         res = _call_llm_role(label, prompt, cfg, temperature=temperature)
     if not res.get("error"):
         return res
+    # 预算耗尽 → 回退没有意义（其它路由同样被同一道闸门拒），直接返回；
+    # 否则日志里会出现一串"回退 deepseek/… 回退 opencode-go/…"的误导信息
+    # （2026-10-13 冒烟实测：L1 被 180s 掐死后，judge 连试 3 条路由，全是 budget_exhausted）
+    if str(res.get("error_detail") or "") == "budget_exhausted" or res.get("budget_exhausted"):
+        return res
     if label != "judge":
         return res
     if _primary_pre:
@@ -2411,7 +2530,8 @@ def _parse_judge_json(text: str) -> dict:
         _ro = _extract_json_value(text, "reopen_condition")
         if isinstance(_ro, str) and _ro.strip():
             _out["reopen_condition"] = _ro.strip()[:300]
-        for _k, _t in (("missing", list), ("next_actions", list), ("fallback", dict)):
+        for _k, _t in (("missing", list), ("next_actions", list), ("fallback", dict),
+                       ("chain_verdicts", dict)):
             _v = _extract_json_value(text, _k)
             if isinstance(_v, _t):
                 _out[_k] = _v
@@ -2424,6 +2544,9 @@ _DECISION_BACKFILL_NOTE = ("引擎回填：judge 未按契约给出 decision/nex
 
 
 _DECISION_FIELDS = ("decision", "next_actions", "fallback", "reopen_condition", "missing")
+# 2026-10-13：证据链状态也要带回结果（用户口径：辩论=找证据链，"哪一方断链/断在哪一步"
+# 比 verdict 本身更有信息量 —— 冒烟实测裁判给出的正是「pro 断链（断点：…）」这类判断）
+_CHAIN_FIELDS = ("chain_verdicts", "chain_summary")
 
 
 def _copy_decision_fields(dst: dict, obj: dict) -> None:
@@ -2432,7 +2555,7 @@ def _copy_decision_fields(dst: dict, obj: dict) -> None:
     judge 真的给了 decision/next_actions 时，顺带清掉上一轮回填留下的标记
     （decision_source / 回填告警），避免把 judge 的产出误标成"引擎回填"。
     """
-    for k in _DECISION_FIELDS:
+    for k in _DECISION_FIELDS + _CHAIN_FIELDS:
         v = obj.get(k)
         if v:
             dst[k] = v
@@ -2740,6 +2863,9 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
     # v2 结构化论据较长，记录保留 800 字（legacy 500 字）
     _keep = 800 if use_v2 else 500
     _hb = _ProgressHeartbeat(f"L1 采样（{n_samples} 组 × 2 次调用）").start()
+    # 2026-10-13：给裁判留窗口 —— 采样阶段最多吃掉「总预算 - 裁判预留」，
+    # 采样结束后把没花完的还回去（否则裁判整理/裁判会被掐死 → judge_error → 引擎兜底）。
+    _l1_phase = _role_phase_begin()
     for i in range(n_samples):
         temp = _TEMP_POOL[i % len(_TEMP_POOL)]
         if use_v2:
@@ -2762,6 +2888,11 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
                                "con_draft_only": str(con["content"]).startswith("[reasoning草稿")})
         _emit_progress(f"L1 第 {i + 1}/{n_samples} 组采样完成（累计 {_hb.elapsed}s）", "done")
     _hb.stop()
+    # 采样结束 → 把剩余预算（至少裁判预留）还给「裁判整理 + 裁判」这一段
+    _l1_back = _role_phase_end(_l1_phase)
+    if _l1_back:
+        _emit_progress(f"L1 采样阶段用时 {int(time.time() - _l1_phase[0])}s，"
+                       f"裁判阶段保留 {int(_l1_back)}s", "done")
 
     if not debates_text:
         return _fallback_debate(topic, context, kb, "")
@@ -2833,6 +2964,7 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
         result["confidence"] = "low"
         result["consistency_issues"] = issues
 
+    _persist_decision_channel(result)   # 2026-10-14：参数决策 → claims/params.json（后续分析要用）
     result_json = json.dumps(result, ensure_ascii=False, indent=2)
     # 2026-08-14 修复：矛盾裁决（consistency_issues 非空）不入全局缓存，
     # 否则下次同 topic+context 命中会直接返回 low 结果，污染 72h 复用。
@@ -3036,9 +3168,11 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
     # 其他的裁判呢？所以辩论之前，也要分析一下场景呢？」→ 先用 1 次短调用判断本场属于哪类问题，
     # 再据此决定各席位身份与裁判评分维度；预判失败就用原有生物学模板继续，不阻断辩论。
     # 整场辩论的总预算（2026-09-26）：预算耗尽后 _call_llm_sync 不再发 HTTP，
-    # 剩余席位/轮次毫秒级跑完 —— 工具不会再挂 15-20 分钟
-    _set_debate_deadline()
-    _emit_progress(f"辩论开始（{level} · {rounds} 轮 · 先做场景预判）· 总预算 {int(_DEBATE_BUDGET_DEFAULT)}s", "pending")
+    # 剩余席位/轮次毫秒级跑完 —— 工具不会再挂 15-20 分钟。
+    # 2026-10-12 用户口径：L1 限时 180s（"不要拖延时间"），L2 才用总预算。
+    _budget_used = _L1_BUDGET_DEFAULT if str(level).upper() == "L1" else _DEBATE_BUDGET_DEFAULT
+    _set_debate_deadline(_budget_used)
+    _emit_progress(f"辩论开始（{level} · {rounds} 轮 · 先做场景预判）· 总预算 {int(_budget_used)}s", "pending")
     _hb_scene = _ProgressHeartbeat("场景预判").start()
     try:
         scenario_res = _analyze_scenario(topic, context, cfg)
@@ -3071,6 +3205,9 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             ev = evidence_cards or ""
 
             # ========== 正方 3 专业编辑（互相不知道，各用专属知识库） ==========
+            # 2026-10-13：角色阶段限时（给「裁判整理 + 裁判」留 _judge_reserve 秒），
+            # 打完这一轮的角色波次再把预算还回去 —— 防止角色吃光 900s 让裁判一次都跑不上。
+            _rp = _role_phase_begin()
             if use_v2:
                 pro_tasks = [
                     ("pro_biology", _v2_role_prompt("pro_biology", topic, context, bio_kb, "", ev, scenario=scenario) + round_note),
@@ -3121,6 +3258,12 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                 neutral_args_v2 = "\n\n".join(
                     [f"### {_nl}\n{neutral_results[_nl]['content']}"
                      for _nl in ("design_review", "reproducibility_review")])
+
+            # 角色阶段结束（本轮）→ 把剩余预算还给裁判阶段（至少 _judge_reserve 秒）
+            _rp_back = _role_phase_end(_rp)
+            if _rp_back:
+                _emit_progress(f"第 {round_no} 轮角色阶段用时 {int(time.time() - _rp[0])}s，"
+                               f"裁判阶段保留 {int(_rp_back)}s", "done")
 
             # ========== 裁判整理（2026-09-18 用户要求）：先把草稿整理成清晰言论+论据 ==========
             # 实跑证据：8 个角色里常有 5-7 个不按 JSON 契约输出，只回 [reasoning草稿…]；
@@ -3341,6 +3484,7 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                 "general_kb_used_as_fallback": not (biology_kb or statistics_kb or bioinfo_kb),
             },
         }
+        _persist_decision_channel(result)   # 同上：L2 也把参数决策落通道
         result_json = json.dumps(result, ensure_ascii=False, indent=2)
         # 🔧 P1-2 修复(2026-08-01): 解析 judge JSON → 结构化 verdict 供 Agent 直接使用
         # 之前: judge_verdict 是原始文本(含```json围栏)，verdict=modify 的 recommended_params 无法结构化回传
@@ -3407,6 +3551,7 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             result["consistency_issues"] = _issues
             logger.warning(f"debate verdict still inconsistent after re-judge: {_issues} → confidence=low, 禁止回流")
 
+        _persist_decision_channel(result)   # 重裁后也刷新参数通道（以最新裁决为准）
         result_json = json.dumps(result, ensure_ascii=False, indent=2)
         # 持久化辩论结果（优化2：全局缓存用于去重；P0：指纹隔离）
         # 2026-08-14 修复：矛盾裁决不入缓存，否则下次命中直接返回 low 结果。
