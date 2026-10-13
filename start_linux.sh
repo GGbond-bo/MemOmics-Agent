@@ -266,4 +266,21 @@ echo ""
         sleep 1
     done
 ) &
-exec "$VENV_PY" webui/server.py
+export MEMOMICS_SUPERVISED=1
+_mmhome="${MEMOMICS_HOME:-$(pwd)/memomics_home}"
+: > "$_mmhome/.launcher_supervised" 2>/dev/null || true
+while :; do
+    "$VENV_PY" webui/server.py
+    _mmrc=$?
+    # 2026-10-13：应用内重启（更新后一键生效）——退出码 77 或落盘的 .restart_pending 都算重启请求
+    if [ "$_mmrc" = "77" ] || [ -f "$_mmhome/.restart_pending" ]; then
+        rm -f "$_mmhome/.restart_pending" 2>/dev/null || true
+        echo ""
+        echo "[restart] 收到应用内重启请求，3 秒后自动重启..."
+        sleep 3
+        continue
+    fi
+    break
+done
+rm -f "$_mmhome/.launcher_supervised" 2>/dev/null || true
+exit ${_mmrc:-0}

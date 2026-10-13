@@ -261,11 +261,24 @@ REM 延迟自动开浏览器（不阻塞启动；显式浏览器打开，规避系统默认关联损坏）
 start "" /min powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\open_webui.ps1" %PORT%
 
 
+set "MEMOMICS_SUPERVISED=1"
+> "%MEMOMICS_HOME%\.launcher_supervised" echo supervised
+:mm_supervised_run
 "%PYTHON%" webui\server.py
+set "MMRC=%errorlevel%"
+if "%MMRC%"=="77" goto :mm_restart
+if exist "%MEMOMICS_HOME%\.restart_pending" goto :mm_restart
+del "%MEMOMICS_HOME%\.launcher_supervised" >nul 2>&1
 echo.
-echo Exit code: %errorlevel%
+echo Exit code: %MMRC%
 pause
 exit /b 0
+:mm_restart
+del "%MEMOMICS_HOME%\.restart_pending" >nul 2>&1
+echo.
+echo [restart] 收到应用内重启请求，3 秒后自动重启...
+timeout /t 3 /nobreak >nul
+goto :mm_supervised_run
 
 :mm_probe_port
 REM  %1=端口；回填 PORT_STATE=free|memomics|busy 与 PORT_OWNER
