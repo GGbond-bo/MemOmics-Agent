@@ -17850,7 +17850,12 @@ function dcsPickDir(cb) {
 // ==== 下载队列块结束 ====
 
 // 「🗂 数据」标签 = 云上文件浏览：不管当前在看项目还是任务，点它都回到数据视图
-function dcsOpenData() { return dcsNav(_dcsLastPath || '/Files', 1); }
+function dcsOpenData() {
+  // 2026-10-13：记住的目录要带着范围记忆 —— 上次是在别的项目里逛，这次回来别开错项目
+  var cur = _dcsScope ? _dcsScope.id : '';
+  var p = (cur === (_dcsLastPathScope || '')) ? (_dcsLastPath || '/Files') : '/Files';
+  return dcsNav(p, 1);
+}
 
 // 2026-10-07（用户）：「📁 项目」挪到工具行最左；点「☁️ DCS 云」默认展示项目信息。
 function dcsTabProjects() { dcsSetView('browse'); dcsShowProjects(1); }
@@ -18028,6 +18033,9 @@ function dcsCrumbs(items) {
 function dcsCrumbsFromPath(path) {
   var parts = String(path || '/Files').split('/').filter(Boolean);
   var acc = '', items = [], start = (parts[0] === 'Files') ? 1 : 0;
+  // 2026-10-13 修：起始前缀 '/Files' 不能丢 —— 旧代码从 '/'+parts[1] 开始累积，
+  // 点 ≥2 级深的父目录名会导航到 '/FOR_COCO' 这种无根路径 → 云上查不到 → 目录变空
+  if (start) acc = '/Files';
   for (var i = start; i < parts.length; i++) {
     acc += '/' + parts[i];
     var target = acc;
@@ -18038,7 +18046,7 @@ function dcsCrumbsFromPath(path) {
     var up = '/' + parts.slice(0, -1).join('/');
     items.push({ label: '⬆ 上级', fn: function () { dcsNav(up, 1); } });
   }
-  dcsCrumbs(items);
+  dcsCrumbs(dcsScopeCrumbs().concat(items));   // 2026-10-13：浏览别的项目时最左钉范围徽章
 }
 
 function dcsDetail(pairs, actions) {
@@ -18107,9 +18115,11 @@ function dcsProjectDetail(p) {
     ['欠费', p.is_arrears ? '是（先充值再投递）' : '否'],
     ['状态', p.current ? '当前项目' : '未选中']
   ], [
-    p.current ? null : ['📌 设为当前项目', function () { dcsRun('use_project', { project: p.project_id }, '切换到 ' + p.project_id); }],
-    ['🗂 浏览它的数据', function () { dcsNav('/Files', 1); }],
-    ['📋 它的任务', function () { dcsShowTasks(1); }]
+    p.current ? null : ['📌 设为当前项目', function () { _dcsScope = null; dcsRun('use_project', { project: p.project_id }, '切换到 ' + p.project_id); }],
+    // 2026-10-13：浏览数据/任务 = 面板级范围浏览（不动 CLI 当前项目），用户原话：
+    // 「点击哪个项目，就能显示和浏览该项目的数据和任务」
+    ['🗂 浏览它的数据', function () { dcsScopeEnter(p); dcsNav('/Files', 1); }],
+    ['📋 它的任务', function () { dcsScopeEnter(p); dcsShowTasks(1); }]
   ].filter(Boolean));
 }
 
@@ -18120,10 +18130,13 @@ function dcsNav(path, page) {
   else _dcsState.page = page;
   var st = _dcsState;
   _dcsLastPath = st.path;
+  _dcsLastPathScope = _dcsScope ? _dcsScope.id : '';
   dcsSetView('browse');
   dcsCrumbsFromPath(st.path);
   if (page === 1) dcsClearRows();
-  dcsCall({ action: 'ls', path: st.path, long: true, page: page }, function (res) {
+  var args = { action: 'ls', path: st.path, long: true, page: page };
+  if (_dcsScope) args.project = _dcsScope.id;   // 2026-10-13：浏览别的项目（隔离 CLI 配置，不动默认项目）
+  dcsCall(args, function (res) {
     var box = res.entries || {};
     var items = box.items || [];
     st.total = (box.total === null || box.total === undefined) ? (st.rows.length + items.length) : box.total;
@@ -18139,14 +18152,20 @@ function dcsNav(path, page) {
         };
       }
       var meta = [dcsFmtSize(it.size), it.create_time].filter(Boolean).join(' · ');
+      // 浏览别的项目时不给「加队列」：下载走默认项目的 CLI 配置，范围对不上会下错/失败
+      var dlAction = _dcsScope
+        ? [['🔒 下载', function () {
+            dcsPrint('⚠ 正在浏览「' + _dcsScope.name + '」—— 下载/队列只支持默认项目。先「📌 设为当前项目」，或 ✕ 退出项目范围后再下载。', 'err');
+          }, '浏览别的项目时下载不可用']]
+        : [['⬇ 加队列', function () {
+            dcsEnqueue([{ path: child, name: it.name, size: it.size || 0 }]);
+          }, '加入下载队列（可批量勾选）']];
       return {
         icon: '📄', name: it.name, meta: meta,
         badges: it.sn ? [[it.sn, '']] : [],
-        pick: { path: child, name: it.name, size: it.size || 0 },
+        pick: _dcsScope ? null : { path: child, name: it.name, size: it.size || 0 },
         onOpen: function () { dcsFileDetail(it, child); },
-        actions: [['⬇ 加队列', function () {
-          dcsEnqueue([{ path: child, name: it.name, size: it.size || 0 }]);
-        }, '加入下载队列（可批量勾选）']]
+        actions: dlAction
       };
     });
     dcsRender(rows, {
@@ -18166,7 +18185,9 @@ function dcsFileDetail(it, full) {
   ], [
     ['⬇ 下载到本机', function () { dcsDownloadFile(full, it.name, it.size); }],
     ['ℹ️ 刷新元数据', function () {
-      dcsCall({ action: 'info', path: full }, function (r) {
+      var iArgs = { action: 'info', path: full };
+      if (_dcsScope) iArgs.project = _dcsScope.id;   // 2026-10-13：元数据也在浏览范围内查
+      dcsCall(iArgs, function (r) {
         dcsDetail([['元数据', JSON.stringify(r.info || r, null, 2)]], [['🧾 在日志里看', function () { dcsSetView('log'); }]]);
       });
     }]
@@ -18177,6 +18198,33 @@ var _dcsLastDir = '';
 var _dcsLastPath = '/Files';
 var _dcsOpenDefault = false;   // 面板打开时是否强制回项目视图
 var _dcsCfgBack = 'browse';    // 关设置时回到哪个视图   // 最后浏览过的数据路径（数据标签每次都回到它）
+
+// === 2026-10-13 面板级「浏览别的项目」===
+// 用户口径：「点哪个项目，就能显示和浏览该项目的数据和任务；退出 DCS 云/刷新/交互框的
+// 默认 DCS 项目，还是『设为当前项目』设定的那个。」实现：_dcsScope 只影响面板的
+// ls/find/info/tasks/task_logs 查询（后端用隔离 CLI 配置跑，不动 CLI 当前项目）。
+var _dcsScope = null;          // {id, name} 正在浏览的项目范围；null = 默认项目
+var _dcsLastPathScope = '';    // _dcsLastPath 是哪个范围下的（换范围后不回错目录）
+
+function dcsScopeEnter(p) {
+  // 点「当前项目」自己的数据 = 没换范围，清掉即可
+  _dcsScope = (p && !p.current && p.project_id) ? { id: p.project_id, name: p.project_name || p.project_id } : null;
+}
+function dcsScopeExit() {
+  _dcsScope = null;
+  var st = _dcsState || {};
+  if (st.kind === 'ls') dcsNav('/Files', 1);
+  else if (st.kind === 'tasks') dcsShowTasks(1);
+  else if (st.kind === 'find') dcsShowProjects(1);
+}
+function dcsScopeCrumbs() {
+  // 范围徽章：固定在面包屑最左，✕ 退出回默认项目
+  if (!_dcsScope) return [];
+  return [
+    { label: '📦 ' + _dcsScope.name },
+    { label: '✕ 退出项目范围', fn: dcsScopeExit }
+  ];
+}
 
 // 调本机原生选择框（宿主进程弹 Windows 对话框），把结果填回输入框
 function dcsPickInto(inputId, kind) {
@@ -18316,9 +18364,11 @@ function dcsShowFind(name, page) {
   else _dcsState.page = page;
   var st = _dcsState;
   dcsSetView('browse');
-  dcsCrumbs([{ label: '🔍 搜索 ' + name, fn: function () { dcsShowFind(name, 1); } }, { label: '第 ' + page + ' 页' }]);
+  dcsCrumbs(dcsScopeCrumbs().concat([{ label: '🔍 搜索 ' + name, fn: function () { dcsShowFind(name, 1); } }, { label: '第 ' + page + ' 页' }]));
   if (page === 1) dcsClearRows();
-  dcsCall({ action: 'find', name: name, page: page, page_size: 50 }, function (res) {
+  var fArgs = { action: 'find', name: name, page: page, page_size: 50 };
+  if (_dcsScope) fArgs.project = _dcsScope.id;   // 2026-10-13：在浏览的项目范围里搜
+  dcsCall(fArgs, function (res) {
     var box = res.matches || {};
     var items = box.items || [];
     st.total = box.total || (st.rows.length + items.length);
@@ -18330,7 +18380,11 @@ function dcsShowFind(name, page) {
         icon: '📄', name: it.name || '', meta: full + (it.size ? (' · ' + dcsFmtSize(it.size)) : ''),
         badges: it.entity_id ? [[it.entity_id, '']] : [],
         onOpen: function () { dcsFileDetail(it, full); },
-        actions: [['⬇ 下载', function () { dcsDownloadFile(full); }]]
+        actions: [_dcsScope
+          ? ['🔒 下载', function () {
+              dcsPrint('⚠ 正在浏览「' + _dcsScope.name + '」—— 下载只支持默认项目。先「📌 设为当前项目」，或 ✕ 退出项目范围。', 'err');
+            }, '浏览别的项目时下载不可用']
+          : ['⬇ 下载', function () { dcsDownloadFile(full); }]]
       };
     });
     dcsRender(rows, {
@@ -18347,9 +18401,11 @@ function dcsShowTasks(page) {
   else _dcsState.page = page;
   var st = _dcsState;
   dcsSetView('browse');
-  dcsCrumbs([{ label: '📋 离线任务', fn: function () { dcsShowTasks(1); } }, { label: '第 ' + page + ' 页' }]);
+  dcsCrumbs(dcsScopeCrumbs().concat([{ label: '📋 离线任务', fn: function () { dcsShowTasks(1); } }, { label: '第 ' + page + ' 页' }]));
   if (page === 1) dcsClearRows();
-  dcsCall({ action: 'tasks', page_size: 20, page: page }, function (res) {
+  var args = { action: 'tasks', page_size: 20, page: page };
+  if (_dcsScope) args.project = _dcsScope.id;   // 2026-10-13：浏览别的项目的任务
+  dcsCall(args, function (res) {
     var box = res.tasks || {};
     var recs = box.records || [];
     st.total = box.total || (st.rows.length + recs.length);
@@ -18568,6 +18624,7 @@ function openDcsConsole() {
 function dcsClose() {
   var el = document.getElementById('dcs-console');
   if (el) el.style.display = 'none';
+  _dcsScope = null;   // 2026-10-13：关面板 = 退出项目范围浏览，下次从默认项目开始
 }
 
 function dcsToggleCfg() {
@@ -18606,6 +18663,8 @@ function dcsKey(e) {
 function dcsRun(action, extra, label) {
   var args = { action: action };
   if (extra) { for (var k in extra) { if (extra[k] !== undefined && extra[k] !== null && extra[k] !== '') args[k] = extra[k]; } }
+  // 2026-10-13：只读类动作跟随面板的浏览范围（看别的项目的任务日志等）
+  if (_dcsScope && ['task_logs', 'ls', 'find', 'info', 'tasks'].indexOf(action) >= 0 && !args.project) args.project = _dcsScope.id;
   dcsPrint('▶ ' + (label || action), 'sys');
   return dcsCall(args, function () {
     if (action === 'use_project') { dcsLoad(); dcsShowProjects(1); }
@@ -18927,9 +18986,14 @@ function dcsSwrFollowup(res, args) {
     fetch('/api/dcs/status').then(function (r) { return r.json(); }).then(function (d) {
       var c = (d && d.config) || {};
       if (!(c.enabled && c.bound)) return;
+      // 2026-10-13 预热加宽：项目列表 + 默认项目 /Files 首屏一起进缓存，点开面板零等待
       fetch('/api/dcs/exec', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'projects', page: 1 })
+      }).catch(function () {});
+      fetch('/api/dcs/exec', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'ls', path: '/Files', long: true, page: 1 })
       }).catch(function () {});
     }).catch(function () {});
   }
