@@ -37,7 +37,7 @@ related_skills: [create-bio-skill]
 > 收工三步：
 > 1. 复制 `templates/skill.json.template` → 本目录 `skill.json`（填 name / trigger_keywords / trigger_level）
 > 2. `python -m webui.skills_registry --build` → `python scripts/check_skills_gate.py` → 通过后 `git add` 整目录
-> 3. 复核：`python scripts/verify_skill_registration.py <skill-name>`
+> 3. 复核：`python memomics_home/skills/bioinformatics/skill-registration-and-routing/scripts/verify_skill_registration.py <skill-name>`（⚠️ 项目根 `scripts/` 下**没有**这个脚本，写裸 `scripts/verify_skill_registration.py` 会 `can't open file` —— 2026-10-12 实测踩空）
 >
 > **一句话铁律：`register_skill` 返回 success ≠ 技能能被触发。**
 > 2026-10-04 实测：`register_skill` 成功、SOUL.md 已写入，但真实 matcher 命中为 `[]`——
@@ -112,7 +112,7 @@ git add memomics_home/skills/<...>/<skill> webui/tests/fixtures/skill_routing_ma
 python scripts/check_skills_gate.py     # 期望 [skills-gate] PASS
 ```
 
-> 🔧 **一键体检（8 项）**：`python scripts/verify_skill_registration.py <skill-name>`
+> 🔧 **一键体检（8 项）**：`python memomics_home/skills/bioinformatics/skill-registration-and-routing/scripts/verify_skill_registration.py <skill-name>`（脚本在本 skill 自己的 `scripts/` 下，不在项目根）
 > 📋 **完整机制 / 失败签名 / 排查命令**：`references/skill-registration-pipeline.md`
 > 📄 **skill.json 起手模板**：`templates/skill.json.template`（**必须带 `.template` 后缀**，理由见下方支撑目录铁律）
 >
@@ -165,6 +165,20 @@ python scripts/check_skills_gate.py     # 期望 [skills-gate] PASS
 | 某 skill.json 的 diff **只有换行符**（`--numstat` 显示 N/N 对称、`git diff` 全是 `+...\r`） | 写它的代码缺 `newline="\n"`（`webui/server.py` 的技能写接口），Windows 下 `\n` 被翻成 `\r\n`；**内容逐字节相同** | 无内容损失 → `git checkout -- <file>` 还原；**别把它当真改动提交** |
 | 提交前发现几百个 skill.json 变脏，怀疑是自己弄的 | 结论要靠 mtime，不靠感觉 | 按 mtime 分桶统计（`os.path.getmtime` 按日期计数），再与**会话起始快照的 git 计数**对齐——本轮 416 M 全程未变，299 个是 09-23 遗留积压，与我无关 |
 | 连续多轮重跑门禁被系统判「循环失控」 | 为换解释器/换 grep 反复跑同一个 ~95 s 的门禁 | **一次跑完取汇总**：`.venv/Scripts/python.exe -m pytest ... -q \| tail`（pytest 一律走项目 venv），PASS 就停手；只有出现 `failed` 汇总行才带着报错原文重跑一次 |
+
+## 门禁 FAIL 三签名速查（2026-10-12 实测：新增技能一轮过门禁）
+
+新建技能后 `python scripts/check_skills_gate.py` 报 `2 failed` 时**先按签名分流**——三条都可能与你的新技能无关，别急着改自己的东西：
+
+| 签名（报错原文） | 根因 | 正确动作 |
+|---|---|---|
+| `AssertionError: 有 N 个 RED 技能没有任何路由用例：['<别人的技能>']` | 索引把某个**别人写的**技能解析成 RED，而 fixture `cases` 里没有它（索引重建会暴露这类预存缺口） | **探针选句**：`_match_red_skill_triggers('一句真实口语')` 命中的那句原样抄进 `cases`（配 `max_hits`）→ 单跑该测试文件转绿。**不要**图省事写 `coverage_exempt` |
+| `AssertionError: 这些技能的 skill.json 还没入 git…: ['A','B']`（`test_index_is_reproducible_from_committed_metadata`） | 那两个是**会话起始就未跟踪的用户技能**（本仓库惯例：`SKILLS_GATE=0` 提交、不进 git，见历史 commit message） | 不是你的改动 → **不要**替用户 `git add` 别人的技能；提交用 `SKILLS_GATE=0` 并在**提交信息里写明根因与原技能名**（与历史提交同做法） |
+| `test_task_routes.py` 报同秒 id 断言（`'qc-2026....' not in {...}`） | 并发整跑下任务 id 同秒碰撞，**flaky** | **分离单跑**该文件（`pytest webui/tests/test_task_routes.py -q`）→ 转绿即判 flaky，不要改代码 |
+
+**取数纪律**：门禁一次 ~90 s，跑一次取汇总行；失败时先 `grep -E "^E "` 提**断言正文**再决定动作 —— 直接 `| tail -30` 会被 `DeprecationWarning` 刷屏（server.py 的 `on_event` 弃用警告），看不到断言。
+
+📄 完整证据链（逐条原文 + 复现命令 + 修后转绿记录）：`references/gate-failure-triage.md`
 
 ## Proven Scripts
 

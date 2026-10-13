@@ -1,0 +1,29 @@
+{
+  "id": "r-namespace-and-package-conflicts",
+  "name": "R 命名空间与包冲突诊断",
+  "category": "bioinformatics",
+  "language": "R",
+  "description": "R/Bioconductor 包之间的命名空间冲突与遮蔽诊断 —— S4 泛型抢走同名函数（unable to find an inherited method）、library 顺序导致的 masked、多 R 版本 PATH 打架导致 DLL LoadLibrary 失败。触发:unable to find an inherited method / masked from 'package:",
+  "starting_prompt": "使用 R 命名空间与包冲突诊断 进行分析",
+  "source_dir": "skills/bioinformatics/r-namespace-and-package-conflicts",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "r",
+    "namespace",
+    "masking",
+    "s4-generic",
+    "bioconductor",
+    "dependency-conflict",
+    "troubleshooting"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "namespace",
+    "package",
+    "conflicts"
+  ],
+  "when_to_use": "R/Bioconductor 包之间的命名空间冲突与遮蔽诊断 —— S4 泛型抢走同名函数（unable to find an inherited method）、library 顺序导致的 masked、多 R 版本 PATH 打架导致 DLL LoadLibrary 失败。触发:unable to find an inherited method / masked from 'package:"
+}

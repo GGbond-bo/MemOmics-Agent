@@ -262,6 +262,11 @@ content = generate_skill_md(name=..., description=..., category=..., ...)
 | - | - | - | 2026-08-28 | pytest frontend_ux | - | - |  |
 | - | - | - | 2026-08-28 | clone_dnb_v213.sh | - | - |  |
 | - | - | - | 2026-08-28 | clone_dnb_v213.sh | - | - |  |
+| human | - | - | 2026-10-12 | inspect_github_repo.sh | - | - |  |
+| - | - | - | 2026-10-12 | inspect_github_repo.sh | - | - |  |
+| - | - | - | 2026-10-12 | inspect_github_repo.sh | - | - |  |
+| - | - | - | 2026-10-12 | install_chinese_research_latex.sh | - | - |  |
+| - | - | - | 2026-10-12 | install_chinese_research_latex.sh | - | - |  |
 ---
 
 ## When to Use

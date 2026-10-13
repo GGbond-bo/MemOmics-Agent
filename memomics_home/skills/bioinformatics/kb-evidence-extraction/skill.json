@@ -7,10 +7,23 @@
   "starting_prompt": "使用 知识库证据链提炼 Skill（L0-L3 可信度分级） 进行分析",
   "source_dir": "skills/bioinformatics/kb-evidence-extraction",
   "memomics_module": "",
-  "chains_from": ["literature-full-summary"],
-  "chains_to": ["knowledge-base-curation"],
-  "tags": ["evidence-chain", "kb", "extraction", "L0-L3"],
-  "aliases": ["证据链提炼", "知识提炼", "kb-extract"],
+  "chains_from": [
+    "literature-full-summary"
+  ],
+  "chains_to": [
+    "knowledge-base-curation"
+  ],
+  "tags": [
+    "evidence-chain",
+    "kb",
+    "extraction",
+    "L0-L3"
+  ],
+  "aliases": [
+    "证据链提炼",
+    "知识提炼",
+    "kb-extract"
+  ],
   "trigger_level": "YEL",
   "trigger_keywords": [
     "kb-evidence-extraction",
@@ -22,5 +35,181 @@
     "evidence chain",
     "补充知识库"
   ],
-  "when_to_use": "把文献库文献提炼成带证据链的知识库条目。触发场景：'把这篇/这些文献提炼进知识库'、'提取知识/参数进知识库'、'构建/补充知识库（带证据链）'、'这条结论可信度几级'。"
+  "when_to_use": "把文献库文献提炼成带证据链的知识库条目。触发场景：'把这篇/这些文献提炼进知识库'、'提取知识/参数进知识库'、'构建/补充知识库（带证据链）'、'这条结论可信度几级'。",
+  "success_count": 13,
+  "proven_script": "patch_deliverable_section11",
+  "proven_params": [
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "extract_lit_text.py",
+      "params": "pymupdf 提取 9 篇 AI agent 文献全文 → results/memomics-75ba0499/data/lit_text/",
+      "date": "2026-10-11",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "9 篇 PDF 全部提取成功，页数 9-88，字符 44.9k-165.4k，合计 846k 字符；识别出文献身份：ChemGraph(NatComm2025)、Co-Scientist(Nature2026)、paper2Agent(Nature2026)、rare-disease agentic system(Nature2026)、ChemCrow-like/LLM+chemistry to"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "ai_agent_literature",
+      "script": "inspect_kb_paths",
+      "params": "grep sed 检查 save_knowledge.py / kb_search.py 源码",
+      "date": "2026-10-11",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "查清知识库路径机制：save_knowledge 三域（biology 五级/common/common/<direction>/<kb_category>/<assay>/、chemistry），kb_category 硬白名单 (01_生物学知识|02_质控参数|03_测序方法|04_个性化)；kb_search 用 os.walk+FTS5 索引根目录下任意 yaml/md。结论：要建『AI"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "inspect_test_conventions",
+      "params": "head conftest.py / pytest.ini / test_kb_retrieval_golden.py",
+      "date": "2026-10-11",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "摸清测试规范：测试放 webui/tests/，pytest.ini 默认 -m \"not external/network/live_llm/gpu/ssh/lab/docker/browser\"；conftest 已把 repo 根与 hermes-agent 加入 sys.path；既有 kb 测试用 importlib.util.spec_from_file_location 按路径加载模"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "test_save_knowledge_ai_domain.py",
+      "params": "pytest webui/tests/test_save_knowledge_ai_domain.py -v（13 用例）",
+      "date": "2026-10-11",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "新增测试 13 passed（0.11s）。覆盖：ai 域落盘路径 ai_agent/<subcat>/<name>.yaml 与 YAML 顶层字段、direction 归一化(lower+空格/连字符→下划线)、默认 general、evidence 随条目落盘；错误路径 4 类非法子类（a/b、..、sub/../evil、超长）全部拒绝且不越界写文件；铁轨回归（unverified 拒收、"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "pytest_kb_marker",
+      "params": "pytest -m kb -q",
+      "date": "2026-10-11",
+      "score": 6,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "kb 标记测试集运行（输出被 tail -15 截断在 warnings 段，未看到最终汇总行，需重取汇总）。目的：确认 domain=ai 分支未破坏既有知识库检索/浏览测试。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "pytest_kb_marker_retry",
+      "params": "pytest -m kb -q 2>&1 | grep -E \"passed|failed\" （grep 无输出，exit 0）",
+      "date": "2026-10-11",
+      "score": 5,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "grep 抓汇总行为空（疑似 MSYS 管道下 pytest 汇总行被 CR 影响或未落到 stdout 尾部）。改用重定向到 log 文件再读尾部的稳妥办法。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "pytest_kb_to_log",
+      "params": "pytest -m kb -q --color=no > log/pytest_kb.log 2>&1; EXIT=0",
+      "date": "2026-10-11",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "EXIT=0（kb 标记测试集通过，无 failed/error）。现象记录：pytest 汇总行在 MSYS 重定向下偶发不落文件尾部（log 尾为 warnings footer），判定以 exit code 为准更可靠；后续统一用「全量 pytest + 看 exit code」验收。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "ai_agent_literature",
+      "script": "kb_write_ai_entries.py",
+      "params": "kb_write_ai_entries.py（domain=ai，5 条目）",
+      "date": "2026-10-11",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "5 篇 AI agent 文献成功入库到新建 AI 分类：knowledge_base/ai_agent/ 下 frameworks/（Biomni、DeepRare、ChemGraph、BioMaster）与 agent_design/（Co-Scientist），各自 YAML 含完整结构化 content（定位/思路/问题/工作量/测试/benchmark/关键数字/局限/矛盾标注/可复用点"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "pytest_full_and_delegation_check",
+      "params": "全量 pytest（后台）+ 检查 delegation live 日志",
+      "date": "2026-10-11",
+      "score": 7,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "全量 pytest 完成：4 个失败（test_dcs_cloud_connector 2 个、test_skill_routing_matrix::test_every_red_skill_is_covered、test_skills_registry::test_index_is_reproducible_from_committed_metadata），均与本次改动（save_knowled"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "stash_test_attempt",
+      "params": "git stash push -- <2 files> && pytest <4 failing tests> && git stash pop",
+      "date": "2026-10-11",
+      "score": 6,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "git stash push 未生效（无 STASHED 输出，链式 && 中断；随后 git stash pop 报 No stash entries found → 确认未丢失任何改动，工作区完好）。改用「依赖关系论证 + grep」确认 4 个失败与本次改动无关，不再动 stash。"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "ai_agent_literature",
+      "script": "deliver_ai_agent_report",
+      "params": "写交付物 results/AI_agent_前沿工作解读.md + KB 索引 memomics/knowledge_base/ai_agent/00_INDEX.md",
+      "date": "2026-10-11",
+      "score": 10,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "交付物落盘：合读解读 20.9 KB（10 节：结论/9 篇身份表/5 条思路谱系/痛点对照/规模与成本表/三档评测手段+benchmark 清单+三个评测坑/横向对比大表/三条设计公理/7 处原文矛盾照录/7 条对 MemOmics 的可落地启示/KB 落点）；AI 分类索引 4.1 KB（12 条清单 + 使用建议）。至此本次用户诉求全部落地：9 篇 PDF 全文提取 → 逐篇结构化 → 知识"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "ai_agent_literature",
+      "script": "kb_ai_add_meta_fields.py",
+      "params": "kb_ai_add_meta_fields.py（12 条目补 conflict_status/contradictions/citation_caution/editorial_inference）",
+      "date": "2026-10-11",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "按 L2 辩论席位批评意见完成修正并落盘：① 矛盾数字从「只写在 content 正文」升级为 YAML 顶层结构化字段——conflict_status（7 篇 unresolved / 2 篇 none_found / 3 篇综合条目）、contradiction_count、contradictions[]（共 21 条，CASSIA 6 条最多）、citation_caution（引用数字"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "ai_agent_literature",
+      "script": "patch_deliverable_section11",
+      "params": "patch 解读交付物：追加 §11 结论审核记录（L2 辩论结果 + 席位意见落实表 + 4 项未决）",
+      "date": "2026-10-11",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "交付物定稿：§11 记录 L2 辩论未出裁决（7/8 席位有实质论证、裁判 budget_exhausted 未归档），逐条列出采纳的 5 项修正与 2 项部分采纳/承认未做，并诚实登记 4 项未决验证项（多查询召回、复现成功率、行号漂移、启示六要素）。下一步：最终产物校验（文件清单 + 结构化字段落地确认）。"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": "patch_deliverable_section11"
+  }
 }

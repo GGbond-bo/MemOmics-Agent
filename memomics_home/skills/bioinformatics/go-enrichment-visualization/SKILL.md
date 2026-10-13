@@ -146,6 +146,23 @@ When the two-line label `"term\n(genes)"` makes gene text collide with the term 
 2. **v-B 纯词条版**: row name = term only, NO genes — strictly the user's pheatmap reference code (`scripts/go_heatmap_MF_SMF_v3_words_only.R`, one-shot in execute_r R 4.5.3).
 Always deliver BOTH files side by side and tell the user which is which; the genes themselves are unchanged from the approved v2 selection — only layout differs.
 
+### 🔴 增量补亚群 / 补词条（vN → vN+1 · 2026-10-13 v15 实测）
+
+用户常在图定稿后又追加亚群或词条（原话 *"从 X.xlsx 这个表格里补充两个亚群…完成 v15"*）。
+**只做增量，配色/尺寸/边距/图例/行列不聚类全部沿用上一版**——用户批准过的版本是基线，不要借机重新设计。
+
+| 动作 | 规则 |
+|---|---|
+| **加列** | 插入位置 = **源 xlsx 里该亚群的自然位次**，不是追加到末尾。先读源表 `unique(df$Cluster)` 定位，再对照图上既有列序。实例：源表顺序 `… RP_high(II) → RSS → Specialized MF → NMJ …`，图上是 `… RP_high(II) → NMJ …` ⇒ 新列插在 **RP_high(II) 之后、NMJ 之前**（`cols.index("RP_high(II)")+1`） |
+| **加行** | 插到「其所属亚群所在列的段位」（本例新亚群夹在 RP_high 段与 NMJ 段之间 ⇒ 新行插在 `ATP biosynthetic process` 之后、`neuromuscular junction` 之前） |
+| **共享词条** | 已存在于矩阵的（如 `muscle structure development`、`supramolecular fiber organization`）→ **不新增行**，只在该行补新列的值，行位置保持原样 |
+| **双版** | 复用同一个 `render(mat, tag, Wi, Hi)` 函数出两版，只换输入矩阵与画布宽（纯词条 9.5×11 in；末尾括号基因行名更长 ⇒ 11.5×11 in） |
+
+**🔴 用户给的清单可能少于源表 —— 必须比对并主动报告**：本例用户在消息里给了 RSS 3 条 + Specialized MF 4 条，源表里这两个亚群**各有 5 条**（漏 `sensory system development`、`neuron projection development`、`modulation of chemical synaptic transmission`）。
+正确做法 = **按用户给的条目执行**（不擅自补），但交付时**逐条列出未纳入项 + 其 -log10(q)** 并问是否补。静默按子集出图 = 用户以为你用了全表。
+
+配方（矩阵增量构建脚本模式 + 列序核对输出）：`references/incremental-cluster-term-extension.md`。
+
 ### Env note (pheatmap path needs NO CSV bridge)
 `pheatmap` + `RColorBrewer` are in **BOTH** R 4.5.3 (`execute_r` kernel, also has `openxlsx`) and R 4.4.2. So the whole pheatmap pipeline runs one-shot inside `execute_r`: read xlsx → build matrix → pheatmap → png/pdf/svg via base grDevices (`png(res=300)` + `pdf()` + `svg()`). Unlike the ComplexHeatmap path, no terminal-Rscript bridge required.
 

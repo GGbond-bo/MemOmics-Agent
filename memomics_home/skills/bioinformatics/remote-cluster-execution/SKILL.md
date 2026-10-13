@@ -106,6 +106,59 @@ source <conda_root>/bin/activate <env>      # 推荐
 - 探测**不需要** rail_review(post) 的分析级口径（无图表产出，会被判 failed）——如实说明"口径不匹配、非分析任务"即可，不要补假产物。
 - 反之，`submit` / `push` / `pull` / 真实分析属于高代价写操作 → 走铁律 35 意图确认。
 
+### ⛔ 铁规 3.1：`rail_review(pre)` 只点**本机 R** —— 集群作业会被它误拦（2026-10-09 实测）
+
+`rail_review(phase="pre", required_packages=[...])` 检查的是**本机**包清单，**看不到集群 env**。
+一个「跑在集群上、本地根本用不到」的包会把 `submit`/`run` 挡死
+（`{"should_proceed":false,"missing_packages":["RUVSeq"]}` →
+`🛡️ rail_review(pre) 发现问题: Missing packages: RUVSeq…`）。
+⚠️ **拦截覆盖 `run`**，所以「先去集群验一下包在不在」的那次 `run` 也会被挡 ——
+想证明集群有包，却必须先让本机有包，形成死锁。**别指望用 `run` 绕过去。**
+
+**解绑三步（旧写法，仍有效）**：① `check_env(packages=[...], language="R", auto_install=false)`
+确认本机确实缺（快速无副作用）→ ② `check_env(..., auto_install=true)` 走平台通道补到本机
+（返回 `installed_now: {...}`）→ ③ 重新 `rail_review(phase="pre", ...)` → `should_proceed=true`，
+门禁自动解绑，投递放行。
+
+#### ✅ 首选解：传 `location="cluster"` —— 门禁直接查集群包清单，**根本不用装本地**（2026-10-09 实测，取代上三步）
+
+`rail_review` 支持按执行位置审查；**集群作业就该带这三个参数**，上面的死锁直接消失：
+
+```
+rail_review(phase="pre", module_id=..., method_name=..., skill_name=...,
+            location="cluster", node="ssh23", env="R4.41",
+            required_packages=[...])
+```
+
+同一次 MuSC 投递的对照实测：
+
+| 写法 | 回执 | 结果 |
+|---|---|---|
+| 不传 `location` | 查本机包 → `missing_packages:["RUVSeq"]` | ❌ 被拦 → 被迫装本地包（用户会质问「集群不是有自己的环境吗」） |
+| `location="cluster", node="ssh23", env="R4.41"` | `location_line: 集群 ssh23/R4.41 —— 显式指定（节点上的 R 包清单，694 个包，缓存命中）` | ✅ `should_proceed:true`，**零本地安装** |
+
+要点：
+- **显式传 `location` 才有硬拦效力**；`location_source:"inferred"`（自动推断）报出的问题**只警告、不拦执行**。
+- **本地缺 ≠ 集群缺**，反之亦然（`ssh23/R4.41` 里 `RUVSeq`/`MAST`/`lme4`/`edgeR` 都在）。
+- 因此正确顺序是：**先带 location 试一次 pre-review → 只有它仍报缺包，才走上面三步补包。**
+  巡例先把本地包装上属于白装。
+- 同理 **`rail_review(post)` 的 `output_dir` 必须是「本机可读路径」**：喂集群绝对路径会报
+  `Output directory not found`（假失败）；且纯统计任务 `figure_count=0` 也会判 failed
+  → **先 `pull` 回 `results/<sid>/`、补一张结果图，再复审**。两条实录见
+  `references/rail-gate-and-meta-preflight.md` 第 4 节。
+
+**必须主动交代口径**（若已经装了本地包）：那次安装**与运行无关**，纯为过本机门禁。用户实测原话
+「**集群不是有自己的环境吗？你用本地的干什么？用集群的环境 R4.4.1 跑啊**」——
+汇报时一次说清并给证据：作业命令里的 `export PATH=<conda_root>/envs/<env>/bin:$PATH`
+＋ 日志**首段**的集群包自检输出，并问「要不要卸掉本地那份」。
+⛔ 不要为了过门禁就少报 `required_packages`（瞒报 = 自己拆掉 pre 审查）。
+
+**另一条同源的静默坑**（同一次投递踩到）：分组列真实取值 ≠ 脚本硬编码 `levels` →
+`factor()` 全 NA → 整批打印「跳过：组别缺失」但**退出码 0、零报错**；
+探针里**不要**套 `factor(levels=...)`（会把真值抹成 NA，看着像"没这个分组"）。
+两条的完整实录 + 可复用投递命令骨架（含集群包自检首段）
+→ `references/rail-gate-and-meta-preflight.md`。
+
 ## 🔴 铁规 4：路径与节点语义
 
 - 本地路径（`E:/...`、`results/...`）与远端绝对路径（`/hwfssz3/...`）是**两套**，不能当同一个字符串混用。用户没说数据在哪 → 先 `remote_cluster action="locate"`，按 verdict（local/cluster/ambiguous/missing）决定在哪儿算；ambiguous/missing → 停手问用户，**不许自己挑、不许编路径**。
@@ -126,6 +179,41 @@ source <conda_root>/bin/activate <env>      # 推荐
 - 动手前先想清楚"这次探查要回答什么"，一次问完；不要"看一眼再决定下一眼看什么"。
 - 已被判定循环时不要反复重试同类命令 —— 直接整理已有结果交付（多数情况信息已经够了）。
 - **跨节点校验也算重复**：2026-10-08 实测，因"先在 A 节点查一遍 `ls`/`df`/`qstat`、再在 B 节点查一遍同样的组合"，被判循环失控强制干预。跨节点比对要么**在同一条命令里遍历**（远端 `for` 循环 / 一次 `run` 带全部段落），要么**只查真正有差异的那一项**（例如问"`/home` 是否同一份卷"→ 只跑 `df -h $HOME`，别把整包探针重跑一遍）。
+
+### ⛔ 铁规 6.1：`submit` 回执 + 首次 `ps` 存活 ≠ 任务会跑完 —— 投递后做**一次**早期失败核对，然后停手（2026-10-09 实测）
+
+- 事故原样：MuSC RUVr+MAST 全量作业 **15:08:54 投递、15:13 我按 `ps` 汇报"在跑"**，**实际 15:10:37 就 `Execution halted` 退出了**（只跑了 1 分 43 秒，死在第一个亚群第一个迭代单元的 `cpm` dispatch 错误）；用户 15:13 来问「**我在这个节点 ssh23 上没看到任务**」才发现。顺带暴露：wrapper 打 `rc=0`（**不接 Rscript 真退出码**）→ 日志尾部看着像正常结束。
+- 根因：**R/Python 脚本常在第一个迭代单元内就崩**（首行报错 → 整脚本退出），"进程还活着"只在最初几十秒成立。所以 `ps` 有 pid 只证明"起过"，不证明"跑得完"。
+- 做法：投递后**第一次**核对要**一次拿全三样并读日志尾部**（不能只看 `ps`）：
+  ```bash
+  ps -ef | grep <脚本名> | grep -v grep; tail -30 <工作盘>/<日志>; ls <产物目录> | wc -l
+  ```
+  日志里看到正常进度行（如 `[subset] …` / `[RUV] …` / `块 1/N`）→ **本轮停手**；
+  看到 `Execution halted` / `Error` / `rc=` 非零 → 立刻定位根因并报用户，**不要**说"正在跑"。
+- ⚠️ 与铁规 6 的关系：**核对一次之后就不要再每轮重复同一条监控命令**（会被判循环失控强制干预）；之后只在**用户问起**或确知有新信息时再查一次。
+- 配套建议：把长脚本拆出**冒烟版**（只跑第 1 个迭代单元）先投一次 —— 首轮崩溃 1 分钟内暴露，比全量跑 30 轮后才发现省几十小时。
+
+### ⛔ 铁规 6.2：长任务的「监控」必须是**落地进程 + 落盘日志**，不能是口头承诺（2026-10-09 实测）
+
+用户直接追问原话：「**我在好奇，你有没有持久化？集群代码报错了，你会不会检查，实测是不会自己检查，刚才报错了，你就没有发现**」
+
+三件事同时被揭穿：
+
+1. **口头承诺 ≠ 动作**：上一轮汇报里写了"要挂 watchdog"，那只是**一句话，没落成任何文件/进程** —— 典型「叙事代替执行」（铁律 -1）。用户隔一轮就能发现。
+2. **真正的缺口是「监控持久化」**，不是数据/进程持久化：`large_cache` 账本（数据）✅、`setsid` 作业（进程）✅，但**没有任何东西在盯日志**。我是回合制的 —— 集群作业崩了不会通知我；**没有反向通道，就只能等用户来问**。要闭环必须有能把事件送回 Agent 的通道。
+3. **watchdog 建了也不够**：本机轮询进程确实按设计命中条件并退出了，但 ① **stdout 没落盘** → 输出随进程回收丢失、失忆；② **退出通知没能确认送达** → 作业 15:56 完成、16:04 用户问起，中间**没有主动报**。等于监控白挂。
+
+**落地四项要求（缺一不可）**：
+
+| 项 | 要求 |
+|---|---|
+| 通道 | 本机后台进程（`terminal background=True` + `notify_on_complete=True`）。`cronjob` 未暴露时，**它就是唯一反向唤醒通道** |
+| **持久化** | **stdout 一律重定向到 `results/<sid>/logs/watchdog.log`** —— 禁止只打 stdout（退出即失忆） |
+| **状态** | 命中后**写 alerts 文件**（不是只退出）；下次续跑轮第一件事就是读它 |
+| 判据 | 每轮 ssh **一次拿全**：`ps -ef \| grep <脚本名>` + `tail -N <工作盘>/<日志>` + `ls <产物目录> \| wc -l`；命中「报错 / 产物齐 / 进程消失 / 静默超时」→ 记录 + 退出 |
+
+**边界要如实讲**（别粉饰）：本机 watchdog 绑在 MemOmics 服务进程上，**服务重启即死**；集群 `setsid` 作业（PPID=1）不受影响，但重启后必须重挂。⛔ **不许拿"我已经挂了监控"当免检牌**。
+**恢复轮纪律**：任何"继续/跑完没"的续跑轮，先读 `logs/watchdog.log` + alerts 文件，再决定说什么 —— 而不是重新跑一遍监控命令（会被判循环失控，见铁规 6）。
 
 ## 🔴 铁规 7：**用户锁定的环境映射是"持久声明"，不是探针缓存**（2026-10-08）
 
@@ -292,6 +380,7 @@ cell 输入框。实现要点：
 | 看会话里跑过的 cell / 图 | `action="session_cells"`（代码+输出+图清单）→ 逐张 `action="session_plot" path="plots/<请求号>_01.png"`（WebUI 里就是输入框上方「📓 总端」那张面板） |
 | 长任务投递（读一次+检查点） | `scripts/run_cluster_job.sh <INPUT> <WORKDIR>` → `action="submit"` |
 | 标记管账/清理 | `large_cache list|verify|clean [--yes]` |
+| 盯 `submit` 起的长作业进度 | `action="run"` 一条命令拿全：`ps -ef \| grep <脚本名> \| grep -v grep`（数进程）+ `tail -40 <工作盘>/<out>.log` + `ls <产物目录> \| wc -l`；**日志必须落 `/hwfssz3/...` 工作盘**（`~/memomics_jobs/logs` 跨节点不可见 → 用户 MobaXterm 里看不到） |
 | 数据在哪儿 | `action="locate" path="<用户原话路径>"` |
 | 节点连通/负载 | `action="nodes"` |
 | 跑重活 | `action="submit"`（先 `action="check"` 摸调度器/资源） |
@@ -304,6 +393,7 @@ cell 输入框。实现要点：
 - `references/environment-declaration.md` — 环境声明的机制：`environment.json` 的 `cluster` 段 schema、`declared_env()` / `save_declared()`、WebUI「🧩 环境管理」填写入口与 `POST /api/env/declared`。
 - `references/three-node-cluster-facts.md` — 三节点（`ssh3`/`ssh0`/`ssh23`）规格与外网矩阵、共享 NFS + 同一套 SGE 队列、**工作环境 vs 装包环境分工**、推荐安装链、以及改 `environment.json` 后的**验证三件套**（JSON 断言 / `validate_env.py` / 全量 offline pytest）。
 - `references/observability-from-cluster-side.md` — **用户在 MobaXterm 里能核对到什么**（铁规 11 的实测底稿）：账号 `zhangbo11`、工作盘共享 vs `/home` 不共享、`ps`/`qstat`/账本三层可见性、`qstat` 失败 → 退化为 setsid 的因果链、以及回答这类问题的固定骨架。
+- `references/rail-gate-and-meta-preflight.md` — **铁规 3.1 的实测底稿**：`rail_review(pre)` 本地口径拦截集群 `submit` 的死锁，**首选解 `location="cluster"`+`node`+`env`（实测零本地安装）**、旧的三步补包解绑、以及两者的对照回执；分组列 levels 不一致导致「整批静默跳过、退出码 0」的前置核查；`dplyr::recode` 未命中值**原样保留不产生 NA** 所以 `anyNA()` 守卫抓不到漏映射（守卫要写 `%in%` 集合判定）；**第 4 节：`rail_review(post)` 在集群产物上的两连误判（`Output directory not found` / `figure_count=0`）与「先 pull 再复审」的正确顺序**；以及可复用的集群投递命令骨架。
 - `references/big-input-inventory.md` — **大输入清单 + `large_cache` 的真实边界**（铁规 10 的底稿）：`scan` 只认本机路径（无 `--remote`，喂集群路径返回 `exists:false` 不报错）、`mark --remote` 的必要性、`Muscle_96_38/Umap/` 实测 6 个 0.48–1.76 GB RDS 清单、以及复查用的三条只读命令。
 - `references/persistent-r-session.md` — **常驻 R 会话的协议与实测**（2026-10-09 落地）：文件队列（`staging`→`queue` 原子 mv）为什么必须有、`state.txt`/`done/*.res.txt`/`ckpt/` 格式、`setsid -f` 不可用与 busybox `ps` 的兼容处理、MuSC 验收全过程（16.3s 读入 → 38.9s UMAP → 6 分钟后 FindMarkers 仍 `readrds_calls=1`）、4 个实测踩坑，以及**第二批的抓图/Notebook 总端**（`plots/` + `---PLOTS---` 分段 + 逐表达式 `dev.off()` 的原因 + `session_cells`/`session_plot` 读侧 + bounded_capture 截断陷阱）。
 
@@ -363,3 +453,7 @@ cell 输入框。实现要点：
 | human | skeletal_muscle | exercise | 2026-10-08 | musc_umap_prop_ssh3.R | - | - |  |
 | human | skeletal_muscle | exercise | 2026-10-09 | r_session_daemon.R（常驻会话：MuSC 读一次 → RunUMAP 38.9s → 6 分钟后 FindMarkers，readrds_calls=1） | - | - |  |
 | - | - | - | 2026-10-09 | test_cluster_session.py（19 用例） | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-09 | large_cache list + ssh23 env probe | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-09 | probe_musc_meta.R | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-09 | large_cache list（开工前查大输入标记） | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-09 | muscle_RUV_MAST_MuSC.R | - | - |  |

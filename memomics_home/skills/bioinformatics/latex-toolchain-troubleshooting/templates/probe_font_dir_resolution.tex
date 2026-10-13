@@ -1,0 +1,43 @@
+% probe_font_dir_resolution.tex — 探针：打印「字体目录宏」的真实展开值
+%
+% 用途：fontspec 报 `The font X cannot be found` 时，第一步就要确认模板**用来定位字体的目录宏**
+%       是否真的展开成了「真实可用的绝对路径」。因为 fontspec 的 Path= 不走 kpathsea 补全
+%       （不同于裸 \setmainfont{X}），宏展开异常（空 / 相对 / currfile 未生效）就会直接找不到字体。
+%
+% 用法：
+%   1) 用**官方 wrapper 同样的环境**编译（否则本探针自己也会找不到 bensz-fonts）：
+%        xelatex -interaction=nonstopmode probe_font_dir_resolution.tex
+%   2) 看日志：
+%        grep '\[PROBE\]' probe_font_dir_resolution.log
+%
+% 读法：
+%   - `theabsdir` 为空     → currfile 的 abspath 链没生效 → Path= 必然失败
+%   - `BenszFontsDir` 为空/相对 → 同上，或该宏未被定义（TEXINPUTS 未注入 bensz-fonts）
+%   - 出现 `OK:`           → Path= 值本身可用，问题在别处（看该家族是否缺 Extension= 等）
+%   - 出现 `FAIL:`         → 确认是 Path= 解析问题，按 SKILL.md §六 决策树处理
+
+\documentclass{ctexart}
+
+% currfile 的 abspath 是「取当前 .sty 绝对路径」这类宏的依赖
+\RequirePackage[abspath]{currfile}
+\typeout{[PROBE] theabsdir (本探针所在目录) = \theabsdir}
+
+% 有 bensz-fonts 就打印它的目录宏；没有则明确提示 TEXINPUTS 未注入
+\IfFileExists{bensz-fonts.sty}{%
+  \RequirePackage{bensz-fonts}%
+  \typeout{[PROBE] BenszFontsPackageDir = \BenszFontsPackageDir}%
+  \typeout{[PROBE] BenszFontsDir        = \BenszFontsDir}%
+  \typeout{[PROBE] BenszFontsFile(FontAwesome.otf) = \BenszFontsFile{FontAwesome.otf}}%
+  % 关键判定：Path= 用的就是这个值，末尾必须有斜杠且必须是真实可用目录
+  \IfFileExists{\BenszFontsFile{FontAwesome.otf}}{%
+    \typeout{[PROBE] OK: FontAwesome.otf 按展开值可定位 -> Path= 值本身没问题}%
+  }{%
+    \typeout{[PROBE] FAIL: 按展开值定位不到 FontAwesome.otf -> Path= 解析有问题}%
+  }%
+}{%
+  \typeout{[PROBE] 未找到 bensz-fonts.sty —— TEXINPUTS 未注入？本探针须按官方 wrapper 的环境跑}%
+}
+
+\begin{document}
+探针：请看 \texttt{.log} 里的 \texttt{[PROBE]} 行。
+\end{document}

@@ -192,6 +192,10 @@ GSEA/ORA功能富集分析。clusterProfiler/gseapy。GO/KEGG/Reactome/MSigDB
 | human | skeletal_muscle | aging | 2026-09-24 | 11_go_YPost_vs_OPost.R | - | - |  |
 | - | - | - | 2026-09-24 | 12_go_plot_YPost_vs_OPost.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-10-03 | ora_power_for_small_lists.py (execute_python 内联计算) | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-13 | go_heatmap_v14_smaller_words_only.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-13 | build_v15_matrix.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-13 | build_v15_matrix.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-13 | go_heatmap_v15.R | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

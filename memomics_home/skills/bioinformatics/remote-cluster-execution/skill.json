@@ -40,8 +40,8 @@
     "kernel 式持久化"
   ],
   "when_to_use": "远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收；含常驻 R 会话（kernel 式持久化，大 rds 读一次一直用：session_start/exec/save/restore/status/stop）。触发:集群/ssh3/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub/常驻会话/读一次一直用/不要每次重新读取。",
-  "success_count": 12,
-  "proven_script": "r_session_daemon.R",
+  "success_count": 16,
+  "proven_script": "muscle_RUV_MAST_MuSC.R",
   "proven_params": [
     {
       "species": "",
@@ -198,9 +198,61 @@
       "approved": false,
       "custom_script": false,
       "result": "常驻 R 会话（kernel 式持久化）落地并通过用户口径验收：readRDS 661.8MB 一次 16.3s（readrds_calls=1），RunUMAP(harmony 1:30) 38.9s（对象 2GB，RSS 2.5→3.0GB），约 7 分钟后 FindMarkers(lpMuSC vs dMuSC) 3.6s（20266 行/1323 显著，CSV 1.25MB），全程同一 pid=109595、readrds_calls 始终=1 → 证明复用内存对象不回读文件。实现=base-R daemon + 文件队列（staging→queue 原子 mv）+ state 心跳 + ckpt 检查点；19 个离线用例全绿。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "exercise+aging",
+      "script": "large_cache list + ssh23 env probe",
+      "params": "node=ssh23; M=/hwfssz3/PS_JLU/zhangxiao6/software/miniconda3; R4.41",
+      "date": "2026-10-09",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "只读探查通过：① large_cache 账本里 musc-umap-20261008 已标记（662MB 集群输入，持久化闸门可过）② ssh23 空闲(112核/503GB, load 0.001) ③ R4.41(R 4.4.1) 含 Seurat/Matrix/edgeR/RUVSeq/MAST/lme4/parallel ④ 工作目录 /hwfssz3/PS_JLU/zhangbo/ju"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "exercise+aging",
+      "script": "probe_musc_meta.R",
+      "params": "ssh23; R4.41; probe_musc_meta.R; readRDS 15.9s",
+      "date": "2026-10-09",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "rds 事实核查完成（只读）：MuSC_exercise_clean_dele_cluster_umap.rds = 51227 基因 × 15810 细胞，assay=RNA/SCT，默认 RNA。meta 33 列，含 samplename/type/annotation_L3，**无 individual**（脚本由 samplename 去 _Pre/_Post 推出 24 个个体，可行）"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "exercise+aging",
+      "script": "large_cache list（开工前查大输入标记）",
+      "params": "node=ssh23; target=/hwfssz3/PS_JLU/zhangbo/Muscle_96_38/Umap/MuSC_exercise_clean_dele_cluster_umap.rds",
+      "date": "2026-10-09",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "共 5 个标记，其中 musc-umap-20261008 (active, 远端) 已覆盖 MuSC 662MB rds → 持久化门禁满足；ssh23 check 确认 scheduler=none、112核/503GB、Rscript=R4.41/bin/Rscript"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "exercise+aging",
+      "script": "muscle_RUV_MAST_MuSC.R",
+      "params": "node=ssh23; job=MuSC_RUV_MAST; ncores=16; env=R4.41; outdir=MuSC_RUV_result; type=dplyr::recode 短码映射; nruv=10; pctcut=0.1; min_cells=10; chunk_size=500",
+      "date": "2026-10-09",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "MuSC RUVr+MAST(glmer) 逐亚群×5对比作业已投到 ssh23；submit 返回 exit=124（工具 20s 窗口已知误报，脚本 /home/zhangbo11/memomics_jobs/scripts/MuSC_RUV_MAST_ssh23_20261009_151121.sh，PID 85641）；日志落 /hwfssz3/.../analyze/MuSC_RUV_r"
     }
   ],
   "user_prefs": {
-    "last_used_script": "r_session_daemon.R"
+    "last_used_script": "muscle_RUV_MAST_MuSC.R"
   }
 }

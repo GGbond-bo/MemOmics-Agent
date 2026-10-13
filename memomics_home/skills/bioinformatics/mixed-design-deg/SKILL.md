@@ -126,10 +126,14 @@ or 'bayesglm'` ⇒ **`method="glmer"` 就是随机效应通道**，公式可写 
 | 2 | `waldTest(fit, MAST::CoefficientHypothesis(...))` | `"MAST::CoefficientHypothesis" is not a defined class` | **不用 waldTest**，直接 `coef + vcov` 手算 Wald：`est = B %*% w`、`se = sqrt(t(w) %*% Vi %*% w)`、`p = 2*pnorm(-abs(est/se))` —— 支持任意线性对比、不依赖内部导出 |
 | 3 | 假设 `vcov()` 维度是 (基因,系数,系数) | 不报错、**静默取错值** | 实测是 **(系数, 系数, 基因)**（`7 x 7 x 3000`，`dimnames[[3]]` 才是基因名）⇒ 代码里**自动判方向**：`orient <- if (length(intersect(dimnames(vv)[[3]], rownames(cc))) > 0.5*nrow(cc)) "ccg" else "gcc"` |
 | 4 | 直接 `split(seq_len(n), md$individual)` | `group length is 0 but data length > 0` | **先 `print(names(md))` 再动手**（别假设列存在）；`individual <- sub("_[^_]+$", "", as.character(md$samplename))` |
+| 5 | 裸 `cpm(d_e)`（RUVr 前那段 edgeR 归一化） | `unable to find an inherited method for function 'cpm' for signature 'object = "DGEList"'` | `library(MAST)` **连带载入 `SingleCellExperiment`**，其同名 S4 泛型 `cpm` 劫持了裸调用（它只有 SCE 方法、没有 DGEList 方法）⇒ 写 **`edgeR::cpm(d_e)`**（1 行改动，逻辑零变化）。同族函数 `calcNormFactors`/`glmFit`/`estimateGLM*Disp`/`DGEList` 实测未被 mask，但 edgeR 调用统一加 `edgeR::` 更稳 |
 
-⚠️ 陷阱 1–3 是同一族：**对包内部符号/返回结构的假设**。判据：**凡对包函数签名、导出状态、返回维度拿不准
+⚠️ 陷阱 1–3、5 是同一族：**对包内部符号/返回结构的假设**。判据：**凡对包函数签名、导出状态、返回维度拿不准
 ⇒ 读该包自己安装的 Rd（`tools::Rd2txt(tools::Rd_db("<pkg>")[["<fn>.Rd"]])`）或直接 `print(dim/dimnames)` 实测，
 禁止凭记忆写**；⛔ 报错后**不要「换个写法再试一次」逐步逼近**（连败即触发循环检测，本轮白烧 5 轮）。
+⚠️ **陷阱 5 专属判据：「以前跑通过」不能当免修依据** —— 同一脚本在**未载入 `SingleCellExperiment`** 的环境
+（比如 notebook 里 library 顺序不同）能跑通，换个执行方式（Rscript 作业 / 另一个环境）就必崩。
+诊断三行：`print(find("cpm"))`（看 package: 顺序）→ `print(methods::isGeneric("cpm"))` → `edgeR::cpm(d_e)` 实测。
 
 **NEBULA 官方 API（读 README 原文核实）**：`nebula(count, id, pred = model.matrix, offset, method = 'LN'|'HL', ncore)`；
 `count` 是 **M(基因) × N(细胞)**、元素必须为**整数**、支持 sparse `dgCMatrix`；`pred` 必须含**截距列**；
@@ -155,6 +159,10 @@ Aging/DM = 两 Pre 组 `~grp`；Ex_Young/Old/DM = 单组 `~time`；DiD = 两组 
 
 > 📄 完整配方（四条陷阱的实测报错原文 + coef/vcov 手算 Wald 代码 + vcov 方向自动判定 + NEBULA 逐对比
 > 子集设计 + 计算量外推 + 本机/集群分工 + 结果表形状）见 `references/cell-level-mast-nebula-recipe.md`。
+> 📄 🔴 **用户固定复用那支脚本（每亚群 × 每对比独立跑：pseudobulk 估 RUVr 因子 → 当协变量进细胞级 MAST）
+> 的运行手册** —— 8 步骨架、固定对比/命名口径、组名短码映射与 `%in%` 守卫、五个坑（含 `cpm` mask、
+> 静默跳过、静默丢基因）、集群投递要点、**冒烟版只改 2 行**、汇报骨架 →
+> `references/ruvr-mast-per-subcluster-runbook.md`。MF 已跑通、MuSC 2026-10-09 复用，换组织/亚群直接套。
 
 ## 参考文献与源码证据库
 

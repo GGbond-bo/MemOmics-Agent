@@ -102,3 +102,24 @@ content: |
 - 入库必须过 `save_knowledge`（evidence 必填、unverified 拒收），不得绕过铁轨手写 YAML
 - 多值物种/组织字段拆单一合法段（`human;mouse` → 取 `human`），assay_type 小写词汇表（RNA/ATAC/spatial/bulk）
 - 批量任务失败不硬重试：先看 rejected 原因（路径段非法/LLM 格式问题）再决定
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| - | - | - | 2026-10-11 | extract_lit_text.py | - | - |  |
+| - | - | ai_agent_literature | 2026-10-11 | inspect_kb_paths | - | - |  |
+| - | - | - | 2026-10-11 | inspect_test_conventions | - | - |  |
+| - | - | - | 2026-10-11 | test_save_knowledge_ai_domain.py | - | - |  |
+| - | - | - | 2026-10-11 | pytest_kb_marker | - | - |  |
+| - | - | - | 2026-10-11 | pytest_kb_marker_retry | - | - |  |
+| - | - | - | 2026-10-11 | pytest_kb_to_log | - | - |  |
+| - | - | ai_agent_literature | 2026-10-11 | kb_write_ai_entries.py | - | - |  |
+| - | - | - | 2026-10-11 | pytest_full_and_delegation_check | - | - |  |
+| - | - | - | 2026-10-11 | stash_test_attempt | - | - |  |
+| - | - | ai_agent_literature | 2026-10-11 | kb_write_ai_entries.py | - | - |  |
+| - | - | ai_agent_literature | 2026-10-11 | deliver_ai_agent_report | - | - |  |
+| - | - | ai_agent_literature | 2026-10-11 | kb_ai_add_meta_fields.py | - | - |  |
+| - | - | ai_agent_literature | 2026-10-11 | patch_deliverable_section11 | - | - |  |

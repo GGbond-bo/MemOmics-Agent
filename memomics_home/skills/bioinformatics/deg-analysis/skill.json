@@ -867,11 +867,37 @@
       "approved": false,
       "custom_script": false,
       "result": "扩展口径使 Aging HSP 由 11→36、O_EX 4→7、逆转衰老 785 新增 3 个 DNAJ；但三组共同 HSP 交集两种口径均空。产出 10-13 号 sheet + HSP_methods_and_caption.md"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "exercise+aging",
+      "script": "stat_musc_cells.R",
+      "params": "min_cells=10; groups=Y_Pre/Y_Post/O_Pre/O_Post/OD_Pre/OD_Post; n_cells=15810; n_samples=47; n_individuals=24; n_subclusters=6; R=R4.41@ssh23",
+      "date": "2026-10-09",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "exit=0；4 个 csv 落 /hwfssz3/.../analyze/MuSC_RUV_result/ (stat_cells_by_subcluster_group.csv / stat_samples_raw_by_subcluster_group.csv / stat_samples_valid_by_subcluster_group.csv / stat_comparison_sam"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "exercise+aging",
+      "script": "plot_musc_coverage.py",
+      "params": "figsize=(19.5,5.4); dpi=300; png+pdf; panels=A/B/C/D; bad_mask=valid<2; cmap=(A)YlGnBu log1p (B)Blues (C)Greens (D)红-琥珀-绿",
+      "date": "2026-10-09",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "图 figures/musc_subcluster_coverage.png + .pdf 已生成；16/30 可跑比对；per-subcluster runnable={zone1:5, zone2:5, CCND2+MuSC:3, zone3:2, lpMuSC:1, dMuSC:0}"
     }
   ],
-  "proven_script": "hsp_extended_scope_sensitivity.py",
+  "proven_script": "plot_musc_coverage.py",
   "error_count": 6,
-  "success_count": 61,
+  "success_count": 63,
   "official_docs": "https://satijalab.org/seurat/articles/de_vignette.html",
   "doc_source": "official",
   "prerequisites": {
@@ -881,7 +907,7 @@
     "description": "需要已聚类的数据"
   },
   "user_prefs": {
-    "last_used_script": "hsp_extended_scope_sensitivity.py"
+    "last_used_script": "plot_musc_coverage.py"
   },
   "errors": [
     {

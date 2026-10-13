@@ -375,11 +375,50 @@
       "approved": false,
       "custom_script": false,
       "result": "小列表 ORA 功效上限量化完成：7 基因需 3~6/7 同通路才过 BH；2 基因基本无解。建议改分层 ORA 或 GSEA pre-ranked。"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "go_heatmap_v14_smaller_words_only.R",
+      "params": "pheatmap; YlOrRd 5档 #FFF7EC-#FDD49E-#FC8D59-#D7301F-#7F0000; 0-10截断; cluster_rows=FALSE, cluster_cols=FALSE; angle_col=45; 画布9.2x10.4in; padding 上1.0/右4.0/下1.8/左5.0cm; legend右下横放; 48词条×15亚群全展示",
+      "date": "2026-10-13",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "v14 GO词条热图（缩小版）完成：48 GO terms x 15 subclusters，纯词条版，三格式导出成功"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "build_v15_matrix.py",
+      "params": "build_v15_matrix.py: 插入 SORBS+/RUNX1+ 两列（位于 RP_high(II) 后、NMJ 前，与 HAD 原表位置一致）；新增 5 词条行（cell-cell adhesion 3.8 / developmental growth 3.2 / regulation of small GTPase mediated signal transduction 2.3 / regulation of cell projection organization 4.8 / regulation of anatomical structure morphogenesis 3.8）；共享词条 muscle structure development(+4.4) 与 supramolecular fiber organization(+3.0) 合并进已有行",
+      "date": "2026-10-13",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "v15 矩阵构建脚本就绪：48x15 -> 53x17，新增 SORBS+/RUNX1+ 两亚群与 5 条新词条"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "go_heatmap_v15.R",
+      "params": "pheatmap; YlOrRd 5档 #FFF7EC-#FDD49E-#FC8D59-#D7301F-#7F0000; 0-10; cluster_rows=FALSE cluster_cols=FALSE; angle_col=45; border_color=NA; fontsize_row=8 fontsize_col=9; padding T1.0/R4.0/B1.8/L5.0cm; 右下横放图例0/5/10; words_only 9.5x11in / with_genes 11.5x11in; 53词条x17亚群",
+      "date": "2026-10-13",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "v15 双版出图成功（纯词条 + 词条末尾括号基因）：新增 SORBS+/RUNX1+ 两亚群及 5 条新词条，矩阵 53x17"
     }
   ],
-  "proven_script": "ora_power_for_small_lists.py (execute_python 内联计算)",
+  "proven_script": "go_heatmap_v15.R",
   "error_count": 3,
-  "success_count": 26,
+  "success_count": 29,
   "official_docs": "https://gseapy.readthedocs.io/en/latest/tutorials.html",
   "doc_source": "official",
   "prerequisites": {
@@ -389,7 +428,7 @@
     "description": "需要DEG结果"
   },
   "user_prefs": {
-    "last_used_script": "ora_power_for_small_lists.py (execute_python 内联计算)"
+    "last_used_script": "go_heatmap_v15.R"
   },
   "errors": [
     {

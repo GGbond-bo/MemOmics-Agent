@@ -1,0 +1,32 @@
+{
+  "id": "large-file-transfer-troubleshooting",
+  "name": "📦 大文件传输失败排查（上传 / 下载）",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": "大文件传输（上传/下载）失败的排查与修复，云平台（DCS Cloud / GenPilot）与远端集群通用。覆盖「提交即失败 / 0 B / 用时 1s」类症状的阶段判定、通道与体积上限、浏览器端流式写入残件（.crswap）、目标端残留导致平台条目预校验拒绝，以及免 shell 三源取证。",
+  "starting_prompt": "使用 📦 大文件传输失败排查（上传 / 下载） 进行分析",
+  "source_dir": "skills/bioinformatics/large-file-transfer-troubleshooting",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "下载失败",
+    "上传失败",
+    "传输失败",
+    "批次下载",
+    "提交批次下载任务失败",
+    "crswap",
+    "卡在0%",
+    "大文件下载",
+    "云平台下载",
+    "下载任务报错",
+    "oss 通道",
+    "raysync",
+    "目标盘空间不足",
+    "传输中断"
+  ],
+  "when_to_use": "大文件传输（上传/下载）失败的排查与修复，云平台（DCS Cloud / GenPilot）与远端集群通用。覆盖「提交即失败 / 0 B / 用时 1s」类症状的阶段判定、通道与体积上限、浏览器端流式写入残件（.crswap）、目标端残留导致平台条目预校验拒绝，以及免 shell 三源取证。"
+}
