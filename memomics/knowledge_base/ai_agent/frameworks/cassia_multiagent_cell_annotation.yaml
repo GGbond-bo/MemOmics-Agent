@@ -1,0 +1,98 @@
+type: kb_entry
+domain: ai
+name: cassia_multiagent_cell_annotation
+subcategory: frameworks
+last_updated: 2026-10-11 18:32
+source: data_driven
+verified: verified
+quality: high
+auto_trigger:
+- cassia_multiagent_cell_annotation
+content: "## 一句话定位\n**首个专为单细胞细胞类型注释设计的多 agent LLM 框架**：5 个互联 LLM（Annotator / Validator\
+  \ / Formatter / Scoring / Reporter）+ 可选 agent（Subclustering / Uncertainty / Annotation\
+  \ Boost / RAG），实现自动化、**可解释**、带**定量质量分**的细胞注释，并用共识机制校准置信度、抑制幻觉（威斯康星大学麦迪逊分校，Nature\
+  \ Communications 2025）。\n\n> 注：原文实际标题为 **CASSIA: a multi-agent large language model\
+  \ for automated and interpretable cell annotation**。\n\n## 研究思路（核心设计哲学与架构）\n- **设计哲学**：LLM\
+  \ 几乎总会给答案且「信心均一」，已知会幻觉。CASSIA 用**多 agent 相互制衡 + 可解释推理 + 定量质量分**把 LLM 从黑箱变成可信分析工具——「超越顺序\
+  \ prompt，做自适应、类专家的分析」。\n- **默认 5 步工作流**：① **Annotation**（分析 marker 表达模式，出标签 + 详细推理）→\
+  \ ② **Validation**（迭代检查 marker–细胞类型一致性，**最多 3 个精化循环**）→ ③ **Quality Assessment**（按科学准确性与\
+  \ marker 平衡度给 **0–100** 分）→ ④ **Refinement**（标记低分/混合簇待精化）→ ⑤ **Reporting**（输出完整推理、质量分与精化过程）。\n\
+  - **输入**：用户指定**物种、组织、待注释类群、每类 marker 集合**（多来自 Seurat FindAllMarkers / Scanpy tl.rank_genes_groups）；推荐每类\
+  \ **50 个 marker**。\n- **可选 agent**：**Annotation Boost**（对低分注释用完整统计量做**假设驱动的 breadth-then-depth\
+  \ 搜索**，可提出用户未想到的候选类型，最多 5 次迭代，基于 ReAct 扩展）；**Subclustering**（同时分析一群体内所有亚群）；**Uncertainty/Consensus(CS)**（多轮默认\
+  \ 5 轮，量化不确定性）；**RAG**（4 个子 agent：Marker Database 查 CellMarker、Ontology Database\
+  \ 用 Owlready 建组织特异本体树、Hierarchical Feature 做「概念特征轴」降维、可选 Cross-Species）。\n- **关键设计要素**：\n\
+  \  - **Annotator prompt 工程**：零样本 chain-of-thought + 角色设定 + 受众框定 + **假想奖励（\"做得好奖励\
+  \ $10,000\"）** + 强制 6 个分析步骤 + 终止标记 \"FINAL ANNOTATION COMPLETED\"；\n  - **质量分阈值用加权代价优化**：Total\
+  \ cost = w×FP + FN（FP=正确却被标低质，FN=错误却被标高质，**w=2**），阈值选 **~75%**；\n  - **CS 分数**取三种共识度量的**最小值**（CSCL\
+  \ 基于 Cell Ontology CL API 统一术语、CSLLM 基于 LLM 术语统一、consensus agent 独立估计），CS<75% 判不确定；\n\
+  \  - **选择性记忆管理**：annotation/validation 共享历史；scoring 看完整对话；成功案例 formatting 只看最终轮、失败案例看完整历史\
+  \ → 实现不同细胞类型分析间的**上下文隔离**。\n\n## 解决的问题（痛点）\n细胞注释是 scRNA-seq 关键步骤，但多数方法需**计算+领域双重专业知识**、结果**不一致且难解释**；基于参考的方法在无匹配参考集时受损、无参考方法依赖\
+  \ marker 先验；手工注释（金标准）耗时费力。\n**现有 LLM 代表 GPTCelltype 的四个短板**：① 易幻觉；② **不解释推理**；③\
+  \ **不给质量分**，用户无法区分幻觉/低质与高质；④ 为减少幻觉只用**很少的 marker**，能注一般类型但不能准确注亚群。\n\n## 工作量与内容\n\
+  - agent 数量：默认 **5 个**互联 LLM + **Onboarding** 平台；可选 4 类（含 RAG 内含 4 子 agent）；\n- 覆盖\
+  \ **970 个细胞类型**（5 个经典数据集）；质量评估用 **>500 个细胞类型**；\n- 桥接外部数据库/本体：**CellMarker / CellMarker2.0**、**Cell\
+  \ Ontology (CL) API**、**Owlready**；\n- 大规模数据：MOCA（Mouse Organogenesis Cell Atlas）**~200\
+  \ 万细胞、61 个胚胎阶段**；\n- 基线：GPTCelltype(v1.0, GPT-4/GPT-4o)、ScType、SingleR、CellTypist、scCATCH；\n\
+  - 交付形态：**R 包 + Python 包 + Web 界面**（www.cassia.bio），默认流程单命令执行。\n\n## 怎么测试（评测方式）\n\
+  - **评测框架**：沿用 GPTCelltype（Hou & Ji, Nat Methods 2024）的**三级分层评价**——按与参考注释的**分类学距离**分「完全正确\
+  \ / 部分正确 / 错误」（对罕见细胞类型适配：识别到 general category 即算部分正确）；\n- 平均准确率：完全正确 =1、部分正确 =0.5、错误\
+  \ =0；数据集内所有细胞类型求平均；\n- **benchmark 数据集**：GTEx、Tabula Sapiens(TS)、Human Cell Landscape(HCL)、Mouse\
+  \ Cell Atlas(MCA)、Azimuth（HCL 因注释-元数据不一致仅用于 marker-based 方法比较；MCA 因混合组织只比较 CASSIA\
+  \ 与 GPTCelltype）；\n- **marker 数量扫描**：n = 10/30/50/70/100，共 **2,670 次 CASSIA 运行**；\n\
+  - **模型对比**：Claude 3.5 Sonnet、GPT-4o、LLaMA3.2 90B（temperature=0）；\n- **专门场景**：癌症（2\
+  \ 原发 + 3 转移）、免疫（PBMC68k、ProjecTILs）、非模式生物（鲨鱼、家猫、虎、穿山甲）、混合细胞群（合成 50:50 / 80:20 /\
+  \ 60:40 / 70:30）、RAG（小鼠运动皮层、小脑、人肺）；\n- **金标准纠错检验**：对 15 个「质量分 >90% 但与金标准不一致」的注释，用\
+  \ **3 个 LLM 投票**判定谁更贴近 marker 谱，三者一致时再人工核验；\n- **消融**：跨 benchmark 系统消融（Supplementary\
+  \ Note 6）；\n- **湿实验验证**：脑转移瘤样本来自临床试验 **NCT03398694**，10x Chromium 测序，金标准由病历 + 病理学家判定。\n\
+  \n## 关键数字（均出自原文）\n- 主 benchmark（970 细胞类型）：相对现有方法**完全正确提升 12–41%**、**组合正确（完全+部分）提升\
+  \ 9–20%**；对多数数据集**平均准确率提升 >20%**；\n- marker 最优约 **50 个**（之后平台化或下降），对应 ~200–250 tokens；\n\
+  - 模型稳健性：**CASSIA-Claude-3.5 = 0.92**、**CASSIA-GPT-4o = 0.88**、**CASSIA-LLaMA-3.2\
+  \ = 0.82**；\n- **癌症**：整体正确率 79%；区分癌/非癌**平均正确识别 72.5% 癌细胞** vs GPTCelltype **20%**；加一句\
+  \ prompt 后**提升到 88–100%**；\n- **免疫**（PBMC68k + ProjecTILs）：比次优方法**提升 27%**；\n- **非模式生物**：鲨鱼\
+  \ **20/22**、家猫 **57/64**、虎 **66/79**、穿山甲 **41/54**，准确率**提升 14–77%**；\n- **混合细胞群**：50:50\
+  \ → 默认直接检出 6/10 + scoring 再标 3 个 = **总检出 90%**，consensus 检出 7/10（GPTCelltype4 =\
+  \ 0、GPTCelltype4o = 3/10）；80:20 → 总检出 80%，consensus 14/20，dominant 准确率默认与 consensus\
+  \ 均 **0.9** vs GPTCelltype4 0.35 / 4o 0.45；\n- **RAG**：3 个组织比 core CASSIA **提升 7–13%**（神经元亚型：projection\
+  \ ~65%、inhibitory ~72%、non-neurons ~85%）；\n- **MOCA**：平均准确率 **0.53** vs GPTCelltype\
+  \ **0.15**；\n- **质量分与正确性显著关联**：Kruskal-Wallis **p = 2.56×10⁻⁸**；阈值 **75%**；泛化验证（132\
+  \ 个非模式生物注释）：低分 <75% 中 **80%（16/20）**为错/部分错、正确注释 **97%（128/132）**高于阈值；\n- **CS 分**：正确/部分正确中位数\
+  \ **~90**，错误中位数 **~60**；理论共识上界（70% 基础准确率）5 轮后 ≈84%、15 轮后 ≈95%；\n- **Annotation Boost**：42\
+  \ 个低分注释中 27 错/15 对 → **成功纠正 24/27（89%）**且**保留全部 15 个原本正确的**；\n- **金标准纠错**（15 个高置信不一致）：**11\
+  \ 个（73.3%）**同意 CASSIA、1 个（6.7%）不同意、3 个（20%）LLM 间冲突（发现金标准本身有错，如 Schwann vs monocytes）；\n\
+  - **效率**：~**30 秒/细胞类型/CPU 核**；8 核、20 簇数据集 **< 2 分钟**；成本 GPT-4o ≈**$0.02/注释**、Claude\
+  \ 3.5 ≈$0.03、LLaMA3.2 90B ≈**$0.003**。\n\n## 局限（作者自述边界）\n**依赖输入 marker 质量**（簇分不清或连续轨迹的数据集\
+  \ marker 难导出，MOCA 上平均准确率仅 0.53）→ 建议注释前做标准 QC（含 doublet 检测、ambient RNA 校正）；初始 marker\
+  \ 计算耗时且可能次优（未来探索自适应 marker 选择 + gene set enrichment）；**假设聚类在外部完成**，限制聚类与注释的深度整合；扩展到聚类/轨迹/多模态需任务特定\
+  \ agent 与 prompt 适配；作者明示「No statistical method was used to predetermine sample size\
+  \ … we did not perform hypothesis tests on the leaderboard metrics」，且实验未随机化、研究者未盲法。\n\
+  \n## 原文不一致（如实标注）\n① CS 分评测样本量：正文 **95** vs Fig.5b 图注 **n=100**；② 质量分评测：正文「more than\
+  \ **500**」vs Fig.5a「**n=530**」vs Annotation Boost 段「42 out of **586**」（三口径）；③ 癌细胞检出：正文\
+  \ **72.5% / 20%** vs Fig.4b 图注 **57–100% / 0–40%**；④ 非模式生物：正文穿山甲 **41/54 = 75.9%**\
+  \ vs Fig.4d 图注「>**85%**」（矛盾）；⑤ 提升口径 **12–41% / 9–20%** vs 非模式生物段 **14–77%**；⑥ Zenodo\
+  \ DOI 出现两个不一致编号。\n\n## 可复用点（对自建 agent 系统最有价值）\n① **生成者与评估者分离**的「生成—验证—格式化—评分—报告」流水线；②\
+  \ **定量质量分 + 加权代价优化定阈值**（w×FP+FN）——可操作的置信度校准；③ **共识/多次采样量化不确定性（CS 分数）**，把不确定性变成可报告的数字并触发下游精化；④\
+  \ **假设驱动的 breadth-then-depth ReAct 精化 agent**——**用结构化统计量（p、pct.1/pct.2、log2FC）而非纯文本\
+  \ marker 列表喂 LLM**；⑤ **RAG 用「本体树 → 概念特征轴（类 PCA）」的结构化检索**（不是简单向量检索）；⑥ **选择性记忆/上下文隔离**；⑦\
+  \ prompt 模板可直接复用（角色 + 受众 + 假想奖励 + 强制 step-by-step + 终止标记）；⑧ **成本分层的模型选择**（GPT-4o\
+  \ 默认 / Claude 精度 / LLaMA 大规模）；⑨ **用「金标准纠错」反向验证质量分**（发现金标准本身有错）；⑩ R/Python 包 + Web\
+  \ 三形态。\n\n## 元信息\n- Nature Communications，Article in Press（Received 7 Mar 2025；Accepted\
+  \ 17 Nov 2025）；DOI **10.1038/s41467-025-67084-x**\n- 代码 https://github.com/ElliotXie/CASSIA（MIT；Zenodo\
+  \ v1.2.0）；Web www.cassia.bio / www.cassiacell.com\n- 数据：NCBI GEO **GSE307976**；临床样本\
+  \ NCT03398694"
+evidence: 来源：CASSIA 全文（data/lit_text/CASSIA.txt）。原文数字：970 个细胞类型 benchmark、完全正确提升 12–41%、组合正确提升
+  9–20%；CASSIA-Claude3.5 0.92 / GPT-4o 0.88 / LLaMA3.2 0.82；癌细胞正确识别 72.5% vs GPTCelltype
+  20%；MOCA 0.53 vs 0.15；质量分 Kruskal-Wallis p=2.56×10⁻⁸、阈值 75%、132 注释中 97%(128/132)
+  正确者高于阈值；Annotation Boost 纠正 24/27(89%)；金标准纠错 11/15(73.3%)；2,670 次 marker 扫描；~30s/细胞类型/核；GPT-4o
+  ≈$0.02/注释。DOI 10.1038/s41467-025-67084-x。
+conflict_status: unresolved
+contradiction_count: 6
+contradictions:
+- CS 分评测样本量：正文 95 vs Fig.5b 图注 n=100
+- 质量分评测规模：正文 'more than 500' vs Fig.5a n=530 vs Annotation Boost 段 586（三口径）
+- 癌细胞检出：正文 72.5%/20% vs Fig.4b 图注 57–100%/0–40%
+- 非模式生物：正文穿山甲 41/54=75.9% vs Fig.4d 图注 '>85%'（直接矛盾）
+- 提升口径：主 benchmark 12–41%/9–20% vs 非模式生物段 14–77%
+- Zenodo DOI 出现两个不一致编号
+citation_caution: 引用规模/准确率数字前，先看本条目「原文不一致」小节与 contradictions 字段；原文未报告的项目标为「原文未报告」，不得按
+  0 或缺省处理。

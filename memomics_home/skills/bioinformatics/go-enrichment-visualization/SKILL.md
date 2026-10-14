@@ -12,7 +12,9 @@ when_to_use: >
   enrichment heatmap or dotplot. e.g. "把选好的GO富集词条画成CNS级别的热图" or
   "按这个张图的样子绘制热图" (reference-figure style matching), or
   "先把每个亚群的词条和对应的基因列出来，我自己挑" (selection worksheet FIRST — see
-  references/term-selection-worksheet.md).
+  references/term-selection-worksheet.md), or
+  "这个也太多太大了，有其他的展现形式吗？" (matrix >85% sparse → the heatmap FORM is the
+  problem, not its size: switch to the facet-lollipop grid, §稀疏度 >85% → 换形式).
 version: 1.1.0
 author: MemOmics
 license: MIT
@@ -242,8 +244,23 @@ firstx = np.array([np.argmax(nb[y]) if nb[y].any() else W for y in range(H)])
 ```
 v11 实测：列名区左边缘 0 非白像素、行名区左边界统一 x=73px（0.62 cm）→ 不截断。注意**左边缘 <15px 的残留像素若集中在图像最底部，那是右下角 legend 的刻度字，不是列名**——别误判成截断。
 
+### ✅ 用户说「就按 vN 来」= 先确认是哪一版，再按他要的版本号另存（2026-10-13 v15→v16）
+
+本图族常**一次交付两版**（v15：纯词条 `words_only` 9.5×11 in / 末尾括号基因 `with_genes` 11.5×11 in）。
+用户随后说 *"算了，就按照v15的热图吧，只不过每个词条后面不要增加基因了，做个v16"* ⇒ 意图 = **以双版中的「带基因版」为参照、去掉基因**，产出纯词条新版。
+
+- **即使新规格与旧版 `words_only` 等价，也要按用户点名的版本号另存一版**（`go_heatmap_v16_words_only.R` → `..._v16_words_only.{png,pdf,svg}`）——不要回一句"这版已经存在了"。用户按版本号认文件。
+- **尺寸沿用被点名版本的样式**：不要因为"去掉基因后行名变短"就擅自缩画布（用户是按 v15 的观感做的判断）。
+- **只改用户点名的那一处**（本例：词条后不加基因），配色/行序/列序/图例/字号逐字不动。
+- **版本链（本图族，下次选起点直接用）**：v12 8.5×11.5 in → v13（+Δ左右边距）→ v14 **9.2×10.4 in**（"热图再小一点"）→ v15 **9.5×11.0 in**（+SORBS+/RUNX1+ 两亚群 ⇒ 53×17）→ v16 纯词条 9.5×11.0 in。`PAD(上右下左)=c(1.0,4.0,1.8,5.0)` cm 自 v13 起定稿，后续版本逐字不动。
+- **导出方式澄清（对下文「3-format export」的细化，别过度套用）**：脚本内**无预量测动作**时，`execute_r` 持久内核里 `source()` 一次连开 `png()+pdf()+svg()` 是**可行的**（v16 实测 PNG 146 KB 正常、三格式齐全）；只有当脚本里先跑了 `pheatmap(silent=TRUE)` / `convertWidth` 这类量尺寸动作时才必须 `pdf(NULL) … dev.off()` 包裹，否则 PNG 全白——**不必为此无条件另起 Rscript 进程**。
+
 ### ⚠️ 验证预算：图定稿后最多核 3 项，然后交付
-本类任务极易陷入"反复测量"循环（系统会判定循环失控并强制中断）。图生成后**只核 3 项**：① 三格式文件大小非零 ② 内容占比 >30%（非空白，见上文 probe）③ 列名区左边缘无贴边。三项过了立刻汇报交付，不要再跑第二轮 vision / 像素分析。
+本类任务极易陷入"反复测量"循环（系统会判定循环失控并强制中断；2026-10-13 v16 又因**把像素分析拆成多轮**触发一次强制干预）。图生成后**只核 3 项**：① 三格式文件大小非零 ② 内容占比 >30%（非空白，见上文 probe）③ 列名区左边缘无贴边。三项过了立刻汇报交付，不要再跑第二轮 vision / 像素分析。
+
+**⚠️ 判据 ② 对 YlOrRd 低端近白的热图不适用**：定稿色板低端 `#FFF7EC` 的 RGB 和 = 738，与常用背景阈值（735）几乎重合 ⇒ **零值格会被判成背景**，实测内容占比只有 **8.0%**，但图完全正常（53×17 / 92% 零值格）。与上文棒棒糖图的处理一致：**占比天然低 ≠ 坏图**。改判组合：三格式文件非空 **+ 暖色系像素占比 > 3%**（`(r>150)&(r>g)&(g>=b-10)&(r-b>30)`，v16 实测 4.09%）**+ 上下留白 > 0 px**。
+
+**⚠️ 边缘贴边 ≠ 一定被裁——用「密度梯度」区分自然收笔与硬裁切**：v16 实测右边缘有 73 px 贴边内容，但自边缘向内密度为 **82 → 21 → 12**（`x=2730/2790/2849`）递减 ⇒ 这是最右列 45° 斜排文字的**收笔**，不是截断；**硬裁切的特征是边缘列保持高密度**（笔画被切断）。所以 `贴边像素 > 0` 只能触发一次密度梯度核验（一个脚本内算完），**不能直接断言"列名被截断"**——误报会导致无意义返工。
 
 ### 🔴 pheatmap `cellwidth`/`cellheight` are POINTS, not cm (cost a whole broken round)
 `pheatmap(cellwidth = 0.38, cellheight = 0.45)` is read as **0.38 pt / 0.45 pt** → the body collapses to a dot: the PNG measured **1.4% non-background pixels / 98.6% empty white** while R exited 0.
@@ -491,6 +508,11 @@ Hand-picked GO tables are ~92% sparse (each cluster has 3-6 terms). The heatmap 
 - **Remove all-zero rows/columns** to compress the matrix
 - **Add more GO terms** per cluster (top 10-15 instead of 3-6)
 
+🔴 **先量化稀疏度，再谈方案**：矩形热图必须让所有行共享同一套列轴，**面积浪费率 = 1 − 非零率**。
+实测 v15（53 词条 × 17 亚群 = 901 格 / 仅 75 非零 = **8.3%**）时，用户直接否掉形式本身 ——
+*"这个也太多太大了，有其他的展现形式吗？"*。**稀疏度 >85% 时不要再调尺寸/边距/配色，直接给替代形式**
+（见下文 §「🔴 稀疏度 >85% → 换形式」）。
+
 ### P2. Color scheme MUST match reference figure EXACTLY
 When user says "按这个图的样子画" — they mean the **exact color palette**, not "similar warm colors." Never substitute a multi-color ramp for a monochromatic one. The user catches mismatches immediately.
 
@@ -520,6 +542,54 @@ row_order = row_nz[dense_paths].sort_values(ascending=False).index
 col_order = col_nz[dense_cols].sort_values(ascending=False).index
 pv_filtered = pv_filtered.loc[row_order, col_order]
 ```
+
+## 🔴 稀疏度 >85% → 换形式，别再调尺寸/配色（v15 会话实测 · 用户否掉形式本身）
+
+用户原话：*"这个也太多太大了，有其他的展现形式吗？"* —— 当时图是 53 词条 × 17 亚群 / 901 格 / 仅 **75 格非零（8.3%）**。
+
+**根因不是尺寸，是容器选错了**：矩形热图强制所有行共享同一套列轴，91.7% 的空白格子占掉的就是纯白面积。
+行标签最长 67 字符 + 53 行 ⇒ 画布必然又长又大，**调边距 / 字号 / 配色全都治不住**。
+
+**先算再决定**：
+```python
+sparsity = 1 - (m.values > 0).mean()
+```
+| 稀疏度 | 动作 |
+|---|---|
+| < 60% | 矩形热图 OK（必要时叠加 P5 密度过滤） |
+| 60–85% | 热图 + P5 过滤，或点阵图 |
+| **> 85%** | **直接给替代形式，不要交付矩形热图**（用户会当场否掉） |
+
+**替代形式优先级**：
+1. ⭐ **分面棒棒糖图 / per-cluster panel grid** —— 把 n×m 矩阵拆成 m 个独立小 panel，每个 panel 只画
+   该亚群自己的 3–6 条词条 ⇒ **零空格，面积利用率≈100%**；17 亚群排 4 列网格 = 11.4×8.6 in 横版
+   （对比同数据的热图是竖长版）。模板：`templates/go_enrichment_facet_lollipop.py`。
+   panel 内 = `hlines(0→v)` 浅灰基线 + 端点 `scatter(c=v, cmap=YlOrRd, norm=0..10)`，标题=亚群名，
+   共享 x 轴 0–10，右下角横放色标，配色沿用定稿 YlOrRd。
+2. **精简热图**：每亚群留 top2-3 ⇒ 行数 53→~30，保留热图观感、靠减内容瘦身（用户早前确认过
+   "每个亚群的词条选两个左右"）。
+3. **点阵图 dotplot**：空格消失但**高度不变**（行数没少）——只解决"看着空"，不解决"太大"，
+   别把它当主推。
+4. **亚群-词条二分网络**：适合强调共享词条关系。
+
+**分面图两个必做**：
+- **词条名必须缩写**：panel 宽仅 ~1.1 in，67 字符原名放不下。替换表（可复用）：
+  `negative regulation of`→`neg. reg.` / `positive regulation of`→`pos. reg.` / `regulation of`→`reg. of` /
+  `signaling pathway`→`signaling` / `signal transduction`→`signal transd.` /
+  `G protein-coupled receptor`→`GPCR` / `extracellular matrix`→`ECM` /
+  `metabolic process`→`metab.` / `biosynthetic process`→`biosynth.` / `catabolic process`→`catab.` /
+  `organization`→`org.` / `development`→`dev.` / `response to`→`resp. to` / `process`→`proc.`；
+  再 `textwrap.wrap(s, 26)[:2]` 折两行，基因作第二行 `(g1, g2, g3...)`（3 个 + `...`）。
+- **panel 间 `wspace` ≥ 1.6**：每列 panel 的 y 轴标签画在 axes 左侧、会盖到前一列的绘图区，
+  `wspace` 太小 ⇒ 标签互相压叠，OCR 读到乱码串（实测 `RegOfsrePRR3SCA`）。
+
+⚠️ **图注/标题里的编码声明必须先核对代码真的实现了**：本轮我给标题写了 *"size = gene count scale"*，
+而 `scatter(s=46)` 是**固定大小** —— 点大小压根没编码基因数。**写了没实现的编码 = 假图注**，
+比缺图注严重。写 caption 前先读一遍绘图调用。
+
+⚠️ **棒棒糖 / 分面图的"内容像素占比"天然低**（实测 **5.9%**，对比热图 40%+）——
+**不要用上文「>30% 才算健康」那条判据判它坏图**，那会把好图误杀。改用
+**OCR 文本条数 ≥ 预期元素数**（本例 196 条；17 panel 标题 + 每词条的名称与基因行）来验。
 
 ## Common Issues
 
@@ -622,5 +692,6 @@ norm = Normalize(vmin=0, vmax=10)
 | human | skeletal_muscle | aging/exercise | 2026-09-15 | `scripts/go_heatmap_v12b_margin_words_only.R` | **v12b 终版·零裁切宽边距（用户认可，首选起点）**：`cellwidth=24.66pt` / `cellheight=9pt` 锁死几何 + `PAD(上右下左)=c(1.2,3.5,2.0,4.5)cm` + **null 设备内量尺寸反推画布** 11.92×8.33 in → 48 词条 × 15 亚群零裁切。项目内副本：`results/memomics-440038cf/scripts/go_heatmap_v12b_margin_words_only.R`。验收探针：`scripts/verify_figure_no_clip.py`（一次跑完，别反复像素扫描）。 |
 | human | skeletal_muscle | aging | 2026-09-15 | `scripts/go_heatmap_v13_margin_words_only.R` | **v13 · 只加左右边距版（路径 A）**：严格照抄 v12，仅 `PAD` 左2.8→5.0 / 右1.8→4.0 cm + 画布宽 8.5→**10.23 in**（Δ画布=Δ边距 ⇒ 本体不变）；同源 v12b = 路径 B（锁 `cellwidth` 零裁切）。手册：`references/pheatmap-margin-only-adjustment.md`。 |
 | human | skeletal_muscle | aging | 2026-09-15 | go_heatmap_v14_smaller_words_only.R | - | - |  |
+| human | skeletal_muscle | aging/exercise | 2026-10 | `templates/go_enrichment_facet_lollipop.py` | **稀疏矩阵替代形式（非零率 >85% 时首选，别出矩形热图）**：分面棒棒糖图，17 panel 网格 11.4×8.6 in，零空格子；含 GO 词条名缩写表 + `wspace≥1.6` 防 panel 标签压叠 + 「图注不得声称未实现的编码」自检。实例产出：`results/memomics-440038cf/figures/GO_enrichment_facet_lollipop_v1.{png,svg,pdf}`。 |
 | human | skeletal_muscle | aging/exercise | 2026-09-15 | `results/memomics-2274ab75/scripts/fig_A2_5effects_v3.R` | **base-graphics 多面板矩阵热图元脚本（零第三方依赖）**：17 程序 × 5 效应面板 × 10 亚群，`rect()` 拼格子 + `TwoSlopeNorm` 等价 256 级 LUT + FDR 星号 + 左侧**分组色块条**（5 轴色）+ `par(fig)` 右下/右侧色标。**已修两坑**：① 分组色块条移到 `draw_cbar()` **之前**绘制（v2 因顺序问题色块从未渲染）② 标签 `at = NROWS-0.5-row_pos` 行中心（v2 用底边偏半格）。四格式 @300dpi + manifest QA。**要复制这套版式就从 v3 起，不要从 v2 或 `fig_split_v10.R` 起——它们两坑都有**。同族：`scripts/fig_A3_transposed_v3.R`（转置版，干净）。 |
 | human | skeletal_muscle | aging | 2026-09-19 | `results/memomics-2274ab75/scripts/fig_A3_CNS_v5.R` | **转置矩阵热图·定稿版式（用户认可）**：亚群 x × 程序 y，17 程序 / 5 轴 / 10 亚群，107.9×155.5 mm，base graphics 零第三方依赖 + Arial + `svglite`（SVG 文字可编辑）。**关键常量**：`CELL=0.255`、`MAI=c(0.75,1.35,0.55,0.35)`、`LBLX=-0.04`（行标签右端紧贴热图，实测缝 3 px）、`LB0=-3.40/LB1=-4.11`（左侧分类色块）、`LNX=-4.27`（竖排轴名，**黑色 `COL_TXT`**）、标题 `mtext(side=3, line=0.60, at=(W/2-MAI[2])/CELL)`。脚本自带 strwidth 版式自检 + `archive_superseded/` 归档上一版。 |

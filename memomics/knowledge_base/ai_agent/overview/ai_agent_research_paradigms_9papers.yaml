@@ -1,0 +1,67 @@
+type: kb_entry
+domain: ai
+name: ai_agent_research_paradigms_9papers
+subcategory: overview
+last_updated: 2026-10-11 18:32
+source: data_driven
+verified: verified
+quality: high
+auto_trigger:
+- ai_agent_research_paradigms_9papers
+content: "## 阅读须知（**先读这段**）\n- 本条目是**编者归纳**（跨 9 篇文献的横向综合），**不是**任何单篇原文的自述。谱系划分、二分法、「设计观察」均属编者后设归纳，**供检索与讨论用，不应当作文献事实引用**。\n\
+  - 单篇事实请查 `frameworks/` 与 `agent_design/` 下的对应条目；那里每个数字都带原文出处，且**矛盾处并列照录**。\n- 引用任何规模数字前，务必先看该篇条目的「原文不一致」小节——**9\
+  \ 篇中有 7 篇存在正文/Methods/图注数字不一致**。\n\n## 这 9 篇合起来在回答什么\n一句话：**「大模型如何从『会聊天』变成『能真正做完科研』」**——9\
+  \ 篇各自在不同位置切这一刀。按「解决的核心矛盾」可归为 5 条谱系：\n\n### 谱系 A：通用能力从哪来——「环境/动作空间」派\n- **Biomni**（Stanford\
+  \ 2025）：论点=通用性来自**先把领域动作空间系统化映射出来**（150 工具 + 105 软件包 + 59 库），再让 CodeAct agent 用**代码**当通用动作接口自由组合。它是**广度优先**的「虚拟\
+  \ AI 生物学家」。\n- **ScienceBuddy**（arXiv 2026）：同样建了大工具目录（**224 工具 / 22 模块**，且**明确 derived\
+  \ from Biomni**），但把它当**底座**，真正的新意在「怎么持续变强」。→ 见谱系 E。\n\n### 谱系 B：把「论文/代码」本身变成 agent\
+  \ 载体\n- **Paper2Agent**（Nature 2026）：论点=**论文是知识的分发单位，但它是被动的**。把论文的 tools/resources/prompts\
+  \ 三件套打包成 **MCP server**，且工具**先用论文自带 tutorial 验证再锁定**——解决的是「代码幻觉」，做的是**忠实执行**而非「看起来很懂」。\n\
+  - **ChemCrow**（Nat Mach Intell 2024）：这条谱系的**最早范式**——18 个化学工具 + ReAct，**不训练**，纯提示编排。它的历史价值在于**证明了「通用\
+  \ LLM + 工具外挂」这条路走得通**，并第一次把 agent 接到了**真实机器人平台**（RoboRXN）上。\n\n### 谱系 C：领域专用系统（把通用范式落到具体科学问题）\n\
+  - **DeepRare**（Nature 2026）：罕见病诊断。论点=**训练无关的 agentic 架构 + 可溯源推理链**，把推理锚定在可核验证据上（reference\
+  \ link verification 抑制幻觉）。三层 MCP 式架构（central host + 6 个 agent server + 异构数据源）。\n\
+  - **CASSIA**（Nat Commun 2025）：细胞注释。论点=**用多 agent 相互制衡把 LLM 黑箱变可信工具**：生成者/评估者分离 +\
+  \ 0–100 质量分 + 共识分（CS）+ 75% 阈值触发精化。\n- **ChemGraph**（Commun Chem 2025）：计算化学工作流。论点=**多\
+  \ agent 拆分（planner/executor/aggregator）能让中小模型准确率翻倍**，且把 ASE calculator 抽象成可换后端（xTB/MACE/DFT）。\n\
+  \n### 谱系 D：长流程的可靠性——「防误差传播」派（本组唯一讲工程鲁棒性的）\n- **BioMaster**（Bioinformatics 2025）：论点=**长链流程的真正敌人是累积误差与假完成**。解法是\
+  \ Plan/Task/Debug/**Check** 四角色，**每步 Check 输出文件**（存在/非空/命名/格式），把偏差在传播前掐掉。这是「agent\
+  \ 做生产级流水线」绕不开的一课。\n\n### 谱系 E：自我改进——「模型与流程双轨递归」\n- **ScienceBuddy**（arXiv 2026）：本组唯一做**闭环自改进**的。把「可编辑的\
+  \ harness（指令/skills/上下文管理）」与「不可变的科学基础设施」解耦，内层用固定辅助模型做**有界编辑 + 成对评估**进化 harness，外层用\
+  \ GRPO 训模型，两层互为条件（recursive-in-recursive）。\n- **Co-Scientist**（Nature 2026）：另一条自我改进路线——**不训权重**，靠\
+  \ **Elo 自对弈锦标赛 + Meta-review 无梯度反馈回路**做 test-time compute scaling。核心主张：**生成新假设、且随算力持续变强（未见饱和）**。\n\
+  \n## 三条贯穿全组的设计观察（**编者归纳**，非原文自称的「公理」，且是倾向而非定律）\n1. **「不训练也能强 → 先把动作/工具做对」**（9 篇中\
+  \ 8 篇不训模型：Biomni、Paper2Agent、ChemCrow、ChemGraph、DeepRare、BioMaster、CASSIA、Co-Scientist）。\n\
+  \   ⚠️ **已知反例**：**ScienceBuddy 训练了模型**（GRPO）——所以这是「本轮主战场在工程编排」的观察，不是「不能训练」的规律。\n\
+  2. **反幻觉主要靠结构而非说辞**：验证后锁定（Paper2Agent）、reference link verification（DeepRare）、质量分+共识分（CASSIA）、每步\
+  \ Check（BioMaster）、安全硬门+人类授权（ChemCrow）。\n   ⚠️ **已知局限**：这些机制本身并非绝对可靠——ChemCrow 实测\
+  \ **LLM-as-judge 会偏好「流畅」而非「正确」**；CASSIA 的质量分也依赖输入 marker 质量（MOCA 上准确率仅 0.53）。\n\
+  3. **可溯源/可审计是这批工作的共同取向**：Paper2Agent 的源码链接、DeepRare 的推理链、Biomni 公开全部 prompt、ScienceBuddy\
+  \ 的 Trajectory 视图——都在回答「凭什么信它」。\n\n## 「发现」vs「执行」的分野（最值得记住的一条·编者归纳）\n**操作定义（先立标准，否则二分不成立）**：本条目所称「做新知识」=\
+  \ **生成了此前不存在、且经外部真值验证（湿实验 / 机器人执行 / 专家盲评 / 独立数据集）的新科学主张**；仅「产生候选输出」（如给出候选注释、候选合成路线、候选变异排序）不计入，因为那仍属对已有知识的应用与排序。\n\
+  \n- **按此定义，做「新知识」的只有两篇**：**Co-Scientist**（生成可实验验证的新假设，AML 药物重定位 / 肝纤维化靶点 / cf-PICI\
+  \ 机制，均有湿实验或同期独立研究印证）与 **ScienceBuddy**（把协作经验转成任务与 rubric 持续自改进，本身即新的改进机制）。\n- ⚠️\
+  \ **边界争议（坦白标注）**：若把定义放宽到「产生可检验的候选输出」，则 **Biomni**（动作发现智能体从 2,500 篇论文挖掘候选动作）、**ChemCrow**（自主规划合成路线）、**CASSIA**（产生新注释）都应跨入，二分即不成立。**结论对该定义敏感，引用时请连带引用定义。**\n\
+  - 其余 7 篇本质是**「忠实执行/可靠复现」**：把论文方法跑对（Paper2Agent）、把诊断做准（DeepRare）、把注释做准（CASSIA）、把工作流跑通（BioMaster）、把模拟编排好（ChemGraph）、把化学操作做对（ChemCrow）、把领域动作组合起来（Biomni）。\n\
+  - **Paper2Agent 作者自己点破了这一点**：开放式分析可能有多个可辩护答案，所以「与单一参考答案一致」的 benchmark 只能解释为**忠实执行**的度量，**不是分析有效性的度量**。\n\
+  \n## 对 MemOmics 的直接启示（可落地）\n1. **每一步做 Check**（BioMaster）——与现有 rail_review(post)\
+  \ 同构，可强化为「产物存在性 + 非空 + 命名一致性」硬校验。\n2. **工具先验证后锁定**（Paper2Agent）——对应 skill 的 proven\
+  \ scripts 机制与 record_run。\n3. **输出必须带可核验引用，且做链接有效性后处理**（DeepRare 的 reference link\
+  \ verification）——直接对应 save_reference / evidence_write 的溯源要求。\n4. **给结论配定量置信度**（CASSIA\
+  \ 质量分 + CS 共识分 + 阈值）——比「有/无结论」更可用。\n5. **多角色独立评审 + 裁判**（Co-Scientist Reflection/Meta-review、CASSIA\
+  \ Validator）——与 debate_analysis 的多角色独立调用同构，**不微调即反馈**（Meta-review）这点值得借鉴。\n6. **诚实边界声明**（ScienceBuddy：reflector\
+  \ 固定 → 不宣称机制变强）——报告里该说「原文未报告/口径不一致」就得说。\n7. **原文自相矛盾要照录**：本次 9 篇中 **7 篇**存在正文/Methods/图注数字不一致（详见各条目），这正是「多源验证\
+  \ + 不编造」的价值所在。"
+evidence: 综合 9 篇原文（data/lit_text/ 下 9 个纯文本，共 84.6 万字符）。支撑数字举例：Biomni 150 工具+105 软件包+59
+  库、DbQA 74.4%；Paper2Agent 100 篇→74 篇 agent 化、599 工具、593 通过验证；DeepRare Recall@1 57.18%；CASSIA
+  970 细胞类型、质量分 p=2.56×10⁻⁸；ChemGraph 多 agent 使 GPT-4o 达 100%；BioMaster Hi-C 完整预处理仅
+  BioMaster ✓；ChemCrow 18 工具、4 个真实合成成功；Co-Scientist 203 目标 Elo 未见饱和；ScienceBuddy 测试准确率
+  42.2%→73.3%。
+conflict_status: none_found
+contradiction_count: 0
+contradiction_note: 本篇未发现硬矛盾；但注意其复现性边界（见 content 的「局限」小节）。
+citation_caution: 引用规模/准确率数字前，先看本条目「原文不一致」小节与 contradictions 字段；原文未报告的项目标为「原文未报告」，不得按
+  0 或缺省处理。
+editorial_inference: true
+editorial_note: 跨 9 篇的编者归纳：5 条范式谱系、「发现 vs 执行」二分法、三条设计观察均为后设推导，非任何单篇原文自述；二分法对「新知识」的操作定义敏感（放宽定义则
+  Biomni/ChemCrow/CASSIA 跨类）。谱系划分不是互斥分类，同一工作可跨谱系（如 Co-Scientist 同属 E 谱系与「新知识」类）。

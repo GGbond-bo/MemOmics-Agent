@@ -1,6 +1,6 @@
 ---
 name: competitor-agent-research
-description: "调研/对比其他科研 AI Agent（Biomni/BiOmics 等）的能力与架构，以及为自家产品做领域缺口论证与发文定位。触发词：'XX agent 差距'/'调研一下 XX 的能力和架构'/'竞品分析'/'biomini'/'Biomni'/'BiOmics'/'精读 N 篇论文全文'/'产出结构化竞品卡'/'把竞品卡从薄卡升级为深度卡'/'深度卡'/'只输出我要的 JSON 字段'/'每写完一张立即落盘'/'不要攒到最后写'/'结果写盘到指定 JSON 文件'/'发文定位'/'研究缺口'/'gap 分析'/'出发点是什么'/'帮我解读这个 agent 文章'/'跟 biomni 比呢'/'paper2Agent'/'biomaster'/'BioMaster'/'co-scientist'/'Co-Scientist'/'他们是怎么完成这个工作的'/'你自己能做什么'/'MemOmics 能做什么'/'它的设计初衷'。方法论：身份确认→GitHub API 源码调研→论文 PDF 提取→能力/架构双维对比；批量全文精读出竞品卡见模式 C；缺口论证与定位报告见模式 D；单篇 agent 论文精读 + 与已读竞品做范式对比见模式 F；论文 claim ↔ 开源代码审计见模式 E；读完竞品后转审本家（「那你呢？」）见模式 G。"
+description: "调研/对比其他科研 AI Agent（Biomni/BiOmics 等）的能力与架构，以及为自家产品做领域缺口论证与发文定位。触发词：'XX agent 差距'/'调研一下 XX 的能力和架构'/'竞品分析'/'biomini'/'Biomni'/'BiOmics'/'精读 N 篇论文全文'/'产出结构化竞品卡'/'把竞品卡从薄卡升级为深度卡'/'深度卡'/'只输出我要的 JSON 字段'/'每写完一张立即落盘'/'不要攒到最后写'/'结果写盘到指定 JSON 文件'/'发文定位'/'研究缺口'/'gap 分析'/'出发点是什么'/'帮我解读这个 agent 文章'/'跟 biomni 比呢'/'paper2Agent'/'biomaster'/'BioMaster'/'co-scientist'/'Co-Scientist'/'他们是怎么完成这个工作的'/'你自己能做什么'/'MemOmics 能做什么'/'它的设计初衷'。方法论：身份确认→GitHub API 源码调研→论文 PDF 提取→能力/架构双维对比；批量全文精读出竞品卡见模式 C；缺口论证与定位报告见模式 D；单篇 agent 论文精读 + 与已读竞品做范式对比见模式 F；论文 claim ↔ 开源代码审计见模式 E；读完竞品后转审本家（「那你呢？」）见模式 G；N 篇横向合读（'整理出来给我看一看'）见模式 B5，同批入库独立知识库域 + 3 条横向综合条目见 B5-b/B5-c。触发补充：'整理到知识库'/'创建 AI 的单独分类'/'AI 前沿工作'/'他们用什么 benchmark'。"
 when_to_use: "[competitor-agent-research] 用户问自己(MemOmics)与另一个科研/生信 AI Agent 的差距、要求从能力和架构上调研对比、或问「我们要发文章的话出发点是什么/这个领域还缺什么」需要做缺口论证与发文定位"
 version: 1.0.0
 author: MemOmics
@@ -96,12 +96,102 @@ prerequisites:
 把引用（DOI/PMID）收进引用库：`save_reference(action="add", global_lib=true, metadata={...})`，
 交付时一并给出 `references.bib`。
 
+### B5 — N 篇竞品「横向合读」交付形状（9 篇一批，2026-10-11 实测）
+
+触发词补充：「**整理出来给我看一看**」/「这 N 篇放一起看」/「他们的研究思路（是什么）」/「他们各自怎么测的」。
+
+与 B1–B4 的差别：B 是**赛道综述**（时间线 + 商业格局 + 标尺）；B5 是**一批已全文提取的竞品的横向合读**——
+用户手上常已有一批结构化摘要（`data/*.md` / KB 条目），要的是**把它们摆成一张可读的图景**，而不是再检索一轮。
+
+**8 段固定形状（照抄）**：
+1. **一句话分野尺**（最重要，放最前）：给这批论文**一把尺子**，而不是并列 N 条介绍。
+   本批 = 「**只有 2 篇在做『新知识』（Co-Scientist、ScienceBuddy），其余 7 篇本质是『忠实执行 / 可靠复现』**」。
+   没有这把尺，N 篇读完等于没读。
+2. **骨架表**：`# | 系统 | 出处 | 一句话定位 | 是否训练模型`——「是否训练」是高信息量列（本批 8/9 不训，
+   说明这一轮主战场是**工程编排**而非模型训练）。
+3. **研究思路谱系**（用户最关心的"他们的思路"）：把 N 篇归到 **3–5 条谱系**（本批：A 环境/动作空间派 ·
+   B 论文工具即 agent · C 领域专用系统 · D 长流程可靠性 · E 自我改进），**每条给一句"思路要点"金句**；
+   配**独立 ```mermaid 围栏**（flowchart TD：核心问题 → 各派 → 各派一句机制）。
+   ⛔ 不要把大流程图塞进 dsh-ui 的 JSON 里（超长 JSON 会被流式截断 → 整块降级成代码块）。
+4. **痛点对照表**：`痛点 | 谁在解决 | 解法关键词`——让读者按"它治什么病"记，而不是按名字记。
+5. **工作量/规模对照**：工具数 · 数据语料 · 评测规模 · 成本耗时；**附"读这张表的三个要点"**
+   （规模差异极大 ≠ 质量 / 成本已低到可落地 / 开源程度差异很大）。
+6. **三档可信度分层的评测手段**（最硬：真实世界闭环 → 次硬：人类盲评 + rubric → 自动指标）
+   + 公开基准清单 + **自建基准小节**（本批 8/9 自建，是本组最大共性）+ **评测设计上的坑**
+   （LLM-as-judge 偏好"流畅"而非"正确" / 只有 1 篇做过系统性对抗测试）。
+7. 🔴 **原文矛盾照录表（必带，用户最认这一段）**：逐篇列 `论文 | 矛盾处`，**两个数字都写、都标位置**。
+   本批 **7/9 篇**有硬矛盾，且集中在**自建 benchmark 的规模统计**上。收尾必须写清
+   "这不是挑刺——恰恰是多源验证 + 不编造的价值；综述不并列照录就会把自己的结论建立在错误数字上"。
+8. **对本家的可落地启示**（5–8 条编号）+ **诚实边界**；最后给 **2–3 个可选下一步**让用户挑
+   （如：做成组会 PPT / 挑某一篇出精读卡 / 导出中文+English 双语对比表）。
+
+**四条硬纪律**：
+- 🔴 **标题必须回原文核验**：任务书 / 清单给的标题**常常不是原文标题**。本批两处实测：
+  Paper2Agent 原文是 *Reimagining research papers as interactive and reliable AI agents*（清单给的是描述性简称
+  "Automatic generation of AI agents from research papers"）；arXiv 那篇真名是
+  *ScienceBuddy: Recursive-in-Recursive Self-Improvement for Interactive Scientific Agents*。
+  ⇒ **读首行确认真标题，交付时主动单列"任务书 ≠ 原文"的更正**（用户很认这种主动纠错，与 E2「先说自己错了」同源）。
+- **交付形态**：「整理出来给我看一看」= **在对话里给出完整可读的成品**，⛔ 不是只回一句"已落盘，路径在 X"。
+  同时**主合读 md 必须落盘**（`results/<sid>/results/*.md`）：对话=阅读版、磁盘=可转发/可归档版。
+- **对话版要控长度**：N 篇长表用 **Markdown 管道表格**（比 dsh-ui table 更抗截断）；关键结论/纠错用
+  **dsh-ui callout**（一个 fence ≤3 个紧凑组件、总长 ≤1500 字符）；谱系图用独立 mermaid 围栏。
+  ⚠️ 单条回复过长会被**流式截断**——本批第一次尝试即在骨架表中途被切断，所以**先给骨架、再逐段铺**，必要时续写。
+- **每个数字都要能指回原句**；原文没写的写「原文未报告」，查不到就不填（与 C2 同规矩）。
+
+📄 本批 9 篇的事实底座（身份表 / 五谱系 / benchmark 三档 / 横向对比表 / **7 处原文矛盾** / 7 条启示）见
+`references/nine-paper-cross-reading-2026-10.md`。
+
+### B5-b — 入库半边：批量非生物文献要建**独立知识库域** + 3 条横向综合条目（2026-10-11 实测）
+
+B5 讲「整理出来给我看一看」的**对话版**；本节讲同一批任务的**另一半交付——入知识库**。
+用户原话常是「**整理到知识库，创建 AI 的单独分类**，先整理到知识库，然后帮我解读」⇒ **两件都要做**，
+⛔ 不要只做解读或只做入库。
+
+🔴 **入库域：非生物文献必须新建独立域，⛔ 不要塞进物种五级目录。**
+这类文献（AI agent / 方法 / 系统论文）**没有物种/组织维度**；硬塞 `Homo_sapiens/<组织>/<方向>/…`
+会让五级目录语义失效、也检索不出来。本次建 `memomics/knowledge_base/ai_agent/`，
+**子类固定五档（照抄）**：
+`frameworks`（系统与框架架构）| `agent_design`（设计范式与自改进）| `benchmarks`（基准与数据集）
+| `evaluation`（评测方法）| `overview`（横向综合）。附一份 `00_INDEX.md`（收录清单 + 子类约定 +
+使用建议 + 同期交付物指针）。
+- 入库调用 `save_knowledge(domain="ai", direction="<子类>", ...)`；⚠️ 若工具报 domain 非法，说明
+  **运行中的 server 还持旧模块**（改了代码但进程没重启）——处置见 `platform-execution-pitfalls`
+  「打了补丁的模块 ≠ 在跑的进程」。
+- 每条 YAML **固定 11 字段**：定位 / 研究思路 / 解决的问题 / 工作量 / 测试方式 / benchmark 细节 / 关键数字 /
+  局限 / **原文矛盾标注** / **可复用点** / 元信息（DOI·代码·许可），并带 `evidence` 溯源字段。
+- 🔴 **入库后跑一次 `search_knowledge` 验证**——索引不到 = 分类没生效（本次实测得到
+  `ai_agent/frameworks/biomni_general_biomedical_agent.yaml` 排第一、score 180.95）。
+
+🔴 **必须额外写 3 条横向综合条目（批量入库的真增量）**——逐篇条目只回答「这篇是什么」，
+批级价值全在**横向格子**上：
+| 条目 | 内容骨架 |
+|---|---|
+| `overview/<x>_research_paradigms_Npapers` | **研究思路谱系**：N 篇归到 3–5 条谱系 + 3 条设计公理 + 分野句 |
+| `benchmarks/<x>_benchmark_inventory_Npapers` | 公开基准复用表 + 自建基准表 + 对抗测试 + 湿实验 + **选型建议** |
+| `evaluation/<x>_evaluation_paradigms_Npapers` | 评测范式卡（专家盲评 rubric / LLM-as-judge / Elo 自对弈 / 分层准确率 / 消融 / 真实闭环）+ 坑 + 检查清单 |
+
+每条末尾写「**可复用点**」与「**原文矛盾**」两小节 —— 用户引用规模数字前会先看这两节。
+
+### B5-c — 两个能显著提升解读质量的判据（自己算，不要只罗列）
+
+1. 🔴 **分野句**（= B5 第 1 段的「一句话分野尺」）：通读后**数一遍「是否训练模型 / 是否产出新假设」**即得。
+   本次 = 「只有 2 篇在做**新知识**（Co-Scientist、ScienceBuddy），其余 7 篇本质是**忠实执行 / 可靠复现**」。
+   没有这把尺，N 篇读完等于没读。
+2. 🔴 **同一量表跨家归一**：把各家的工具数 / 语料规模 / 评测规模 / **成本耗时**塞进同一张表，
+   一眼看出「**工具数量 ≠ 质量**」（6 工具的 ChemGraph 靠多 agent 拆分把 GPT-4o 拉到 100%）、
+   「**成本已低到可落地**」（Paper2Agent 单篇 ~45 min/$14、CASSIA $0.02/次注释——这是 2025–2026
+   相比早期 agent 工作的最大变化）这类结论。
+
+📄 本次 9 篇的**入库配方 + 全部事实底座**（含逐字数字 / 跨家归一表 / benchmark 清单 / 评测三档与三坑 /
+原文矛盾表 / 7 条对本家启示）见 `references/batch-ai-agent-literature-to-kb-domain.md`。
+
 ## 模式 C — 批量论文精读 → 结构化竞品卡（JSON，2026-10-02 新增）
 
 触发词补充：「精读 N 篇 XX 论文全文」「产出结构化竞品卡」「论文编号 n = 1,2,...」
 任务形态：给一份 `cards_source.json` 清单（含 n/title/venue/year/doi/pmcid/**text_file**），
-逐篇读**全文**并按**固定 schema** 出中文竞品卡。配方与 schema 见
-`references/paper-to-competitor-cards.md`。
+两处「任务书标题 ≠ 原文标题」更正）
+- `references/batch-ai-agent-literature-to-kb-domain.md` — **模式 B5-b/B5-c：批量非生物文献入库独立知识库域**（`ai_agent/` 五子类域约定 + 11 字段 YAML schema + **3 条横向综合条目的固定形状** + 入库后 `search_knowledge` 验证 + 分野句与跨家归一两个判据）+ 9 篇全部事实底座
+- `references/paper-to-competitor-cards.md`
 
 ### C1 — 顺序（每步都别跳）
 1. `execute_python` 读清单，打印 `n | title | venue | year | doi | pmcid | text_file`，**核对本次分配的 n 列表**。
@@ -166,9 +256,18 @@ prerequisites:
 |---|---|---|
 | 2026-10-02 | 3 子代理 × 10–11 篇 | 2 个撞 `max_iterations`，产出不可回收 |
 | **2026-10-07** | **3 子代理 × 5 篇** | **15/15 成功**（api_calls 15–32 / 254–291 s），零截断、零迭代耗尽 |
+| **2026-10-08** | **同一次派发内 6 / 5 / 5 篇**（`deleg_c617920e`） | **6 篇那个撞 `max_iterations` 且未落盘**；两个 5 篇的**同时成功**（32,544 B / 30,096 B，各 5 卡全字段齐） |
+
+🔴 **2026-10-08 是「批内对照」，比上面两行更硬**：三任务同一批次、同一模型、同一时刻派发，
+**只有篇数不同**（6 vs 5 vs 5）⇒ 变量被隔离到「篇数」一格上，结果是 **6 篇必挂、5 篇必过**。
+所以 **5 是悬崖边，不是保守推荐值**：⛔ 不许「6 篇差不多吧」地加一篇，**篇数一旦写进 brief 就当硬约束**。
+（旁证：挂掉的 t0 事后由补派批次拆成 t0a/t0b 各 3 篇才补齐 —— 见 C12；说明**补救成本 = 再精读全批**，
+比一开始就切成 ≤5 贵得多。）
 
 ⇒ **可复用扇出规格**（派发时照抄）：
 - **每子代理 ≤5 篇全文**（单篇 30–580KB 长行文本）；要读更多就**分批多次派发**，⛔ 不要加大单人配额。
+- **派发前逐条核对篇数**：`n` 列表切分完，**每个任务的长度都要 ≤5** ——
+  哪怕只有一个任务超出，它就会成为整批的落盘缺口（本轮即如此）。
 - 每人**只回指定字段的 JSON**，并强制三条硬要求：① 顶部一行 `已读：… / 未读：…` 点名编号；
   ② `evidence_quote` ≤200 字符**连续逐字**（子代理会自行声明已用脚本 `in` 校验）；
   ③ `architecture` 400–800 字、必须含**专名与数字**（见 C9 密度要求）。
@@ -254,7 +353,7 @@ JSON 之外**最多留一行**未读/未完成声明（C2 第三条要求点名�
 本次实测 `-w 1400` **仍被截**、`-w 700` 正常——若用 `-w 3000` 读 5 篇，每行约 1/3 内容会丢，**卡片事实被污染且看不出错**。
 **见到 `[truncated]` 立即减小宽度重排**，不要把它当成原文结束。
 
-### C9 — 「薄卡 → 深度卡」升级 + 综述类论文的字段填法（2026-10-06 实测）
+### C9-b — 「薄卡 → 深度卡」升级 + 综述类论文的字段填法（2026-10-06 实测）
 
 触发词补充：「把它们的竞品卡从**薄卡升级为深度卡**」「只输出我要的 JSON 字段」「论文编号 n = …」（走既有卡的补读，不是新建卡）
 
@@ -309,7 +408,7 @@ key_claim / novelty / limitations / evidence_quote`。三条硬要求：
 📄 深度卡完整 schema + 本次 4 篇新竞品（Agentomics/ChemGraph/CASSIA/SPARK）事实底稿 + 逐字数字 +
 五条已校验 evidence_quote + 范式定位见 `references/deep-card-schema-and-agentic-agents-2026.md`。
 
-## 模式 C（别名/补充）— 完整 recipe 与已读清单
+## 模式 C（别名/补充）· 历次 recipe 索引
 
 早期版本此处另写过一节「模式 C」，内容已并入上文 C1–C6。逐条 recipe / schema / 关键词锚点切片 /
 预算陷阱 / 已读竞品清单统一见 `references/batch-paper-deepread-recipe.md`；
@@ -363,6 +462,31 @@ key_claim / novelty / limitations / evidence_quote`。三条硬要求：
    且冻结后新卡不会回流进 DOCX/HTML ⇒ 交付物自相矛盾）。
    ⇒ 由此纠正默认动作：**重派的理由是「store 缺了这批要补的窟窿」，与「这批回执报了 ERROR」无关**；
    两条回执**独立判定**，⛔ 不要因一条失败停掉整轮的合并/定稿动作。
+🔁 **第六次回执实测补（2026-10-08，同一对回执 COMPLETE + ERROR 再次到达）——本轮无新增判定，只有两条纪律**：
+   ⓐ 这对回执的处理已标准化在 `delegation-orchestration` §二 ⓪-g（回执头 `Dispatched` / `(Nm ago)` /
+   `Total duration: ?s` **三个都不可信**、重放次数只增不减、**台账行带累计序号 `replay#<N>`**）
+   ⇒ 本轮正确动作 = `grep notes.md` 台账 + ⓪-d 字段健康扫描 + 零写入，⛔ **不要再逐项重跑判定**；
+   ⓑ 重放轮若**上一轮还剩一个待用户定夺的问题**（本轮 = 是否补第 32 张卡 / 是否装 `python-docx`），
+   用**一行**复述即可，⛔ **不要重复弹确认窗口**（用户会把同一问题当成新问题）。
+   🔁 **再达实测补（2026-10-08，31 卡终态又推一次）——本轮唯一真增量：待办清单要「销账」**：
+   ⓐ 判定同 ⓪/⓪-g（台账 grep 命中 ⇒ 零写入），但**上一轮报过的缺陷/缺口，被后续轮次补上后必须销账**，
+   否则每轮重放都会重报同一个已不存在的问题。本轮实例：早前 ⓪-d 抓出的 `n=2` `limitations` 截断
+   （8 字 `作者自陈：物理能`）**已被 round2 深读升级顺带修复**（现全库 `limitations` 最短 132 字、
+   `<25 字` 项 0）⇒ 台账该行改写为 `… 已闭合（round2 升级后最短 132 字）`，后续轮次**不得再报**。
+   （规程见 `delegation-orchestration` §二 重放轮动作清单 4-c；与 §四「自报缺口是历史态、不是现状」同源、方向相反。）
+   ⓑ **同一个待决项被复述到第 3 轮仍无答复 ⇒ 降级为「非阻塞·挂起」**：转进台账一行
+   `[挂起] …（等用户，非阻塞）`，正文不再逐轮追着问（本轮两项〔补第 32 张卡 / 装 `python-docx`〕已连问 4 轮，
+   它们不阻塞任何产物 ⇒ 不该每轮回放都占用回复；见 `delegation-orchestration` 4-b）。
+   🔁 **2026-10-08 本条被再犯一次（已写到第 3 轮，实际仍连问到第 5 轮）⇒ 升级为回放轮的硬门**：
+   本轮正文照旧以「**仍等你一句话**（已问 5 轮）」收尾，等于**已写下的规程当场失效**。
+   ⇒ 回放轮交付前**自查一句**：正文里若出现「仍等你 / 是否要 / 要不要」等**待决项追问**，
+   **先数台账该行的追问轮数**——`≥3` 就把追问**删掉**，只在台账写 `[挂起]`，正文一个字都不提。
+   （判据：挂起项**不阻塞任何产物**，它出现在正文里的唯一效果是让用户以为有新问题。）
+   🔴 **2026-10-08 再度被违反**：本轮正文改用「已连续 4 轮无答复，按协议降级为挂起 …… 你什么时候想推再说一句即可」
+   的**汇报式措辞** —— 与追问等效（把挂起项重新推回用户眼前 + 邀请回复）。⇒ 判据已从「不追问」升级为
+   **机械判据：正文出现该待决项的名字即违规**（汇报 / `[挂起]` 标注同样算），并把回放轮回复固定为
+   **四块模板**（判定 / 证据链层级 / 指纹 / 台账已记账，**没有第五块**）。
+   完整判据与模板见 `delegation-orchestration` §二 4-b（本条只留指针，⛔ 不要在此复制正文）。
 1. **回收：优先解析批次唤醒消息，其次 session DB，不要抄 live transcript。** live log 里只有截断的流式片段（30KB 的 JSON 只留 2–3KB）→ 回收率 0（与 C8 现象一致）。**取数优先级（2026-10-07 补）**：① **`delegate_task` 批次完成的唤醒消息正文本身就带完整 JSON**（本轮 3 任务 15 张卡逐字完整、未被截断，比查库快得多，也无需 `unique_phrase`）——先直接解析它；② 唤醒消息若被上下文压缩/截断，再回 `memomics_home/state.db` 取全文：
    ```python
    con = sqlite3.connect(r"E:/MemOmics-Agent/memomics_home/state.db")
@@ -532,6 +656,56 @@ C11-c 记过「冒号前带空格」；本轮又撞一种，且**同时击落了
   「被截成 8 字 `作者自陈：物理能`」缺陷的最终修复版（恢复原文见 `references/deep-card-small-batch-2026-10-08-n1-2-14-17.md`）。
 - 交付物：`results/<sid>/data/deep_cards_round2_t0a.json`（`{"cards":{...}}`、`ensure_ascii=False, indent=2`）。
 
+### C11-i — 🔴 重派时**增量落盘纪律必须由主代理原文写进 brief**；回执指纹速判（2026-10-08 第三次实测，同一坑第三次踩）
+
+C11-d 记「读+起草串成串行大链 ⇒ 迭代耗尽、`json.dump` 一次没跑」；C11-g/h 记「**用户亲自**给出
+『每写完一张立即落盘、不要攒到最后写』之后两次都跑通」。**本轮（补派/重派批次）**：brief 里没有这句话
+⇒ **第三次**同因失败（子代理自报 *ran out of tool-calling iterations while drafting，the output JSON was NOT written to disk*）。
+
+**根因一句话**：教训活在**主代理的上下文**里，不在子代理里 —— ✅/❌ 完全取决于 brief 里有没有那几行字。
+
+⇒ **每次派发深度卡任务，把这段逐字写进 brief**（照抄）：① 先写落盘骨架 `{"cards":{}}` 并 `getsize` 确认；
+② 每完成一张立即 `json.load` → 加卡 → `json.dump(..., ensure_ascii=False, indent=2)`；③ 给落盘+回读预留 ≥2–3 次迭代；
+④ 预算不够就先交已起草篇目的完整 JSON + 一行点名未完成编号（C2 第三条）。
+（连同 C7-b 的「每人 ≤5 篇」「`fold -s -w 700` 读法」一起写进 brief。）
+
+🔎 **回执指纹速判（比数篇数更早、更硬）**：`api_calls` ≈ **50** 且 duration ≈ **700+ s** = **撞 `max_iterations`**、
+产物大概率**未落盘**（本轮 t0 = `api_calls=50, 755.83s`）；正常完成档实测 **`api_calls` 15–38 / 254–630 s**
+（同批两个 5 篇任务 = **35 calls / 630.5 s → 32,544 B** 与 **38 calls / 586.14 s → 30,096 B**）。
+🔴 **`api_calls` 是原批次的真实记账，每轮回放数值不变**（2026-10-08 再达复核一致）⇒ 用它判「是不是撞 cap」，
+⛔ 但也要当心**别把 30 多 calls / 600 多秒误判成「逼近 50，大概也失败了」而重派**——唯一硬信号是
+**`api_calls` 是否打满（== 50）**；不到 50 就一律回磁盘判，不靠回执猜。⚠️ `status=interrupted, 0s` + 「Parent agent interrupted」
+**不代表文件没写**（t0a/t0b 即此形态而文件完整）⇒ 先 `ls` + 字段健康扫描验磁盘，⛔ 不要凭 `status` 或
+`api_calls` 直接重派（盲重派 = 再精读全部全文）。
+
+### C11-j — 🔴 子代理「草稿存在 kernel 变量里」= **永久丢失**；失败回执三指纹 + 补派粒度降一档（2026-10-08 实测）
+
+本轮 `deleg_c617920e` 的 t0（6 篇）回执原文：
+> *the output JSON was NOT written to disk … I drafted complete 10-field deep cards for n=1, 2, 14, 15 **in kernel variables** … `deep_cards_round2_t0.json` was never created.*
+
+⇒ 四条判据（与 C11-d/i 配套，专治「回执说已成稿」）：
+
+1. 🔴 **kernel 草稿不可回收，且不算进度**：子代理的 `execute_python` 内核**按会话隔离、随子代理退出销毁**（铁律 20），
+   父代理**没有任何通道**读到它。回执出现「drafted … in kernel variables / 已在内存里成稿」时：
+   ⛔ 不要去 `state.db` / live log / 任何 kernel 里翻找（**找不到就是没有**，白烧一轮）；
+   ⛔ 更**不要把它计入进度**——按「4 张已成稿」去合并会得到**半份卡且不自知**（比零卡更危险）。
+2. **失败回执三指纹（命中任一即判「未落盘」）**：① `api_calls == 50`（打满迭代上限）；② duration ≈ **700+ s**；
+   ③ 正文含 `NOT written to disk` / `never created` / `ran out of tool-calling iterations`。
+   命中 → 先 `ls` 目标路径 + 跑字段健康扫描（`delegation-orchestration` 的 `scripts/audit_store_field_health.py`），
+   **文件真不在**才按 C12 走归并缺口。⚠️ **`status=completed` 不代表成功**（本批 t0 就是 `completed` 却零落盘）；
+   但反向也成立——`status=interrupted` 也可能文件完整（C12），**两边都以磁盘为准**。
+3. **补派粒度 = 原派 ≤5 篇、补派 ≤3 篇**：t0 由后续补派**拆成 3+3**（t0a/t0b）才补齐；与 C11-g（N=3 一次跑通）、
+   C11-h（N=3 二次跑通）互为佐证 ⇒ **重派时配额再降一档**（重派还背着上一轮已烧掉的上下文预算）。
+   代价标尺：挂掉一个 6 篇任务的补救 = **把那 6 篇全文重读一遍**（本轮即如此）——把篇数硬约束写进 brief 比事后补救便宜得多。
+4. **只补缺、不重派整批**：失败回执末尾常自带「To finish」清单（本轮 t0 指名 n=16/17 未起草）。
+   照它切分范围，⚠️ 但第 1 条已说明「kernel 成稿」**不算落盘** ⇒ 实际补派范围 = 该任务**全部**篇目，
+   除非回执明确说某几张**已经 `json.dump` 过**（回执里没有这句话 = 当作全未落盘）。
+
+> 一句话：**回执里的「已成稿」是声明，磁盘上的文件才是事实**——与 C12「manifest 的 status 是声明」同一条规。
+
+📄 派发 brief 逐字模板 + 回执指纹表 + 重放轮两条纪律见
+`references/deep-card-dispatch-brief-and-receipt-fingerprints.md`。
+
 ### C12 — 多批次产物归并 → 合入 store → 重出交付物（2026-10-08 实测：16 张卡碎在 4 个文件里）
 
 C10 讲「一批深度卡怎么合回交付物」；C12 讲**同一批任务被反复重派后碎成多份**时怎么办（本轮即此形态）。
@@ -587,6 +761,38 @@ HTML 生成只依赖标准库（os/re/json/html/csv）⇒ 用项目 venv 跑即�
 
 📄 本次多批次归并的全量数字、四个散件清单、断言实测输出与脚本路径见
 `references/round2-multibatch-merge-and-deliverable-refresh.md`。
+
+## 模式 H — 全文结构化提取 → 中文结构化摘要（轻量交付物，2026-10-11 新增）
+
+触发词补充：「**深度结构化提取论文《X》的全部关键信息**」/「输出**中文结构化摘要**」/「所有数字必须来自原文」
+（常是子代理被派去做的一步；源文件 = `results/<sid>/data/lit_text/<Paper>.txt`）。
+
+与模式 C 深度卡的差别：**深度卡 = 10 字段 JSON（机器消费）；本模式 = 给人读的多章节中文摘要**（10 节：
+元信息/定位/思路/问题/工作量/评测/benchmark/结果数字/局限/可提取信息）。三条硬纪律：
+
+- 🔴 **`lit_text/*.txt` 是「交织行号」格式**（每行内容后跟一行裸整数序号，CRLF）——**先用 `grep -n -E` 建章节地图，
+  再按行号 `read_file` 分段读**；该格式下纯文本检索命中不稳，**以 `grep -n` 为准**（别因检索返空就以为原文没这段）。
+- **每个数字指回原句；原文没写的明写「原文未报告」**（本例缺 期刊/DOI/年份/许可——预印本形态，**别替它编 DOI**）。
+- 🔴 **主动标注原文自相矛盾**：同一量在两处给两个数时**两处都照录并标出**（本例抓到 3 处：克隆基准 10 vs 20 题、
+  温度文件 458 vs 485 份、动作发现 2,500 篇 vs 摘要「tens of thousands」）——「同一量两个数」比「看着不对」更硬。
+  🆕 **最隐蔽的一类是「正文 vs 图注」**（2026-10-11：DeepRare 正文 Recall@1 **78%** vs Fig.2 图注 **70.0% top-1**；
+  数据集计数摘要「nine」vs 后文「eight」）⇒ 同一指标**摘要/正文/图注三源逐处对照**，冲突两处都列。
+  🆕 **矛盾的第二入口 = 「同一事实、非同一数值」两处说法不同（2026-10-11 第三实例）**：高频发生在
+  **Methods 方法描述 ↔ Evaluation 评测描述**之间 —— 本例 BioMaster 的 Methods 写基座为 **GPT-4**、
+  评测章节却写「统一用 **GPT-4o**」（两节常由不同作者在不同时间写，最容易互相打架）。
+  ⇒ 处理同前（两处逐字并列、各带节名），并加一条禁令：⛔ **不替原文圆场** —— 不要写「应为笔误 / 本意是 GPT-4o」
+  之类的调和句；一旦替它选一个，这条最硬的发现就被抹平，而用户/审稿人正是靠这一段判断提取可信度。
+  ⇒ 检索入口：矛盾既可能在「同一量的两处」、也可能在「同一事实的两节」，所以
+  **摘要 / 正文 / 图注 / Methods / Evaluation 五处都要过**，⛔ 别只在正文扫。
+- 🔴 **必须落盘，⛔ 不接受「对话交付」**（2026-10-11 同批对照实测）：同一批三个子任务里，落盘的那一个
+  （`Biomni_结构化摘要.md` 18.7 KB）**是唯一可直接引用的产物**；另两个只在回执正文里交付
+  ⇒ 内容只剩 `cache/delegation/subagent-summary-*.txt` 缓存件可查，跨轮/跨会话复用无门。
+  ⇒ 派发 brief 里**一律写绝对输出路径**；回执拿到后**先 `ls` 该路径**（有落盘件才叫完成，见
+  `delegation-orchestration` 的 `templates/delegation-brief.md`）。
+- 补充材料（Supplementary Notes/Figures）在同一文件后半段，**消融数字/prompt 全文/rubric 常只在那里**，别只读正文。
+
+📄 完整配方（10 节交付形状 / 交织行号读法 / 三条纪律 / 与深度卡的取舍）见
+`references/fulltext-structured-extraction-recipe.md`。
 
 ## 模式 D — 发文定位与缺口论证（Gap claim / positioning，2026-10-02 新增）
 
@@ -941,6 +1147,7 @@ KB 条目多是**文献提炼**而非本数据实测——它是"参数有出处
 | ⚠️ 用 AST 数「空壳函数」会大幅高估 | 只匹配 `ast.Import`（`import X`）、漏掉 `ast.ImportFrom`（`from X import Y`）→ 本次一度误报「70% 工具无真实动作」，严格重扫实为 **19%** | 收集**两种 import 节点**并用 `sys.stdlib_module_names` 过滤第三方；**任何量化结论先手工核 1–2 个样本函数体再出口**；现成探针 `scripts/audit_agent_repo_claims.py` |
 | terminal 中 rm -rf 被拦截 | 安全护栏拦截删除 | 克隆到新目录名，不要 rm 旧目录 |
 | PMC 全文 txt 近乎单行（`count("\n")`≈5） | read_file 的 offset/limit 按行切片失效，读了等于没读 | 首选 `fold -s -w 700 <f>.txt > <f>.w700.txt` **重排后再 read_file**（limit/offset 生效，可一次读全，比 execute_python 字符切片省调用）；或按**字符区间** `print(t[a:b])` 读；章节头用 regex `m.start()` 定位 |
+| `results/<sid>/data/lit_text/*.txt` 是**交织行号**格式 | 每行内容后跟一行裸整数（PDF 原版面行号）+ CRLF，约一半行是序号；纯文本检索命中不稳 | **先用 `grep -n -E` 建章节地图**（Abstract/Results/Methods/References/Supplementary/benchmark/ablation），再按行号 `read_file` 分段；**以 `grep -n` 为准**，别因检索返空就以为原文没这段（见模式 H） |
 | 🔴 read_file **静默截断长行**（>~700 字符） | 行尾出现 `... [truncated]`，**该行剩余部分无声丢失**（不是续到下一行）。本次实测 `fold -w 3000` 与 `-w 1400` **均被截**、`-w 700` 正常 → 用 w3000 读 5 篇会丢掉每行约 1/3，**卡片事实被污染而完全看不出错** | 重排宽度**取 ≤700**；**见到 `[truncated]` 就当行作废，减小宽度重排重读**，不要把它当成原文结束 |
 | PMC fullTextXML 的**表格**里嵌 LaTeX 宏 | 表 3/5 等单元格被 `\documentclass[12pt]{minimal}…\end{document}` 大段 LaTeX 撑爆，`print` 出来全是宏噪声、真正的 ✓/✗ 与数值被淹没 | 打印前先 `seg=re.sub(r"\\documentclass.*?\\end\{document\}","[MATH]",seg,flags=re.S)` 压成占位符再读；**只影响输出可读性，不改判定**——表格语义仍要从表注/正文补齐 |
 | cards_source.json 的 abstract/methods/results 只有 ~1600 字符 | 以为是全文摘要，落卡漏掉 benchmark/模型/limitations | 一律读 text_file 原文，清单字段只当索引用 |
@@ -959,6 +1166,8 @@ KB 条目多是**文献提炼**而非本数据实测——它是"参数有出处
 - `references/biomaster-knowledge-bank.md` — **BioMaster (Bioinformatics 2025) 第三范式知识库**：4 Agent + 2 RAG(top-2) + mem0 式 memory 架构、Table 1 逐行胜负、Hi-C 解耦实验（Fig.5b）、消融、**本家硬伤清单**（无量化/单 LLM/消融仅定性）、**三范式矩阵**（会不会 / 准不准 / 跑不跑得完）、**「喂正确 plan 解耦能力维度」可复用实验模板**、事实核验锚点
 - `references/paper2agent-knowledge-bank.md` — Paper2Agent (Nature 2026) 架构/六步管线/验证判据知识库 + **与 Biomni 的头对头 benchmark 数字**（98.7 vs 37.3 等）+ 范式对比表（工具-环境型 vs 论文资产化型）+ **「Markdown skill 文件 vs 可执行 MCP 工具」消融线索**（该消融数字在 Supplementary Note，本 PDF 无）
 - `references/research-agent-landscape-2026.md` — 赛道全景知识库（模式 B）
+- `references/nine-paper-cross-reading-2026-10.md` — **模式 B5：9 篇竞品横向合读事实底座**（身份表〔Biomni/Co-Scientist/DeepRare/ChemGraph/BioMaster/Paper2Agent/CASSIA/ChemCrow/ScienceBuddy〕/ 五谱系 A–E 与各自思路要点 / benchmark 三档分层 + 自建清单 / 横向对比表 / **7 处原文自相矛盾照录表** / 7 条对 MemOmics 的启示 / 两处「任务书标题 ≠ 原文标题」更正）
+- `references/ai-literature-kb-classification.md` — **竞品文献入库的分类配方**：AI/方法/工具类论文**没有物种/组织维度 ⇒ 不要塞进五级目录**，另建内容型分类根 `knowledge_base/ai_agent/{frameworks,agent_design,overview,benchmarks,evaluation}`；每条 11 个工程属性字段（含必备的「原文矛盾标注」）；**入库后必须实测 `search_knowledge` 命中**才算注册成功；跨批次同名系统做字段级更新而非新建重名条目
 - `references/paper-to-competitor-cards.md` — 模式 C：竞品卡 JSON schema + 全文精读配方 + 已读论文逐字数字底稿
 - `references/deep-card-upgrade-and-fact-bank.md` — **模式 C9：薄卡→深度卡升级**（10 字段 schema / `architecture` 400–800 字的专名+数字密度要求 / 与 C6 压缩规则的取舍 / 「只输出我要的 JSON 字段」交付口径 / **单行全文 `fold -s -w 700` 安全读法 + read_file 静默截断警报**）+ n=34/35/36/41/45 五篇事实底稿（逐字数字 + 可 Ctrl-F 的 evidence_quote 锚点）
 - `references/batch-paper-deepread-recipe.md` — 模式 C：批量精读论文出竞品卡的 recipe（manifest 结构 / 锚点切片 / 卡片 schema / 预算陷阱 / 已读竞品清单）
@@ -981,6 +1190,9 @@ KB 条目多是**文献提炼**而非本数据实测——它是"参数有出处
 - `references/deep-card-small-batch-2026-10-08-n1-2-14-17.md` — **模式 C11 小批续（n=1,2,14,15,16,17）**：本轮**落盘未完成**的教训底稿（读+起草烧光迭代、`json.dump` 一次没跑）+ 两个新增工具坑（execute_python 的 **`/e/…` MSYS 路径失效**、单篇全文远超 stdout 上限）+ 6 条已 `q in t` 校验的 evidence_quote + 六篇逐字数字 + **n=2 截断 `limitations` 的完整原文恢复**（Discussion §4.2 九条）+ 落盘约定
 - `references/round2-multibatch-merge-and-deliverable-refresh.md` — **模式 C12：多批次产物归并 + 交付物重出的全量底稿**（批次链路表〔蒸发→撞上限→拆 t0a/t0b〕/ 4 个散件清单 / 引文硬门代码 / 16 卡 before→after 字符表〔24,796→48,544〕/ md 重渲染两类处理 / DOCX·HTML 重建命令与字节数 / **终态双向断言清单** / 汇报口径）
 - `scripts/merge_round2_deepread.py` — **模式 C12 归并器**：多散件归并 → **逐字引文硬门（拒写不通过字段）** → 保持 store 容器形状 → 代次字段归一化（`deep_read_round` 纯日期 + `deep_read_pass` 批次）→ 引文审计与字段长度 diff 报告
+- `references/deep-card-dispatch-brief-and-receipt-fingerprints.md` — **模式 C11-i：深度卡派发 brief 逐字模板 + 回执指纹速判表**（增量落盘纪律必须由主代理写进 brief、`api_calls≈50`/`700+s` = 撞 `max_iterations` 的信号、`status=interrupted` 不等于文件没写、重放轮两条纪律）
+- `references/deeprare-knowledge-bank-and-prose-summary-schema.md` — **模式 H 的竞品事实底稿 + 散文式中文摘要交付变体**：DeepRare（Nature 2026，罕见病诊断多 agent，**新竞品**：三层 MCP 架构 / 6 agent server / >40 工具 / 9 数据集 6,401 例 2,919 病，HPO R@1 57.18%、多模态 69.1% vs Exomiser 55.9%、推理链专家认可 95.4%、失败模式五类占比）+ ChemGraph 补充逐字数字 + **正文↔图注↔摘要 三源交叉核对纪律**（MME 78% vs 70.0%、nine vs eight）+ lit_text 两种格式的读法
+- `references/fulltext-structured-extraction-recipe.md` — **模式 H：全文结构化提取 → 中文结构化摘要**（10 节交付形状 / `lit_text/*.txt` **交织行号**格式的 `grep -n` 章节地图读法 / 三条纪律：数字溯源·「原文未报告」·**主动标注原文自相矛盾**〔Biomni 3 处实例〕 / 何时用本模式 vs 深度卡）
 
 ## Common Issues
 

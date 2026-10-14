@@ -38,5 +38,25 @@
       "script": "delegate_task batch (deleg_bfb03f20)",
       "severity": "high"
     }
-  ]
+  ],
+  "success_count": 1,
+  "proven_script": "",
+  "proven_params": [
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "",
+      "params": "",
+      "date": "2026-10-13",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "第4批委派回执（deleg_1f7a6a84）为重复投递：其两个具名产物 AI摘要_paper2Agent_CASSIA.md / AI摘要_ChemCrow_ScienceBuddy.md 已在磁盘存在，未重跑。实查发现唯一真缺口：Co-Scientist 与 DeepRare+ChemGraph 两份摘要仅存于 cache/delegation，已带溯源头复制进 results/…75ba04"
+    }
+  ],
+  "user_prefs": {
+    "last_used_script": ""
+  }
 }

@@ -18,8 +18,8 @@
     "wakeup",
     "progress"
   ],
-  "success_count": 42,
-  "proven_script": "wakeup_three_source_check_v8.py",
+  "success_count": 43,
+  "proven_script": "wakeup_check_memomics-be17649b_replay15",
   "proven_params": [
     {
       "species": "human",
@@ -566,10 +566,23 @@
       "approved": false,
       "custom_script": false,
       "result": "唤醒核查：unchecked=0 契约干净；进程仅系统组件+node，无 Rscript/分析脚本；GPU 全桌面 C+G；唤醒源=task_state armed+user message（E5 情形②，合法轮询非死循环）"
+    },
+    {
+      "species": "",
+      "tissue": "",
+      "direction": "",
+      "script": "wakeup_check_memomics-be17649b_replay15",
+      "params": "{\"species\": \"human\", \"tissue\": \"general\", \"direction\": \"engineering\"}",
+      "date": "2026-10-13",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "唤醒#15 核销：本会话（memomics-be17649b，AI-Agent 竞品定位交付）仍终态。① 本轮唤醒正文无 ASYNC DELEGATION 回执（纯 LoopX tick），无待核销新批次；② cards.json md5=17dd2962e9b31b08a3f071739d72db3e · 220095 B · mtime 10-08 01:39:12 —— 与 replay#7"
     }
   ],
   "user_prefs": {
-    "last_used_script": "wakeup_three_source_check_v8.py"
+    "last_used_script": "wakeup_check_memomics-be17649b_replay15"
   },
   "when_to_use": "新唤醒验证与上条**有细节差异**（基线组件 14→12、PID 名单变化）但结论同为终态；此时 #109 的「合并正文为最新」会丢 #117 的独立证据、#107 的「扩块加 bullet」又仅为合并块设计 → 混合变体 = 单条块转范围块 + 双 bullet，一个 patch（锚点 = 标题行 + 原 bullet 两行连续）完成，块数不增、两组验证细节都在…",
   "error_count": 1,

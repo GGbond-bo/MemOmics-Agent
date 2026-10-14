@@ -137,6 +137,10 @@ graph LR
 
 ## 八、坑位（实测）
 
+> 🔧 本机补丁（cv-01 字体路径 + tabu）可幂等重打 / 体检：
+> `python scripts/crl_fix_local_patches.py --check`（体检）→ 去掉 `--check` 即打补丁；
+> 细节与验证口径见 `references/local-patches.md`。
+
 | 现象 | 根因 | 修法 |
 |---|---|---|
 | `git clone` 报 `schannel: failed to receive handshake` | 本机 GitHub git 协议 TLS 不通（curl 正常） | 用 **Gitee 镜像** `https://gitee.com/huangwb8/ChineseResearchLaTeX.git` |
@@ -144,6 +148,7 @@ graph LR
 | 直接跑 `xelatex main.tex` 报字体/宏包缺失 | 公共包未装入 `TEXMFHOME`，且跳过了官方 wrapper 的环境准备 | 先 `python scripts/install.py install --mirror gitee`，再用包内 `*_project_tool.py build` |
 | DOCX 里出现 `$\gamma$` 源码 | 走了旧导出链（未过 MathML 中间态） | 用官方 `docx` 子命令，别自己 pandoc |
 | 改了 `packages/` 后别的模板一起坏 | 公共层被直接改 | 改前先判断层级（`make-latex-model`），改后跑该包覆盖模板的回归 |
+| `cv-01`（学术简历）编译 `TeX capacity exceeded, sorry [pool size]` + 满屏 `^^@`，报错停在 `\section{\faGraduationCap …}` | 两个叠加，**都与图标无关**：① `bensz-fonts.sty` 的 `\theabsdir` 在本机 MiKTeX 便携版**返回空且不稳定** → `\BenszFontsDir` 退化成相对 `fonts/` → 字体找不到；② `tabu` 与本机 LaTeX 内核不兼容（`\end{tabu}` → `Undefined control sequence`） | 打两个本机补丁：`bensz-fonts.sty` 空值回退绝对路径 + cv 模板 `tabu`→`array`/`tabular`（各留 `.bak-memomics`）。**修完实测通过**：`main-zh.pdf` 754 KB / `main-en.pdf` 678 KB，3 页，与上游基线像素比对仅信息块有间距差 → 见 `references/local-patches.md` |
 | Overleaf 报错 | 编译器不是 XeLaTeX / 缺字体 | 传 `*-Overleaf-*.zip`，Menu → Compiler 选 XeLaTeX |
 
 ---
@@ -178,9 +183,52 @@ python scripts/check_skills_gate.py                           # 提交门禁
 | - | - | - | 2026-10-12 | gate-rerun | - | - |  |
 | - | - | - | 2026-10-12 | gate-final | - | - |  |
 | - | - | - | 2026-10-12 | crl.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl.sh | - | - |  |
+| human | - | - | 2026-10-12 | miktex_install_probe.sh | - | - |  |
+| - | - | - | 2026-10-12 | miktex_mirror_probe.sh | - | - |  |
+| - | - | - | 2026-10-12 | miktex_list_mirror_dir.sh | - | - |  |
+| - | - | - | 2026-10-12 | miktex_download_setup.sh | - | - |  |
+| - | - | - | 2026-10-12 | miktex_list_setup_zip.sh | - | - |  |
+| - | - | - | 2026-10-12 | miktexsetup_help.sh | - | - |  |
+| - | - | - | 2026-10-12 | miktex_install_timeout_lesson.sh | - | - |  |
+| - | - | - | 2026-10-12 | miktex_install_background.sh | - | - |  |
+| - | - | - | 2026-10-12 | miktex_install_portable.sh | - | - |  |
+| - | - | - | 2026-10-12 | miktex_config_and_probe.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_template_structure_probe.sh | - | - |  |
+| - | - | - | 2026-10-12 | miktex_compile_test_run.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_compile_rootcause_probe.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_package_installer_probe.sh | - | - |  |
+| - | - | - | 2026-10-12 | miktex_texmf_vars_probe.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_install_help_probe.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_install_attempt_run.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_delegate_installer_probe.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_local_install_attempt_v1.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_local_install_attempt_v2.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_all_installers_help.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_install_packages_local.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_compile_proof.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_multipass_compile.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_compile_diag.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_compile_diag.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_fix_missing_pkgs.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_compile_multipass_with_installer.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_cv_font_diag.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_font_path_probe.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_official_build_probe.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_cv_official_build.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_cv_fix_fontawesome.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_fix_fontmap.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_cv_last_resort.sh | - | - |  |
+| - | - | - | 2026-10-12 | debate_cv01_rootcause.sh | - | - |  |
+| - | - | - | 2026-10-12 | min_repro_texorpdfstring_test.sh | - | - |  |
+| - | - | - | 2026-10-12 | min_repro_control_falsification.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_cv01_true_mechanism.sh | - | - |  |
+| - | - | - | 2026-10-12 | crl_fix_local_patches.py | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
 |-------|-------|----------|
+| ❌ 无法下载 bensz-fonts（ref=main, mirror=gitee）。最后错误：gi | install.py 走 texmfhome/delegate 模式时仍要联网下 | 改用本地方案：仓库已有完整克隆，绕过下载器，直接用 packages/<pkg>/scripts/p |
+| thesis-nju-master: "l.2 \\BenszThesisSetup {templa | MiKTeX basic 只装官方包集，不含 CRL 仓库自带的 bensz-* | 待修：①CRL 自带公共包 packages/bensz-* 未装入 MiKTeX texmf 树  |
 | [skills-gate] FAIL —— 2 failed, 896 passed (91.6s) | 索引重建后 paper-structured-extraction 被解析为 R | 待办：① 定位第 2 个失败（怀疑 test_webui_picker_and_prompt_ind |
 

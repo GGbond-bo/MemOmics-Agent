@@ -4,7 +4,7 @@ species: Homo_sapiens
 tissue: skeletal_muscle
 direction: aging
 assay_type: RNA
-last_updated: 2026-10-03 00:20
+last_updated: 2026-10-13 12:24
 source: data_driven
 verified: partially_verified
 quality: medium
@@ -12,17 +12,19 @@ auto_trigger:
 - functional-enrichment_empirical
 content: 'skill: functional-enrichment
 
-  quality_score: 8.0
+  quality_score: 9.0
 
 
   params_used:
 
-  N=7743(universe, 未过滤全表); n_list=7(UP)/2(DOWN); BH 假设检验数 M=10000; 超几何单尾精确检验(无 scipy，纯
-  math.comb)
+  pheatmap; YlOrRd 5档 #FFF7EC-#FDD49E-#FC8D59-#D7301F-#7F0000; 0-10; cluster_rows=FALSE
+  cluster_cols=FALSE; angle_col=45; border_color=NA; fontsize_row=8 fontsize_col=9;
+  padding T1.0/R4.0/B1.8/L5.0cm; 右下横放图例0/5/10; words_only 9.5x11in / with_genes 11.5x11in;
+  53词条x17亚群
 
 
   result_summary:
 
-  小列表 ORA 功效上限量化完成：7 基因需 3~6/7 同通路才过 BH；2 基因基本无解。建议改分层 ORA 或 GSEA pre-ranked。'
-evidence: 'record_run(functional-enrichment): 小列表 ORA 功效上限量化完成：7 基因需 3~6/7 同通路才过 BH；2
-  基因基本无解。建议改分层 ORA 或 GSEA pre-ranked。'
+  v15 双版出图成功（纯词条 + 词条末尾括号基因）：新增 SORBS+/RUNX1+ 两亚群及 5 条新词条，矩阵 53x17'
+evidence: 'record_run(functional-enrichment): v15 双版出图成功（纯词条 + 词条末尾括号基因）：新增 SORBS+/RUNX1+
+  两亚群及 5 条新词条，矩阵 53x17'

@@ -221,6 +221,13 @@ def _load_remote_config(force: bool = False) -> dict:
     cfg["host"] = str(cfg["host"] or "").strip()
     cfg["user"] = str(cfg["user"] or "").strip()
     cfg["key"] = str(cfg["key"] or "").strip()
+    if not cfg["key"]:
+        try:                                    # 2026-10-11：留空即自动探测本机默认密钥
+            _det = detect_private_keys()
+            if _det:
+                cfg["key"] = _det[0]
+        except Exception:
+            pass
     cfg["workdir"] = str(cfg["workdir"] or "").strip() or "~"
     cfg["scheduler"] = str(cfg["scheduler"] or "auto").strip().lower()
     cfg["job_dir"] = str(cfg["job_dir"] or "").strip()
@@ -2735,6 +2742,80 @@ def _exec_install(client, pub_line: str) -> str:
                        % (out[-500:], err_out[-500:]))
 
 
+def detect_private_keys() -> list:
+    """探测本机默认位置的 SSH 私钥（存在且非空），返回绝对路径列表（正斜杠）。
+
+    2026-10-11 用户反馈"输入完 host 根本不知道怎么检测"：私钥路径不再要求手填，
+    所有需要 key 的入口先用这里探测，探测不到再由 ensure_keypair 自动生成。
+    """
+    home = os.path.expanduser("~")
+    out = []
+    for nm in ("id_ed25519", "id_ecdsa", "id_rsa", "id_dsa"):
+        p = os.path.join(home, ".ssh", nm)
+        try:
+            if os.path.isfile(p) and os.path.getsize(p) > 0:
+                out.append(p.replace("\\", "/"))
+        except OSError:
+            continue
+    return out
+
+
+def ensure_keypair(preferred: str = "") -> dict:
+    """保证本机有一对可用密钥：优先用用户填的 → 其次自动探测 → 都没有就现场生成。
+
+    返回 {"ok":bool, "key":<私钥>, "pub":<公钥>, "created":bool, "error":<str>}。
+    生成的是 ed25519、无口令，落在 ~/.ssh/id_ed25519（权限 600），等价于
+    ssh-keygen -t ed25519 -N ""；有 cryptography 就直接算，没有才退到 ssh-keygen 命令。
+    """
+    p = str(preferred or "").strip()
+    if p:
+        p = os.path.expanduser(p)
+        try:
+            if os.path.isfile(p) and os.path.getsize(p) > 0:
+                return {"ok": True, "key": p.replace("\\", "/"), "pub": (p + ".pub").replace("\\", "/"), "created": False}
+        except OSError:
+            pass
+    det = detect_private_keys()
+    if det:
+        return {"ok": True, "key": det[0], "pub": det[0] + ".pub", "created": False}
+    home = os.path.expanduser("~")
+    d = os.path.join(home, ".ssh")
+    key_path = os.path.join(d, "id_ed25519")
+    try:
+        os.makedirs(d, exist_ok=True)
+        try:
+            os.chmod(d, 0o700)
+        except OSError:
+            pass
+        made = False
+        try:
+            from cryptography.hazmat.primitives import serialization as _ser
+            from cryptography.hazmat.primitives.asymmetric import ed25519 as _ed
+            _k = _ed.Ed25519PrivateKey.generate()
+            priv = _k.private_bytes(_ser.Encoding.PEM, _ser.PrivateFormat.OpenSSH, _ser.NoEncryption())
+            pub = _k.public_key().public_bytes(_ser.Encoding.OpenSSH, _ser.PublicFormat.OpenSSH)
+            with open(key_path, "wb") as fh:
+                fh.write(priv)
+            with open(key_path + ".pub", "wb") as fh:
+                fh.write(pub + b" memomics@local\n")
+            made = True
+        except Exception:
+            made = False
+        if not made:
+            import subprocess
+            _r = subprocess.run(["ssh-keygen", "-t", "ed25519", "-N", "", "-f", key_path, "-C", "memomics@local"],
+                                capture_output=True, text=True)
+            if _r.returncode != 0:
+                return {"ok": False, "error": "生成密钥失败：%s" % ((_r.stderr or _r.stdout or "").strip() or "ssh-keygen 非 0 退出")}
+        try:
+            os.chmod(key_path, 0o600)
+        except OSError:
+            pass
+    except Exception as exc:
+        return {"ok": False, "error": "生成密钥失败：%s: %s" % (type(exc).__name__, exc)}
+    return {"ok": True, "key": key_path.replace("\\", "/"), "pub": (key_path + ".pub").replace("\\", "/"), "created": True}
+
+
 def install_pubkey(cfg: dict, node_name: str, password: str) -> str:
     """用密码登录一次，把本机公钥追加进远端 ~/.ssh/authorized_keys（幂等）。
 
@@ -2754,11 +2835,17 @@ def install_pubkey(cfg: dict, node_name: str, password: str) -> str:
     if not host or not user:
         return _err("节点 %r 缺 host/user，连不了" % (name or node_name), node=name)
     port = int(node_cfg.get("port") or 22)
-    key_path = str(node_cfg.get("key") or "").strip()
-    pub_path = (os.path.expanduser(key_path) + ".pub") if key_path else ""
-    if not pub_path or not os.path.exists(pub_path):
-        return _err("找不到公钥文件：%s（先在「⚙️ 配置」里填对私钥路径；本机还没有密钥对就先生成："
-                    "ssh-keygen -t ed25519）" % (pub_path or "<未配置 remote.key>"), node=name)
+    _kp = ensure_keypair(str(node_cfg.get("key") or ""))
+    if not _kp.get("ok"):
+        return _err(str(_kp.get("error") or "无法准备本机 SSH 密钥"), node=name)
+    key_path = _kp["key"]
+    pub_path = _kp["pub"]
+    created_note = ""
+    if _kp.get("created"):
+        created_note = "（本机原本没有密钥，已自动生成 %s）" % key_path
+    if not os.path.exists(pub_path):
+        return _err("私钥有了但公钥文件不在：%s（正常应是 %s.pub 同目录；删掉私钥重跑本操作可自动重建）"
+                    % (pub_path, key_path), node=name)
     with open(pub_path, "r", encoding="utf-8") as fh:
         pub_line = fh.read().strip()
     if not pub_line:
@@ -3165,7 +3252,7 @@ def _conn_hint(exc, node_cfg) -> str:
                 % (" " + jump if jump else ""))
     if "permission denied" in text:
         return ("对方拒绝了密钥认证——公钥还没装到%s，或私钥路径指错。"
-                "先在 ⚙️ 配置里输密码点一次「🔑 安装公钥」。"
+                "先在 ⚙️ 配置里输密码点一次「🔑 安装公钥」——本机没有密钥也不用管，会自动生成（ed25519）并装好。"
                 % ("跳板或目标节点" if jump else "目标节点"))
     if "connection refused" in text:
         return "对方端口拒接：检查节点的 host / port 是否填对（sshd 是否在这个端口上）。"

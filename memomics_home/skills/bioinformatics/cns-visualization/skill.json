@@ -347,13 +347,39 @@
       "approved": false,
       "custom_script": false,
       "result": "集群 ssh23 成功重绘 UMAP：Seurat 51227细胞x15810基因（reductions pca/harmony/umap，6亚群 lpMuSC/CCND2+MuSC/dMuSC/zone3/zone2/zone1）。产出 4 图：umap_clusters.png(774KB)/pdf(915KB)、umap_by_age.png(1.38MB)/pdf(902KB)，耗时0.7"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "go_heatmap_v15.R",
+      "params": "矩阵 53x17 (MF_SMF_go_matrix_v15.csv); YlOrRd 5档 #FFF7EC→#7F0000; 0-10; cluster_rows/cols=FALSE; fontsize_row=8; fontsize_col=9; angle_col=45; border_color=NA; padding c(1.0,4.0,1.8,5.0)cm; 画布 words_only 9.5x11in / with_genes 11.5x11in; 图例右下横放 3.6cm 0/5/10",
+      "date": "2026-10-13",
+      "score": 8,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "v15 两版生成成功（纯词条 + 带基因），新增 SORBS+/RUNX1+ 两亚群，矩阵 48x15 → 53x17"
+    },
+    {
+      "species": "human",
+      "tissue": "skeletal_muscle",
+      "direction": "aging",
+      "script": "go_heatmap_v16_words_only.R",
+      "params": "矩阵 53x17 (MF_SMF_go_matrix_v15.csv); 纯词条无基因; YlOrRd 5档 #FFF7EC→#FDD49E→#FC8D59→#D7301F→#7F0000; 0-10 clip; cluster_rows=FALSE; cluster_cols=FALSE; fontsize_row=8; fontsize_col=9; angle_col=45; border_color=NA; padding c(1.0,4.0,1.8,5.0)cm; 画布 9.5x11in; 图例右下横放 3.6cm 0/5/10",
+      "date": "2026-10-13",
+      "score": 9,
+      "auto_score": 0.0,
+      "approved": false,
+      "custom_script": false,
+      "result": "v16 纯词条版生成成功：53 词条 x 17 亚群（含 SORBS+/RUNX1+），PNG/PDF/SVG 三格式，画布 9.5x11 in"
     }
   ],
-  "proven_script": "cluster_umap_replot_MuSC.R",
+  "proven_script": "go_heatmap_v16_words_only.R",
   "error_count": 2,
-  "success_count": 23,
+  "success_count": 25,
   "user_prefs": {
-    "last_used_script": "cluster_umap_replot_MuSC.R"
+    "last_used_script": "go_heatmap_v16_words_only.R"
   },
   "trigger_keywords": [
     "UMAP",

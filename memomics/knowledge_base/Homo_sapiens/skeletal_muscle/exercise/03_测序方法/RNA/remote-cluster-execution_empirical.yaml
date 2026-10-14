@@ -4,7 +4,7 @@ species: Homo_sapiens
 tissue: skeletal_muscle
 direction: exercise
 assay_type: RNA
-last_updated: 2026-10-08 16:09
+last_updated: 2026-10-08 23:39
 source: data_driven
 verified: partially_verified
 quality: medium
@@ -17,13 +17,17 @@ content: 'skill: remote-cluster-execution
 
   params_used:
 
-  node=ssh23; cmd=ls -la Umap/ + find *.R + ls R4.41 Seurat dir + df; timeout=120
+  IN=MuSC_exercise_clean_dele_cluster_umap.rds (662MB); ENV=/hwfssz3/PS_JLU/zhangxiao6/software/miniconda3/envs/R4.41/bin/Rscript;
+  OUT=/hwfssz3/PS_JLU/zhangbo/Muscle_96_38/Umap/umap_prop_20261008; launch=setsid
+  nohup on ssh3 (直接在本节点，不走 SGE 队列以保证 htop 可见)
 
 
   result_summary:
 
-  ssh23 只读探测：确认 MuSC_exercise_clean_dele_cluster_umap.rds 存在(662MB, Jun 11)；同目录 24
-  个 rds/h5ad 产物；项目内无 R 脚本；R4.41 的 Seurat 库目录存在；共享盘 120T/余24T。为后续 UMAP 重绘提供输入与输出目录依据。'
-evidence: 'record_run(remote-cluster-execution): ssh23 只读探测：确认 MuSC_exercise_clean_dele_cluster_umap.rds
-  存在(662MB, Jun 11)；同目录 24 个 rds/h5ad 产物；项目内无 R 脚本；R4.41 的 Seurat 库目录存在；共享盘 120T/余24T。为后续
-  UMAP 重绘提供输入与输出目录依据。'
+  ssh3 直启成功：ps -u zhangbo11 可见 bash wrapper(PID 127336) + Rscript(127350) + tee(127351)，host=cngb-supermem-a15-3
+  确认跑在 ssh3；脚本自适应 introspect meta.data 后出多张 UMAP(亚群/分组/分面) + 亚群比例堆叠图(counts+100%)，并写比例
+  CSV 与 metadata census CSV'
+evidence: 'record_run(remote-cluster-execution): ssh3 直启成功：ps -u zhangbo11 可见 bash
+  wrapper(PID 127336) + Rscript(127350) + tee(127351)，host=cngb-supermem-a15-3 确认跑在
+  ssh3；脚本自适应 introspect meta.data 后出多张 UMAP(亚群/分组/分面) + 亚群比例堆叠图(counts+100%)，并写比例
+  CSV'

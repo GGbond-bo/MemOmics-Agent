@@ -4,7 +4,7 @@ species: Homo_sapiens
 tissue: skeletal_muscle
 direction: aging
 assay_type: RNA
-last_updated: 2026-10-08 00:03
+last_updated: 2026-10-13 16:06
 source: data_driven
 verified: partially_verified
 quality: medium
@@ -12,18 +12,16 @@ auto_trigger:
 - cns-visualization_empirical
 content: 'skill: cns-visualization
 
-  quality_score: 9.0
+  quality_score: 8.0
 
 
   params_used:
 
-  csv=effect5_effsize_v3.csv; rows=1100; scores=22; effects=5; subs=10
+  PNG 2850x3300 @300dpi; 边缘检测阈值 sum<735; 内容 x 0-2849 / y 33-3267; 贴边像素 左65(底部) 右73(y=396-412)
 
 
   result_summary:
 
-  核实效应量表：effect5_effsize_v3.csv 含 22 个 score × 5 效应 × 10 亚群 = 1100 行，列含 eff/eff_type/p_np/p_par/n1/n2/aux1/aux2/q。其中已含
-  scoreI_AUC/scoreII_AUC/scoreIIa_AUC/scoreIIx_AUC 完整效应量 → 第二版加肌纤维类型打分无需重算'
-evidence: 'record_run(cns-visualization): 核实效应量表：effect5_effsize_v3.csv 含 22 个 score
-  × 5 效应 × 10 亚群 = 1100 行，列含 eff/eff_type/p_np/p_par/n1/n2/aux1/aux2/q。其中已含 scoreI_AUC/scoreII_AUC/scoreIIa_AUC/scoreIIx_AUC
-  完整效应量 → 第二版加肌纤维类型打分无需重算'
+  v16 边缘检测完成：上下留白正常（33/32px），左右有少量像素贴边（左 65px @底部、右 73px @y396-412 疑为最右列名倾斜文字末端）'
+evidence: 'record_run(cns-visualization): v16 边缘检测完成：上下留白正常（33/32px），左右有少量像素贴边（左 65px
+  @底部、右 73px @y396-412 疑为最右列名倾斜文字末端）'

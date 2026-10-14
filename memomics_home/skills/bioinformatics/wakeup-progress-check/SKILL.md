@@ -7,8 +7,26 @@ description: 系统唤醒/进度询问时的任务状态核查规程。定位活
 
 ## 何时触发
 
+- 🔴 **连续零 delta tick ≥5 轮 → 自行暂停 LoopX，不等用户抱怨（2026-10-13 memomics-be17649b 实测，第 10 轮）**：判定门槛 = 三源逐项同值（产物 md5 同值 + 交付物**字节与 mtime** 全同 + 无晚于 plan 的新产出）**且**唯一挂起项必须用户供给（DOI / 二选一决策）⇒ 机器无法产出，继续 tick 纯烧 token。动作 = `results/<sid>/.loopx/registry.json` 里 goal `status` **和** `adapter.status` 双改 `paused` + `quota.compute: 0` + 写 `pause_reason`，task_plan 只记一行并注明「可一句话恢复」，汇报里给出恢复路径。**可逆 ⇒ 不必等点头**；⛔ 但仍有 in_progress / 后台进程 / 未核销回执时不可暂停。配方（`search_files` 找不到隐藏目录 `.loopx/`，必须 `find`）+ task_plan 用 patch 的**缩进漂移坑**（会把 `**Status:**` 顶出首列、越修越歪 → 改前读全整份再 `write_file`）→ `references/loopx-noop-tick-escalation.md` · 🔴 **暂停后还有两件收尾**：① **验根** —— 读回 JSON ≠ 停成（`waiting`/`cleared` 会被放行），必须跑一次 `LoopXBridge.should_run()`，为 False 即判「暂停有效」（§3-b）；唤醒头 `📊 LoopX 状态` 块写 `goal: active`、或暂停后仍收到 tick，**都不是「没停成」的证据**（头字段是注入的渲染摘要）⇒ 回读 registry 复核即可，⛔ 不重复暂停；② **报告骨架里的 `【仍挂起】` 行已删除** —— 照它写就必然踩 `delegation-orchestration` 4-b 的「挂起项重列 + 邀约句」违规（本会话实测照此发出），待决项只进 `notes.md`，发前跑 `replay_reply_lint.py --ledger`
+- 🔴 **零 delta 轮次的回复纪律（2026-10-14 tick#22 亲历：规则明明写着，仍照旧犯）**：三条硬约束 ——
+  ① **task_plan 每轮只写 ≤1 行**（`#N 第 N 次同值 → 零写入`）；本轮的结构性发现 / 逐条数字 / 证据指纹**全部进 `notes.md`**，
+     否则 plan 被审计文字淹没（§4 坑 B 的自我放大，本轮实测又违反了：往 plan 写了 6 行）；
+  ② **回复到「结论 / 恢复方式」即停**，`挂起项` / `待决项` / `等你一句话` **一个字都不进正文**，只写进
+     `notes.md` 的 `[挂起 · 非阻塞]` 行；
+  ③ **每一条唤醒轮回复（不只暂停轮）发前都跑 linter**：
+     `python <skills>/bioinformatics/delegation-orchestration/scripts/replay_reply_lint.py --ledger results/<sid>/notes.md <草稿>`
+     返回 1 ⇒ 按提示删整段重跑；0 才发。⛔ 不凭「读一遍觉得干净」发 —— tick#22 正是没跑 linter，把
+     「仍需你一句话的两件事：① 32 号卡 DOI ② 是否恢复 LoopX」原样发出，与 4-b 违规史**逐字同形**。
+- 🔴 **`📌 用户最近诉求（本会话）` 记忆块会串会话 —— 先验归属再动手（2026-10-14 实测）**：唤醒 / 回执轮注入的该块
+  可能混入**别的会话**的原话。本轮块内一条「看看 `E:\MemOmics-Agent` 有没有 README.md / AGENTS.md，讲讲项目是干什么的」
+  实为 `memomics-75ba0499` 的诉求（`session_search` 只命中他会话，`search_history` 本会话 0 命中）⇒ 行动前先
+  `session_search(query=<该诉求的独有名词>)` 验归属：命中他会话 ⇒ **按铁律 -5 不接管、不代跑**，只在 `notes.md` 记一行，
+  ⛔ 不写进回复、更不列成待决项（会与 4-b 的 lint 正面冲突）；0 命中 ⇒ 只能说「本会话无记录」，不等于用户没说过。
+  细则见 `references/loopx-noop-tick-escalation.md` §6。
 - 🔴 **用户抱怨"为什么一直在唤醒" / "把唤醒停掉" → 停止 LoopX 唤醒（2026-08-12 用户确认选项 A 实测）**：根因 = `results/<sid>/.loopx/registry.json` 中 goal status=active → LoopX 每分钟 tick 发唤醒。修复 = status 改 `paused` + `quota.compute` 改 `0`（⚠️ 只改 cleared 不够，waiting 会被 bridge 放行）；验证 = `LoopXBridge.should_run()` 返回 should_run=False。完整步骤（含备份/恢复/用户偏好教训）→ `references/stopping-loopx-wakeups.md`
 - 🔴 **用户抱怨"为什么一直这样 / 怎么又长时间无响应" → 唤醒死循环根治（2026-08-26 memomics-cd677556 实测）**：最高频"长时间无响应"根因 = **完成契约未闭环**（见 Step 2 陷阱 E3）——产物齐全但 task_plan 残留 in_progress/checkbox 未勾 → 自检每轮唤醒 → 唤醒历史逐字堆进上下文 → 响应变慢超时 → 中断又唤醒 → 恶性循环。动作 = 同一轮 patch task_plan 标 complete 打破循环（不是只口头汇报）。
+- 🔴 **唤醒正文是 `[ASYNC DELEGATION BATCH COMPLETE]` 回执 → 转 `delegation-orchestration`，不跑本 skill 的 task_plan 仪式（2026-10-08 实测：同轮两条回执，一条 COMPLETE 重放 + 一条 interrupted 重放）**：这类唤醒**不涉及 task_plan、不是进度核查**——第一步就 `grep -n "deleg_" results/<sid>/notes.md` 查回执台账（命中且交付物字节数一致 ⇒ 一跳判重放、**零写入收场**），未命中再按 `delegation-orchestration` §二 ⓪ 系列做磁盘一跳。⛔ 不要读 task_plan、不要跑三源、不要追加唤醒记录（Step 1–3 不适用）；⛔ 也**不要因为回执头写着 `status=interrupted` / `ERROR` / `(4m47s ago)` 就重派子代理**——这三个字段都是父侧记账假象（`0s` / `api_calls=0` 同理），子代理产出可能早已完整落盘并进终态 store（§一-b 表、§二 ⓪-g）
+- 🔴 **唤醒没带回执、但 `cache/delegation/live/` 里出现陌生批次目录 ⇒ 先判归属，再判重放（2026-10-13 实测）**：本轮扫到 3 个批次（`deleg_e78e9cbd` / `8e3e2dac` / `1f7a6a84`），台账零命中 —— **不要**按「台账没记过 ⇒ 未合并 ⇒ 重做」处理。归属只有一条硬证据：`grep -ho "memomics-[a-z0-9]\{8\}" <live 目录>/task-*.log | sort | uniq -c` → 实测命中 **`memomics-75ba0499` ×35、本会话 ×0** ⇒ 属**他会话**，按**铁律 -5 session 隔离**：不读产物 / 不合并 / 不接管 / 不重派。⚠️ 主题同域（都是 AI-agent 文献提取）、store 里出现同名专名（CASSIA/ChemCrow）、时间「比上轮新」——**三条都不构成归属证据**；缓存根还有 `hermes_home/` 与 `memomics_home/` 两个候选，`ls -d` 过再下结论。收尾 = 台账一行 + task_plan 一行（防下轮重查），正文报「外部会话批次 · 不接管」。完整配方 → `delegation-orchestration` 的 `references/foreign-session-batch-attribution.md`
 - 消息包含 `[系统唤醒]` / `⏰` / cron 唤醒
 - 消息头含 `📊 LoopX 状态：goal: ... | attention: ... | todos: ...`（LoopX 心跳唤醒变体，2026-08-09 实测；其后的 `[系统唤醒 #N]` 编号是 LoopX 计数器，**不作 task_plan 记录编号**——按已有记录最大号+1 或按终态不追加规则处理）
 - 🔴 **LoopX 消息模板陷阱（#96 实测 2026-08-09）**：消息正文三条（读 task_plan → search_files → 继续执行）只是**触发信号，不是完整流程**——它不含本 skill 加载步骤；照模板字面执行必跳 skill 门禁 → 进程源滑回被禁 `//FO CSV` 变体（缺口 #14 实证）。Step 0 无条件 `skill_view(wakeup-progress-check)`，三源只用 verify_wakeup.sh 或 Step 3 快查三条。重复违规台账与不可信记录黑名单 → `references/recurring-execution-gaps.md`
@@ -327,6 +345,12 @@ cd <会话目录> && echo '== 产出子目录 ==' && ls -la figures/R_version/ &
 
 - 🔧 **task_plan 模板各异：无 `## 红线与约束` 节（扁平模板）时的追加锚点回退（2026-09-12 memomics-7839e23a 实测）**：本节所有锚点法（#17/#70/#108/#115）都默认 plan 采用**标准模板**（含 `## 红线与约束` + 既有唤醒记录块）。本次的专利任务 plan 是**扁平模板** —— 只有 `Goal / Environment / Inputs / Current Phase / Phases / Errors Encountered / Decisions Made / 关键结论`，**既无 `## 红线与约束` 节，也无任何唤醒记录块**（本次即首次唤醒落地）。三条适配：① **追加锚点回退 = 文件末尾那个唯一行**（本次用 `## 关键结论` 段末的 `- 替换对照表：...`，全文唯一），新记录写在文件末尾并配新标题 `## 唤醒记录`；② **取号不适用**（无既有记录块 → 本次即 `#0`，不必跑 grep 取号，也不必做 ≥5 合并判断）；③ **不因"没有红线节"就跳过写盘** —— 终态短记录照写，只是锚点换成末尾唯一行。判据：read_file 全文后看 `## ` 标题清单，选**出现次数 == 1 且位于文件尾部**的那一行作锚；若末尾有多个唯一行，优先选**业务正文的最后一行**（别选系统自动生成的 `Proven Scripts` 表尾 —— 那张表会被脚本改写，mtime 不稳）。
 
+🔧 **模板变体三：扁平 Phase 模板 + 行内 `- [x] #NN` 审计链（2026-10-13 memomics-be17649b 实测）**：plan 既无 `## 🏁 唤醒 #N 记录` 块、也无 `## 红线与约束`，而是在 `### Phase N` 下用 `- [x] #11 …` / `- [x] #12 …` **行内 bullet 串**记每轮核销。三条适配：① **取号 = 链尾最大 NN + 1**（read_file 看到链尾即可；`#84` 标题截断 / `#90` 裸 bullet / `#116` body 污染三个取号陷阱都是为 `🏁` 块设计的，此处不适用）② **追加锚点 = 唯一的 `**Status:** completed` 行**（本类模板里只出现一次、天然位于链尾之后）：`old_string="**Status:** completed"` → `new_string="<新 bullet>\n**Status:** completed"`，实测一次成功；⛔ 别用 Phase 标题行（多个 Phase 都含 `### Phase`）③ 链内 ≥5 条同类核销 bullet **不必压缩**——每条带**不同批次编号/证据**（`deleg_xxx`、md5 第 N 次同值），与 `🏁` 块里"逐字相似的终态记录"性质不同，压缩会丢批次证据。
+
+🔴 **`find -newermt` 基线禁用手填 `Runtime State.started_at`（2026-10-13 memomics-be17649b 实测）**：新模板 `## Runtime State` 段的 `started_at` **不是**"上次记账时刻"（本会话 = 01:57，而 plan mtime = 22:16）——拿它当基线会把**整个会话期间**的记账文件全列出来（`.memory/turn_archive/*`、`.memory/conclusions.md`、`notes.md`、`REQUIREMENTS.md`、`review/assets.json`、`log/run_record_*.json`），看着像"未记账产出"，**极易触发多余的补账/复查回合**（E3 循环的燃料）。基线**只能是 `task_plan.md` 自身 mtime**（`ls -l --time-style='+%Y-%m-%d %H:%M' task_plan.md` 取 ISO 直接喂 `find -newermt`）。判"未记账产出"前先自问：这文件是**产物**还是**本会话自己的记账文件**？后者不算产出、不补账。
+
+💡 **无进程类终态会话的指纹三源（2026-10-13 memomics-be17649b 实测）**：文献/交付物/专利类会话**没有 Rscript/python 分析进程**，Step 3 的进程源与 GPU 源全是空跑——⛔ 不要为"凑三源"去跑 `nvidia-smi`/`tasklist`（纯耗 token + 触发循环检测，见陷阱 E6）。改用等价强度的**指纹三源，一条 terminal 取全**：① **唤醒源**（`.loopx/registry.json` 的 `status`/`quota` + `.task_state.json` 的 `armed`/`rounds_started`，套 E5 三分法：loopx `active` ⇒ 周期唤醒 / `armed=true`+`reason=user message…` ⇒ 用户消息武装 / 两者皆非 ⇒ 回头查完成契约；本会话实测 `active` + `armed=false` ⇒ LoopX tick，非契约缺陷、非用户消息）② **载体指纹**（核心产物 md5，如 `data/cards.json` —— 同值 = 内容零漂移，比数文件个数硬）③ **交付物字节 + mtime**（逐文件 `ls -l --time-style='+%Y-%m-%d %H:%M'`；字节与时间戳全同 = 未触发重渲染）。三源一致 + 无晚于 plan mtime 的实质新产出 ⇒ 判**「零写入收敛轮」**：只追加一行审计 bullet、不重派/不重读/不重合并/不重渲染，回复压到 ≤5 行（E3 上下文膨胀对策），并在正文一句话告知用户"停掉唤醒的唯一开关 = `status: paused` + `quota.compute=0`"。现成脚本 → `scripts/terminal_session_fingerprint.sh <会话目录> [载体相对路径= data/cards.json] [交付目录= deliverables]`。
+
 ## Step 2.5: waiting_user 状态 = 轻量核查 + SILENT（2026-08-27 memomics-cd677556 实测）
 
 **task_plan 的 Current Phase 显式标注 `waiting_user`（"等待用户决策"）时，唤醒不是进度核查，是"确认仍在等"**——最小核查即可，不要跑全套三源仪式、不要推进任何 Phase、不要补账：
@@ -344,6 +368,7 @@ cd <会话目录> && echo '== 产出子目录 ==' && ls -la figures/R_version/ &
 - 📎 **等待期点名产物交付完整示例（含聚合脚本模式）→ `references/waiting-user-deliverables.md`**
 - 🔴 **系统"会话要求路径不存在"提醒 = 先 search_files 核实再问用户（2026-08-27 memomics-cd677556 唤醒 #9 实测）**：会话要求块注入 `⚠️ 以下要求中的路径不存在，请向用户核实是否已更新/作废：D:\学习文献\Revised text-final.docx` 时，**不要立即问用户**——先用 `search_files(target='files', pattern='<文件名关键词>', path='<父目录>')` 实测（本案例 `*Revised*` in `D:/学习文献` 一次命中 `D:/学习文献/Revised text-final.docx` = 文件真实存在）→ 系统检测是**误报**（中文路径/docx 后缀/路径规范化差异触发），按误报处置：不向用户核实、不作废路径，汇报里说明"系统路径提示系误报，已检索确认文件存在"。⛔ 只有 search_files 也确认不存在时才向用户问"路径是否已更新/作废"。教训：会话要求块的路径警告只是**触发线索**，不是结论；一次 search_files 就能省掉一次无谓打扰用户的回合。
 - 🔴 **路径"真不存在"确认后的问法模板 + 作废标记闭环（2026-08-27 memomics-cd677556 唤醒 #15 实测）**：#9 的误报反例之后，本次是**真阴性**：`search_files(target='files', pattern='*Revised*', path='D:/学习文献')` 实测 0 命中 → 文件确实被移动/重命名/删除。正确处置四步：① 汇报里明确写"**已核实不存在**"（不是照抄系统警告原文）② 问用户"请告知新路径或标记作废"（给两选一，不默认作废）③ 声明"在您回复前不基于此路径做任何推导"（防止用已失效路径推断任务内容）④ 用户确认作废后 → **同步清理会话锚点/requirements 标记**（`session_memory(remove)` 或更新对应条目），防止后续唤醒每轮重复问同一路径 + 重复把失效路径注入上下文（呼应 E3 上下文膨胀教训）。⚠️ 与 #9 的分界：search_files 命中 = 系统误报，不打扰用户；0 命中 = 真缺失，才按上述模板问。系统警告本身只触发核实，不触发"问用户"。
+- 🔴 **路径警告的第三种形态：字符串截断（2026-10-13 memomics-be17649b 实测）**：警告里的路径本身就断在词中/无扩展名（如 `E:\文献\AI\Closed-loop transfer enables a`），而同一路径在会话锚点里标注「已实测存在，24,214,769 B」⇒ 这是**展示层截断**，不是文件缺失——**不核实、不打扰用户、不作废路径**，汇报里一句「系字符串截断假警报，完整文件在盘」即可。判据：路径**结尾不像完整文件名**（断在词中/无扩展名/恰好卡在固定字符数）⇒ 截断型；结尾完整却仍报缺失 ⇒ 才按上述 #9/#15 两形态（search_files 核实 → 命中=误报 / 0 命中=问用户）处置。详见 `references/repeated-wakeup-convergence-fingerprint.md` §5。
 - ⚠️ 别把 SKILL 完整 ceremony 当默认：三源交叉验证（Step 3）是给"可能正在跑后台任务"的唤醒用的；waiting_user 是显式声明"没有东西在跑"，核查降级是符合设计不是偷懒
 
 ## Step 3: 三源交叉验证
@@ -559,6 +584,7 @@ mid-run 唤醒发现**进程已死**（heartbeat `rscript=` 为空 / tasklist �
 ## 相关
 
 - 🔴 **唤醒/中断轮重投了一条"上一轮已经做完"的请求 → 一步判定，别重做也别连环复核（2026-10-01 实测：我烧了 10+ 个只读调用才找到证据，第 5 轮起即吃循环检测 OOD）**：判据 = `grep -n '<资产名>' results/<sid>/log/system_log.jsonl`（或现成探针 `scripts/asset_history_probe.py <会话目录> <关键词>`）——日志里若已有 `write_file → execute_* → rail_review → skill_evolution(record_run)` 完整链，**且 `record_run` 的 `notes` 已覆盖用户这次请求 + 时间晚于上一条用户消息 ⇒ 任务已完成，直接汇报**。附：matplotlib 的 SVG 默认把文字存成**路径**（`svg.fonttype='path'`），grep `<text>` 恒返回 0，**不能**用它判"图内有没有中文"，要看的是改图脚本 + 那次 OCR 的 `record_run.notes` → `references/already-completed-request-redelivery.md`
+- 🔁 **终态会话连续多轮空转唤醒（按「第 N 次同值」计）→ 指纹一条命令取全 + `ask_user` 弹窗只发一次 + 其后收敛为一行**：完整配方（一条命令四指纹 / md5 作主指纹 / 「键存在 ≠ 本批贡献」的内容同一性检验 / 收敛终点 / 路径警告的截断型第三形态）→ `references/repeated-wakeup-convergence-fingerprint.md`
 - 长任务心跳监控（Agent 不在场时的自动检测）：`heartbeat-monitor` skill
 - ATAC 专项的唤醒门禁细节：`atac-seq-memomics` references/post-completion-wakeup-gate.md
 
@@ -647,6 +673,7 @@ mid-run 唤醒发现**进程已死**（heartbeat `rscript=` 为空 / tasklist �
 | human | skeletal_muscle | aging | 2026-10-01 | wakeup_check_memomics-afd2d418_v8 | - | - |  |
 | human | skeletal_muscle | aging | 2026-10-01 | wakeup_three_source_check_v8.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-10-01 | wakeup_check_memomics-afd2d418_v8 | - | - |  |
+| - | - | - | 2026-10-13 | wakeup_check_memomics-be17649b_replay15 | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
