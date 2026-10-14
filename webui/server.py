@@ -394,6 +394,40 @@ logger = logging.getLogger("memomics")
 _SKILLS_WARMED = False
 
 @app.on_event("startup")
+async def _start_runtime_maintenance():
+    """启动时挂上「慢循环看门狗」与「SQLite 保养」（2026-10-13）。
+
+    背景：用户反馈会话卡住、暂停不立即生效；实测抓到 /api/sessions（纯内存遍历，正常 0.03s）
+    耗时 33.4s —— 事件循环被同步重活堵住。看门狗把阻塞瞬间（含主线程调用栈）写进
+    log/slow_loop.log；保养把 state.db 的 WAL 及时 checkpoint（实测 1.09GB db + 300MB wal）。
+    两者都在后台，异常一律吞掉，不影响主流程。
+    """
+    try:
+        _rt = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runtime")
+        if _rt not in sys.path:
+            sys.path.insert(0, _rt)
+        import slow_loop_watchdog as _swd
+        import db_maintenance as _dbm
+        _wd = _swd.start_watchdog(MEMOMICS_DIR)
+        globals()["_SLOW_LOOP_WD"] = _wd
+        asyncio.create_task(_slow_loop_heartbeat(_wd))
+        _dbm.run_maintenance_async(os.path.join(MEMOMICS_HOME_DIR, "state.db"), MEMOMICS_DIR)
+        print("[mem] 慢循环看门狗 + 数据库保养已启动", flush=True)
+    except Exception as _e:  # noqa: BLE001
+        print("[mem] 看门狗/保养启动跳过: %r" % (_e,), flush=True)
+
+
+async def _slow_loop_heartbeat(_wd) -> None:
+    """事件循环心跳：0.25s 一次（被同步调用堵住时心跳自然停，看门狗据此判定）。"""
+    while True:
+        try:
+            _wd.heartbeat()
+        except Exception:
+            pass
+        await asyncio.sleep(0.25)
+
+
+@app.on_event("startup")
 async def _warm_skills_snapshot():
     """启动时调用 build_skills_system_prompt() 一次，将 355 个 SKILL.md 的
     元数据快照写入 memomics_home/.skills_prompt_snapshot.json。
@@ -12121,6 +12155,16 @@ def _apply_overlay(extract_root: str, tops: list) -> int:
 
 @app.get("/api/update/check")
 async def update_check():
+    """检查更新（2026-10-13：同步网络/IO 下放到线程池）。
+
+    实测：这条链路里的 HTTP + SSL 上下文构建曾在事件循环线程里跑 4~33 秒，
+    把整个 WebUI 堵住（看门狗 log/slow_loop.log 有栈）。现在统一在线程池里跑。
+    """
+    import asyncio as _aio
+    return await _aio.get_running_loop().run_in_executor(None, _update_check_sync)
+
+
+def _update_check_sync():
     """检查更新：本地 VERSION vs GitHub 最新 release（含平台资产信息）。
 
     返回:
