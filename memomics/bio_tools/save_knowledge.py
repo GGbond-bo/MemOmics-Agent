@@ -64,7 +64,7 @@ SCHEMA = {
             },
             "species": {
                 "type": "string",
-                "description": "物种（如 Homo sapiens / Mus musculus）。提供后按五级目录入库: 物种/组织/方向/类别/assay。"
+                "description": "物种（如 Homo sapiens / Mus musculus）。提供后按五级目录入库: 物种/组织/方向/类别/assay。生物/生信知识必填（否则落到 other 平铺目录，知识库浏览树里找不到对应物种/课题）。"
             },
             "tissue": {
                 "type": "string",

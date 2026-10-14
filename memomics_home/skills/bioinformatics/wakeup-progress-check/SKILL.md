@@ -8,6 +8,21 @@ description: 系统唤醒/进度询问时的任务状态核查规程。定位活
 ## 何时触发
 
 - 🔴 **连续零 delta tick ≥5 轮 → 自行暂停 LoopX，不等用户抱怨（2026-10-13 memomics-be17649b 实测，第 10 轮）**：判定门槛 = 三源逐项同值（产物 md5 同值 + 交付物**字节与 mtime** 全同 + 无晚于 plan 的新产出）**且**唯一挂起项必须用户供给（DOI / 二选一决策）⇒ 机器无法产出，继续 tick 纯烧 token。动作 = `results/<sid>/.loopx/registry.json` 里 goal `status` **和** `adapter.status` 双改 `paused` + `quota.compute: 0` + 写 `pause_reason`，task_plan 只记一行并注明「可一句话恢复」，汇报里给出恢复路径。**可逆 ⇒ 不必等点头**；⛔ 但仍有 in_progress / 后台进程 / 未核销回执时不可暂停。配方（`search_files` 找不到隐藏目录 `.loopx/`，必须 `find`）+ task_plan 用 patch 的**缩进漂移坑**（会把 `**Status:**` 顶出首列、越修越歪 → 改前读全整份再 `write_file`）→ `references/loopx-noop-tick-escalation.md` · 🔴 **暂停后还有两件收尾**：① **验根** —— 读回 JSON ≠ 停成（`waiting`/`cleared` 会被放行），必须跑一次 `LoopXBridge.should_run()`，为 False 即判「暂停有效」（§3-b）；唤醒头 `📊 LoopX 状态` 块写 `goal: active`、或暂停后仍收到 tick，**都不是「没停成」的证据**（头字段是注入的渲染摘要）⇒ 回读 registry 复核即可，⛔ 不重复暂停；② **报告骨架里的 `【仍挂起】` 行已删除** —— 照它写就必然踩 `delegation-orchestration` 4-b 的「挂起项重列 + 邀约句」违规（本会话实测照此发出），待决项只进 `notes.md`，发前跑 `replay_reply_lint.py --ledger`
+- 🔴 **零 delta 轮次的回复纪律（2026-10-14 tick#22 亲历：规则明明写着，仍照旧犯）**：三条硬约束 ——
+  ① **task_plan 每轮只写 ≤1 行**（`#N 第 N 次同值 → 零写入`）；本轮的结构性发现 / 逐条数字 / 证据指纹**全部进 `notes.md`**，
+     否则 plan 被审计文字淹没（§4 坑 B 的自我放大，本轮实测又违反了：往 plan 写了 6 行）；
+  ② **回复到「结论 / 恢复方式」即停**，`挂起项` / `待决项` / `等你一句话` **一个字都不进正文**，只写进
+     `notes.md` 的 `[挂起 · 非阻塞]` 行；
+  ③ **每一条唤醒轮回复（不只暂停轮）发前都跑 linter**：
+     `python <skills>/bioinformatics/delegation-orchestration/scripts/replay_reply_lint.py --ledger results/<sid>/notes.md <草稿>`
+     返回 1 ⇒ 按提示删整段重跑；0 才发。⛔ 不凭「读一遍觉得干净」发 —— tick#22 正是没跑 linter，把
+     「仍需你一句话的两件事：① 32 号卡 DOI ② 是否恢复 LoopX」原样发出，与 4-b 违规史**逐字同形**。
+- 🔴 **`📌 用户最近诉求（本会话）` 记忆块会串会话 —— 先验归属再动手（2026-10-14 实测）**：唤醒 / 回执轮注入的该块
+  可能混入**别的会话**的原话。本轮块内一条「看看 `<安装目录>` 有没有 README.md / AGENTS.md，讲讲项目是干什么的」
+  实为 `memomics-75ba0499` 的诉求（`session_search` 只命中他会话，`search_history` 本会话 0 命中）⇒ 行动前先
+  `session_search(query=<该诉求的独有名词>)` 验归属：命中他会话 ⇒ **按铁律 -5 不接管、不代跑**，只在 `notes.md` 记一行，
+  ⛔ 不写进回复、更不列成待决项（会与 4-b 的 lint 正面冲突）；0 命中 ⇒ 只能说「本会话无记录」，不等于用户没说过。
+  细则见 `references/loopx-noop-tick-escalation.md` §6。
 - 🔴 **用户抱怨"为什么一直在唤醒" / "把唤醒停掉" → 停止 LoopX 唤醒（2026-08-12 用户确认选项 A 实测）**：根因 = `results/<sid>/.loopx/registry.json` 中 goal status=active → LoopX 每分钟 tick 发唤醒。修复 = status 改 `paused` + `quota.compute` 改 `0`（⚠️ 只改 cleared 不够，waiting 会被 bridge 放行）；验证 = `LoopXBridge.should_run()` 返回 should_run=False。完整步骤（含备份/恢复/用户偏好教训）→ `references/stopping-loopx-wakeups.md`
 - 🔴 **用户抱怨"为什么一直这样 / 怎么又长时间无响应" → 唤醒死循环根治（2026-08-26 memomics-cd677556 实测）**：最高频"长时间无响应"根因 = **完成契约未闭环**（见 Step 2 陷阱 E3）——产物齐全但 task_plan 残留 in_progress/checkbox 未勾 → 自检每轮唤醒 → 唤醒历史逐字堆进上下文 → 响应变慢超时 → 中断又唤醒 → 恶性循环。动作 = 同一轮 patch task_plan 标 complete 打破循环（不是只口头汇报）。
 - 🔴 **唤醒正文是 `[ASYNC DELEGATION BATCH COMPLETE]` 回执 → 转 `delegation-orchestration`，不跑本 skill 的 task_plan 仪式（2026-10-08 实测：同轮两条回执，一条 COMPLETE 重放 + 一条 interrupted 重放）**：这类唤醒**不涉及 task_plan、不是进度核查**——第一步就 `grep -n "deleg_" results/<sid>/notes.md` 查回执台账（命中且交付物字节数一致 ⇒ 一跳判重放、**零写入收场**），未命中再按 `delegation-orchestration` §二 ⓪ 系列做磁盘一跳。⛔ 不要读 task_plan、不要跑三源、不要追加唤醒记录（Step 1–3 不适用）；⛔ 也**不要因为回执头写着 `status=interrupted` / `ERROR` / `(4m47s ago)` 就重派子代理**——这三个字段都是父侧记账假象（`0s` / `api_calls=0` 同理），子代理产出可能早已完整落盘并进终态 store（§一-b 表、§二 ⓪-g）

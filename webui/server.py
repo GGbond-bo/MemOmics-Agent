@@ -12257,6 +12257,21 @@ _RESTART_EXIT_CODE = 77
 _SUPERVISED_MAX_AGE_SEC = 6 * 3600
 
 
+def _write_runtime_port(port) -> None:
+    """把真实监听端口写到 memomics_home/runtime/port.txt（2026-10-13 新增）。
+
+    用途：桌面图标脚本（scripts/launch_from_desktop.ps1）据此发现端口 —— 端口被占、
+    start.bat 自动换端口（8899 -> 8890 ...）后，图标仍能打开正确地址，而不是死认 8899。
+    """
+    try:
+        d = os.path.join(MEMOMICS_HOME_DIR, "runtime")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "port.txt"), "w", encoding="utf-8") as f:
+            f.write("%s\n" % port)
+    except OSError:
+        pass
+
+
 def _home_file(name: str) -> str:
     return os.path.join(MEMOMICS_HOME_DIR, name)
 
@@ -21438,6 +21453,7 @@ if __name__ == "__main__":
     _crash_count = 0
     while True:
         try:
+            _write_runtime_port(port)
             uvicorn.run(app, host=os.environ.get("MEMOMICS_HOST", "127.0.0.1"), port=port)
         except Exception as e:
             _crash_count += 1
