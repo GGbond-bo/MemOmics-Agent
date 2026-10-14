@@ -629,6 +629,15 @@ DeepRare 14 · Co-Scientist 14 · ChemCrow 14 · ChemGraph 12 · BioMaster 11 �
   `Full subagent output saved to: …\cache\delegation\subagent-summary-<i>-<YYYYMMDD>_<HHMMSS>_<ms>.txt`
   —— 文件名中的 `YYYYMMDD_HHMMSS` 就是该 summary **真实落盘的时刻**（本轮 `…20261008_011906…` = **01:19:06**）。
   ⛔ 不要用回执正文里的 `(4m47s ago)` / `(Nm ago)` / `Total duration` 对表 —— 全是渲染值（⓪-g）。
+- 🔴 **只用它文件名里的时间戳，⛔ 不要盲 `read_file` 那条路径**：页脚的 summary 路径与本 skill 反复记过的
+  `live/<deleg_id>/task-N.log` 路径**同族 —— 都是模板回填，整条可能不存在**
+  （本会话台账连续 4 轮实测 `hermes_home/cache` 整目录 absent；⚠️ 与「另一候选根 `memomics_home/cache/` 下
+  确有文件」的读数**互斥**，⛔ 两个方向都不许外推 ⇒ 只能逐轮 `ls -d` 两个候选根现查，见 §一-b）。
+  ⇒ 取时间戳走**文件名**（纯字符串处理，不依赖文件是否存在）；
+  `read_file` 报 not found 时 **⛔ 不得推断「内容丢了 / 需要重派」** —— 路径不在 ≠ 产出不在，
+  判产出一律回落盘件 + mtime + 字节指纹（§五）。
+  ⚠️ 同理，回执里 `To read the omitted middle: read_file path="…"` 这一句**也只是模板建议**，
+  它给的路径同样可能不存在；⛔ 不要照它 retry，更不要因读不到就把截断当缺口。
 - **拿到就和「补救件」的 mtime 对表**：
 
   | 事件 | 时刻（本轮实测） |
@@ -1117,6 +1126,7 @@ pairs = [(int(k), x) for k, x in v.items()] if isinstance(v, dict) else [(x["n"]
 | "drafts 完整、字数已达标，**在 kernel variables 里**" | 🔴 **零回收**——子代理 session 结束后它的持久内核一并消失，父代理取不到任何变量 | 别惦记这些草稿，等于没做（与 §五「产出必须落盘」同源） |
 | "**Re-dispatch with the same instructions** — the remaining work is: draft n=16/n=17 …" | **子代理视角的建议，父代理不可照做**：它不知道后来已拆批补派过（本批 t0 的 6 篇被拆成 `t0a` / `t0b` 两个落盘件补齐） | ⛔ 不许照摘要原样重派；先 `ls data/*_t*.json` 找**补派件**（命名惯例：同批拆片 `<base>t0a.json` / `<base>t0b.json`），再按 §二 ⓪-f 冗余判定 |
 | "All inputs are already read and quotes verified" | 同样是**自报**，只对**落盘文件**作数 | 以磁盘为准（§四 主条） |
+| "…`json.dump(…, ensure_ascii=False, indent=2)` to `<…>/deep_cards_round2_t0.json`, verify with `os.path.getsize`…" | 🔴 **连它给的目标文件名都可能与你实际用的不一致** —— 本会话那 6 篇实际是被拆成两片落盘（`…_t0a.json` / `…_t0b.json`，命名惯例见 §一-b ①-b），而子代理建议的是**从未存在过的** `t0.json` | ⛔ **不采信子代理给的落盘路径名**：照抄有两个后果 —— ① 对同一批 6 篇产出**第三个分叉副本**（`t0.json` vs `t0a/t0b`，按文件名判重失效，下游不知该信哪份）；② `ls t0.json` 必然 MISSING ⇒ 被误读成「store 有真缺口」而重派整批（§一-b 已证这批早已并入终态 store）。正解 = 先 `ls data/*_t*.json` 列**磁盘上实际存在的**落盘件，用**键集**做 ⓪-f 冗余判定（文件名判不了重放，回退逐字段 diff） |
 
 ⇒ 净教训（与 §一-b 互补）：**撞 cap 的批次不要原样重派**——要么拆得更小（≤5 篇/人），要么改主代理自己做；
 且 brief 里必须显式写「**任何中间成果（草稿、验证过的引文）必须立即落盘到指定文件，禁止只留在内核变量**」。

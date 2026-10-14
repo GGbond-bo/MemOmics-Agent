@@ -4,7 +4,7 @@ species: Homo_sapiens
 tissue: skeletal_muscle
 direction: aging
 assay_type: RNA
-last_updated: 2026-09-29 16:26
+last_updated: 2026-10-15 00:34
 source: data_driven
 verified: partially_verified
 quality: medium
@@ -17,20 +17,16 @@ content: 'skill: scipilot-figure-skill
 
   params_used:
 
-  {"data": "deg_subcluster_updown_coef025_long.csv (fdr<0.05 & |coef|>0.25)", "layout":
-  "1x5 panels side-by-side, sharey, horizontal diverging bars", "excluded_subclusters":
-  ["RSS", "Specialized MF"], "kept_subclusters": 8, "colors": {"Up": "#B2182B", "Down":
-  "#2166AC"}, "version_A": "shared symlog linthresh=10 (cross-panel comparable)",
-  "version_B": "per-panel free linear scale", "figsize": "14.0x4.3 in @300dpi", "font":
-  "Arial->Helvetica->DejaVu", "formats": ["png", "pdf"]}
+  fig_A2_5effects_drop2_dz.R | 15 programs/5 axes | paired panels switched d_av ->
+  Cohen''s dz (aux1), indep panels kept Hedges'' g | canvas 16.5x8.4in @300dpi | 4
+  formats x 2 dirs
 
 
   result_summary:
 
-  五比较组×8亚群上下调背离柱大图出图成功（4 文件）：版本A 共享 symlog 刻度（跨组可比）+ 版本B 各面板独立刻度（小组细节可读）。剔除 RSS/Specialized
-  MF 后各组合计 Aging 16,915(Up 16,535/Down 380) | Ex_Old 1,322(231/1,091) | DM 269(125/144)
-  | Ex_DM 226(107/119) | Ex_Young 99(61/38)。算术校验：各组总数 = 上轮 10 亚群总数 − RSS − SMF，5/5
-  全对。关键设计：Aging 最大 5,218 vs Ex_Young 最大 15（350 倍量级差）→ 单用共享线性刻度会让小组变零线，故双版本交付。'
-evidence: 'record_run(scipilot-figure-skill): 五比较组×8亚群上下调背离柱大图出图成功（4 文件）：版本A 共享 symlog
-  刻度（跨组可比）+ 版本B 各面板独立刻度（小组细节可读）。剔除 RSS/Specialized MF 后各组合计 Aging 16,915(Up 16,535/Down
-  380) | Ex_Old 1,322(231/1,091) | DM 269(125/144) | Ex_DM 226(107/119) | E'
+  8 files written (all non-empty). dx/d_av median ratios: ExYoung 0.978 (r=+0.495),
+  ExOld 0.888 (r=+0.413), ExT2D 0.651 (r=-0.195). Star counts unchanged vs d_av version
+  (Aging 77, T2D 2, ExYoung 10, ExOld 27, ExT2D 5 per 150 cells).'
+evidence: 'record_run(scipilot-figure-skill): 8 files written (all non-empty). dx/d_av
+  median ratios: ExYoung 0.978 (r=+0.495), ExOld 0.888 (r=+0.413), ExT2D 0.651 (r=-0.195).
+  Star counts unchanged vs d_av version (Aging 77, T2D 2, ExYoung 10, Ex'

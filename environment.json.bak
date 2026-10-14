@@ -1,7 +1,7 @@
 {
   "_version": "1.2",
   "_description": "MemOmics 全局环境 — 所有分析共享。启动时 validate_env.py 自动读→验→修。本机=paths 段；远端集群=cluster 段（持久声明，不被探针重扫覆盖）。",
-  "_last_updated": "2026-10-14T18:43:33",
+  "_last_updated": "2026-10-15T00:29:38",
   "_canonical": {
     "_comment": "2026-08-14 环境唯一真源声明（此前多版本/多库路径混乱导致各种报错）",
     "R": "4.5.3 @ C:/Program Files/R/R-4.5.3，库 = E:/R-libs/R-4.5.3（259 包含 Seurat/harmony/ArchR）",
@@ -119,7 +119,7 @@
         "conda_activate": "source /hwfssz3/PS_JLU/zhangxiao6/software/miniconda3/bin/activate <env>",
         "note": "conda 属主为 zhangxiao6（drwxr-xr-x，只能读用、装不了包）；登录节点无 module 系统，R/python 不在 PATH，作业脚本必须显式 export 或先 activate。config.yaml 的 ssh3 note 指向 zhangbo/envs/R4.4.1_zb —— 那是**自有装包环境**，不是默认工作环境；两套的分工见 policy.env_usage。",
         "probed": {
-          "at": "2026-10-14 18:43:31",
+          "at": "2026-10-15 00:29:36",
           "scheduler_detected": "none",
           "remote_home": "/home/zhangbo11",
           "workdir_ok": true,
@@ -147,7 +147,7 @@
         "internet": true,
         "scheduler": "SGE 8.1.9（与 ssh3/ssh23 同一套队列）",
         "probed": {
-          "at": "2026-10-14 18:43:33",
+          "at": "2026-10-15 00:29:38",
           "scheduler_detected": "none",
           "remote_home": "/home/zhangbo11",
           "workdir_ok": true,
@@ -178,7 +178,7 @@
         "scheduler": "SGE 8.1.9（同一套队列）",
         "note": "config.yaml 里标「小内存节点」是相对 ssh3 的 3TB 而言，503 GB 实测并不小。",
         "probed": {
-          "at": "2026-10-14 18:22:29",
+          "at": "2026-10-14 23:56:41",
           "scheduler_detected": "none",
           "remote_home": "/home/zhangbo11",
           "workdir_ok": true,
