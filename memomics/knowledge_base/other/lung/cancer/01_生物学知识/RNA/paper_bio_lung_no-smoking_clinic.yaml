@@ -1,12 +1,10 @@
-pmid: "39580524"
 type: kb_entry
 name: paper_bio_lung_no-smoking_clinic
-doi: "10.1038/s41467-024-54434-4"
 species: other
 tissue: lung
 direction: cancer
 assay_type: RNA
-last_updated: 2026-10-07 18:28
+last_updated: 2026-10-14 18:41
 source: literature
 verified: partially_verified
 quality: medium

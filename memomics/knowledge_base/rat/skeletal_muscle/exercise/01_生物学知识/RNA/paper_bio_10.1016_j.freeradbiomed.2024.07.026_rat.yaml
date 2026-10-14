@@ -1,17 +1,15 @@
-pmid: "39059515"
 type: kb_entry
-name: paper_bio_10.1016_j.freeradbiomed.2024.07.026
-doi: "10.1016/j.freeradbiomed.2024.07.026"
-species: other
+name: paper_bio_10.1016_j.freeradbiomed.2024.07.026_rat
+species: rat
 tissue: skeletal_muscle
 direction: exercise
 assay_type: RNA
-last_updated: 2026-10-07 17:45
+last_updated: 2026-10-14 18:41
 source: literature
 verified: partially_verified
 quality: medium
 auto_trigger:
-- paper_bio_10.1016_j.freeradbiomed.2024.07.026
+- paper_bio_10.1016_j.freeradbiomed.2024.07.026_rat
 content: '## 结论（证据链分级：L0 无来源 / L1 有来源未验证 / L2 实验验证 / L3 临床级）
 
   - **[L1]** 骨骼肌可塑性使其能适应多种内外部刺激和扰动，收缩活动变化可引发生化、代谢和产力特性的大规模重塑。　（位置：Abstract）

@@ -1,17 +1,15 @@
-pmid: "33951459"
 type: kb_entry
-name: paper_bio_hotspot
-doi: "10.1016/j.cels.2021.04.005"
-species: other
-tissue: other
+name: paper_bio_hotspot_mus_musculus
+species: Mus_musculus
+tissue: peripheral_blood_mononuclear_cells
 direction: other
 assay_type: RNA
-last_updated: 2026-10-07 17:28
+last_updated: 2026-10-14 18:41
 source: literature
 verified: partially_verified
 quality: medium
 auto_trigger:
-- paper_bio_hotspot
+- paper_bio_hotspot_mus_musculus
 content: '## 结论（证据链分级：L0 无来源 / L1 有来源未验证 / L2 实验验证 / L3 临床级）
 
   - **[L1]** Hotspot 是一种基于图的通用方法，可在给定细胞-细胞相似度基础上识别信息基因并将其组织为基因模块。　（位置：SUMMARY / INTRODUCTION）

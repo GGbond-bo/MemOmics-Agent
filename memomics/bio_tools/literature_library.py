@@ -2042,6 +2042,47 @@ def _kb_write_fallbacks(tags: dict, k: dict) -> tuple:
     return species, ti, dr
 
 
+def _enrich_tags_from_summary(tags: dict, hit: dict) -> dict:
+    """入库前的 tags 兜底回填（2026-10-13，用户反馈：提取的知识在浏览树里看不到对应物种/课题目录）。
+
+    根因：tags 是标题规则分类（_rule_classify），生物论文标题大多不带物种 → species=["unknown"]
+    → 生物学条目全落进 other/ 目录，用户在 Homo_sapiens/skeletal_muscle 下什么都看不到。
+    回填链：tags 缺失 → 9 项提炼摘要的 species/tissue（读过全文，远比标题准；
+    实测 devcel 肌肉衰老篇 tags=unknown 但 summary.species="mouse;human"）
+    → 方向再兜底用规则词表扫「标题 + 摘要 idea/problem/background」。
+    """
+    t = dict(tags or {})
+    s = hit.get("summary") or {}
+
+    def _flat(v):
+        if isinstance(v, list):
+            return ";".join(str(x) for x in v)
+        return str(v or "")
+
+    def _bad_species(v):
+        return (not v) or all(str(x).strip().lower() in ("", "unknown", "other") for x in v)
+
+    if _bad_species(t.get("species")):
+        sp = [x.strip() for x in re.split(r"[;,;、/|]", _flat(s.get("species"))) if x.strip()]
+        if sp:
+            t["species"] = sp
+    if not t.get("tissue"):
+        # 组织兜底只收规整的 snake_case 词（规则词表形态）；摘要里的自由文本短语
+        # （如「研究覆盖35种 human 组织」）会污染目录名，一律拒收
+        ti = [x.strip().lower().replace(" ", "_")
+              for x in re.split(r"[;,;、/|]", _flat(s.get("tissue"))) if x.strip()]
+        ti = [x for x in ti if re.fullmatch(r"[a-z][a-z0-9_]{1,40}", x)]
+        if ti:
+            t["tissue"] = ti
+    if not t.get("direction"):
+        blob = " ".join([str(hit.get("title") or ""),
+                         _flat(s.get("idea")), _flat(s.get("problem")), _flat(s.get("background"))])
+        dr = _rule_classify(blob).get("direction") or []
+        if dr:
+            t["direction"] = dr
+    return t
+
+
 def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> tuple:
     """把结构化知识写进 knowledge_base（批O3 2026-08-16 跨物种/化学域版）：
 
@@ -2054,6 +2095,7 @@ def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> t
     """
     from memomics.bio_tools.save_knowledge import save_knowledge
     written, rejected = [], []
+    tags = _enrich_tags_from_summary(tags, hit)   # 2026-10-13：tags 缺失物种/组织/方向 → 摘要回填
     species_list, ti, dr = _kb_write_fallbacks(tags, k)
     stem = os.path.splitext(hit.get("file") or "")[0]
     bio = k.get("biology") or {}
@@ -2184,8 +2226,14 @@ def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> t
             f"- {label}: {c.get(key) or '—'}"
             for label, key in (("靶点", "target"), ("剂量", "dose"), ("IC50/EC50", "ic50"),
                                ("模型", "model"), ("效应", "effect")))
+        # 2026-10-13 修：chem_<stem>_<slug> 拼接常超 64 字符被铁轨拒收（条目丢失）。
+        # 截断到 63 字符 + 8 位哈希防碰撞（同篇两个长名化合物截断后同名的问题）。
+        import hashlib as _hl
+        _raw_name = _safe_kb_name(stem, "chem") + f"_{slug}"
+        _cname = _raw_name if len(_raw_name) <= 64 else (
+            _raw_name[:54] + "_" + _hl.md5(_raw_name.encode("utf-8")).hexdigest()[:8])
         r = json.loads(save_knowledge(
-            name=_safe_kb_name(stem, "chem") + f"_{slug}",
+            name=_cname,
             content=c_content, source="literature", evidence=evidence,
             verified="partially_verified",
             domain="chemistry", direction="compounds",

@@ -1,17 +1,15 @@
-pmid: "42019489"
 type: kb_entry
-name: paper_bio_10.1016_j.devcel.2026.03.010
-doi: "10.1016/j.devcel.2026.03.010"
-species: other
+name: paper_bio_10.1016_j.devcel.2026.03.010_homo_sapiens
+species: Homo_sapiens
 tissue: skeletal_muscle
 direction: other
 assay_type: RNA
-last_updated: 2026-10-07 17:39
+last_updated: 2026-10-14 18:41
 source: literature
 verified: partially_verified
 quality: medium
 auto_trigger:
-- paper_bio_10.1016_j.devcel.2026.03.010
+- paper_bio_10.1016_j.devcel.2026.03.010_homo_sapiens
 content: '## 结论（证据链分级：L0 无来源 / L1 有来源未验证 / L2 实验验证 / L3 临床级）
 
   - **[L2]** 本文构建了小鼠肢体骨骼肌在静息、实验诱导萎缩和肥厚状态下的单核/单细胞转录组图谱，并结合空间图谱揭示肌肉驻留细胞群和肌纤维类型特异性转录反应的变化。　（验证：实验诱导小鼠萎缩/肥厚模型，单核/单细胞转录组、空间转录组及高分辨率3D成像（SUMMARY）
