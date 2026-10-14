@@ -64,7 +64,7 @@ SCHEMA = {
             },
             "species": {
                 "type": "string",
-                "description": "物种（如 Homo sapiens / Mus musculus）。提供后按五级目录入库: 物种/组织/方向/类别/assay。"
+                "description": "物种（如 Homo sapiens / Mus musculus）。提供后按五级目录入库: 物种/组织/方向/类别/assay。生物/生信知识必填（否则落到 other 平铺目录，知识库浏览树里找不到对应物种/课题）。"
             },
             "tissue": {
                 "type": "string",
@@ -90,10 +90,12 @@ SCHEMA = {
             },
             "domain": {
                 "type": "string",
-                "enum": ["biology", "common", "chemistry"],
+                "enum": ["biology", "common", "chemistry", "ai"],
                 "description": "知识域: biology=物种五级目录(默认); common=物种无关方法(跨物种生信知识); "
                                "chemistry=化学类文章(chemistry/<类别>/，类别用 direction 传: "
-                               "compounds/pharmacology/reactions/reagents/conditions)",
+                               "compounds/pharmacology/reactions/reagents/conditions); "
+                               "ai=AI/科研智能体类文献(ai_agent/<子类>/，子类用 direction 传，"
+                               "如 frameworks/benchmarks/evaluation/agent_design/systems)",
                 "default": "biology"
             },
             "evidence_chain": {
@@ -232,6 +234,8 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
                 common/<direction|general>/<category>/<assay|na>/<name>.yaml
       chemistry 化学类文章: chemistry/<chem_category>/<name>.yaml
                 chem_category 用 direction 传入 ∈ compounds/pharmacology/reactions/reagents/conditions
+      ai        AI/科研智能体类文献（2026-10-11 新增）: ai_agent/<subcategory>/<name>.yaml
+                subcategory 用 direction 传入，自由子类（如 frameworks/benchmarks/evaluation）
     """
     name = (name or "").strip()
     content = (content or "").strip()
@@ -266,6 +270,42 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
         return _err("⛔ 入库失败：知识库根目录未找到（MEMOMICS_KB_DIR 未设置且无默认路径）")
 
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    # ── AI 域（2026-10-11）：ai_agent/<子类>/<name>.yaml ──
+    # 用途：AI agent / 科研智能体类文献（架构设计、benchmark、评测范式）。
+    # 独立于物种五级目录，便于横向对比与检索。
+    # 子类（direction）建议：frameworks（框架架构）/ benchmarks（基准与数据集）/
+    # evaluation（评测方法）/ agent_design（设计范式）/ systems（基础设施）。
+    if domain == "ai":
+        _seg_sub = (direction or "general").strip().lower().replace(" ", "_").replace("-", "_")
+        if not _SAFE_PATH_SEG_RE.match(_seg_sub):
+            return _err(f"⛔ 入库拒绝：路径段 '{_seg_sub}' 非法（仅字母/数字/下划线/中文，≤64 字符）")
+        entry_dir = os.path.join(root, "ai_agent", _seg_sub)
+        entry_path = os.path.join(entry_dir, f"{name}.yaml")
+        entry = {
+            "type": "kb_entry", "domain": "ai", "name": name,
+            "subcategory": _seg_sub, "last_updated": ts,
+            "source": source, "verified": verified,
+            "quality": "high" if verified == "verified" else "medium",
+            "auto_trigger": [name], "content": content,
+        }
+        if evidence:
+            entry["evidence"] = evidence
+        if evidence_chain:
+            entry["evidence_chain"] = evidence_chain
+        if yaml is None:
+            return _err("⛔ 入库失败：PyYAML 不可用，无法写 YAML 条目")
+        try:
+            os.makedirs(entry_dir, exist_ok=True)
+            entry = _preserve_external_fields(entry, entry_path)
+            with open(entry_path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(entry, f, allow_unicode=True, sort_keys=False)
+        except OSError as e:
+            return _err(f"⛔ 入库失败：写入 {entry_path} 失败: {e}")
+        logger.info("save_knowledge(ai): %s → %s", name, entry_path)
+        return json.dumps({"status": "success", "path": entry_path, "name": name,
+                           "verified": verified, "source": source, "mode": "ai_yaml"},
+                          ensure_ascii=False)
 
     # ── 化学域（批O3 2026-08-16）：chemistry/<类别>/<name>.yaml ──
     if domain == "chemistry":
