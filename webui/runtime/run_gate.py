@@ -9,10 +9,13 @@
     只有用户主动发新消息才重置为 pending（用户主动 = 新指令，不算自动重启）。
 
 2026-08 迁移 DSH 后台能力（M2/M3/M4）：
-  - M2 armed（重启后重新授权）：armed 字段持久化。server 重启后由启动扫描对
-    非退役任务统一 disarm —— 机器不会自己恢复自主续跑，必须用户发消息（arm）
-    才重新武装。与 DSH 的 process-local activation 同义，但持久化到磁盘
-    （单 server 进程无 driver 重载场景，持久化反而能在崩溃后保持 disarm）。
+    - M2 armed（许可）：**2026-10-18 改为进程内生效（借鉴 DSH goal 语义）**。
+      旧实现把 armed 落盘并"重启即全量 disarm"，于是每次重启都把在跑任务冻住，
+      必须用户发消息才解锁（实测 7 天 1293 次自动唤醒被拦，是"任务跑一半就停"
+      的结构性原因）。现在：默认 armed（机器在跑 = 已授权），只有**显式暂停**
+      （paused_at>0 / activation=paused，由用户 stop 或工具主动调用）才拦；
+      旧文件里没有暂停标记的 armed=False 一律按 armed 迁移，不再永久冻结。
+      失控仍由轮数预算（max_rounds，默认 256）+ 退役状态（done/cancelled）兜住。
   - M3 硬轮数预算：rounds_started / max_rounds（默认 256，与 DSH maxGoalRounds
     一致）。每次真正注入唤醒回合 +1（admit_round），到上限自动唤醒一律 stop；
     用户消息重置预算（交互式模型的"人类监督刷新时钟"）。
@@ -39,6 +42,12 @@ VALID_STATES = ("pending", "running", "done", "blocked", "cancelled")
 # 任务类型（2026-08-16）：normal=普通任务（画图/轻量分析，默认）；
 # long_running=长任务管线（后台进程/心跳监督）。运行时证据自动升级，不降级。
 VALID_TASK_CLASSES = ("normal", "long_running")
+
+# 2026-10-18：许可模型（借鉴 DSH goal 的 activation）
+#   armed  = 进程内默认许可（机器在跑即视为已授权）
+#   paused = 用户/工具显式暂停（唯一会拦自动续跑的状态）
+ACTIVATION_ARMED = "armed"
+ACTIVATION_PAUSED = "paused"
 
 # M3: 硬轮数预算默认上限（与 DSH maxGoalRounds 默认 256 对齐）
 DEFAULT_MAX_ROUNDS = 256
@@ -67,6 +76,10 @@ def _default_state() -> dict:
         "armed": True,
         "armed_at": 0.0,
         "armed_by": "",
+        # 2026-10-18：进程内许可 + 显式暂停（不再靠重启 disarm）
+        "activation": ACTIVATION_ARMED,
+        "paused_at": 0.0,
+        "paused_by": "",
         "rounds_started": 0,
         "max_rounds": DEFAULT_MAX_ROUNDS,
     }
@@ -88,8 +101,20 @@ def load_state(results_dir: str) -> dict:
                 return _default_state()
             if data.get("task_class") not in VALID_TASK_CLASSES:
                 data["task_class"] = "normal"
-            # M2: 旧文件缺 armed 字段 → 视为未授权（重启后需用户重新武装）
-            data["armed"] = bool(data.get("armed", False))
+            # 2026-10-18：许可改为进程内生效 —— 只有"显式暂停"才 paused。
+            # 迁移：旧版启动扫描写的 armed=False 没有 paused_at 标记 → 按 armed 处理，
+            # 历史文件不会再把任务永久冻住；用户主动 stop 会写 paused_at。
+            _paused_at = 0.0
+            try:
+                _paused_at = float(data.get("paused_at") or 0.0)
+            except (TypeError, ValueError):
+                _paused_at = 0.0
+            _explicit_pause = (str(data.get("activation") or "") == ACTIVATION_PAUSED
+                               or _paused_at > 0.0)
+            data["activation"] = ACTIVATION_PAUSED if _explicit_pause else ACTIVATION_ARMED
+            data["armed"] = data["activation"] == ACTIVATION_ARMED   # 兼容字段
+            data.setdefault("paused_at", _paused_at)
+            data.setdefault("paused_by", str(data.get("paused_by") or ""))
             # 字段级防御：rounds/max_rounds 损坏只修该字段，绝不整体回退状态机
             # （整体回退会把 done 任务重置成 pending+armed → 老任务被自动重启）
             try:
@@ -196,6 +221,11 @@ def save_state(results_dir: str, state: str, reason: str = "",
         "armed": _base.get("armed", True) if armed is None else bool(armed),
         "armed_at": _base.get("armed_at", 0.0) if armed is None else (time.time() if armed else 0.0),
         "armed_by": _base.get("armed_by", "") if armed is None else ("save_state" if armed else ""),
+        # 2026-10-18：activation/paused_* 必须随写盘保留，否则一次 save_state 就丢暂停语义
+        "activation": ((_base.get("activation") or ACTIVATION_ARMED) if armed is None
+                       else (ACTIVATION_ARMED if armed else ACTIVATION_PAUSED)),
+        "paused_at": _base.get("paused_at", 0.0) if armed is None else (0.0 if armed else time.time()),
+        "paused_by": _base.get("paused_by", "") if armed is None else ("" if armed else "save_state"),
         "rounds_started": _base.get("rounds_started", 0) if rounds_started is None else rounds_started,
         "max_rounds": _base.get("max_rounds", DEFAULT_MAX_ROUNDS) if max_rounds is None else max_rounds,
     }
@@ -206,33 +236,48 @@ def save_state(results_dir: str, state: str, reason: str = "",
 
 
 def arm(results_dir: str, by: str = "user_message") -> bool:
-    """M2: 重新武装——用户在场（发消息）即授权自动唤醒恢复。保留状态/预算。"""
+    """恢复自动续跑许可（显式暂停的反操作）。保留状态机 phase 与预算。"""
     if not results_dir:
         return False
     st = load_state(results_dir)
     st["armed"] = True
     st["armed_at"] = time.time()
     st["armed_by"] = str(by)[:80]
+    st["activation"] = ACTIVATION_ARMED
+    st["paused_at"] = 0.0
+    st["paused_by"] = ""
     return _write_state(results_dir, st)
 
 
 def disarm(results_dir: str, reason: str = "") -> bool:
-    """M2: 撤销自动唤醒许可（重启扫描 / 显式暂停用）。不改变状态机 phase。"""
+    """**显式暂停**自动续跑（用户 stop / 主动叫停）。不改变状态机 phase。
+
+    2026-10-18 语义变更：重启扫描不再调用本函数（进程内许可默认 armed），
+    所以这里等价于"暂停"，会写 paused_at 标记；arm()/用户消息可恢复。
+    """
     if not results_dir:
         return False
     st = load_state(results_dir)
     st["armed"] = False
     st["armed_at"] = 0.0
     st["armed_by"] = ""
+    st["activation"] = ACTIVATION_PAUSED
+    st["paused_at"] = time.time()
+    st["paused_by"] = str(reason)[:120] or "user"
     ok = _write_state(results_dir, st)
-    if ok and reason:
-        logger.info("[RunGate] %s disarm (%s)", os.path.basename(results_dir), reason)
+    if ok:
+        logger.info("[RunGate] %s paused (%s)", os.path.basename(results_dir), reason)
     return ok
 
 
 def is_armed(results_dir: str) -> bool:
-    """M2: 当前是否持有自动唤醒许可。"""
-    return bool(load_state(results_dir).get("armed", False))
+    """当前是否允许自动续跑（进程内许可：默认 armed，显式暂停才 False）。"""
+    return str(load_state(results_dir).get("activation") or ACTIVATION_ARMED) == ACTIVATION_ARMED
+
+
+def is_paused(results_dir: str) -> bool:
+    """是否被显式暂停（供 UI/自检日志区分"暂停"与"退役/预算耗尽"）。"""
+    return not is_armed(results_dir)
 
 
 def admit_round(results_dir: str) -> bool:
@@ -365,9 +410,10 @@ def check_gate(results_dir: str, *, interrupt_requested: bool = False,
             return "run", "user explicitly restarted (task_state reset to pending)"
         return "ask_user", f"task_state={state}: 用户消息未命中继续词表，由上层决定是否开新任务"
 
-    # M2: 自动唤醒需要武装许可（重启后必须用户消息重新授权——DSH armed 语义）
-    if is_auto_wake and not st.get("armed", False):
-        return "stop", "armed required: 重启后自动唤醒已暂停，请发消息继续（重新授权）"
+    # 2026-10-18：自动唤醒只被"显式暂停"拦住（进程内许可默认 armed，重启不再冻结）
+    if is_auto_wake and str(st.get("activation") or ACTIVATION_ARMED) != ACTIVATION_ARMED:
+        return "stop", ("paused: 任务已被显式暂停（%s）——发消息或恢复运行即可继续"
+                        % (st.get("paused_by") or "user"))
 
     # M3: 硬轮数预算（自动唤醒到上限即停）
     if is_auto_wake and int(st.get("rounds_started", 0)) >= int(st.get("max_rounds", DEFAULT_MAX_ROUNDS)):

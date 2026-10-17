@@ -377,7 +377,10 @@ def test_c2_explicit_outranks_pinned_and_red():
     inj = server._build_skill_injection("visualization", "bio", "zh", text, pinned=["scrna-qc"])
     i_exp = inj.find("<<<EXPLICIT_SKILL_MD_BEGIN>>>")
     i_pin = inj.find("<<<PINNED_SKILL_MD_BEGIN>>>")
-    i_red = inj.find("检测到用户消息命中以下必触发技能")
+    # 2026-10-18：RED 段改为「语义优先」候选块（用户要求：关键词只是候选，先判意图）
+    i_red = inj.find("技能触发纪律：语义优先")
+    if i_red < 0:
+        i_red = inj.find("检测到用户消息命中以下必触发技能")  # 兼容旧文案
     assert i_exp >= 0, "显式调用块必须在注入里"
     assert i_pin > i_exp, "显式调用优先于置顶（用户点名的东西最大）"
     assert i_red > i_pin > i_exp, "RED 自动命中排在最后: exp=%d pin=%d red=%d" % (i_exp, i_pin, i_red)

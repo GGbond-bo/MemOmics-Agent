@@ -481,6 +481,21 @@ def make_tool_result_message(
     callers should compare by value, not by ``is``.
     """
     wrapped = _maybe_wrap_untrusted(name, content)
+    # 2026-10-18（借鉴 DSH spill）：超大工具输出**溢写落盘**再截预览，避免"中间段被砍掉就永久丢失"。
+    # 这是工具结果落成 message 的唯一收口点，覆盖 terminal / 读文件 / 脚本 / MCP 等全部工具。
+    try:
+        from tools.output_spill import maybe_spill as _maybe_spill
+        if isinstance(wrapped, str):
+            wrapped = _maybe_spill(wrapped, tool_name=name)
+        elif isinstance(wrapped, list):
+            _spilled = []
+            for _part in wrapped:
+                if isinstance(_part, dict) and isinstance(_part.get("text"), str):
+                    _part = {**_part, "text": _maybe_spill(_part["text"], tool_name=name)}
+                _spilled.append(_part)
+            wrapped = _spilled
+    except Exception:
+        pass
     message = {
         "role": "tool",
         "name": name,

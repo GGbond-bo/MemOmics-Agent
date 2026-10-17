@@ -145,6 +145,13 @@ _spawn_pause_lock = threading.Lock()
 _spawn_paused: bool = False
 
 _active_subagents_lock = threading.Lock()
+
+# 2026-10-18（借鉴 DSH continuable subagents）：跑完的子 agent 留一份**可续聊**句柄。
+# 与 _active_subagents（只装"正在跑"的）分开：这里装"跑过、还能再接一句话"的，
+# 上限 8 个，超出丢最旧的（子 agent 的完整对话同时落盘在 tools/subagent_mail.py）。
+_continuable_lock = threading.Lock()
+_continuable: Dict[str, Dict[str, Any]] = {}
+_MAX_CONTINUABLE = 8
 # subagent_id -> mutable record tracking the live child agent.  Stays only
 # for the lifetime of the run; _run_single_child is the owner.
 _active_subagents: Dict[str, Dict[str, Any]] = {}
@@ -2361,6 +2368,23 @@ def _run_single_child(
         # child was never registered (e.g. ID missing on test doubles).
         if _subagent_id:
             _unregister_subagent(_subagent_id)
+            # 2026-10-18：把子 agent 的会话落盘并留一份可续聊句柄（DSH continuable child 语义）
+            try:
+                from tools import subagent_mail as _mail
+                _child_msgs = getattr(child, "messages", None)
+                _mail.save_child(
+                    _subagent_id,
+                    goal=str(goal or ""),
+                    messages=_child_msgs if isinstance(_child_msgs, list) else None,
+                    model=str(getattr(child, "model", "") or ""),
+                )
+                with _continuable_lock:
+                    _continuable[_subagent_id] = {"agent": child, "saved_at": time.time()}
+                    _over = len(_continuable) - _MAX_CONTINUABLE
+                    for _k in list(_continuable.keys())[:_over if _over > 0 else 0]:
+                        _continuable.pop(_k, None)
+            except Exception as _e:
+                logger.debug("save subagent transcript failed: %s", _e)
 
         if child_pool is not None and leased_cred_id is not None:
             try:
@@ -2421,6 +2445,67 @@ def _recover_tasks_from_json_string(
             f"{type(parsed).__name__} instead."
         )
     return parsed, None
+
+
+def continue_subagent(delegation_id: str, message: str, parent_agent=None) -> str:
+    """给已跑过的子 agent 续聊一句话（借鉴 DSH 的 continuable children + 持久邮箱）。
+
+    行为：
+      - 子 agent 仍在内存（同一进程生命周期内）→ 直接 ``run_conversation`` 续跑，返回新回答；
+      - 已不在内存（服务重启/句柄被驱逐）→ 不假装能续，返回可操作说明 + transcript 路径。
+    无论哪种情况，消息都会先写进**持久邮箱**（tools/subagent_mail.py），不会丢。
+    """
+    did = str(delegation_id or "").strip()
+    msg = str(message or "").strip()
+    if not did or not msg:
+        return "[delegate_message] 需要 delegation_id 与非空 message"
+    try:
+        from tools import subagent_mail as _mail
+    except Exception:
+        _mail = None
+    if _mail is not None:
+        try:
+            _mail.queue_message(did, msg)
+        except Exception:
+            pass
+    with _continuable_lock:
+        rec = _continuable.get(did)
+    child = rec.get("agent") if isinstance(rec, dict) else None
+    if child is not None:
+        pending = []
+        if _mail is not None:
+            try:
+                pending = _mail.take_pending(did)
+            except Exception:
+                pending = []
+        text = "\n\n".join(pending) if pending else msg
+        try:
+            result = child.run_conversation(
+                user_message=text,
+                task_id=str(getattr(child, "_task_id", "") or ""),
+            )
+            summary = result.get("summary") if isinstance(result, dict) else None
+            msgs = result.get("messages") if isinstance(result, dict) else None
+            if _mail is not None:
+                _mail.save_child(
+                    did,
+                    goal=str(getattr(child, "_delegate_goal", "") or ""),
+                    messages=msgs if isinstance(msgs, list) else None,
+                    model=str(getattr(child, "model", "") or ""),
+                    summary=str(summary or "")[:2000],
+                )
+            return str(summary or "[delegate_message] 子 agent 已回复（无摘要）")
+        except Exception as e:
+            return f"[delegate_message] 续聊失败：{e}（这条消息已入队 {did}，可稍后重试）"
+    info = _mail.load_child(did) if _mail is not None else {}
+    path = _mail._path(did) if _mail is not None else ""
+    n = len((info or {}).get("messages") or [])
+    return (
+        f"[delegate_message] 子 agent {did} 已不在本进程内存（服务重启过或句柄被驱逐），无法直接续聊。"
+        f"这条消息已写入持久邮箱；它的会话记录（{n} 条）在 {path}。"
+        "要接着做同一件事：用 delegate_task(goal=<原目标>, context=<这条消息>）重新派发，"
+        "并在 context 里附上该 transcript 路径（新子 agent 可自行 read_file 回看）。"
+    )
 
 
 def delegate_task(

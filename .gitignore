@@ -216,3 +216,6 @@ memomics_home/remote/
 tmp/
 
 memomics_home/runtime/
+
+memomics_home/spill/
+memomics_home/delegations/

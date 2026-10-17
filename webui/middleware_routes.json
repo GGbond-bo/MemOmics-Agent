@@ -6,6 +6,7 @@
   "/api/cluster/exec": "public",
   "/api/cluster/install_key": "public",
   "/api/cluster/status": "public",
+  "/api/context/window": "public",
   "/api/dcs/bind": "public",
   "/api/dcs/config": "public",
   "/api/dcs/diagnose": "public",

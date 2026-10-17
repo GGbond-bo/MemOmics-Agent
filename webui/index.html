@@ -2545,6 +2545,20 @@ document.addEventListener('DOMContentLoaded', applyUILang);
           <div class="ctx-stats" id="ctx-stats"></div>
           <div class="ctx-breakdown" id="ctx-breakdown"></div>
           <div class="ctx-model-info" id="ctx-model-info"></div>
+          <!-- 2026-10-17 新增：窗口上限（config.yaml 的 context_length 覆盖）——此前只能看不能调，
+               而同一模型在不同通道的窗口可能差很多（DCS Cloud 1M / OpenCode Go 128k / 兜底 128k） -->
+          <div id="ctx-window-editor" style="margin-top:8px;font-size:11px;">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span style="font-weight:600;">🔧 窗口上限</span>
+              <input id="ctx-window-input" type="number" min="16384" step="1024" placeholder="留空=自动"
+                     style="width:118px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:transparent;color:var(--text);font-size:11px;">
+              <button onclick="saveCtxWindow(false)" title="写入 config.yaml 并立即生效"
+                      style="font-size:10px;padding:1px 6px;border:1px solid var(--border);border-radius:4px;background:transparent;color:var(--text);cursor:pointer;">保存</button>
+              <button onclick="saveCtxWindow(true)" title="清除覆盖，回到自动探测"
+                      style="font-size:10px;padding:1px 6px;border:1px solid var(--border);border-radius:4px;background:transparent;color:var(--text);cursor:pointer;">恢复自动</button>
+            </div>
+            <div id="ctx-window-hint" style="color:var(--text-light);margin-top:3px;"></div>
+          </div>
           <div id="ctx-quota" style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);font-size:11px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
               <span style="font-weight:600;">💠 用量与套餐</span>
@@ -19053,9 +19067,15 @@ function renderContextUsage(data, error) {
 
   var modelInfo = document.getElementById('ctx-model-info');
   if (modelInfo) {
-    modelInfo.textContent = '模型: ' + (data.model || '未知') +
-      ' ｜ 窗口: ' + (ctxMax > 0 ? ctxMax.toLocaleString() + ' tokens' : '未知');
+    var srcLabel = data.window_source === 'config' ? '（窗口上限已钉住）'
+                 : data.window_source === 'agent' ? '（运行实例）'
+                 : '（自动探测）';
+    var chan = data.provider_name ? (' ｜ 通道: ' + data.provider_name) : '';
+    modelInfo.textContent = '模型: ' + (data.model || '未知') + chan +
+      ' ｜ 窗口: ' + (ctxMax > 0 ? ctxMax.toLocaleString() + ' tokens' : '未知') +
+      (ctxMax > 0 ? ' ' + srcLabel : '');
   }
+  renderCtxWindowEditor(data);
   loadCtxUsage(false); // 用量与套餐（宿主侧 60s 缓存）
 }
 
@@ -19161,6 +19181,68 @@ function renderCtxUsage(d) {
           (d.cached ? ('缓存 ' + Math.round(d.cache_age_sec || 0) + 's 前查询') : '刚刚查询') +
           ' · 阶梯计价: 空闲时段半价</div>';
   body.innerHTML = html;
+}
+
+// === 窗口上限（2026-10-17 新增：让「上下文窗口」面板可看也可调）===
+// 背景：同一模型在不同通道解析出的窗口可能差很多 —— deepseek-flash 在 DCS Cloud 是 1M、
+// 在 OpenCode Go 是 128k、端点换过地址或缓存丢失时会退回 128k 兜底值（用户反馈"突然只有128k"）。
+// 这里写的是底座官方覆盖字段 config.yaml → custom_providers[].models.<model>.context_length，
+// 服务端写盘后立即热更新运行中的 agent（下次启动由 agent_init 的 step 0 读到）。
+var ctxWindowState = { override: null, effective: 0, source: '' };
+
+function renderCtxWindowEditor(data) {
+  var inp = document.getElementById('ctx-window-input');
+  var hint = document.getElementById('ctx-window-hint');
+  if (!inp || !hint) return;
+  ctxWindowState.override = (data && data.window_override) || null;
+  ctxWindowState.effective = (data && data.context_max) || 0;
+  ctxWindowState.source = (data && data.window_source) || '';
+  if (document.activeElement !== inp) {
+    inp.value = ctxWindowState.override ? String(ctxWindowState.override) : '';
+  }
+  var eff = ctxWindowState.effective > 0 ? ctxWindowState.effective.toLocaleString() + ' tokens' : '未知';
+  var bits = [];
+  if (ctxWindowState.override) {
+    bits.push('已钉住 ' + ctxWindowState.override.toLocaleString() + '（config.yaml context_length）');
+  } else {
+    bits.push('当前生效 ' + eff + '，来源：' +
+      (ctxWindowState.source === 'agent' ? '运行中实例' : '自动探测') +
+      ' —— 自动探测在端点变更/缓存丢失时会退回 128,000 兜底值');
+  }
+  if (data && data.agent_live === false) bits.push('｜该会话当前没有运行中的 agent，窗口为解析值');
+  if (data && data.used_is_estimate) bits.push('｜占用百分比为"整段历史估算"（本进程还没有新的模型调用）');
+  hint.textContent = bits.join(' ');
+}
+
+async function saveCtxWindow(clear) {
+  if (!currentSid) { alert('请先选择一个会话'); return; }
+  var inp = document.getElementById('ctx-window-input');
+  var hint = document.getElementById('ctx-window-hint');
+  var val = null;
+  if (!clear) {
+    val = parseInt((inp && inp.value) || '0', 10);
+    if (!val || val < 16384) { alert('窗口上限需为 ≥ 16384 的整数；想回到自动请点「恢复自动」'); return; }
+  }
+  if (hint) hint.textContent = '正在写入 config.yaml …';
+  try {
+    var r = await fetch('/api/context/window', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: currentSid, context_length: val })
+    });
+    var d = await r.json();
+    if (!r.ok || d.error) {
+      if (hint) hint.textContent = '❌ ' + (d.error || ('HTTP ' + r.status));
+      return;
+    }
+    if (hint) {
+      hint.textContent = '✅ ' + (d.cleared ? '已恢复自动探测' : '已钉住 ' + d.context_length.toLocaleString()) +
+        '，当前生效 ' + (d.effective || 0).toLocaleString() + ' tokens';
+    }
+    refreshContextUsage();
+  } catch (e) {
+    if (hint) hint.textContent = '❌ 写入失败: ' + e.message;
+  }
 }
 
 function updateGauge(pct, cumulative, max) {
