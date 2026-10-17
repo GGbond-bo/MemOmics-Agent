@@ -32,6 +32,9 @@ if (Test-Path $lnkPath) {
         if ($sc0.Arguments -like "*launch_from_desktop.ps1*") {
             $okLnk = ($sc0.Arguments -like "*$root*")
         }
+        # 2026-10-17 修复：旧快捷方式带 -WindowStyle Hidden → 整个启动过程没有窗口、没有进度，
+        # 用户点完图标以为"没启动"（还会反复点）。检测到 Hidden 就重建为可见窗口版本。
+        if ($okLnk -and ($sc0.Arguments -match '(?i)-WindowStyle\s+Hidden')) { $okLnk = $false }
     } catch { $okLnk = $false }
     if ($okLnk) { exit 0 }
 }
@@ -92,7 +95,9 @@ $sc = $shell.CreateShortcut($lnkPath)
 $launcher = Join-Path $root 'scripts\launch_from_desktop.ps1'
 if (Test-Path $launcher) {
     $sc.TargetPath = "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe"
-    $sc.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$launcher`""
+    # 不要加 -WindowStyle Hidden：启动窗口必须可见——用户要能看到进度和
+    # "关闭本窗口 = 停止 MemOmics"（全隐藏会让人以为图标点了没反应）。2026-10-17 修复。
+    $sc.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$launcher`""
 } else {
     $sc.TargetPath = "$env:ComSpec"
     $sc.Arguments = "/c `"$startBat`""
