@@ -536,6 +536,15 @@ async def _seed_self_check_startup():
                 _active = _task_plan_active(_rd) or _session_has_active_work(s)
                 if not _active:
                     continue
+                # 2026-10-18（DSH 语义）：重启后许可已失效(paused) → 不播种自检，等用户消息。
+                # 实测问题：播种直接 _schedule_self_check，等于绕过"重启不自动续跑"的闸门。
+                try:
+                    from webui.runtime.run_gate import is_armed as _is_armed_seed
+                    if _rd and not _is_armed_seed(_rd):
+                        print(f"[MemOmics] 跳过播种（许可未武装，等用户消息）: {sid[:12]}", flush=True)
+                        continue
+                except Exception:
+                    pass
                 _agent = s.get("agent")
                 if _agent is None:
                     try:
@@ -2709,6 +2718,20 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
     results_dir = session.get("results_dir", "")
     # ── RunGate 退役闸门（P1-A 接线，2026-08-12）：task_state == done/cancelled
     #    → 自动唤醒一律拦截（防"唤醒→写记录→签名变→再唤醒"死循环的最终兜底）──
+    # 2026-10-18（硬闸门，fail-closed）：没有 results_dir / 没有任务状态文件 / 未武装 →
+    # 一律不唤醒。巡检与播种都绕不过这里（实测有两条路径会绕过，靠这道兜底）。
+    if not urgent:
+        if not results_dir:
+            logger.info(f"[SelfCheck] session {session['id'][:12]}: 无 results_dir → 不唤醒")
+            return
+        try:
+            from webui.runtime.run_gate import is_armed as _is_armed_hard
+            if not _is_armed_hard(results_dir):
+                logger.info(f"[SelfCheck] session {session['id'][:12]}: 许可未武装 → 不唤醒（硬闸门）")
+                return
+        except Exception:
+            pass
+
     try:
         from webui.runtime.run_gate import check_gate
         if results_dir:
@@ -7086,16 +7109,22 @@ def _load_persisted_sessions():
                         _keep = bool(_was_running and _fresh)
                     except Exception:
                         _keep = False
-                if _keep:
-                    # 注意：这里要**重新武装**，不能只"保留" —— 上一次重启已经把它 disarm 了，
-                    # 只保留的话开关永远追不回来（首版实现踩过这个坑）。
-                    if not _is_armed_gate(_rd2):
-                        try:
-                            from webui.runtime.run_gate import arm as _arm_gate
-                            _arm_gate(_rd2, by="auto_arm_on_restart")
-                        except Exception:
-                            pass
-                    _keep_armed += 1
+                # 2026-10-18（DSH 语义）：磁盘归一化 —— 上个进程留下的 armed 落盘纠正为 paused
+                try:
+                    from webui.runtime.run_gate import normalize_proc as _normalize_proc
+                    _normalize_proc(_rd2)
+                except Exception:
+                    pass
+
+                if _keep and _auto_arm:
+                    # 2026-10-18 对齐 DSH：默认不再自动武装（_auto_arm=False），重启后必须
+                    # 用户消息或显式 resume 才恢复。此分支只服务显式开启 auto_arm_on_restart 的部署。
+                    try:
+                        from webui.runtime.run_gate import arm as _arm_gate
+                        _arm_gate(_rd2, by="auto_arm_on_restart")
+                        _keep_armed += 1
+                    except Exception:
+                        pass
                     continue
                 # 2026-10-18 fix: in-process permit is default; never freeze idle tasks on boot.
                 # Only when the user explicitly sets run_gate.auto_arm_on_restart=false

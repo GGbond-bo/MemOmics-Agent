@@ -238,8 +238,12 @@ def save_state(results_dir: str, state: str, reason: str = "",
         "armed_at": _base.get("armed_at", 0.0) if armed is None else (time.time() if armed else 0.0),
         "armed_by": _base.get("armed_by", "") if armed is None else ("save_state" if armed else ""),
         # 2026-10-18：activation/paused_* 必须随写盘保留，否则一次 save_state 就丢暂停语义
-        "activation": ((_base.get("activation") or ACTIVATION_ARMED) if armed is None
-                       else (ACTIVATION_ARMED if armed else ACTIVATION_PAUSED)),
+        # 2026-10-18：**新建**状态文件时绝不默认 armed（实测踩坑：任何对"无状态文件"的会话
+        # 写一次状态，就会凭空生成 armed 文件 → 重启后又自动续跑）。新建一律 paused，
+        # 必须用户消息（arm）或显式 resume 才武装。
+        "activation": (ACTIVATION_ARMED if armed
+                       else (ACTIVATION_PAUSED if _existing is None
+                             else (_base.get("activation") or ACTIVATION_ARMED))),
         "paused_at": _base.get("paused_at", 0.0) if armed is None else (0.0 if armed else time.time()),
         "paused_by": _base.get("paused_by", "") if armed is None else ("" if armed else "save_state"),
         "proc_id": os.getpid(),
@@ -286,6 +290,34 @@ def disarm(results_dir: str, reason: str = "") -> bool:
     if ok:
         logger.info("[RunGate] %s paused (%s)", os.path.basename(results_dir), reason)
     return ok
+
+
+def normalize_proc(results_dir: str) -> bool:
+    """把"上个进程留下的 armed"在磁盘上纠正为 paused（2026-10-18，DSH resume/fork 语义）。
+
+    load_state 只是"读时生效"，文件里仍写着 armed —— 端口探测/巡检/别处代码直接读 JSON 会误判。
+    启动时调用本函数把磁盘状态统一纠正过来，返回 True 表示确实改写过。
+    """
+    if not results_dir or not os.path.isfile(_state_path(results_dir)):
+        return False
+    try:
+        with open(_state_path(results_dir), "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        if not isinstance(raw, dict):
+            return False
+        try:
+            _pid = int(raw.get("proc_id") or 0)
+        except (TypeError, ValueError):
+            _pid = 0
+        if _pid and _pid == os.getpid():
+            return False      # 本进程写的，保留
+        if str(raw.get("activation") or "") == ACTIVATION_PAUSED:
+            return False      # 已是 paused
+        st = load_state(results_dir)      # load_state 已按 proc_id 判成 paused
+        st["paused_by"] = st.get("paused_by") or "process restart (需用户消息或显式 resume 再武装)"
+        return _write_state(results_dir, st)
+    except Exception:
+        return False
 
 
 def is_armed(results_dir: str) -> bool:
