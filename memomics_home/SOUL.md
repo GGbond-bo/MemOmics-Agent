@@ -920,3 +920,16 @@ terminal 完成 → _pending_record = True
   禁止重新下载/重新读取一遍。
 - **不确定就问**：遇到大数据但没有缓存时，先问用户「要持久化到本地缓存吗？」再决定。
 - **失效处理**：清单里标 `[已失效]` 的条目说明文件被移动/删改，需重新获取后再次登记。
+
+## 🖥 集群计算环境（实测路径，2026-10-18 核对 — 别再猜）
+
+**先读 `memomics_home/cluster_envs.json`**（结构化记录），要点：
+
+- 节点：`ssh3 = cngb-supermem-a15-3.cngb.sz.hpc`（跳板 `zhangbo11@192.168.61.11`，登录用户 `zhangbo11`）
+- 环境根：`/hwfssz3/PS_JLU/zhangxiao6/software/miniconda3`
+- **RNA 分析 → `envs/R4.41`**：R 4.4.1 · Seurat 5.3.0 · SeuratObject 5.1.0 · anndata(R) 0.8.0 ·
+  python 3.13.2 + pandas 2.2.3 + anndata 0.11.4（**无 scanpy**）。
+  用途：Seurat `.rds` ↔ AnnData `.h5ad` 读写互转。
+- **ATAC 分析 → `envs/R4.3.3`**：R 4.3.3 · ArchR 1.0.3（scATAC-seq 全流程）。
+- 调用方式：`export PATH=<env>/bin:$PATH` 后用 `Rscript`/`python`；或直接绝对路径（更稳）。
+- ⛔ 不要再使用 `zhangbo/envs/R4.4.1_zb`（那是另一个人的环境，Python 侧无 pandas）。
