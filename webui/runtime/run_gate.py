@@ -80,6 +80,8 @@ def _default_state() -> dict:
         "activation": ACTIVATION_ARMED,
         "paused_at": 0.0,
         "paused_by": "",
+        # 2026-10-18（对齐 DSH）：许可绑定"进程"。换进程 = 自动失权，需用户消息/显式 resume 再武装。
+        "proc_id": 0,
         "rounds_started": 0,
         "max_rounds": DEFAULT_MAX_ROUNDS,
     }
@@ -113,6 +115,20 @@ def load_state(results_dir: str) -> dict:
                                or _paused_at > 0.0)
             data["activation"] = ACTIVATION_PAUSED if _explicit_pause else ACTIVATION_ARMED
             data["armed"] = data["activation"] == ACTIVATION_ARMED   # 兼容字段
+            # 2026-10-18（DSH resume/fork 语义）：许可只在**同一进程**内有效。
+            # 记录里的 proc_id 与本进程不一致（= 服务重启过）→ 自动置 paused，
+            # 必须用户发消息（arm）或显式 resume 才恢复。这样"重启后还在自动跑"不会再发生。
+            try:
+                _rec_pid = int(data.get("proc_id") or 0)
+            except (TypeError, ValueError):
+                _rec_pid = 0
+            _now_pid = os.getpid()
+            if _rec_pid and _rec_pid != _now_pid:
+                data["activation"] = ACTIVATION_PAUSED
+                data["armed"] = False
+                data["paused_at"] = time.time()
+                data["paused_by"] = "process restart (需用户消息或显式 resume 再武装)"
+            data["proc_id"] = _now_pid
             data.setdefault("paused_at", _paused_at)
             data.setdefault("paused_by", str(data.get("paused_by") or ""))
             # 字段级防御：rounds/max_rounds 损坏只修该字段，绝不整体回退状态机
@@ -226,6 +242,7 @@ def save_state(results_dir: str, state: str, reason: str = "",
                        else (ACTIVATION_ARMED if armed else ACTIVATION_PAUSED)),
         "paused_at": _base.get("paused_at", 0.0) if armed is None else (0.0 if armed else time.time()),
         "paused_by": _base.get("paused_by", "") if armed is None else ("" if armed else "save_state"),
+        "proc_id": os.getpid(),
         "rounds_started": _base.get("rounds_started", 0) if rounds_started is None else rounds_started,
         "max_rounds": _base.get("max_rounds", DEFAULT_MAX_ROUNDS) if max_rounds is None else max_rounds,
     }
@@ -246,6 +263,7 @@ def arm(results_dir: str, by: str = "user_message") -> bool:
     st["activation"] = ACTIVATION_ARMED
     st["paused_at"] = 0.0
     st["paused_by"] = ""
+    st["proc_id"] = os.getpid()
     return _write_state(results_dir, st)
 
 

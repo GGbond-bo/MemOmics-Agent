@@ -2608,6 +2608,87 @@ def _task_liveness(session) -> tuple:
             f"任务疑似卡死：PID {sorted(_pids)} | 窗口 {_window}s 内 CPU/IO 零变化 | RSS {_rss_mb:.0f}MB")
 
 
+# 2026-10-18（改 3）：产出物快照 —— 无进展刹车不再用"会自变的进度签名"
+_ARTIFACT_SKIP_DIRS = ("log", "logs", "spill", ".git", "__pycache__", "software_control", "node_modules")
+_ARTIFACT_SKIP_PREFIX = (".task_state", "task_plan", ".wakeup", ".self_check", ".purge")
+
+
+def _artifact_signature(results_dir: str) -> str:
+    """会话产出物快照（排除 log/状态/计划文件）。连续多轮不变 = 真的没有新产出。"""
+    if not results_dir or not os.path.isdir(results_dir):
+        return ""
+    import hashlib as _hl
+    rows = []
+    try:
+        for cur, dirs, files in os.walk(results_dir):
+            dirs[:] = [d for d in dirs if d.lower() not in _ARTIFACT_SKIP_DIRS]
+            for fn in files:
+                low = fn.lower()
+                if low.endswith((".log", ".tmp")) or any(low.startswith(p) for p in _ARTIFACT_SKIP_PREFIX):
+                    continue
+                p = os.path.join(cur, fn)
+                try:
+                    st = os.stat(p)
+                except Exception:
+                    continue
+                rows.append((os.path.relpath(p, results_dir).replace(os.sep, "/"),
+                             st.st_size, int(st.st_mtime_ns)))
+    except Exception:
+        return ""
+    rows.sort()
+    return _hl.sha256(repr(rows[:6000]).encode("utf-8", "replace")).hexdigest()[:16]
+
+
+# 2026-10-18：唤醒回合的"没有活了"表述（命中即退役，不再继续唤醒）
+_NO_PENDING_WORK_RE = __import__("re").compile(
+    r"无未完成待办|没有未完成待办|无待办|没有待办|无 pending|nothing pending|"
+    r"任务已是终态|已是终态|任务已全部完成|已全部完成且无|无未完成项|没有待办事项")
+
+
+def _purge_finished_task_files(results_dir: str, reason: str = "") -> list:
+    """任务完成/退役时**彻底清除**任务残留（用户 2026-10-18 明确要求）。
+
+    清除对象：task_plan.md、task_plan.done.md、以及唤醒/自检留下的临时标记文件。
+    唯一保留的是 log 里一行退出记录（便于事后追溯"这个任务是怎么收尾的"），
+    不保留任何能让调度器再次摸到并唤醒的活文件。
+    返回被删除的文件名列表。
+    """
+    import glob as _glob
+    removed = []
+    if not results_dir or not os.path.isdir(results_dir):
+        return removed
+    targets = [os.path.join(results_dir, "task_plan.md"),
+               os.path.join(results_dir, "task_plan.done.md")]
+    targets += _glob.glob(os.path.join(results_dir, ".wakeup*"))
+    targets += _glob.glob(os.path.join(results_dir, ".self_check*"))
+    for p in targets:
+        try:
+            if os.path.isfile(p):
+                if os.path.basename(p).startswith("task_plan"):
+                    # 留一行记录：标题 + 行数，正文不留
+                    try:
+                        with open(p, "r", encoding="utf-8", errors="replace") as f:
+                            _txt = f.read()
+                        _title = ""
+                        for _ln in _txt.splitlines():
+                            if _ln.strip().startswith("#"):
+                                _title = _ln.strip().lstrip("#").strip()[:80]
+                                break
+                        _log_dir = os.path.join(results_dir, "log")
+                        os.makedirs(_log_dir, exist_ok=True)
+                        with open(os.path.join(_log_dir, "task_purge.log"), "a", encoding="utf-8") as lf:
+                            lf.write(f"[{__import__('datetime').datetime.now():%Y-%m-%d %H:%M:%S}] "
+                                     f"purged {os.path.basename(p)} ({len(_txt)} chars) "
+                                     f"title={_title!r} reason={reason}\n")
+                    except Exception:
+                        pass
+                os.remove(p)
+                removed.append(os.path.basename(p))
+        except Exception:
+            continue
+    return removed
+
+
 def _schedule_self_check(session, agent, loop, trigger="turn_end"):
     """本轮结束后，如果有未完成的主线任务，延迟后自动触发下一轮自检。
     但如果 task_plan 被标记为 cancelled 或 paused，则跳过。
@@ -2637,6 +2718,79 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
                 return
     except Exception as e:
         logger.warning(f"[SelfCheck] RunGate 检查失败(fail-open): {e}")
+    # ── 2026-10-18 用户口径：「完成了，唤醒就全部关掉，不要再唤醒之前的任务」──
+    # 实测问题：唤醒回合的模型自己已经判定"任务已是终态、无未完成待办"，但调度器照样排下一轮，
+    # 于是每轮都烧一次 token（用户看到的就是"✅ 唤醒 #1 核查完毕…"无限刷）。
+    # 这里直接采信"无待办"结论：退役 + 暂停，不再排下一轮。
+    if trigger == "turn_end" and int(session.get("_self_check_count", 0) or 0) > 0:
+        try:
+            _last_text = ""
+            for _m in reversed(session.get("messages") or []):
+                if not isinstance(_m, dict):
+                    continue
+                if _m.get("role") == "assistant" and str(_m.get("content") or "").strip():
+                    _last_text = str(_m.get("content"))[:6000]
+                    break
+            if _NO_PENDING_WORK_RE.search(_last_text):
+                if results_dir:
+                    try:
+                        from webui.runtime.run_gate import mark_done, disarm, save_state
+                        mark_done(results_dir, "wakeup verdict: no pending work")
+                        disarm(results_dir, "auto-retire: 唤醒判定无待办")
+                    except Exception:
+                        pass
+                session["_self_check_count"] = 0
+                logger.info(f"[SelfCheck] session {session['id'][:12]}: 唤醒回合判定「无未完成待办」→ 退役并停止唤醒")
+                return
+        except Exception:
+            pass
+    # ── D) 硬上限：同一会话累计唤醒次数（签名重置也不放行），防无限循环烧 token ──
+    try:
+        _total_wakes = int(session.get("_self_check_total", 0) or 0)
+        if _total_wakes >= 60 and not urgent:
+            if results_dir:
+                try:
+                    from webui.runtime.run_gate import disarm
+                    disarm(results_dir, f"唤醒累计 {_total_wakes} 次，触发硬上限")
+                except Exception:
+                    pass
+            logger.info(f"[SelfCheck] session {session['id'][:12]}: 累计唤醒 {_total_wakes} 次 → 触发硬上限停止")
+            return
+    except Exception:
+        pass
+    # ── 改 1（2026-10-18，对齐 DSH 事件驱动）：turn_end 不再无条件重排自检 ──
+    # 只有这几类"事件"能产生唤醒：用户消息 / 后台进程 settled(task_done) / 集群状态变化 / urgent。
+    # 回合自然结束且没有未完成待办、也没有活跃外部工作 → 不排下一轮（这就是"完成了还一直唤醒"的根治）。
+    if trigger == "turn_end" and not urgent:
+        _active = False
+        try:
+            _active = bool(_session_has_active_work(session))
+        except Exception:
+            _active = False
+        if not has_todos and not _active:
+            logger.info(f"[SelfCheck] session {session['id'][:12]}: turn_end 无待办且无活跃工作 → 不重排自检（事件驱动）")
+            return
+
+    # ── 改 3（2026-10-18）：无进展刹车改成"产出物快照"，连续 3 轮不变就退役 ──
+    try:
+        _asig = _artifact_signature(results_dir)
+        if _asig and _asig == session.get("_artifact_sig_last"):
+            session["_artifact_stall"] = int(session.get("_artifact_stall", 0) or 0) + 1
+        else:
+            session["_artifact_stall"] = 0
+        session["_artifact_sig_last"] = _asig
+        if int(session.get("_artifact_stall", 0) or 0) >= 3 and not urgent:
+            try:
+                from webui.runtime.run_gate import mark_done, disarm
+                if results_dir:
+                    mark_done(results_dir, "artifact stall: 连续 3 轮产出物无变化")
+                    disarm(results_dir, "artifact stall: 无新产出")
+            except Exception:
+                pass
+            logger.info(f"[SelfCheck] session {session['id'][:12]}: 连续 3 轮产出物无变化 → 退役并停止唤醒")
+            return
+    except Exception:
+        pass
     has_plan = results_dir and os.path.isfile(os.path.join(results_dir, "task_plan.md"))
     if not has_todos and not has_plan:
         # 修复(2026-08-07): task_plan.md 被清/未创建但 batch 批处理仍活跃
@@ -2646,7 +2800,15 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
             return
         # 2026-08-15 制动: 无计划/待办且外部确实无工作(无进程+15分钟无真实产出) → 停止唤醒
         if not urgent and _session_no_live_work(session):
-            logger.info(f"[SelfCheck] session {session['id'][:12]}: 无计划/待办/活跃工作 → 停止唤醒（制动）")
+            # 2026-10-18：之前只 return（下次签名一变又会被唤醒）→ 改为退役，彻底停止
+            try:
+                from webui.runtime.run_gate import mark_done, disarm
+                if results_dir:
+                    mark_done(results_dir, "auto-retire: 无 plan/待办/活跃工作")
+                    disarm(results_dir, "auto-retire: 无活可干")
+            except Exception:
+                pass
+            logger.info(f"[SelfCheck] session {session['id'][:12]}: 无计划/待办/活跃工作 → 退役并停止唤醒")
             return
     # 🔧 任务完成 → 归档 task_plan.md + mark_done，停止自检（心跳随之关闭）
     # 判定：待办全部完成/取消 + 主线区（🏁 唤醒记录区之前）无 in_progress/pending + 出现完成标记。
@@ -2686,11 +2848,11 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
                             mark_done(results_dir, "task completed (self-check)")
                         except Exception:
                             pass
+                        # 2026-10-18 用户口径：「只要完成的任务，彻底清除干净，task plan 也要清除掉」
+                        # 旧行为是归档成 task_plan.done.md —— 文件还在，重启扫描/唤醒仍会摸到它。
+                        # 现在完成即清空：计划文件直接删除，只在 log 里留一行退出记录。
                         try:
-                            _done_path = os.path.join(results_dir, "task_plan.done.md")
-                            if os.path.exists(_done_path):
-                                os.remove(_done_path)
-                            os.rename(_plan_path, _done_path)
+                            _purge_finished_task_files(results_dir, reason="task completed (self-check)")
                         except Exception:
                             try:
                                 os.remove(_plan_path)
@@ -2791,6 +2953,17 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
                 else:
                     s.pop("_wakeup_retry_n", None)
                 return
+            # ── 2026-10-18：唤醒真正记账（此前 rounds 一直是 0，256 轮预算形同虚设）──
+            try:
+                from webui.runtime.run_gate import admit_round
+                _rd_w = s.get("results_dir", "") or ""
+                if _rd_w and not admit_round(_rd_w):
+                    logger.info(f"[SelfCheck] session {sid[:12]}: 轮次预算/退役拦截 → 不注入唤醒")
+                    return
+                s["_self_check_total"] = int(s.get("_self_check_total", 0) or 0) + 1
+            except Exception as _e:
+                logger.warning(f"[SelfCheck] admit_round 失败(fail-open): {_e}")
+
             # ── M1 兜底闸门：外部工作在跑且无新进展 → 不唤醒 LLM，只重排兜底 ──
             # （省 token 的关键：轮询文件系统/进程表，而不是轮询 LLM；
             #   DSH"无产出就不唤醒"的落地）
@@ -6865,7 +7038,11 @@ def _load_persisted_sessions():
             from webui.runtime.run_gate import is_retired as _is_retired_gate
             from webui.runtime.run_gate import is_armed as _is_armed_gate
             from webui.runtime.run_gate import load_state as _load_gate_state
-            _auto_arm, _auto_age_h = True, 12.0   # 默认 true = 进程内许可（DSH goal 式）
+            _auto_arm, _auto_age_h = False, 12.0   # 2026-10-18 对齐 DSH：重启后不自动武装（用户消息才恢复）
+            try:
+                from memomics.bio_tools import task_done as _task_done_mod  # noqa: F401  注册 task_done 工具
+            except Exception:
+                pass
             try:
                 import yaml as _y_arm
                 _cfg_p_arm = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
