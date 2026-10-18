@@ -41,12 +41,59 @@ def _worker_path() -> str:
     raise FileNotFoundError(WORKER_NAME)
 
 
+
+# ---------------- 环境解析（读 memomics_home/cluster_envs.json，2026-10-18）----------------
+def _envs_record() -> dict:
+    """读取实测确认过的集群环境记录（RNA=R4.41 / ATAC=R4.3.3）。"""
+    p = os.path.join(os.environ.get("MEMOMICS_HOME") or os.path.expanduser("~"), "cluster_envs.json")
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            return json.load(f) or {}
+    except Exception:
+        return {}
+
+
+def resolve_interpreter(lang: str = "python", purpose: str = "RNA") -> str:
+    """按「语言 + 用途」从环境记录里取解释器绝对路径；取不到才退回默认。
+
+    科研场景关键：集群上 `python3`/`Rscript` 不在默认 PATH，必须用 env 里的绝对路径，
+    而且 RNA 与 ATAC 环境不同（R4.41 vs R4.3.3）——不能混用，否则包版本不对。
+    """
+    rec = _envs_record()
+    envs = rec.get("envs") or {}
+    key = str(purpose or "RNA").upper()
+    ent = envs.get(key) or envs.get("RNA") or {}
+    if str(lang).lower().startswith("r"):
+        return ent.get("Rscript") or ""
+    return ent.get("python") or ""
+
+
+def env_summary() -> dict:
+    """给模型/日志用的一句话环境摘要（含版本），避免用错环境。"""
+    rec = _envs_record()
+    out = {}
+    for k, v in (rec.get("envs") or {}).items():
+        out[k] = {"env": v.get("env_name"), "R": v.get("R"),
+                  "Rscript": v.get("Rscript"), "python": v.get("python"),
+                  "packages": (v.get("R_packages") or {}),
+                  "use_for": v.get("use_for")}
+    return out
+
+
 class ClusterKernel:
     """一个跑在集群上（或本地模拟）的长驻 worker。"""
 
     def __init__(self, host: str = "", user: str = "", port: int = 22, workdir: str = "~",
                  key: str = "", python: str = "python3", timeout: float = 300.0,
-                 extra_opts=None, local: bool = False):
+                 extra_opts=None, local: bool = False, lang: str = "python",
+                 purpose: str = "RNA"):
+        self.lang = "R" if str(lang).lower().startswith("r") else "python"
+        self.purpose = purpose or "RNA"
+        # 解释器优先来自实测环境记录（R4.41/R4.3.3），避免用错环境或 PATH 里没有
+        if self.lang == "R":
+            python = resolve_interpreter("R", self.purpose) or python
+        elif not python or python == "python3":
+            python = resolve_interpreter("python", self.purpose) or python
         self.host = host or ""
         self.user = user or ""
         self.port = int(port or 22)
@@ -75,8 +122,11 @@ class ClusterKernel:
         target = f"{self.user}@{self.host}" if self.user else self.host
         return ["ssh", *opts, target]
 
+    def _worker_file(self) -> str:
+        return "_kernel_worker.R" if self.lang == "R" else WORKER_NAME
+
     def _remote_worker(self) -> str:
-        return f"$HOME/{REMOTE_DIR}/{WORKER_NAME}"
+        return f"$HOME/{REMOTE_DIR}/{self._worker_file()}"
 
     def upload_worker(self) -> bool:
         """把自包含 worker 传到集群（cat 覆盖写，不需要 scp）。"""
@@ -84,11 +134,16 @@ class ClusterKernel:
             self._uploaded = True
             return True
         try:
-            src = open(_worker_path(), "rb").read()
+            _wf = self._worker_file()
+            if self.lang == "R":
+                _wf = "_kernel_worker.R"
+                _src_path = os.path.join(os.path.dirname(_worker_path()), _wf)
+            else:
+                _src_path = _worker_path()
+            src = open(_src_path, "rb").read()
             remote = f'$HOME/{REMOTE_DIR}'
             cmd = self._ssh_prefix() + [
-                f'mkdir -p {remote} && cat > {remote}/{WORKER_NAME} && '
-                f'echo UPLOAD_OK && python3 -c "print(1)" 2>/dev/null || true']
+                f'mkdir -p {remote} && cat > {remote}/{_wf} && echo UPLOAD_OK']
             p = subprocess.run(cmd, input=src, capture_output=True, timeout=120)
             ok = b"UPLOAD_OK" in (p.stdout or b"")
             self._uploaded = ok
@@ -109,8 +164,10 @@ class ClusterKernel:
                 cmd = [sys.executable, "-u", _worker_path()]
                 cwd = os.path.expanduser("~")
             else:
-                remote_cmd = (f'cd {self.workdir} && '
-                              f'exec {self.python} -u {self._remote_worker()}')
+                _exe = self.python
+                remote_cmd = (f'cd {self.workdir} && exec {_exe} '
+                              + (f'{self._remote_worker()}' if self.lang == "R"
+                                 else f'-u {self._remote_worker()}'))
                 cmd = self._ssh_prefix() + [remote_cmd]
                 cwd = None
             self.proc = subprocess.Popen(
@@ -230,7 +287,9 @@ SCHEMA = {
     "parameters": {
         "type": "object",
         "properties": {
-            "action": {"type": "string", "enum": ["start", "exec", "status", "stop", "list", "attach"]},
+            "action": {"type": "string", "enum": ["start", "exec", "status", "stop", "list", "attach", "env"]},
+            "lang": {"type": "string", "enum": ["python", "R"], "description": "语言（默认 python；RNA 分析建议 R）"},
+            "purpose": {"type": "string", "enum": ["RNA", "ATAC"], "description": "用途（决定用 R4.41 还是 R4.3.3）"},
             "code": {"type": "string", "description": "要执行的 Python 代码（exec 时必填）"},
             "timeout": {"type": "number", "description": "执行超时秒数，默认 300"},
             "host": {"type": "string", "description": "可选：覆盖集群 host"},
@@ -251,7 +310,8 @@ def _cluster_cfg() -> dict:
 
 
 def cluster_kernel_tool(action: str = "status", code: str = "", timeout: float = 300,
-                        host: str = "", workdir: str = "", kernel_id: str = "") -> str:
+                        host: str = "", workdir: str = "", kernel_id: str = "",
+                        lang: str = "python", purpose: str = "RNA") -> str:
     sid = ""
     try:
         from memomics.bio_tools.debate_analysis import get_session_sid
@@ -260,6 +320,9 @@ def cluster_kernel_tool(action: str = "status", code: str = "", timeout: float =
         sid = ""
     cfg = _cluster_cfg()
     key = f"cluster:{sid or 'default'}"
+    if action == "env":
+        return json.dumps({"ok": True, "source": "memomics_home/cluster_envs.json",
+                           "envs": env_summary()}, ensure_ascii=False, indent=1)
     if action == "list":
         return json.dumps({"ok": True, "kernels": list_kernels(),
                            "note": "alive/attachable 只在当前服务进程内有效；服务重启后 ssh 管道断，变量必然丢失"}, ensure_ascii=False, indent=1)
@@ -271,14 +334,15 @@ def cluster_kernel_tool(action: str = "status", code: str = "", timeout: float =
     if action == "status":
         return json.dumps(kernel_status(key), ensure_ascii=False)
     kern = get_kernel(
-        key,
+        f"cluster:{sid or 'default'}:{lang}:{purpose}",
         host=(host or cfg.get("host") or ""),
         user=cfg.get("user") or "",
         port=int(cfg.get("port") or 22),
         workdir=(workdir or cfg.get("workdir") or "~"),
         key_file=cfg.get("key") or "",
-        python=cfg.get("python") or "python3",
+        python=(resolve_interpreter(lang, purpose) or cfg.get("python") or "python3"),
         local=bool(not (host or cfg.get("host"))),   # 没配集群 → 本地模拟（同一套协议）
+        lang=lang, purpose=purpose,
     )
     if action == "start":
         return json.dumps(kern.start(), ensure_ascii=False)
@@ -299,7 +363,7 @@ def _register():
             handler=lambda args, **kw: cluster_kernel_tool(
                 args.get("action", "status"), args.get("code", ""),
                 float(args.get("timeout") or 300), args.get("host", ""), args.get("workdir", ""),
-                args.get("kernel_id", "")),
+                args.get("kernel_id", ""), args.get("lang", "python"), args.get("purpose", "RNA")),
         )
     except Exception:
         pass
