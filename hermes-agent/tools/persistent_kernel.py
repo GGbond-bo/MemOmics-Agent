@@ -21,11 +21,15 @@ from collections import deque
 logger = logging.getLogger(__name__)
 
 # 0 = 不启用时间回收；>0 则空闲超过该秒数的 worker 被回收（与 LRU 容量回收并存）。
-# 默认 1800s = 30 分钟（2026-08-13 用户定：最多 2 个 R + 空闲 30 分钟关闭）
-_IDLE_TIMEOUT = float(os.environ.get("MEMOMICS_KERNEL_IDLE_TIMEOUT", "1800"))
+# 2026-10-18（用户：要像 Jupyter 一样长驻，跑完一张图下张图继续）
+# 默认改为 6 小时（原 30 分钟 → 7G 数据刚读完、去查个文献就被回收，下轮只能重读）。
+_IDLE_TIMEOUT = float(os.environ.get("MEMOMICS_KERNEL_IDLE_TIMEOUT", "21600"))
 # 每种语言最多保留的 worker 数（LRU：超出时回收最久未用的）。
 # 默认 2：单任务分析隔多久回来都不重读数据，多任务切换也不爆内存。
-_MAX_WORKERS_PER_LANG = int(os.environ.get("MEMOMICS_KERNEL_MAX_WORKERS", "2"))
+_MAX_WORKERS_PER_LANG = int(os.environ.get("MEMOMICS_KERNEL_MAX_WORKERS", "4"))
+# 内存保护（原来完全没有）：worker 常驻的总内存超过此值才强制回收最久未用者，
+# 否则即使空闲很久也保留（装 7G 数据的内核不该为省内存被杀）。
+_MAX_RSS_MB = int(os.environ.get("MEMOMICS_KERNEL_MAX_RSS_MB", "14000"))
 _MAX_OUTPUT_BYTES = int(os.environ.get("MEMOMICS_KERNEL_MAX_OUTPUT", "200000"))
 _PY_WORKER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_kernel_worker.py")
 _R_WORKER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_kernel_worker.R")
@@ -453,11 +457,33 @@ class _SessionKernelPool(KernelPool):
             logger.info("kernel pool: LRU evicted %d %s worker(s), %d remaining",
                         overflow, lang, len(self._workers))
 
+    def _worker_rss_mb(self, w) -> float:
+        """粗略读取 worker 进程 RSS（MB）；读不到按 0 处理（不因探测失败而误杀）。"""
+        try:
+            import psutil  # type: ignore
+            proc = w.proc
+            if proc is None:
+                return 0.0
+            p = psutil.Process(proc.pid)
+            total = p.memory_info().rss
+            for ch in p.children(recursive=True):
+                try:
+                    total += ch.memory_info().rss
+                except Exception:
+                    pass
+            return total / (1024.0 * 1024.0)
+        except Exception:
+            return 0.0
+
     def _reap_idle(self):
         now = time.monotonic()
         with self._lock:
+            _total_rss = sum(self._worker_rss_mb(w) for w in self._workers.values())
+            _over_mem = _MAX_RSS_MB > 0 and _total_rss > _MAX_RSS_MB
+            # 2026-10-18：只有"内存吃紧"时才按空闲时间回收；内存充足则长驻，
+            # 避免装了大数据的会话（7G h5ad）刚读完就被回收，下轮只能重读。
             stale = [k for k, w in self._workers.items()
-                     if now - w.last_use > _IDLE_TIMEOUT]
+                     if now - w.last_use > _IDLE_TIMEOUT and _over_mem]
             for k in stale:
                 _tid = k.split(":", 1)[1] if ":" in k else ""
                 try:
@@ -467,11 +493,13 @@ class _SessionKernelPool(KernelPool):
                 del self._workers[k]
                 # L1: 空闲回收事件可见化
                 self._record_event(
-                    _tid, f"{k.split(':', 1)[0]} kernel 被空闲回收（{int(_IDLE_TIMEOUT / 60)} 分钟无请求），"
+                    _tid, f"{k.split(':', 1)[0]} kernel 被回收（空闲 {int(_IDLE_TIMEOUT / 60)} 分钟 "
+                          f"且进程总内存 {_total_rss:.0f}MB > 上限 {_MAX_RSS_MB}MB），"
                           f"此前所有变量已丢失，需重新加载数据")
         if stale:
-            logger.info("kernel pool: reaped %d idle worker(s), %d remaining",
-                        len(stale), len(self._workers))
+            logger.info("kernel pool: reaped %d idle worker(s), %d remaining "
+                        "(总内存 %.0fMB / 上限 %dMB)",
+                        len(stale), len(self._workers), _total_rss, _MAX_RSS_MB)
 
     @staticmethod
     def _python_path():
