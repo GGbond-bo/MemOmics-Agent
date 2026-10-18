@@ -62,6 +62,7 @@ class ClusterKernel:
         self.created_at = time.time()
         self.last_use = time.time()
         self.uses = 0
+        self.kernel_id = ""          # 由 get_kernel 赋值，用于跨对话定位
 
     # ---------- 连接构造 ----------
     def _ssh_prefix(self):
@@ -116,6 +117,10 @@ class ClusterKernel:
                 cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 cwd=cwd, bufsize=0)
             self.last_use = time.time()
+            try:
+                _reg_touch(self)     # 落盘登记 → 下一次对话 action=list 能看到
+            except Exception:
+                pass
             return {"ok": True, "pid": self.proc.pid, "local": self.local,
                     "host": self.host or "(local)"}
         except Exception as exc:
@@ -198,6 +203,7 @@ def get_kernel(key: str = "", host: str = "", user: str = "", port: int = 22,
         if kern is None:
             kern = ClusterKernel(host=host, user=user, port=port, workdir=workdir,
                                  key=key_file, python=python, local=local)
+            kern.kernel_id = k
             _session_kernels[k] = kern
         return kern
 
@@ -224,10 +230,11 @@ SCHEMA = {
     "parameters": {
         "type": "object",
         "properties": {
-            "action": {"type": "string", "enum": ["start", "exec", "status", "stop"]},
+            "action": {"type": "string", "enum": ["start", "exec", "status", "stop", "list", "attach"]},
             "code": {"type": "string", "description": "要执行的 Python 代码（exec 时必填）"},
             "timeout": {"type": "number", "description": "执行超时秒数，默认 300"},
             "host": {"type": "string", "description": "可选：覆盖集群 host"},
+            "kernel_id": {"type": "string", "description": "list 查到的内核 id（attach/stop 用）"},
             "workdir": {"type": "string", "description": "可选：集群上的工作目录"},
         },
         "required": ["action"],
@@ -244,7 +251,7 @@ def _cluster_cfg() -> dict:
 
 
 def cluster_kernel_tool(action: str = "status", code: str = "", timeout: float = 300,
-                        host: str = "", workdir: str = "") -> str:
+                        host: str = "", workdir: str = "", kernel_id: str = "") -> str:
     sid = ""
     try:
         from memomics.bio_tools.debate_analysis import get_session_sid
@@ -253,8 +260,14 @@ def cluster_kernel_tool(action: str = "status", code: str = "", timeout: float =
         sid = ""
     cfg = _cluster_cfg()
     key = f"cluster:{sid or 'default'}"
+    if action == "list":
+        return json.dumps({"ok": True, "kernels": list_kernels(),
+                           "note": "alive/attachable 只在当前服务进程内有效；服务重启后 ssh 管道断，变量必然丢失"}, ensure_ascii=False, indent=1)
+    if action == "attach":
+        return json.dumps(attach_kernel(kernel_id or key, sid), ensure_ascii=False)
     if action == "stop":
-        return json.dumps(stop_kernel(key), ensure_ascii=False)
+        return json.dumps(stop_kernel_by_id(kernel_id) if kernel_id else stop_kernel(key),
+                          ensure_ascii=False)
     if action == "status":
         return json.dumps(kernel_status(key), ensure_ascii=False)
     kern = get_kernel(
@@ -285,10 +298,103 @@ def _register():
             schema=SCHEMA,
             handler=lambda args, **kw: cluster_kernel_tool(
                 args.get("action", "status"), args.get("code", ""),
-                float(args.get("timeout") or 300), args.get("host", ""), args.get("workdir", "")),
+                float(args.get("timeout") or 300), args.get("host", ""), args.get("workdir", ""),
+                args.get("kernel_id", "")),
         )
     except Exception:
         pass
 
 
 _register()
+
+
+# ---------------- 跨对话定位 / 结束（2026-10-18 用户要求）----------------
+_REG_FILE = os.path.join(os.environ.get("MEMOMICS_HOME") or os.path.expanduser("~"),
+                         "cluster_kernels.json")
+
+
+def _reg_load() -> dict:
+    try:
+        with open(_REG_FILE, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {"kernels": {}}
+    except Exception:
+        return {"kernels": {}}
+
+
+def _reg_save(d: dict) -> None:
+    try:
+        os.makedirs(os.path.dirname(_REG_FILE), exist_ok=True)
+        tmp = _REG_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(d, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, _REG_FILE)
+    except Exception:
+        pass
+
+
+def _reg_touch(kernel) -> None:
+    """把内核登记到磁盘（跨对话可见），并刷新 last_use。"""
+    d = _reg_load()
+    kid = getattr(kernel, "kernel_id", "") or ""
+    if not kid:
+        return
+    st = kernel.status()
+    d.setdefault("kernels", {})[kid] = {
+        "kernel_id": kid, "host": st.get("host"), "pid": st.get("pid"),
+        "local": st.get("local"), "uses": st.get("uses", 0),
+        "created_at": getattr(kernel, "created_at", time.time()),
+        "last_use": time.time(), "alive": bool(st.get("alive")),
+        "workdir": getattr(kernel, "workdir", ""),
+    }
+    _reg_save(d)
+
+
+def list_kernels(include_stale: bool = True) -> list:
+    """列出所有登记过的集群内核；alive 只对**本服务进程内**的内核有效。"""
+    d = _reg_load()
+    out = []
+    for kid, rec in (d.get("kernels") or {}).items():
+        live = _session_kernels.get(kid)
+        in_proc = live is not None and live.proc is not None and live.proc.poll() is None
+        rec = dict(rec)
+        rec["in_process"] = bool(live is not None)
+        rec["alive"] = bool(in_proc)
+        rec["attachable"] = bool(in_proc)
+        if rec["alive"] or include_stale:
+            out.append(rec)
+    out.sort(key=lambda r: r.get("last_use", 0), reverse=True)
+    return out
+
+
+def attach_kernel(kernel_id: str, sid: str = "") -> dict:
+    """把当前会话挂到已有内核（跨"下一次对话"复用，同一服务进程内有效）。"""
+    kid = str(kernel_id or "").strip()
+    if not kid:
+        return {"ok": False, "error": "需要 kernel_id（先用 action=list 查）"}
+    live = _session_kernels.get(kid)
+    if live is None or live.proc is None or live.proc.poll() is not None:
+        return {"ok": False,
+                "error": ("该内核不在当前服务进程内（服务重启或内核已退出）→ 变量已丢失，"
+                          "需要重新 start 并重新加载数据"),
+                "kernel_id": kid, "hint": "tmux 托管版可跨重启，属下一步升级"}
+    target = f"cluster:{sid or 'default'}"
+    with _lock:
+        _session_kernels[target] = live
+    _reg_touch(live)
+    return {"ok": True, "attached": kid, "bound_to": target,
+            "host": live.status().get("host"), "uses": live.uses}
+
+
+def stop_kernel_by_id(kernel_id: str) -> dict:
+    kid = str(kernel_id or "").strip()
+    live = _session_kernels.pop(kid, None)
+    if live is not None:
+        r = live.stop()
+        d = _reg_load()
+        if kid in (d.get("kernels") or {}):
+            d["kernels"][kid]["alive"] = False
+            d["kernels"][kid]["stopped_at"] = time.time()
+            _reg_save(d)
+        return {**r, "kernel_id": kid}
+    return {"ok": False, "error": f"本进程没有这个内核: {kid}（可能已停止或服务重启过）"}
