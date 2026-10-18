@@ -2401,6 +2401,19 @@ document.addEventListener('DOMContentLoaded', applyUILang);
           </div>
         </div>
         <div class="settings-group">
+          <label>思考强度 (reasoning effort)</label>
+          <select id="settings-effort" onchange="onEffortSelect()">
+            <option value="off">off（默认：不发送，行为不变）</option>
+            <option value="low">low（快，推理最少）</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+            <option value="max">max（最深，最慢；上游可能忽略）</option>
+          </select>
+          <div id="settings-effort-note" style="font-size:11px;color:var(--text-light);margin-top:4px;">
+            仅对支持该参数的上游生效；实测 dcs-cloud 的 max 档抖动较大。
+          </div>
+        </div>
+        <div class="settings-group">
           <label data-i18n="api_base">API Base URL (自动填充)</label>
           <input type="text" id="settings-base-url" placeholder="https://api.deepseek.com/v1" readonly>
         </div>
@@ -8539,6 +8552,39 @@ function onModelSelect() {
     }).catch(e => {
       alert('\u26a0\ufe0f 切换模型请求失败：' + e);
     });
+}
+
+
+// === 思考强度（2026-10-18）===
+async function loadEffortSetting() {
+  try {
+    var d = await (await fetch('/api/model/reasoning_effort')).json();
+    var sel = document.getElementById('settings-effort');
+    if (sel && d && d.level) { sel.value = d.level; }
+    var note = document.getElementById('settings-effort-note');
+    if (note && d && d.model) {
+      var per = (d.model_efforts || {})[d.model];
+      note.textContent = per
+        ? ('当前模型 ' + d.model + ' 单独设为 ' + per + '（优先于全局）')
+        : '全局 ' + (d.level || 'off') + '；仅对支持该参数的上游生效（dcs-cloud 的 max 档抖动较大）。';
+    }
+  } catch (e) {}
+}
+
+async function onEffortSelect() {
+  var sel = document.getElementById('settings-effort');
+  if (!sel) return;
+  var lvl = sel.value;
+  try {
+    var r = await fetch('/api/model/reasoning_effort', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({level: lvl})
+    });
+    var d = await r.json();
+    if (d && d.ok) { showToast('思考强度：' + lvl); }
+    else { showToast('设置失败：' + ((d && d.error) || '未知')); }
+  } catch (e) { showToast('设置失败：' + e); }
+  loadEffortSetting();
 }
 
 function onSettingsModelSelect() {

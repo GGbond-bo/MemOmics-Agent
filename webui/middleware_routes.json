@@ -66,6 +66,7 @@
   "/api/memory/write": "public",
   "/api/memory/{filename}": "public",
   "/api/middleware/audit": "public",
+  "/api/model/reasoning_effort": "public",
   "/api/models": "public",
   "/api/models/available": "public",
   "/api/models/local": "public",

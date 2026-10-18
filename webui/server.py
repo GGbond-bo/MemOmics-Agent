@@ -8463,6 +8463,125 @@ def _env_digest_block() -> str:
         return ""
 
 
+# === 思考强度（reasoning effort，2026-10-18）===
+# 为什么需要：hermes 适配层的 reasoning_effort 只对 Kimi/TokenHub/LM Studio 发送，
+# 自定义 OpenAI 兼容通道（dcs-cloud 等）永远拿不到。实测该端点接受此参数且影响推理深度
+# （low→max 推理 token 均值 294→882）。这里给它一个可控开关，默认 off = 不发送。
+_EFFORT_LEVELS = ("off", "low", "medium", "high", "max")
+
+
+def _effort_cfg_path():
+    return os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
+
+
+def _read_effort() -> dict:
+    try:
+        import yaml
+        d = yaml.safe_load(open(_effort_cfg_path(), encoding="utf-8")) or {}
+        llm = d.get("llm") if isinstance(d.get("llm"), dict) else {}
+        lvl = str(llm.get("reasoning_effort") or "off").strip().lower()
+        per = llm.get("model_efforts") if isinstance(llm.get("model_efforts"), dict) else {}
+        return {"level": lvl if lvl in _EFFORT_LEVELS else "off",
+                "levels": list(_EFFORT_LEVELS),
+                "model_efforts": per,
+                "model": (_current_model or {}).get("model", "")}
+    except Exception as e:
+        return {"level": "off", "levels": list(_EFFORT_LEVELS), "model_efforts": {},
+                "model": "", "error": str(e)}
+
+
+def _write_effort(level: str) -> bool:
+    """行级改写 config.yaml 的 llm.reasoning_effort（不重排整个文件，避免格式爆炸）。"""
+    p = _effort_cfg_path()
+    try:
+        with open(p, "r", encoding="utf-8", newline="") as f:
+            raw = f.read()
+        eol = "\r\n" if "\r\n" in raw else "\n"
+        lines = raw.replace("\r\n", "\n").split("\n")
+        in_llm = False
+        done = False
+        for i, ln in enumerate(lines):
+            if ln.rstrip() == "llm:":
+                in_llm = True
+                continue
+            if in_llm and ln.strip().startswith("reasoning_effort:"):
+                lines[i] = "  reasoning_effort: \"" + level + "\""
+                done = True
+                break
+            if in_llm and ln and not ln.startswith(" "):
+                break
+        if not done:
+            for i, ln in enumerate(lines):
+                if ln.rstrip() == "llm:":
+                    lines.insert(i + 1, "  reasoning_effort: \"" + level + "\"")
+                    done = True
+                    break
+            if not done:
+                lines += ["llm:", "  reasoning_effort: \"" + level + "\""]
+        out = "\n".join(lines)
+        with open(p, "w", encoding="utf-8", newline="") as f:
+            f.write(out.replace("\n", eol) if eol != "\n" else out)
+        return True
+    except Exception as e:
+        logger.warning(f"[reasoning] 写入失败: {e}")
+        return False
+
+
+@app.get("/api/model/reasoning_effort")
+async def get_reasoning_effort():
+    """当前思考强度（全局 + 每模型覆盖）。"""
+    return _read_effort()
+
+
+@app.post("/api/model/reasoning_effort")
+async def set_reasoning_effort(request: Request):
+    """设置思考强度：{"level": "off|low|medium|high|max", "model": "<可选，按模型覆盖>"}"""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    level = str(body.get("level") or "").strip().lower()
+    if level not in _EFFORT_LEVELS:
+        return {"ok": False, "error": f"level 必须是 {'/'.join(_EFFORT_LEVELS)}"}
+    model_id = str(body.get("model") or "").strip()
+    if model_id:
+        # 按模型覆盖：写 config.yaml 的 llm.model_efforts.<model_id>
+        try:
+            import yaml
+            p = _effort_cfg_path()
+            d = yaml.safe_load(open(p, encoding="utf-8")) or {}
+            llm = d.get("llm") if isinstance(d.get("llm"), dict) else {}
+            effs = llm.get("model_efforts") if isinstance(llm.get("model_efforts"), dict) else {}
+            if level == "off":
+                effs.pop(model_id, None)
+            else:
+                effs[model_id] = level
+            llm["model_efforts"] = effs
+            d["llm"] = llm
+            _atomic_write_json(os.path.join(MEMOMICS_HOME_DIR, ".effort_tmp.json"), d)  # 仅占位，下面用稳定写
+            ok = _write_effort(str(llm.get("reasoning_effort") or "off"))
+            # 用 yaml 原样回写 model_efforts（该段是纯数据，可整体替换）
+            with io.open(p, "r", encoding="utf-8", newline="") as f:
+                raw = f.read()
+            eol2 = "\r\n" if "\r\n" in raw else "\n"
+            txt = raw.replace("\r\n", "\n")
+            import re as _re
+            new_block = "  model_efforts:\n" + "".join(
+                f"    {k}: {v}\n" for k, v in effs.items()) if effs else "  model_efforts: {}\n"
+            txt = _re.sub(r"  model_efforts:\n(?:    [^\n]*\n)*", new_block, txt, count=1)
+            if "model_efforts:" not in txt:
+                txt = txt.replace("llm:\n", "llm:\n" + new_block, 1)
+            with io.open(p, "w", encoding="utf-8", newline="") as f:
+                f.write(txt.replace("\n", eol2) if eol2 != "\n" else txt)
+            return {"ok": True, "level": llm.get("reasoning_effort") or "off",
+                    "model": model_id, "model_effort": level}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+    ok = _write_effort(level)
+    logger.info(f"[reasoning] 思考强度设为 {level}（off=不发送）")
+    return {"ok": bool(ok), "level": level}
+
+
 def _create_agent(model_config=None, session_id=None, session=None):
     """创建新的 AIAgent 实例 (每次会话独立)
     

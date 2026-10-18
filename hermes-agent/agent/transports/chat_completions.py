@@ -32,6 +32,44 @@ def _reasoning_config_for_model(model: str, reasoning_config: dict | None) -> di
     return reasoning_config
 
 
+_EFFORT_LEVELS = ("low", "medium", "high", "max")
+
+
+def _resolve_reasoning_effort(model: str) -> str | None:
+    """读「思考强度」配置，返回要发给上游的档位（None = 不发 = 现状）。
+
+    2026-10-18：此前 reasoning_effort 只对 Kimi / TokenHub / LM Studio / Gemini 发送，
+    自定义 OpenAI 兼容通道（如 dcs-cloud）永远拿不到 —— 实测该端点接受这个参数且
+    确实改变推理深度（low→max 推理 token 均值 294→882）。这里有三个来源，优先级从高到低：
+      1) config.yaml → llm.model_efforts.<model_id>（按模型覆盖）
+      2) config.yaml → llm.reasoning_effort（全局默认，off = 关闭）
+      3) custom_providers[].models[].reasoning_effort（模型目录里写的档位）
+    """
+    try:
+        from hermes_cli.config import load_config as _load_cfg
+        cfg = _load_cfg() or {}
+    except Exception:
+        return None
+    llm = cfg.get("llm") if isinstance(cfg.get("llm"), dict) else {}
+    mid = str(model or "").strip()
+    per = llm.get("model_efforts") if isinstance(llm.get("model_efforts"), dict) else {}
+    if mid and isinstance(per.get(mid), str) and per[mid].strip().lower() in _EFFORT_LEVELS:
+        return per[mid].strip().lower()
+    glob = str(llm.get("reasoning_effort") or "off").strip().lower()
+    if glob in _EFFORT_LEVELS:
+        return glob
+    try:
+        for prov in (cfg.get("custom_providers") or []):
+            for m in (prov.get("models") or []):
+                if str(m.get("id") or "").strip() == mid:
+                    eff = str(m.get("reasoning_effort") or "").strip().lower()
+                    if eff in _EFFORT_LEVELS:
+                        return eff
+    except Exception:
+        pass
+    return None
+
+
 def _build_gemini_thinking_config(model: str, reasoning_config: dict | None) -> dict | None:
     """Translate Hermes/OpenRouter-style reasoning config to Gemini thinkingConfig."""
     if reasoning_config is None or not isinstance(reasoning_config, dict):
@@ -389,6 +427,38 @@ class ChatCompletionsTransport(ProviderTransport):
             api_kwargs.update(max_tokens_fn(max_tokens))
         elif anthropic_max_out is not None:
             api_kwargs["max_tokens"] = anthropic_max_out
+
+        # 2026-10-18（思考强度）：通用 OpenAI 兼容通道的 reasoning_effort 透传。
+        # 只对"非白名单通道"发送（Kimi/TokenHub/LM Studio 已各自处理，OpenRouter 走 extra_body），
+        # 且必须在配置里显式开启（默认 off = 一行请求都不变）。
+        try:
+            _eff = _resolve_reasoning_effort(model)
+            _special = (is_kimi or is_tokenhub or params.get("is_lmstudio", False)
+                        or params.get("is_openrouter", False))
+            if _eff and not _special:
+                api_kwargs["reasoning_effort"] = _eff
+                # 探针：仅当 MEMOMICS_DEBUG_EFFORT=1 时写一行（默认静默）
+                try:
+                    import os as _os, time as _t
+                    if _os.environ.get("MEMOMICS_DEBUG_EFFORT") != "1":
+                        raise RuntimeError("probe disabled")
+                    _home = _os.environ.get("MEMOMICS_HOME") or _os.environ.get("HERMES_HOME") or ""
+                    _lp = _os.path.join(_home, "logs", "reasoning_effort.log") if _home else ""
+                    if _lp:
+                        _os.makedirs(_os.path.dirname(_lp), exist_ok=True)
+                        with open(_lp, "a", encoding="utf-8") as _f:
+                            _f.write("%s effort=%s model=%s provider=%s special=%s\n" % (
+                                _t.strftime("%Y-%m-%d %H:%M:%S"), _eff, model,
+                                params.get("provider_name") or "", _special))
+                except Exception:
+                    pass
+                try:
+                    logger.info("[reasoning] effort=%s model=%s provider=%s",
+                                _eff, model, params.get("provider_name") or "")
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
         # Kimi: top-level reasoning_effort (unless thinking disabled)
         if is_kimi:
