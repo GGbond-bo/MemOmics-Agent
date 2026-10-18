@@ -7065,6 +7065,7 @@ def _load_persisted_sessions():
             try:
                 from memomics.bio_tools import task_done as _task_done_mod  # noqa: F401  注册 task_done 工具
                 from memomics.bio_tools import dataset_cache as _dataset_cache_mod  # noqa: F401  注册 dataset_cache
+                from memomics.bio_tools import cluster_kernel as _cluster_kernel_mod  # noqa: F401  注册 cluster_kernel
             except Exception:
                 pass
             try:
