@@ -154,6 +154,10 @@ class ClusterKernel:
 
     # ---------- 生命周期 ----------
     def start(self) -> dict:
+        # 决策3：登录节点禁止跑重分析（只允许轻量交互）
+        _g = guard_heavy_on_login(self.host, self.purpose)
+        if not _g.get("ok"):
+            return _g
         if self.proc is not None and self.proc.poll() is None:
             return {"ok": True, "already": True, "pid": self.proc.pid, "local": self.local}
         if not self.local and not self._uploaded:
@@ -184,6 +188,13 @@ class ClusterKernel:
             return {"ok": False, "error": f"启动失败: {exc}"}
 
     def execute(self, code: str, timeout: float = None) -> dict:
+        # 决策1：6 小时不动 → 自动结束（交互期长驻，不做永久占用）
+        if self.proc is not None and (time.time() - self.last_use) > INTERACTIVE_IDLE_SEC:
+            self._close()
+            return {"status": "error",
+                    "error": (f"内核已因 {INTERACTIVE_IDLE_SEC // 3600} 小时无交互自动结束"
+                              "（内存变量已释放，需重新 start 并重新加载数据）"),
+                    "output": ""}
         st = self.start()
         if not st.get("ok"):
             return {"status": "error", "error": st.get("error", "kernel 未能启动"), "output": ""}
@@ -462,3 +473,52 @@ def stop_kernel_by_id(kernel_id: str) -> dict:
             _reg_save(d)
         return {**r, "kernel_id": kid}
     return {"ok": False, "error": f"本进程没有这个内核: {kid}（可能已停止或服务重启过）"}
+
+# ---------------- 用户决策（2026-10-18）----------------
+INTERACTIVE_IDLE_SEC = 6 * 3600     # 决策1：6 小时不动自动结束
+LOGIN_NODE_PATTERNS = ("login", "cngb-login")   # 决策3：登录节点禁止跑重分析
+
+
+def is_login_node(host: str) -> bool:
+    h = str(host or "").lower()
+    return any(p in h for p in LOGIN_NODE_PATTERNS)
+
+
+def guard_heavy_on_login(host: str, purpose: str = "RNA") -> dict:
+    """决策3：登录节点只允许轻量交互；重分析必须 qsub。
+
+    判定采用保守策略：只要目标是登录节点且调用方声明的是分析用途 → 直接拒绝并给 qsub 指引。
+    """
+    if not is_login_node(host):
+        return {"ok": True}
+    return {"ok": False,
+            "error": (f"拒绝在登录节点（{host}）跑 {purpose} 重分析：会把登录节点拖垮、也容易被管理员杀。"
+                      "正确做法：重分析用 qsub/SGE 提交到计算节点（remote_cluster 的 submit），"
+                      "内核只用于轻量交互（看数据、画小图）。"),
+            "hint": "cluster_kernel 仅做交互；重活走 qsub"}
+
+
+def verify_env_fingerprint(lang: str = "R", purpose: str = "RNA") -> dict:
+    """决策4：环境指纹校验 —— 现取 R/python 版本与关键包，和记录比对。"""
+    rec = _envs_record()
+    ent = ((rec.get("envs") or {}).get(str(purpose).upper()) or {})
+    exe = resolve_interpreter(lang, purpose)
+    if not exe:
+        return {"ok": False, "error": "环境记录里没有该用途的解释器"}
+    import subprocess
+    try:
+        if str(lang).lower().startswith("r"):
+            code = ('cat(R.version.string, "|");'
+                    'for (p in c("Seurat","ArchR")) cat(p,"=",as.character(tryCatch(packageVersion(p), error=function(e) "MISSING")),"|")')
+            out = subprocess.run([exe, "-e", code], capture_output=True, text=True, timeout=120).stdout.strip()
+        else:
+            out = subprocess.run([exe, "-c",
+                                  "import sys,pandas;print(sys.version.split()[0],'|pandas=',pandas.__version__)"],
+                                 capture_output=True, text=True, timeout=120).stdout.strip()
+    except Exception as exc:
+        return {"ok": False, "error": f"取指纹失败: {exc}"}
+    return {"ok": True, "exe": exe, "fingerprint": out,
+            "recorded": {"R": ent.get("R"), "packages": ent.get("R_packages") or
+                         ent.get("python_packages")},
+            "note": "指纹与记录不一致说明环境被升级/重装，需重新核对后再跑分析"}
+

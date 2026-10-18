@@ -207,3 +207,85 @@ def _register():
 
 
 _register()
+
+# ---------------- 用户决策（2026-10-18）----------------
+ASK_THRESHOLD_MB = 100          # 超过就问
+DEFAULT_PERSIST = True          # 久不回答 → 默认持久化
+ASK_TIMEOUT_SEC = 600           # 10 分钟不回答就走默认
+
+
+def scan_big(results_dir: str, threshold_mb: int = ASK_THRESHOLD_MB, roots=None) -> list:
+    """扫描会话目录里 >= 阈值且**未登记**的大文件（含产物），用于"先问用户要不要持久化"。"""
+    out = []
+    base = results_dir or (roots[0] if roots else "")
+    if not base or not os.path.isdir(base):
+        return out
+    known = set()
+    try:
+        for it in (_load(base).get("datasets") or []):
+            known.add(os.path.normcase(os.path.abspath(it.get("path", ""))))
+    except Exception:
+        pass
+    lim = threshold_mb * 1024 * 1024
+    for cur, dirs, files in os.walk(base):
+        dirs[:] = [d for d in dirs if d not in ("log", "logs", "__pycache__", ".git", "node_modules")]
+        for fn in files:
+            p = os.path.join(cur, fn)
+            try:
+                sz = os.path.getsize(p)
+            except Exception:
+                continue
+            if sz >= lim and os.path.normcase(os.path.abspath(p)) not in known:
+                out.append({"path": os.path.abspath(p), "size": sz,
+                            "mb": round(sz / (1024.0 * 1024.0), 1)})
+    out.sort(key=lambda r: -r["size"])
+    return out
+
+
+def build_ask_message(big: list, extra: str = "") -> str:
+    """给模型看的"必须先问用户"提示（enforcement 拦截时用）。"""
+    if not big:
+        return ""
+    total = sum(b.get("size", 0) for b in big) / (1024.0 * 1024.0)
+    lines = [f"⚠️ 检测到 {len(big)} 个未登记的大文件（合计 {total:.1f}MB ≥ {ASK_THRESHOLD_MB}MB）："]
+    for b in big[:6]:
+        lines.append(f"  • {b['path']}  ({b['mb']}MB)")
+    lines += [
+        "按规矩**先问用户**：要持久化吗？（持久化 = 登记到 data_index.json，后续任务直接复用，不重读）",
+        f"用户 {ASK_TIMEOUT_SEC // 60} 分钟不回答 → 默认**持久化**并继续；回答要清理 → 不登记。",
+        "登记：dataset_cache(action='register', path=..., source=..., note=...)。",
+    ]
+    if extra:
+        lines.append(extra)
+    return "\n".join(lines)
+
+
+def register_artifacts(results_dir: str, threshold_mb: int = ASK_THRESHOLD_MB,
+                       note_prefix: str = "产物") -> dict:
+    """产物登记：把扫描到的大产物批量登记（用户决策 4 的"产物登记"）。"""
+    big = scan_big(results_dir, threshold_mb)
+    done = []
+    for b in big:
+        r = register(results_dir, b["path"], source="local artifact",
+                     note=f"{note_prefix} {b['mb']}MB", kind="artifact")
+        if r.get("ok"):
+            done.append(b["path"])
+    return {"ok": True, "registered": len(done), "paths": done}
+
+
+def bind_kernel(results_dir: str, path: str, kernel_id: str, host: str = "", pid=None) -> dict:
+    """内核-数据绑定：记录"这份数据在哪个内核/节点里加载过"（用户决策 4）。"""
+    try:
+        d = _load(results_dir)
+        for it in (d.get("datasets") or []):
+            if os.path.normcase(it.get("path", "")) == os.path.normcase(os.path.abspath(path)):
+                it["bound_kernel"] = kernel_id
+                it["bound_host"] = host
+                it["bound_pid"] = pid
+                it["bound_at"] = time.time()
+                _save(results_dir, d)
+                return {"ok": True, "path": path, "kernel_id": kernel_id, "host": host, "pid": pid}
+        return {"ok": False, "error": "该文件未登记，先 register"}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+

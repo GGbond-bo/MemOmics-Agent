@@ -920,6 +920,35 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
             return {"blocked": True,
                     "message": _base + f"（已连续拦截 {es._blocked_attempts} 次）" + _hint}
 
+        # 2026-10-18（用户决策1）：>100MB 数据/产物 → 先问用户要不要持久化（硬门禁）
+        try:
+            import re as _re, os as _os
+            _blob = str(args or "")
+            _paths = _re.findall(r"([A-Za-z]:[\\/][^\s\"'\,;]+)", _blob)
+            if _paths:
+                from memomics.bio_tools import dataset_cache as _dc
+                _rd = getattr(es, "results_dir", "") or ""
+                _big = []
+                for _p in _paths[:20]:
+                    try:
+                        if _os.path.isfile(_p) and _os.path.getsize(_p) >= _dc.ASK_THRESHOLD_MB * 1024 * 1024:
+                            _big.append({"path": _p,
+                                         "size": _os.path.getsize(_p),
+                                         "mb": round(_os.path.getsize(_p) / (1024.0 * 1024.0), 1)})
+                    except Exception:
+                        continue
+                if _big:
+                    _known = {_os.path.normcase(_os.path.abspath(it.get("path", "")))
+                              for it in (_dc._load(_rd).get("datasets") or [])} if _rd else set()
+                    _todo = [b for b in _big if _os.path.normcase(_os.path.abspath(b["path"])) not in _known]
+                    if _todo and not getattr(es, "_bigdata_asked", False):
+                        es._bigdata_asked = True
+                        _msg = _dc.build_ask_message(_todo)
+                        _emit("enforcement", action="blocked", message=_msg, bigdata=True)
+                        return {"blocked": True, "message": _msg}
+        except Exception:
+            pass
+
         # 2026-10-18（用户口径：先问清再动手）：grill 前置门禁
         try:
             note_grill_activity(es, tool_name, args)
