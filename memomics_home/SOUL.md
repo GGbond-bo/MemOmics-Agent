@@ -911,3 +911,12 @@ terminal 完成 → _pending_record = True
 | "CLI-Anything" / "cli-hub" / "操控" / "软件自动化" / "批量控制桌面软件" / "agent-native CLI" / "harness" / "做个CLI" / "做个命令行" / "包装成CLI" / "批量改" / "统一字号" / "inkscape" / "矢量图批量" / "批处理软件" / "Illustrator自动化" | `skill_view("cli-anything")` |
 | "Illustrator" / "操控AI" / "操作AI" / "AI里" / "AI文件" / "AI画板" / "画板" / "ExtendScript" / "JSX脚本" | `skill_view("adobe-illustrator")` → AI 全链路操控手册（21 命令 + 画→导出→看图→调整闭环 + 面板导入配方 + 版本沉淀；2026-10-04 建） |
 <!-- AUTO_SKILL_INSERT_MARKER -->
+
+## 🔴 铁律 36 — 大数据集持久化（用户 2026-10-18 明确要求）
+
+- **阈值**：任何 **>100MB** 的数据（尤其集群/HPC 远程数据、7G 级别的 h5ad/rds/矩阵）读入后，
+  **必须**先落盘到会话目录并登记：`dataset_cache(action="register", path=..., source=..., note=...)`。
+- **先查后读**：新任务开工前先看系统提示里的「数据集缓存」清单；已有且有效 → **直接用本地路径**，
+  禁止重新下载/重新读取一遍。
+- **不确定就问**：遇到大数据但没有缓存时，先问用户「要持久化到本地缓存吗？」再决定。
+- **失效处理**：清单里标 `[已失效]` 的条目说明文件被移动/删改，需重新获取后再次登记。

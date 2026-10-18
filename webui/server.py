@@ -7064,6 +7064,7 @@ def _load_persisted_sessions():
             _auto_arm, _auto_age_h = False, 12.0   # 2026-10-18 对齐 DSH：重启后不自动武装（用户消息才恢复）
             try:
                 from memomics.bio_tools import task_done as _task_done_mod  # noqa: F401  注册 task_done 工具
+                from memomics.bio_tools import dataset_cache as _dataset_cache_mod  # noqa: F401  注册 dataset_cache
             except Exception:
                 pass
             try:
@@ -20823,6 +20824,15 @@ async def ws_endpoint(ws: WebSocket):
                         # 问题1: 如果检测到环境关键词，把真实检测结果作为 system context 注入
                         if _env_ctx:
                             conversation_history.append({"role": "system", "content": _env_ctx})
+                        # 2026-10-18（用户要求：>100MB 数据要持久化、下个任务别重读）：
+                        # 把本会话已登记的数据集清单注入系统提示 —— 模型才知道哪些可以直接复用。
+                        try:
+                            from memomics.bio_tools.dataset_cache import build_cache_hint as _cache_hint
+                            _ch = _cache_hint(session.get("results_dir", "") or "")
+                            if _ch:
+                                conversation_history.append({"role": "system", "content": _ch})
+                        except Exception:
+                            pass
 
                         # 问题11: HTML报告关键词自动触发 skill_view
                         if _html_ctx:
