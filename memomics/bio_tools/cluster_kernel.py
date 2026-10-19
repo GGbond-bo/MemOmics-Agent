@@ -413,6 +413,25 @@ SCHEMA = {
 }
 
 
+def _resolve_target(host_override: str = "", workdir_override: str = ""):
+    """解析真正的执行目标：优先 remote.nodes[default_node]（计算节点）+ proxy_jump。
+
+    ⚠️ remote.host 是**跳板/登录节点**，不能用来跑分析或取指纹（2026-10-18 实测：
+    登录节点 not a submit host，R 也不在那里）。
+    """
+    cfg = _cluster_cfg()
+    node_name = str(cfg.get("default_node") or "")
+    node = ((cfg.get("nodes") or {}).get(node_name) or {}) if isinstance(cfg.get("nodes"), dict) else {}
+    host = host_override or node.get("host") or cfg.get("host") or ""
+    pj = node.get("proxy_jump") or cfg.get("proxy_jump") or ""
+    extra = ["-J", pj] if pj else []
+    extra += list(cfg.get("extra_ssh_options") or [])
+    return {"host": host, "user": cfg.get("user") or "", "port": int(cfg.get("port") or 22),
+            "key": cfg.get("key") or "", "extra_opts": extra,
+            "workdir": workdir_override or node.get("workdir") or cfg.get("workdir") or "~",
+            "node": node_name, "proxy_jump": pj}
+
+
 def _cluster_cfg() -> dict:
     try:
         from memomics.bio_tools.remote_cluster import _load_remote_config
@@ -433,20 +452,18 @@ def cluster_kernel_tool(action: str = "status", code: str = "", timeout: float =
     cfg = _cluster_cfg()
     key = f"cluster:{sid or 'default'}"
     if action == "submit":
-        _cfg3 = _cluster_cfg()
+        tgt3 = _resolve_target(host, workdir)
         return json.dumps(submit_job(
             code, lang, purpose, slots=4, job_name="mmjob",
-            host=(host or _cfg3.get("host") or ""), user=_cfg3.get("user") or "",
-            port=int(_cfg3.get("port") or 22), key=_cfg3.get("key") or "",
-            extra_opts=_cfg3.get("extra_ssh_options") or [],
-            workdir=(workdir or _cfg3.get("workdir") or "~")), ensure_ascii=False, indent=1)
+            host=tgt3["host"], user=tgt3["user"], port=tgt3["port"],
+            key=tgt3["key"], extra_opts=tgt3["extra_opts"],
+            workdir=tgt3["workdir"]), ensure_ascii=False, indent=1)
     if action == "env":
-        cfg2 = _cluster_cfg()
+        tgt = _resolve_target(host)
         fp = verify_env_fingerprint(lang, purpose,
-                                    host=(host or cfg2.get("host") or ""),
-                                    user=cfg2.get("user") or "", port=int(cfg2.get("port") or 22),
-                                    key=cfg2.get("key") or "",
-                                    extra_opts=cfg2.get("extra_ssh_options") or [])
+                                    host=tgt["host"], user=tgt["user"], port=tgt["port"],
+                                    key=tgt["key"], extra_opts=tgt["extra_opts"])
+        fp["target"] = {k: tgt[k] for k in ("host", "node", "proxy_jump")}
         return json.dumps({"ok": True, "source": "memomics_home/cluster_envs.json",
                            "envs": env_summary(), "fingerprint_check": fp},
                           ensure_ascii=False, indent=1)
@@ -468,16 +485,14 @@ def cluster_kernel_tool(action: str = "status", code: str = "", timeout: float =
                           ensure_ascii=False)
     if action == "status":
         return json.dumps(kernel_status(key), ensure_ascii=False)
+    _tgt = _resolve_target(host, workdir)
     kern = get_kernel(
         f"cluster:{sid or 'default'}:{lang}:{purpose}",
-        host=(host or cfg.get("host") or ""),
-        user=cfg.get("user") or "",
-        port=int(cfg.get("port") or 22),
-        workdir=(workdir or cfg.get("workdir") or "~"),
-        key_file=cfg.get("key") or "",
+        host=_tgt["host"], user=_tgt["user"], port=_tgt["port"],
+        workdir=_tgt["workdir"], key_file=_tgt["key"],
         python=(resolve_interpreter(lang, purpose) or cfg.get("python") or "python3"),
-        local=bool(not (host or cfg.get("host"))),   # 没配集群 → 本地模拟（同一套协议）
-        lang=lang, purpose=purpose,
+        local=bool(not _tgt["host"]),   # 没配集群 → 本地模拟（同一套协议）
+        lang=lang, purpose=purpose, extra_opts=_tgt["extra_opts"],
     )
     if action == "start":
         return json.dumps(kern.start(), ensure_ascii=False)
@@ -722,10 +737,32 @@ def submit_job(code: str, lang: str = "R", purpose: str = "RNA", slots: int = 4,
         # 远端用 bash -lc 加载登录环境（SGE/PATH 依赖 profile），并加 timeout + </dev/null 防挂住
         _cmd = "bash -lc " + shlex.quote("timeout 90 " + " ".join(qargs) + " </dev/null 2>&1")
         r = subprocess.run(ssh + [_cmd], capture_output=True, text=True, timeout=180)
-        out = (r.stdout or "").strip()
+        out = ((r.stdout or "") + "\n" + (r.stderr or "")).strip()
         import re as _re
-        _m = _re.search(r"(?m)(?:Your job(?:-array)?\s+)?(\d{2,})\b", out)   # SGE 作业号是纯数字
-        job_id = _m.group(1) if _m else ""
+        # 失败识别（2026-10-18 实测踩坑：qmaster 不可达时输出里带 "port 6444"，
+        # 旧正则把端口号当作业号 → 假成功）
+        _fail = bool(_re.search(r"Unable to run job|not a submit host|send timeout|got send error", out))
+        _m = _re.search(r"Your job(?:-array)?\s+(\d+)", out)
+        job_id = "" if _fail else (_m.group(1) if _m else "")
+        if not job_id:
+            # 降级：该集群（ssh3/ssh0/ssh23）scheduler=none，正确模式是**直接 ssh 到计算节点 nohup 直跑**
+            try:
+                _r2 = subprocess.run(ssh + [
+                    f"bash -lc {shlex.quote('cd ' + (workdir or '~') + ' && nohup ' + exe + ' ' + remote_script +
+                                             ' > ' + remote_log + ' 2>&1 & echo PID:$!')}"],
+                    capture_output=True, text=True, timeout=120)
+                _o2 = (_r2.stdout or "").strip()
+                _mp = _re.search(r"PID:\s*(\d+)", _o2)
+                if _mp:
+                    return {"ok": True, "mode": "nohup", "pid": _mp.group(1),
+                            "script": remote_script, "log": remote_log,
+                            "message": ("SGE 不可用（" + ("not a submit host" if "not a submit host" in out
+                                       else "qmaster 不可达") + "）→ 已降级为计算节点 nohup 直跑"),
+                            "qsub_raw": out[:300]}
+                return {"ok": False, "error": "qsub 与 nohup 都失败", "qsub_raw": out[:400],
+                        "nohup_raw": _o2[:300]}
+            except Exception as exc:
+                return {"ok": False, "error": f"提交失败: {exc}", "qsub_raw": out[:300]}
         return {"ok": bool(job_id), "job_id": job_id, "script": remote_script,
                 "log": remote_log, "argv": " ".join(qargs),
                 "message": "已提交到计算节点（登录节点不跑重分析）" if job_id else "qsub 未返回作业号",
