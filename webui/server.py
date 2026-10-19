@@ -14000,6 +14000,38 @@ def _loop_check(session, agent, event: str, tool_name: str = None, args=None, de
         return False
 
 
+# 2026-10-19（K2）：系统干预段标记——_loop_inject_steer（循环检测）与
+# enforcement._inject_agent_hint（门禁提示）都经 _pending_steer 通道注入。
+# 新回合清空残留 steer 槽时，系统段作废、用户插话段抢救（chat 入口处调用）。
+_STEER_SYSTEM_MARKERS = ("【系统循环检测·强制干预】", "【系统强制提示】")
+
+
+def _salvage_steer_text(raw) -> str:
+    """从 _pending_steer 残留文本里抢救用户插话：系统干预段丢弃，用户内容返回。
+
+    系统干预块以专属标记开头（其后可能跟 1./2./3. 编号步骤行）；残留多数是纯系统段
+    （2026-08-14 的清理场景）或纯用户段（迟到插话场景），混合较少见——按行过滤：
+    标记行与其后续编号行剔除，其余保留。拿不准的内容宁可保留（交给模型判断
+    "是否已过时"），也不错杀用户的话。
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+    if not any(m in text for m in _STEER_SYSTEM_MARKERS):
+        return text
+    kept = []
+    in_sys = False
+    for line in text.split("\n"):
+        if any(m in line for m in _STEER_SYSTEM_MARKERS):
+            in_sys = True
+            continue
+        if in_sys and line.strip()[:2] in ("1.", "2.", "3.", "4.", "5."):
+            continue  # 系统干预的编号步骤行
+        in_sys = False
+        kept.append(line)
+    return "\n".join(kept).strip()
+
+
 def _loop_inject_steer(session, agent, reason: str, detail: str) -> bool:
     """通过 MemOmics 原生 _pending_steer 通道注入强制收尾提示（下一轮 LLM 调用前生效）。"""
     try:
@@ -19374,6 +19406,16 @@ async def ws_endpoint(ws: WebSocket):
             session = _get_or_create_session(sid)
             current_sid = session["id"]
 
+            # 2026-10-19（steer 落空归一化）：会话当前没有可引导的运行中 agent 时，
+            # 把"引导"直接转成普通新消息走 chat 通道（对齐 DSH best-effort 语义：
+            # next-step 窗口已关 → 作为下一条正常轮次处理，不丢）。
+            # 此前这里走 _internal_chat 浏览器回弹，但前端没有该类型处理器 → 静默丢失。
+            if msg_type == "steer":
+                _running_agent = session.get("running_agent")
+                if not (_running_agent is not None and hasattr(_running_agent, "steer")):
+                    msg_type = "chat"
+                    msg["message"] = (msg.get("content") or msg.get("message") or "").strip()
+
             if msg_type == "switch_session":
                 # 前端切换会话 - 不中断旧会话的 agent，也不注销旧会话的 WS。
                 # 同一浏览器连接同时服务多个会话：切走会话的事件继续推送，
@@ -19702,15 +19744,48 @@ async def ws_endpoint(ws: WebSocket):
                 # 2026-08-14: 清空上回合残留的循环干预 steer——上一回合注入、
                 # 本回合首个 tool batch 后才送达的"停止重复"提示会干扰正常新任务，
                 # 造成"图已出完还在跑"。新回合开始即作废旧干预。
+                # 2026-10-19 修订（K2）：作废只针对系统干预段；残留的**用户插话**
+                # 不再静默丢弃——抢救出来拼到本轮消息前面一并处理（此前用户 steer
+                # 晚到一步就会被这里的清空误杀，用户毫无感知）。
+                _salvaged_steer = ""
                 try:
                     _st_lock = getattr(agent, "_pending_steer_lock", None)
                     if _st_lock is not None:
                         with _st_lock:
+                            _stale_steer = agent._pending_steer or ""
                             agent._pending_steer = ""
                     else:
+                        _stale_steer = getattr(agent, "_pending_steer", "") or ""
                         agent._pending_steer = ""
+                    _salvaged_steer = _salvage_steer_text(_stale_steer)
                 except Exception:
-                    pass
+                    _salvaged_steer = ""
+                # 上一回合收尾后才到达的插话（_do_run 捕获的 result["pending_steer"]
+                # 兜底）也在这里汇合，一并拼入本轮。两段语义相同，都是"迟到的话"。
+                _late_prev = str(session.pop("_late_steer", "") or "").strip()
+                _merged_steer = "\n".join(x for x in (_salvaged_steer, _late_prev) if x)
+                if _merged_steer:
+                    _run_text = (
+                        "[系统提示] 以下是上一轮进行期间发来、没来得及送达的插话"
+                        "（现在送达；仍有效请一并处理，已过时则忽略并向用户说明）：\n"
+                        + _merged_steer[:1500]
+                        + "\n\n[本轮新消息]\n" + (_run_text or "")
+                    )
+                    # 槽抢救段此前从未落历史，这里补上（迟到段在回合末已落，不重复）
+                    if _salvaged_steer:
+                        try:
+                            session["messages"].insert(max(0, len(session["messages"]) - 1),
+                                {"role": "user", "content": _salvaged_steer[:1500],
+                                 "time": datetime.now().strftime("%H:%M:%S"), "source": "steer_salvage"})
+                            _db_sv = _get_session_db()
+                            if _db_sv:
+                                _db_sv.append_message(session["id"], "user", _salvaged_steer[:1500])
+                        except Exception as _e_sv:
+                            logger.warning(f"[steer] 抢救插话落历史失败(不阻断): {_e_sv}")
+                    _session_emit(session, {"type": "info",
+                        "content": "↳ 上一轮有未及时送达的插话，已并入本轮处理：" + _merged_steer[:80],
+                        "session_id": session["id"]})
+                    logger.info(f"[steer] session {session['id']}: salvaged leftover steer ({len(_merged_steer)} chars)")
                 session["restored"] = False
                 # 问题2: 不再用环境变量传 sid（进程级变量会串会话），改用 agent 实例属性
                 agent.memomics_sid = session["id"]
@@ -20834,6 +20909,14 @@ async def ws_endpoint(ws: WebSocket):
                                 conversation_history.append({"role": "system", "content": _ch})
                         except Exception:
                             pass
+                        # 2026-10-18：集群作业摘要（跨回合"记得"在跑的任务，几天后回来也对得上）
+                        try:
+                            from memomics.bio_tools.node_state import jobs_summary as _jobs_summary
+                            _jh = _jobs_summary(session.get("id") or "")
+                            if _jh:
+                                conversation_history.append({"role": "system", "content": _jh})
+                        except Exception:
+                            pass
 
                         # 问题11: HTML报告关键词自动触发 skill_view
                         if _html_ctx:
@@ -21047,6 +21130,18 @@ async def ws_endpoint(ws: WebSocket):
                                 conversation_history=conversation_history if conversation_history else None,
                                 task_id=_session["id"],
                             )
+                            # 2026-10-19（K1 兜底）：回合收尾才到达的插话由 hermes 放在
+                            # result["pending_steer"] 交还调用方。此前这里只取 final_response，
+                            # 交还的插话被静默丢弃（用户看到"已发送引导"，模型却永远没看到）。
+                            # 现在接住 → 存 _session["_late_steer"]，回合末落历史并告知；
+                            # 下一条用户消息在入口处拼入处理（见 chat 入口 steer 抢救段）。
+                            try:
+                                if isinstance(result, dict):
+                                    _late = str(result.get("pending_steer") or "").strip()
+                                    if _late:
+                                        _session["_late_steer"] = _late
+                            except Exception:
+                                pass
                             return result.get("final_response") or "" if isinstance(result, dict) else str(result)
 
                         # research_plan 模式超时保护（CNS级方案 8 分钟）
@@ -21140,6 +21235,27 @@ async def ws_endpoint(ws: WebSocket):
                         # 记录助手回复到 _session（state.db 由 MemOmics 框架 _persist_session 自动写）
                         _session["messages"].append({"role": "assistant", "content": result, "time": datetime.now().strftime("%H:%M:%S")})
                         _session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        # 2026-10-19（K1 兜底落地）：本回合收尾时才送达的插话 →
+                        # 落会话历史 + state.db（刷新可见、审计可查），并明确告知用户；
+                        # 保留 _late_steer  stash，下一条消息在入口处拼入本轮处理。
+                        try:
+                            _late2 = str(_session.get("_late_steer", "") or "").strip()
+                        except Exception:
+                            _late2 = ""
+                        if _late2:
+                            _session["messages"].append({"role": "user", "content": _late2,
+                                                         "time": datetime.now().strftime("%H:%M:%S"),
+                                                         "source": "steer_late"})
+                            try:
+                                _db_lt = _get_session_db()
+                                if _db_lt:
+                                    _db_lt.append_message(_session["id"], "user", _late2)
+                            except Exception as _e_lt:
+                                logger.warning(f"[steer] 迟到插话持久化失败(不阻断): {_e_lt}")
+                            _session_emit(_session, {"type": "info",
+                                "content": "↳ 你刚才的插话在回合结束后才送达，已记入对话历史，将随下一条消息一并处理：" + _late2[:80],
+                                "session_id": _session["id"]})
+                            logger.info(f"[steer] session {_session['id']}: late steer recorded to history ({len(_late2)} chars)")
                         # 尝试提取 todo
                         # P1-1 修正：原代码调 _agent.get_todos()，该方法在 MemOmics 全仓 grep
                         # 0 命中（根本不存在）→ 这个分支恒为 []，等于每轮结束什么都没同步。
@@ -21486,18 +21602,26 @@ async def ws_endpoint(ws: WebSocket):
                     try:
                         ok = agent_ref.steer(steer_text)
                         _session_emit(session, {"type": "steer_sent", "content": steer_text, "success": bool(ok), "session_id": session["id"]})
+                        # 2026-10-19（K3）：插话落会话历史 + state.db。此前只写进 agent 的
+                        # _pending_steer 内存槽——刷新页面后用户插过的话凭空消失，
+                        # 审计（request_dump / 消息列表）也查不到。
+                        if ok:
+                            try:
+                                session.setdefault("messages", []).append(
+                                    {"role": "user", "content": steer_text,
+                                     "time": datetime.now().strftime("%H:%M:%S"), "source": "steer"})
+                                _db_st = _get_session_db()
+                                if _db_st:
+                                    _db_st.append_message(session["id"], "user", steer_text)
+                            except Exception as _e_st:
+                                logger.warning(f"[steer] 插话落历史失败(不阻断): {_e_st}")
                     except Exception as e:
                         _session_emit(session, {"type": "error", "content": f"引导失败: {e}", "session_id": session["id"]})
                 else:
-                    # Agent 未运行 → 提示改用普通消息，同时自动发起新 turn
+                    # 走到这里只剩竞态（归一化判定之后 agent 刚好跑完）——如实告知，不再静默。
+                    # （空闲态的正常落空已由入口处的 steer→chat 归一化兜住，不会再到这里。）
                     if steer_text:
-                        _session_emit(session, {"type": "info", "content": "Agent 空闲，已自动转为新消息", "session_id": session["id"]})
-                        # 复用现有 chat 处理：通过消息队列自己触发
-                        loop.call_soon_threadsafe(
-                            lambda: asyncio.ensure_future(
-                                ws.send_text(json.dumps({"type": "_internal_chat", "message": steer_text, "session_id": session["id"]}, ensure_ascii=False))
-                            )
-                        )
+                        _session_emit(session, {"type": "info", "content": "Agent 当前不在运行状态，本次引导未送达——请作为新消息直接发送。", "session_id": session["id"]})
                     continue
 
     except WebSocketDisconnect:

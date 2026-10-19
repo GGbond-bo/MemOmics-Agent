@@ -407,6 +407,7 @@ SCHEMA = {
             "kernel_id": {"type": "string", "description": "list 查到的内核 id（attach/stop 用）"},
             "seed": {"type": "integer", "description": "随机种子（action=seed 时重设；start 默认 20261018）"},
             "job_id": {"type": "string", "description": "作业号（action=logs/cancel 用）"},
+            "scope": {"type": "string", "enum": ["session", "all"], "description": "jobs 的范围（默认本会话）"},
             "mem_gb": {"type": "number", "description": "本作业预计需要的内存 GB（不填则自动估算）"},
             "disk_gb": {"type": "number", "description": "预计产出占用磁盘 GB（默认 20）"},
             "force": {"type": "boolean", "description": "true = 无视水位线强行提交（会提醒风险）"},
@@ -459,6 +460,11 @@ def cluster_kernel_tool(action: str = "status", code: str = "", timeout: float =
     key = f"cluster:{sid or 'default'}"
     if action in ("jobs", "logs", "cancel"):
         from memomics.bio_tools import node_state as _ns
+        try:
+            from memomics.bio_tools.debate_analysis import get_session_sid as _gss
+            _sid_now = _gss() or ""
+        except Exception:
+            _sid_now = ""
         _t = _resolve_target(host, workdir)
         if action == "jobs":
             # 2026-10-18：每次查作业时顺带推进排队队列（资源松了就自动开跑）
@@ -471,8 +477,14 @@ def cluster_kernel_tool(action: str = "status", code: str = "", timeout: float =
                 _ns.poll_jobs(_t["host"], _t["user"], _t["port"], _t["key"], _t["extra_opts"])
             except Exception:
                 pass
+            _scope = str(locals().get("_scope_arg") or "session").lower()
+            _mine = _ns.list_jobs() if _scope == "all" else _ns.list_jobs(session_id=(_sid_now or None))
+            _others = len(_ns.list_jobs()) - len(_mine)
             return json.dumps({"ok": True, "node": _t["node"], "promoted": _promo,
-                               "jobs": _ns.list_jobs(limit=20)}, ensure_ascii=False, indent=1)
+                               "session_id": _sid_now, "jobs": _mine,
+                               "other_sessions": _others,
+                               "hint": ("其它会话还有 %d 个作业；scope=all 可看全部" % _others) if _others else ""},
+                              ensure_ascii=False, indent=1)
         if action == "logs":
             jid = job_id or kernel_id
             rec = next((j for j in _ns.list_jobs(limit=80) if j.get("job_id") == jid), None)

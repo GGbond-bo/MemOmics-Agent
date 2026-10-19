@@ -213,9 +213,20 @@ def save_jobs(d: dict) -> None:
         pass
 
 
+def _current_sid() -> str:
+    try:
+        from memomics.bio_tools.debate_analysis import get_session_sid
+        return get_session_sid() or ""
+    except Exception:
+        return ""
+
+
 def register_job(job_id: str, **fields) -> dict:
     d = load_jobs()
     rec = dict(fields)
+    # 2026-10-18：作业归属会话 —— 几天后换了会话也能对上"这个 DEG 作业是谁投的"
+    rec.setdefault("session_id", _current_sid())
+    rec.setdefault("submitted_at_str", time.strftime("%Y-%m-%d %H:%M:%S"))
     rec.update({"job_id": job_id, "created_at": time.time(),
                 "status": fields.get("status", "queued")})
     d.setdefault("jobs", {})[job_id] = rec
@@ -232,11 +243,30 @@ def update_job(job_id: str, **fields) -> None:
     save_jobs(d)
 
 
-def poll_jobs(host, user="", port=22, key="", extra_opts=None) -> dict:
-    """一条 ssh 批量体检所有 running 作业：pid+lstart 指纹 + exit 文件 + RSS 峰值。"""
+def poll_jobs(host="", user="", port=22, key="", extra_opts=None) -> dict:
+    """体检 running 作业：pid+lstart 指纹 + exit 文件 + RSS 峰值。
+
+    2026-10-18：按作业自己的 host 分组查（多节点不漏），host 参数只作缺省回退。
+    """
     d = load_jobs()
-    running = {k: v for k, v in (d.get("jobs") or {}).items()
-               if v.get("status") in ("running", "starting") and v.get("pid")}
+    all_running = {k: v for k, v in (d.get("jobs") or {}).items()
+                   if v.get("status") in ("running", "starting") and v.get("pid")}
+    if not all_running:
+        return {"checked": 0, "jobs": {}}
+    _hosts = {}
+    for k, v in all_running.items():
+        _hosts.setdefault(v.get("host") or host, {})[k] = v
+    if len(_hosts) > 1:
+        out_all = {"checked": 0, "jobs": {}}
+        for _h, _jobs in _hosts.items():
+            _r = _poll_one_host(_h, _jobs, user, port, key, extra_opts)
+            out_all["checked"] += _r.get("checked", 0)
+            out_all["jobs"].update(_r.get("jobs") or {})
+        return out_all
+    return _poll_one_host(next(iter(_hosts)), all_running, user, port, key, extra_opts)
+
+
+def _poll_one_host(_h, running, user="", port=22, key="", extra_opts=None) -> dict:
     if not running:
         return {"checked": 0, "jobs": {}}
     lines = ["for p in %s; do" % " ".join(str(v["pid"]) for v in running.values())]
@@ -250,7 +280,7 @@ def poll_jobs(host, user="", port=22, key="", extra_opts=None) -> dict:
             lines.append(f'echo "EXIT:{k}:$(cat {ef} 2>/dev/null)"')
     script = "\n".join(lines)
     try:
-        p = subprocess.run(_ssh_prefix(host, user, port, key, extra_opts)
+        p = subprocess.run(_ssh_prefix(_h, user, port, key, extra_opts)
                            + [f"bash -s <<'MMEOF'\n{script}\nMMEOF"],
                            capture_output=True, text=True, timeout=60)
         out = p.stdout or ""
@@ -296,15 +326,52 @@ def poll_jobs(host, user="", port=22, key="", extra_opts=None) -> dict:
     return {"checked": len(running), "jobs": res}
 
 
-def list_jobs(status=None, limit=30) -> list:
+def list_jobs(status=None, limit=None, session_id=None, host=None, running_first=False) -> list:
+    """列出作业。limit=None = **全量**（老作业不会被截断挤掉）。"""
     d = load_jobs()
     items = []
     for k, v in (d.get("jobs") or {}).items():
         if status and v.get("status") != status:
             continue
+        if session_id and v.get("session_id") != session_id:
+            continue
+        if host and host not in str(v.get("host") or ""):
+            continue
         items.append(v)
-    items.sort(key=lambda r: r.get("created_at", 0), reverse=True)
-    return items[:limit]
+    if running_first:
+        items.sort(key=lambda r: (r.get("status") not in ("running", "queued"),
+                                  -float(r.get("created_at") or 0)))
+    else:
+        items.sort(key=lambda r: r.get("created_at", 0), reverse=True)
+    return items if not limit else items[:limit]
+
+
+def jobs_summary(session_id: str = "", max_items: int = 5) -> str:
+    """每回合注入给模型的作业摘要（像 dataset_cache 那样，让它"记得"有作业在跑）。"""
+    try:
+        items = list_jobs(session_id=session_id or None, running_first=True)
+    except Exception:
+        return ""
+    if not items:
+        return ""
+    running = [j for j in items if j.get("status") in ("running", "starting")]
+    queued = [j for j in items if j.get("status") == "queued"]
+    recent = [j for j in items if j.get("status") in ("done", "failed", "lost", "cancelled")]
+    now = time.time()
+    lines = [f"【集群作业（本会话 {len(items)} 个：运行 {len(running)} / 排队 {len(queued)} / 已结束 {len(recent)}）】"]
+    for j in (running + queued + recent)[:max_items]:
+        st = j.get("status")
+        if st in ("running", "starting"):
+            el = (now - float(j.get("started_at") or j.get("created_at") or now)) / 3600.0
+            lines.append(f"  • {j['job_id']}  运行中 {el:.1f}h  pid={j.get('pid')}  node={j.get('node') or j.get('host')}"
+                         + (f"  peak={j.get('peak_rss_gb')}GB" if j.get("peak_rss_gb") else ""))
+        elif st == "queued":
+            w = (now - float(j.get("created_at") or now)) / 60.0
+            lines.append(f'  • {j["job_id"]}  排队 {w:.0f}min  {(j.get("message") or "")[:60]}')
+        else:
+            lines.append(f"  • {j['job_id']}  {st}  exit={j.get('exit_code')}  node={j.get('node') or j.get('host')}")
+    lines.append("  需要时可 action=\"jobs\" 看全部（scope=all 含其它会话）、action=\"logs\" 看日志尾部、action=\"cancel\" 停止。")
+    return "\n".join(lines) + "\n"
 
 # ---------------- 自动放行队列（2026-10-18 用户要求）----------------
 MAX_WAIT_SEC = 7200          # 排队超 2 小时 → 标记 needs_decision，等用户拍板
