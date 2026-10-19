@@ -398,7 +398,7 @@ SCHEMA = {
     "parameters": {
         "type": "object",
         "properties": {
-            "action": {"type": "string", "enum": ["start", "exec", "status", "stop", "list", "attach", "env", "rss", "seed"]},
+            "action": {"type": "string", "enum": ["start", "exec", "status", "stop", "list", "attach", "env", "rss", "seed", "submit"]},
             "lang": {"type": "string", "enum": ["python", "R"], "description": "语言（默认 python；RNA 分析建议 R）"},
             "purpose": {"type": "string", "enum": ["RNA", "ATAC"], "description": "用途（决定用 R4.41 还是 R4.3.3）"},
             "code": {"type": "string", "description": "要执行的 Python 代码（exec 时必填）"},
@@ -432,6 +432,14 @@ def cluster_kernel_tool(action: str = "status", code: str = "", timeout: float =
         sid = ""
     cfg = _cluster_cfg()
     key = f"cluster:{sid or 'default'}"
+    if action == "submit":
+        _cfg3 = _cluster_cfg()
+        return json.dumps(submit_job(
+            code, lang, purpose, slots=4, job_name="mmjob",
+            host=(host or _cfg3.get("host") or ""), user=_cfg3.get("user") or "",
+            port=int(_cfg3.get("port") or 22), key=_cfg3.get("key") or "",
+            extra_opts=_cfg3.get("extra_ssh_options") or [],
+            workdir=(workdir or _cfg3.get("workdir") or "~")), ensure_ascii=False, indent=1)
     if action == "env":
         cfg2 = _cluster_cfg()
         fp = verify_env_fingerprint(lang, purpose,
@@ -663,4 +671,65 @@ def verify_env_fingerprint(lang: str = "R", purpose: str = "RNA", host: str = ""
             "recorded": {"R": ent.get("R"), "packages": ent.get("R_packages") or
                          ent.get("python_packages")},
             "note": "指纹与记录不一致说明环境被升级/重装，需重新核对后再跑分析"}
+
+# ---------------- 集群内核 → qsub 桥（2026-10-18 用户要求）----------------
+SGE_DEFAULTS = {"pe": "smp", "slots": 4, "queue": "", "name": "mmjob"}
+
+
+def submit_job(code: str, lang: str = "R", purpose: str = "RNA", slots: int = 4,
+               queue: str = "", job_name: str = "mmjob", host: str = "", user: str = "",
+               port: int = 22, key: str = "", extra_opts=None, workdir: str = "",
+               script: str = "") -> dict:
+    """把一段分析代码变成 SGE 作业提交（登录节点禁跑重分析的"正确出口"）。
+
+    流程：写脚本到集群 ~/memomics_jobs/scripts/<name>.<ext> → qsub -cwd -j y -o <log>
+          -N <name> -pe smp <slots> <script> → 返回作业号。
+    """
+    if not code.strip() and not script:
+        return {"ok": False, "error": "需要 code（要跑的分析代码）"}
+    if not host:
+        return {"ok": False, "error": "需要集群 host（或在 config.yaml 配置 remote）"}
+    exe = resolve_interpreter(lang, purpose)
+    if not exe:
+        return {"ok": False, "error": f"环境记录里没有 {purpose}/{lang} 的解释器"}
+    import datetime as _dt
+    stamp = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe = "".join(c for c in (job_name or "mmjob") if c.isalnum() or c in "-_")[:24] or "mmjob"
+    ext = "R" if str(lang).lower().startswith("r") else "py"
+    remote_script = script or f"$HOME/memomics_jobs/scripts/{safe}_{stamp}.{ext}"
+    remote_log = f"$HOME/memomics_jobs/logs/{safe}_{stamp}.log"
+    body = code
+    if str(lang).lower().startswith("r"):
+        header = f"#!{exe}\n" if not code.startswith("#!") else ""
+    else:
+        header = f"#!{exe}\n" if not code.startswith("#!") else ""
+    payload = (header + body).encode("utf-8")
+    ssh = _ssh_cmd(host, user, port, key, extra_opts)
+    try:
+        # 1) 落脚本（cat 覆盖写，避免引号/编码问题）
+        w = subprocess.run(ssh + [f"mkdir -p $HOME/memomics_jobs/{{scripts,logs}} && "
+                                  f"cat > {remote_script} && chmod +x {remote_script} && echo WROTE"],
+                           input=payload, capture_output=True, timeout=120)
+        if b"WROTE" not in (w.stdout or b""):
+            return {"ok": False, "error": "写脚本失败", "stderr": (w.stderr or b"").decode("utf-8", "replace")[-300:]}
+        # 2) qsub
+        qargs = ["qsub", "-cwd", "-j", "y", "-o", remote_log, "-N", safe]
+        if queue:
+            qargs += ["-q", queue]
+        if slots and int(slots) > 1:
+            qargs += ["-pe", SGE_DEFAULTS["pe"], str(int(slots))]
+        qargs.append(remote_script)
+        # 远端用 bash -lc 加载登录环境（SGE/PATH 依赖 profile），并加 timeout + </dev/null 防挂住
+        _cmd = "bash -lc " + shlex.quote("timeout 90 " + " ".join(qargs) + " </dev/null 2>&1")
+        r = subprocess.run(ssh + [_cmd], capture_output=True, text=True, timeout=180)
+        out = (r.stdout or "").strip()
+        import re as _re
+        _m = _re.search(r"(?m)(?:Your job(?:-array)?\s+)?(\d{2,})\b", out)   # SGE 作业号是纯数字
+        job_id = _m.group(1) if _m else ""
+        return {"ok": bool(job_id), "job_id": job_id, "script": remote_script,
+                "log": remote_log, "argv": " ".join(qargs),
+                "message": "已提交到计算节点（登录节点不跑重分析）" if job_id else "qsub 未返回作业号",
+                "stderr": (r.stderr or "")[-300:]}
+    except Exception as exc:
+        return {"ok": False, "error": f"提交失败: {exc}"}
 

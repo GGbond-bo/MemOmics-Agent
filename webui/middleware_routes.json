@@ -5,6 +5,7 @@
   "/api/cluster/config": "public",
   "/api/cluster/exec": "public",
   "/api/cluster/install_key": "public",
+  "/api/cluster/node/delete": "public",
   "/api/cluster/status": "public",
   "/api/context/window": "public",
   "/api/dcs/bind": "public",

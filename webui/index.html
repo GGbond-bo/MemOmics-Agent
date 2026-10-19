@@ -16459,7 +16459,13 @@ function clusterNodeCard(nl) {
   head.className = 'cc-nodecard-head';
   head.innerHTML = '<span class="cc-nc-arrow">▸</span><b>' + ccAttr(nl.name) + '</b>' +
     (isDefault ? '<span class="cc-nc-star">★默认</span>' : '') +
-    '<span class="cc-nc-sub">' + ccAttr((eff.user || '') + '@' + (eff.host || '')) + '</span>';
+    '<span class="cc-nc-sub">' + ccAttr((eff.user || '') + '@' + (eff.host || '')) + '</span>' +
+    '<span class="cc-nc-del" title="删除该节点" style="margin-left:auto;cursor:pointer;opacity:.7;">🗑</span>';
+var _del = head.querySelector('.cc-nc-del');
+if (_del) _del.onclick = function (ev) {
+  ev.stopPropagation();
+  clusterDeleteNode(nl.name);
+};
   head.onclick = function () {
     var body = card.querySelector('.cc-node-row');
     var arrow = head.querySelector('.cc-nc-arrow');
@@ -16472,6 +16478,27 @@ function clusterNodeCard(nl) {
   card.appendChild(head);
   card.appendChild(body);
   return card;
+}
+
+// 删除已保存的节点（2026-10-18：能加就要能删）
+async function clusterDeleteNode(name) {
+  if (!name) return;
+  if (!confirm('确定删除节点「' + name + '」吗？\n只从 remote.nodes 移除，不会动集群上的任何文件。')) return;
+  try {
+    var r = await fetch('/api/cluster/node/delete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name })
+    });
+    var d = await r.json();
+    if (d && d.ok) {
+      if (typeof clusterPrint === 'function') clusterPrint('✓ 已删除节点 ' + name, 'ok');
+      if (typeof clusterLoadCfg === 'function') { await clusterLoadCfg(); }
+      else if (typeof loadClusterCfg === 'function') { await loadClusterCfg(); }
+      else { location.reload(); }
+    } else {
+      alert('删除失败：' + ((d && d.error) || '未知'));
+    }
+  } catch (e) { alert('删除失败：' + e); }
 }
 
 function clusterAddNode() {

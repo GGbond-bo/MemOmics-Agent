@@ -21798,6 +21798,68 @@ def _cluster_write_config(values: dict) -> dict:
     return out
 
 
+@app.post("/api/cluster/node/delete")
+async def cluster_node_delete(request: Request):
+    """删除 remote.nodes 下的一个节点（2026-10-18 用户要求：能加就该能删）。
+
+    行级删除：只摘掉 `  nodes:` 里以 `    <name>:` 开头的那个子块，其余配置一字不动
+    （避免 yaml.dump 重排整份 config 造成的格式噪音）。
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    name = str(body.get("name") or "").strip()
+    if not name or not name.replace("-", "").replace("_", "").replace(".", "").isalnum():
+        return {"ok": False, "error": "节点名不合法"}
+    p = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
+    try:
+        with open(p, "r", encoding="utf-8", newline="") as f:
+            raw = f.read()
+    except Exception as exc:
+        return {"ok": False, "error": f"读配置失败: {exc}"}
+    eol2 = "\r\n" if "\r\n" in raw else "\n"
+    lines = raw.replace("\r\n", "\n").split("\n")
+    in_nodes = False
+    removed = []
+    out = []
+    skip_indent = None
+    for ln in lines:
+        if ln.rstrip() == "  nodes:":
+            in_nodes = True
+            out.append(ln)
+            continue
+        if in_nodes:
+            # 退出 nodes 段：出现比 4 空格浅的顶层键
+            if ln and not ln.startswith("    ") and not ln.startswith("      "):
+                in_nodes = False
+                skip_indent = None
+                out.append(ln)
+                continue
+            if ln.startswith("    ") and ln.strip().startswith(name + ":"):
+                skip_indent = len(ln) - len(ln.lstrip())
+                removed.append(ln.strip())
+                continue
+            if skip_indent is not None:
+                cur = len(ln) - len(ln.lstrip()) if ln.strip() else 999
+                if ln.strip() and cur > skip_indent:
+                    continue      # 该节点的子键（host/note/proxy_jump…）一起删
+                skip_indent = None
+        out.append(ln)
+    if not removed:
+        return {"ok": False, "error": f"没有这个节点: {name}"}
+    new_text = "\n".join(out)
+    try:
+        with open(p, "w", encoding="utf-8", newline="") as f:
+            f.write(new_text.replace("\n", eol2) if eol2 != "\n" else new_text)
+        from memomics.bio_tools import remote_cluster as _rc
+        _rc._load_remote_config(force=True)   # 清缓存，立即生效
+    except Exception as exc:
+        return {"ok": False, "error": f"写配置失败: {exc}"}
+    logger.info(f"[cluster] 删除节点 {name}")
+    return {"ok": True, "deleted": name, "note": "已从 config.yaml 的 remote.nodes 移除"}
+
+
 @app.get("/api/cluster/status")
 async def api_cluster_status():
     try:
