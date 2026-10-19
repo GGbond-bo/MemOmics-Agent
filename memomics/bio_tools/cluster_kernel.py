@@ -461,12 +461,18 @@ def cluster_kernel_tool(action: str = "status", code: str = "", timeout: float =
         from memomics.bio_tools import node_state as _ns
         _t = _resolve_target(host, workdir)
         if action == "jobs":
+            # 2026-10-18：每次查作业时顺带推进排队队列（资源松了就自动开跑）
+            _promo = {}
+            try:
+                _promo = _ns.promote_queued()
+            except Exception as _e:
+                _promo = {"error": str(_e)}
             try:
                 _ns.poll_jobs(_t["host"], _t["user"], _t["port"], _t["key"], _t["extra_opts"])
             except Exception:
                 pass
-            return json.dumps({"ok": True, "node": _t["node"], "jobs": _ns.list_jobs(limit=20)},
-                              ensure_ascii=False, indent=1)
+            return json.dumps({"ok": True, "node": _t["node"], "promoted": _promo,
+                               "jobs": _ns.list_jobs(limit=20)}, ensure_ascii=False, indent=1)
         if action == "logs":
             jid = job_id or kernel_id
             rec = next((j for j in _ns.list_jobs(limit=80) if j.get("job_id") == jid), None)
@@ -767,8 +773,27 @@ def submit_job(code: str, lang: str = "R", purpose: str = "RNA", slots: int = 4,
                 "message": _verdict.get("message") or "拿不到节点实时状态，要不要照样提交？",
                 "req_mem_gb": _req["mem_gb"]}
     if _verdict["zone"] == "red" and not force:
-        return {"ok": False, "queued": True, "zone": "red",
-                "message": _verdict.get("message"),
+        # 2026-10-18：红区自动**入队**（而不是单纯拒绝），等资源松了自动跑
+        try:
+            import datetime as _dt2
+            _qstamp = _dt2.datetime.now().strftime("%Y%m%d_%H%M%S")
+            _qname = "".join(c for c in (job_name or "mmjob") if c.isalnum() or c in "-_")[:24] or "mmjob"
+            _qext = "R" if str(lang).lower().startswith("r") else "py"
+            _qscript = f"$HOME/memomics_jobs/scripts/{_qname}_{_qstamp}.{_qext}"
+            _qid = f"q{_qstamp}_{_qname}"
+            _ns.queue_job(_qid, host=host, user=user, port=port, key=key, extra_opts=extra_opts,
+                          workdir=workdir or "~", exe=exe, script=_qscript,
+                          log=f"$HOME/memomics_jobs/logs/{_qname}_{_qstamp}.log",
+                          exit_file=_qscript + ".exit", lang=lang, purpose=purpose,
+                          mem_gb=_req["mem_gb"], disk_gb=_disk_req, zone="red",
+                          code=code, need_upload=True,
+                          message=_verdict.get("message"))
+        except Exception as _exc:
+            return {"ok": False, "queued": False, "zone": "red",
+                    "message": (_verdict.get("message") or "") + f"（入队失败: {_exc}）",
+                    "options": _verdict.get("options") or []}
+        return {"ok": False, "queued": True, "job_id": _qid, "zone": "red",
+                "message": (_verdict.get("message") or "") + " → 已自动排队，资源宽松时自动开跑",
                 "options": _verdict.get("options") or [],
                 "req_mem_gb": _req["mem_gb"], "state": {k: _verdict.get(k) for k in
                     ("node", "mem_avail_gb", "remain_gb", "load1", "procs_R")}}

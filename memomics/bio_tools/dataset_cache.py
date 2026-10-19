@@ -167,17 +167,21 @@ SCHEMA = {
     "parameters": {
         "type": "object",
         "properties": {
-            "action": {"type": "string", "enum": ["register", "list"], "description": "register 登记 / list 查看"},
+            "action": {"type": "string", "enum": ["register", "list", "cleanup_list", "cleanup_delete"],
+                          "description": "register 登记 / list 查看 / cleanup_list 列可清理大产物 / cleanup_delete 删除（需 paths）"},
             "path": {"type": "string", "description": "已就位的本地路径（register 必填）"},
             "source": {"type": "string", "description": "来源（如 集群路径 / 数据库 / 用户提供）"},
             "note": {"type": "string", "description": "备注（样本数、基因数、处理状态等）"},
+            "paths": {"type": "array", "items": {"type": "string"}, "description": "cleanup_delete 时要删的路径"},
+            "min_mb": {"type": "number", "description": "清理阈值 MB（默认 5000）"},
         },
         "required": ["action"],
     },
 }
 
 
-def dataset_cache_tool(action: str = "list", path: str = "", source: str = "", note: str = "") -> str:
+def dataset_cache_tool(action: str = "list", path: str = "", source: str = "", note: str = "",
+                       paths=None, min_mb: float = 5000) -> str:
     rd = ""
     try:
         from memomics.bio_tools.debate_analysis import get_session_results_dir
@@ -186,6 +190,12 @@ def dataset_cache_tool(action: str = "list", path: str = "", source: str = "", n
         rd = ""
     if not rd:
         return json.dumps({"ok": False, "error": "拿不到会话 results_dir"}, ensure_ascii=False)
+    if action == "cleanup_list":
+        return json.dumps({"ok": True, "candidates": cleanup_candidates(rd, int(min_mb or 5000))},
+                          ensure_ascii=False, indent=1)
+    if action == "cleanup_delete":
+        return json.dumps(cleanup_delete(rd, paths or [], int(min_mb or 5000)),
+                          ensure_ascii=False, indent=1)
     if action == "register":
         return json.dumps(register(rd, path, source=source, note=note), ensure_ascii=False)
     return json.dumps({"ok": True, "datasets": list_datasets(rd)}, ensure_ascii=False, indent=1)
@@ -200,7 +210,8 @@ def _register():
             schema=SCHEMA,
             handler=lambda args, **kw: dataset_cache_tool(
                 args.get("action", "list"), args.get("path", ""),
-                args.get("source", ""), args.get("note", "")),
+                args.get("source", ""), args.get("note", ""),
+                args.get("paths") or [], float(args.get("min_mb") or 5000)),
         )
     except Exception:
         pass
@@ -288,4 +299,58 @@ def bind_kernel(results_dir: str, path: str, kernel_id: str, host: str = "", pid
         return {"ok": False, "error": "该文件未登记，先 register"}
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
+
+# ---------------- 产物清理（2026-10-18：共享盘只剩 89GB 时用得上）----------------
+def cleanup_candidates(results_dir: str, min_mb: int = 5000, older_days: int = 7) -> list:
+    """列出可清理的大产物：>= min_mb 且 mtime 早于 older_days（默认 5GB / 7 天）。"""
+    out = []
+    if not results_dir or not os.path.isdir(results_dir):
+        return out
+    known = {}
+    try:
+        for it in (_load(results_dir).get("datasets") or []):
+            known[os.path.normcase(os.path.abspath(it.get("path", "")))] = it
+    except Exception:
+        pass
+    lim = min_mb * 1024 * 1024
+    cutoff = time.time() - older_days * 86400
+    for cur, dirs, files in os.walk(results_dir):
+        dirs[:] = [d for d in dirs if d not in ("log", "logs", "__pycache__", ".git")]
+        for fn in files:
+            fp = os.path.join(cur, fn)
+            try:
+                st = os.stat(fp)
+            except Exception:
+                continue
+            if st.st_size < lim or st.st_mtime > cutoff:
+                continue
+            k = os.path.normcase(os.path.abspath(fp))
+            rec = known.get(k) or {}
+            out.append({"path": fp, "mb": round(st.st_size / 1048576.0, 1),
+                        "age_days": round((time.time() - st.st_mtime) / 86400.0, 1),
+                        "registered": bool(rec), "note": rec.get("note", "")})
+    out.sort(key=lambda r: -r["mb"])
+    return out
+
+
+def cleanup_delete(results_dir: str, paths, min_mb: int = 5000) -> dict:
+    """只删除 results 目录内、且 >= min_mb 的文件（安全护栏：绝不动目录外/小文件）。"""
+    deleted, skipped = [], []
+    root = os.path.normcase(os.path.abspath(results_dir or ""))
+    for p in (paths or []):
+        try:
+            ap = os.path.abspath(p)
+            nap = os.path.normcase(ap)
+            if not root or not nap.startswith(root):
+                skipped.append({"path": p, "why": "不在会话目录内"}); continue
+            if not os.path.isfile(ap):
+                skipped.append({"path": p, "why": "不存在"}); continue
+            if os.path.getsize(ap) < min_mb * 1024 * 1024:
+                skipped.append({"path": p, "why": f"小于 {min_mb}MB，保守起见不删"}); continue
+            os.remove(ap)
+            deleted.append(p)
+        except Exception as exc:
+            skipped.append({"path": p, "why": str(exc)})
+    return {"ok": True, "deleted": deleted, "skipped": skipped,
+            "note": "若要同时从缓存清单移除，再调 list 查看即可"}
 

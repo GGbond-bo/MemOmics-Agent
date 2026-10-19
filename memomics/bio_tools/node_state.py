@@ -305,3 +305,106 @@ def list_jobs(status=None, limit=30) -> list:
         items.append(v)
     items.sort(key=lambda r: r.get("created_at", 0), reverse=True)
     return items[:limit]
+
+# ---------------- 自动放行队列（2026-10-18 用户要求）----------------
+MAX_WAIT_SEC = 7200          # 排队超 2 小时 → 标记 needs_decision，等用户拍板
+
+
+def _ssh_run(host, user="", port=22, key="", extra_opts=None, cmd="echo ok", timeout=120):
+    try:
+        p = subprocess.run(_ssh_prefix(host, user, port, key, extra_opts) + [f"bash -lc {shlex.quote(cmd)}"],
+                           capture_output=True, text=True, timeout=timeout)
+        return p.returncode, ((p.stdout or "") + (p.stderr or "")).strip()
+    except Exception as exc:
+        return 1, f"ssh failed: {exc}"
+
+
+def _ssh_upload(host, user, port, key, extra_opts, remote_path, payload: bytes, timeout=120) -> bool:
+    """把脚本内容写到集群（cat 覆盖写，避免引号/编码问题）。"""
+    try:
+        p = subprocess.run(_ssh_prefix(host, user, port, key, extra_opts)
+                           + [f"bash -lc {shlex.quote('mkdir -p $(dirname ' + remote_path + ') && cat > ' + remote_path + ' && chmod +x ' + remote_path + ' && echo WROTE')}"],
+                           input=payload, capture_output=True, timeout=timeout)
+        return b"WROTE" in (p.stdout or b"")
+    except Exception:
+        return False
+
+
+def start_queued_job(rec: dict) -> dict:
+    """真正启动一个排队中的作业（nohup + 写 exit 文件 + 记 pid/lstart）。"""
+    if rec.get("need_upload") and rec.get("code") is not None:
+        _ok = _ssh_upload(rec.get("host"), rec.get("user", ""), rec.get("port", 22),
+                          rec.get("key", ""), rec.get("extra_opts") or [],
+                          rec.get("script") or "", str(rec.get("code") or "").encode("utf-8"))
+        if not _ok:
+            return {"ok": False, "error": "排队作业脚本上传失败"}
+        update_job(rec["job_id"], need_upload=False)
+    exe = rec.get("exe") or ""
+    script = rec.get("script") or ""
+    log = rec.get("log") or (script + ".log")
+    exitf = rec.get("exit_file") or (script + ".exit")
+    wd = rec.get("workdir") or "~"
+    if not (exe and script):
+        return {"ok": False, "error": "队列记录缺少 exe/script"}
+    inner = f"cd {wd} && {exe} {script} > {log} 2>&1; echo EXIT:$? > {exitf}"
+    cmd = ("nohup bash -c " + shlex.quote(inner) +
+           " >/dev/null 2>&1 & echo PID:$! && sleep 1 && ps -o lstart= -p $!")
+    rc, out = _ssh_run(rec.get("host"), rec.get("user", ""), rec.get("port", 22),
+                       rec.get("key", ""), rec.get("extra_opts") or [], cmd, timeout=120)
+    import re as _re
+    m = _re.search(r"PID:\s*(\d+)", out or "")
+    if not m:
+        return {"ok": False, "error": "启动失败", "raw": (out or "")[:300]}
+    pid = m.group(1)
+    lines = [x for x in (out or "").splitlines() if x.strip() and not x.startswith("PID:")]
+    lstart = " ".join(lines[0].split()) if lines else ""
+    return {"ok": True, "pid": pid, "lstart": lstart}
+
+
+def promote_queued(limit: int = 2, max_wait_sec: int = MAX_WAIT_SEC) -> dict:
+    """把排队作业按顺序放行：绿/黄区就启动，红区保持排队，超时标记 needs_decision。
+
+    触发时机（不引入后台线程）：任何 jobs / submit 调用时顺带推进一次。
+    """
+    d = load_jobs()
+    queued = [v for v in (d.get("jobs") or {}).values() if v.get("status") == "queued"]
+    if not queued:
+        return {"ok": True, "started": [], "still_queued": 0}
+    queued.sort(key=lambda r: r.get("created_at", 0))
+    started, blocked = [], None
+    now = time.time()
+    for rec in queued:
+        if len(started) >= limit or blocked:
+            break
+        wait = now - float(rec.get("created_at") or now)
+        if wait > max_wait_sec:
+            update_job(rec["job_id"], needs_decision=True,
+                       message=f"已排队 {int(wait // 60)} 分钟仍未放行，需要你决定：继续等 / 换节点 / force")
+            continue
+        st = node_state(rec.get("host"), rec.get("user", ""), rec.get("port", 22),
+                        rec.get("key", ""), rec.get("extra_opts") or [],
+                        rec.get("workdir") or "~")
+        v = decide(st, float(rec.get("mem_gb") or 8.0), float(rec.get("disk_gb") or 20.0))
+        if v["zone"] in ("green", "yellow", "unknown"):
+            res = start_queued_job(rec)
+            if res.get("ok"):
+                update_job(rec["job_id"], status="running", pid=res["pid"], lstart=res["lstart"],
+                           started_at=now, waited_sec=round(wait, 1), zone=v["zone"])
+                started.append({"job_id": rec["job_id"], "pid": res["pid"], "waited_sec": round(wait, 1)})
+            else:
+                update_job(rec["job_id"], message=f"启动失败: {res.get('error')}")
+                blocked = rec["job_id"]
+        else:
+            blocked = rec["job_id"]
+            update_job(rec["job_id"], last_check_zone=v["zone"],
+                       message=v.get("message") or "")
+    return {"ok": True, "started": started,
+            "still_queued": len([v for v in (load_jobs().get("jobs") or {}).values()
+                                 if v.get("status") == "queued"]),
+            "blocked_by": blocked}
+
+
+def queue_job(job_id: str, **fields) -> dict:
+    """登记一个排队作业（含启动所需规格，供 promote 使用）。"""
+    return register_job(job_id, status="queued", **fields)
+
