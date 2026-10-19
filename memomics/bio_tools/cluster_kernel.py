@@ -398,7 +398,7 @@ SCHEMA = {
     "parameters": {
         "type": "object",
         "properties": {
-            "action": {"type": "string", "enum": ["start", "exec", "status", "stop", "list", "attach", "env", "rss", "seed", "submit"]},
+            "action": {"type": "string", "enum": ["start", "exec", "status", "stop", "list", "attach", "env", "rss", "seed", "submit", "jobs", "logs", "cancel"]},
             "lang": {"type": "string", "enum": ["python", "R"], "description": "语言（默认 python；RNA 分析建议 R）"},
             "purpose": {"type": "string", "enum": ["RNA", "ATAC"], "description": "用途（决定用 R4.41 还是 R4.3.3）"},
             "code": {"type": "string", "description": "要执行的 Python 代码（exec 时必填）"},
@@ -406,6 +406,10 @@ SCHEMA = {
             "host": {"type": "string", "description": "可选：覆盖集群 host"},
             "kernel_id": {"type": "string", "description": "list 查到的内核 id（attach/stop 用）"},
             "seed": {"type": "integer", "description": "随机种子（action=seed 时重设；start 默认 20261018）"},
+            "job_id": {"type": "string", "description": "作业号（action=logs/cancel 用）"},
+            "mem_gb": {"type": "number", "description": "本作业预计需要的内存 GB（不填则自动估算）"},
+            "disk_gb": {"type": "number", "description": "预计产出占用磁盘 GB（默认 20）"},
+            "force": {"type": "boolean", "description": "true = 无视水位线强行提交（会提醒风险）"},
             "workdir": {"type": "string", "description": "可选：集群上的工作目录"},
         },
         "required": ["action"],
@@ -442,7 +446,9 @@ def _cluster_cfg() -> dict:
 
 def cluster_kernel_tool(action: str = "status", code: str = "", timeout: float = 300,
                         host: str = "", workdir: str = "", kernel_id: str = "",
-                        lang: str = "python", purpose: str = "RNA", seed: int = None) -> str:
+                        lang: str = "python", purpose: str = "RNA", seed: int = None,
+                        job_id: str = "", mem_gb: float = None, disk_gb: float = None,
+                        force: bool = False) -> str:
     sid = ""
     try:
         from memomics.bio_tools.debate_analysis import get_session_sid
@@ -451,13 +457,54 @@ def cluster_kernel_tool(action: str = "status", code: str = "", timeout: float =
         sid = ""
     cfg = _cluster_cfg()
     key = f"cluster:{sid or 'default'}"
+    if action in ("jobs", "logs", "cancel"):
+        from memomics.bio_tools import node_state as _ns
+        _t = _resolve_target(host, workdir)
+        if action == "jobs":
+            try:
+                _ns.poll_jobs(_t["host"], _t["user"], _t["port"], _t["key"], _t["extra_opts"])
+            except Exception:
+                pass
+            return json.dumps({"ok": True, "node": _t["node"], "jobs": _ns.list_jobs(limit=20)},
+                              ensure_ascii=False, indent=1)
+        if action == "logs":
+            jid = job_id or kernel_id
+            rec = next((j for j in _ns.list_jobs(limit=80) if j.get("job_id") == jid), None)
+            if not rec:
+                return json.dumps({"ok": False, "error": f"没有作业 {jid}"}, ensure_ascii=False)
+            import subprocess as _sp
+            lg = (rec.get("log") or "").replace("$HOME", "/home/%s" % _t["user"])
+            try:
+                _q = _sp.run(_ssh_cmd(_t["host"], _t["user"], _t["port"], _t["key"], _t["extra_opts"])
+                             + [f"bash -lc {('tail -c 20000 ' + lg + ' 2>/dev/null')!r}"],
+                             capture_output=True, text=True, timeout=90)
+                return json.dumps({"ok": True, "job_id": jid, "status": rec.get("status"),
+                                   "log_tail": (_q.stdout or "")[-20000:]}, ensure_ascii=False)
+            except Exception as exc:
+                return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
+        # cancel
+        jid = job_id or kernel_id
+        rec = next((j for j in _ns.list_jobs(limit=80) if j.get("job_id") == jid), None)
+        if not rec:
+            return json.dumps({"ok": False, "error": f"没有作业 {jid}"}, ensure_ascii=False)
+        import subprocess as _sp
+        try:
+            _sp.run(_ssh_cmd(_t["host"], _t["user"], _t["port"], _t["key"], _t["extra_opts"])
+                    + [f"bash -lc 'kill -TERM {rec.get('pid')} 2>/dev/null; sleep 1; kill -9 {rec.get('pid')} 2>/dev/null; echo KILLED'"],
+                    capture_output=True, text=True, timeout=60)
+            _ns.update_job(jid, status="cancelled", finished_at=__import__("time").time())
+            return json.dumps({"ok": True, "job_id": jid, "cancelled": True}, ensure_ascii=False)
+        except Exception as exc:
+            return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
+
     if action == "submit":
         tgt3 = _resolve_target(host, workdir)
         return json.dumps(submit_job(
             code, lang, purpose, slots=4, job_name="mmjob",
             host=tgt3["host"], user=tgt3["user"], port=tgt3["port"],
             key=tgt3["key"], extra_opts=tgt3["extra_opts"],
-            workdir=tgt3["workdir"]), ensure_ascii=False, indent=1)
+            workdir=tgt3["workdir"], mem_gb=mem_gb, disk_gb=disk_gb, force=force),
+            ensure_ascii=False, indent=1)
     if action == "env":
         tgt = _resolve_target(host)
         fp = verify_env_fingerprint(lang, purpose,
@@ -514,6 +561,7 @@ def _register():
                 args.get("action", "status"), args.get("code", ""),
                 float(args.get("timeout") or 300), args.get("host", ""), args.get("workdir", ""),
                 args.get("kernel_id", ""), args.get("lang", "python"), args.get("purpose", "RNA"),
+                args.get("job_id", ""), args.get("mem_gb"), args.get("disk_gb"), bool(args.get("force")),
                 (int(args["seed"]) if args.get("seed") is not None else None)),
         )
     except Exception:
@@ -694,7 +742,8 @@ SGE_DEFAULTS = {"pe": "smp", "slots": 4, "queue": "", "name": "mmjob"}
 def submit_job(code: str, lang: str = "R", purpose: str = "RNA", slots: int = 4,
                queue: str = "", job_name: str = "mmjob", host: str = "", user: str = "",
                port: int = 22, key: str = "", extra_opts=None, workdir: str = "",
-               script: str = "") -> dict:
+               script: str = "", mem_gb: float = None, disk_gb: float = None,
+               force: bool = False, input_paths=None, job_key: str = "") -> dict:
     """把一段分析代码变成 SGE 作业提交（登录节点禁跑重分析的"正确出口"）。
 
     流程：写脚本到集群 ~/memomics_jobs/scripts/<name>.<ext> → qsub -cwd -j y -o <log>
@@ -707,6 +756,26 @@ def submit_job(code: str, lang: str = "R", purpose: str = "RNA", slots: int = 4,
     exe = resolve_interpreter(lang, purpose)
     if not exe:
         return {"ok": False, "error": f"环境记录里没有 {purpose}/{lang} 的解释器"}
+    # === 2026-10-18 用户口径：默认都放行，只有"实时观测到紧张"才排队并提醒 ===
+    from memomics.bio_tools import node_state as _ns
+    _req = _ns.estimate_mem_gb(paths=input_paths, declared=mem_gb)
+    _disk_req = float(disk_gb if disk_gb is not None else 20.0)
+    _state = _ns.node_state(host, user, port, key, extra_opts, workdir)
+    _verdict = _ns.decide(_state, _req["mem_gb"], _disk_req)
+    if _verdict["zone"] == "unknown" and not force:
+        return {"ok": False, "need_confirm": True, "zone": "unknown",
+                "message": _verdict.get("message") or "拿不到节点实时状态，要不要照样提交？",
+                "req_mem_gb": _req["mem_gb"]}
+    if _verdict["zone"] == "red" and not force:
+        return {"ok": False, "queued": True, "zone": "red",
+                "message": _verdict.get("message"),
+                "options": _verdict.get("options") or [],
+                "req_mem_gb": _req["mem_gb"], "state": {k: _verdict.get(k) for k in
+                    ("node", "mem_avail_gb", "remain_gb", "load1", "procs_R")}}
+    _advisory = _verdict.get("advisory") or ""
+    if force and _verdict["zone"] in ("red", "unknown"):
+        _advisory = "⚠️ 已按 force 绕过水位线限制：" + (_verdict.get("message") or "")[:120]
+
     import datetime as _dt
     stamp = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     safe = "".join(c for c in (job_name or "mmjob") if c.isalnum() or c in "-_")[:24] or "mmjob"
@@ -747,23 +816,49 @@ def submit_job(code: str, lang: str = "R", purpose: str = "RNA", slots: int = 4,
         if not job_id:
             # 降级：该集群（ssh3/ssh0/ssh23）scheduler=none，正确模式是**直接 ssh 到计算节点 nohup 直跑**
             try:
-                _r2 = subprocess.run(ssh + [
-                    f"bash -lc {shlex.quote('cd ' + (workdir or '~') + ' && nohup ' + exe + ' ' + remote_script +
-                                             ' > ' + remote_log + ' 2>&1 & echo PID:$!')}"],
-                    capture_output=True, text=True, timeout=120)
+                _exitf = remote_script + ".exit"
+                _inner = (f"cd {workdir or '~'} && {exe} {remote_script} > {remote_log} 2>&1; "
+                          f"echo EXIT:$? > {_exitf}")
+                _cmd2 = (f"bash -lc {shlex.quote('nohup bash -c ' + shlex.quote(_inner) +
+                                                 ' >/dev/null 2>&1 & echo PID:$! && sleep 1 && ps -o lstart= -p $!')}")
+                _r2 = subprocess.run(ssh + [_cmd2], capture_output=True, text=True, timeout=120)
                 _o2 = (_r2.stdout or "").strip()
                 _mp = _re.search(r"PID:\s*(\d+)", _o2)
                 if _mp:
-                    return {"ok": True, "mode": "nohup", "pid": _mp.group(1),
-                            "script": remote_script, "log": remote_log,
+                    _pid = _mp.group(1)
+                    _lines = [x for x in _o2.splitlines() if x.strip() and not x.startswith("PID:")]
+                    _lstart = " ".join(_lines[0].split()) if _lines else ""
+                    _jid = job_key or f"mm{stamp}_{_pid}"
+                    try:
+                        _ns.register_job(_jid, status="running", pid=_pid, lstart=_lstart,
+                                         host=host, node=_verdict.get("node") or host,
+                                         script=remote_script, log=remote_log, exit_file=_exitf,
+                                         workdir=workdir or "~", lang=lang, purpose=purpose,
+                                         mem_gb=_req["mem_gb"], mem_source=_req["source"],
+                                         zone=_verdict["zone"], kernel_id=kernel_id if "kernel_id" in dir() else "")
+                    except Exception:
+                        pass
+                    return {"ok": True, "mode": "nohup", "job_id": _jid, "pid": _pid,
+                            "lstart": _lstart, "script": remote_script, "log": remote_log,
+                            "exit_file": _exitf, "zone": _verdict["zone"],
+                            "req_mem_gb": _req["mem_gb"], "mem_source": _req["source"],
+                            "advisory": _advisory,
                             "message": ("SGE 不可用（" + ("not a submit host" if "not a submit host" in out
-                                       else "qmaster 不可达") + "）→ 已降级为计算节点 nohup 直跑"),
+                                       else "qmaster 不可达") + "）→ 已在计算节点 nohup 直跑"),
                             "qsub_raw": out[:300]}
                 return {"ok": False, "error": "qsub 与 nohup 都失败", "qsub_raw": out[:400],
                         "nohup_raw": _o2[:300]}
             except Exception as exc:
                 return {"ok": False, "error": f"提交失败: {exc}", "qsub_raw": out[:300]}
-        return {"ok": bool(job_id), "job_id": job_id, "script": remote_script,
+        if job_id:
+            try:
+                _ns.register_job(job_id, status="running", host=host, node=_verdict.get("node") or host,
+                                 script=remote_script, log=remote_log, exit_file="", mode="qsub",
+                                 mem_gb=_req["mem_gb"], zone=_verdict["zone"])
+            except Exception:
+                pass
+        return {"ok": bool(job_id), "job_id": job_id, "zone": _verdict["zone"],
+                "advisory": _advisory, "script": remote_script,
                 "log": remote_log, "argv": " ".join(qargs),
                 "message": "已提交到计算节点（登录节点不跑重分析）" if job_id else "qsub 未返回作业号",
                 "stderr": (r.stderr or "")[-300:]}
