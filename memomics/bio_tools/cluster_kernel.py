@@ -86,9 +86,17 @@ class ClusterKernel:
     def __init__(self, host: str = "", user: str = "", port: int = 22, workdir: str = "~",
                  key: str = "", python: str = "python3", timeout: float = 300.0,
                  extra_opts=None, local: bool = False, lang: str = "python",
-                 purpose: str = "RNA"):
+                 purpose: str = "RNA", seed: int = None, max_rss_mb: int = 24000):
         self.lang = "R" if str(lang).lower().startswith("r") else "python"
         self.purpose = purpose or "RNA"
+        # 2026-10-18（科研可复现）：默认固定种子；启动时自动设进内核并记录
+        self.seed = int(seed) if seed is not None else 20261018
+        self.applied_seed = None
+        # OOM 保护：远端 worker RSS 上限（MB）；连续 2 次超限才终止，避免误杀长任务
+        self.max_rss_mb = int(max_rss_mb or 24000)
+        self._rss_over = 0
+        self.remote_pid = None
+        self._rss_checked_at = 0.0
         # 解释器优先来自实测环境记录（R4.41/R4.3.3），避免用错环境或 PATH 里没有
         if self.lang == "R":
             python = resolve_interpreter("R", self.purpose) or python
@@ -169,7 +177,9 @@ class ClusterKernel:
                 cwd = os.path.expanduser("~")
             else:
                 _exe = self.python
-                remote_cmd = (f'cd {self.workdir} && exec {_exe} '
+                _safe = (self.kernel_id or "kernel").replace(":", "_")
+                self._pidfile = f"$HOME/{REMOTE_DIR}/{_safe}.pid"
+                remote_cmd = (f'cd {self.workdir} && echo $$ > {self._pidfile} && exec {_exe} '
                               + (f'{self._remote_worker()}' if self.lang == "R"
                                  else f'-u {self._remote_worker()}'))
                 cmd = self._ssh_prefix() + [remote_cmd]
@@ -180,6 +190,15 @@ class ClusterKernel:
             self.last_use = time.time()
             try:
                 _reg_touch(self)     # 落盘登记 → 下一次对话 action=list 能看到
+            except Exception:
+                pass
+            if not self.local:
+                try:
+                    self.remote_pid = self._read_remote_pid()
+                except Exception:
+                    self.remote_pid = None
+            try:
+                self._apply_seed()   # 2026-10-18：启动即固定随机种子（科研可复现）
             except Exception:
                 pass
             return {"ok": True, "pid": self.proc.pid, "local": self.local,
@@ -241,9 +260,90 @@ class ClusterKernel:
                     "result": out, "error": err, "local": self.local}
         return {"status": "error", "output": "", "error": f"执行超时（{to}s）"}
 
+    def _read_remote_pid(self):
+        """读远端 worker 的真实 pid（启动命令把 $$ 写进了 pid 文件）。"""
+        if self.local or not self.host:
+            return None
+        try:
+            p = subprocess.run(_ssh_cmd(self.host, self.user, self.port, self.key, self.extra_opts)
+                               + [f"cat {self._pidfile} 2>/dev/null"],
+                               capture_output=True, text=True, timeout=60)
+            v = (p.stdout or "").strip()
+            return int(v) if v.isdigit() else None
+        except Exception:
+            return None
+
+    def remote_rss_mb(self):
+        """远端 worker 的 RSS（MB）；本地模式用 psutil。"""
+        if self.local:
+            try:
+                import psutil
+                p = psutil.Process(self.proc.pid)
+                tot = p.memory_info().rss + sum(c.memory_info().rss for c in p.children(recursive=True))
+                return round(tot / (1024.0 * 1024.0), 1)
+            except Exception:
+                return None
+        if not self.remote_pid:
+            return None
+        try:
+            p = subprocess.run(_ssh_cmd(self.host, self.user, self.port, self.key, self.extra_opts)
+                               + [f"ps -o rss= -p {self.remote_pid} | awk '{{print int($1/1024)}}'"],
+                               capture_output=True, text=True, timeout=60)
+            v = (p.stdout or "").strip().splitlines()
+            return float(v[-1]) if v and v[-1].strip().isdigit() else None
+        except Exception:
+            return None
+
+    def check_memory(self, force: bool = False) -> dict:
+        """OOM 保护：超限先警告，连续 2 次超限才终止（不误杀正常长任务）。"""
+        now = time.time()
+        if not force and (now - self._rss_checked_at) < 60:
+            return {"checked": False, "reason": "60s 内刚查过"}
+        self._rss_checked_at = now
+        rss = self.remote_rss_mb()
+        out = {"checked": True, "rss_mb": rss, "limit_mb": self.max_rss_mb}
+        if rss is None:
+            out["status"] = "unknown"
+            return out
+        if rss <= self.max_rss_mb:
+            self._rss_over = 0
+            out["status"] = "ok"
+            return out
+        self._rss_over += 1
+        out["status"] = "over"
+        out["consecutive"] = self._rss_over
+        if self._rss_over >= 2:
+            self._close()
+            out["status"] = "killed"
+            out["message"] = (f"内核 RSS {rss:.0f}MB 连续 2 次超过上限 {self.max_rss_mb}MB，"
+                              "已终止以保护节点；请精简对象或改走 qsub 批处理")
+        else:
+            out["message"] = (f"警告：内核 RSS {rss:.0f}MB 已超过上限 {self.max_rss_mb}MB，"
+                              "再超一次将自动终止")
+        return out
+
+    def _apply_seed(self):
+        """把固定种子设进内核（R: set.seed；Python: random/numpy），并记录。"""
+        if self.lang == "R":
+            r = self.execute(f"set.seed({self.seed}); cat('seed=', {self.seed}, '\n')", timeout=60)
+        else:
+            code = ("import random\ntry:\n    import numpy as np\n    np.random.seed(%d)\n"
+                    "except Exception:\n    pass\nrandom.seed(%d)\nprint('seed=', %d)" % (self.seed, self.seed, self.seed))
+            r = self.execute(code, timeout=60)
+        if r.get("status") == "ok":
+            self.applied_seed = self.seed
+        return self.applied_seed
+
+    def reseed(self, seed: int) -> dict:
+        self.seed = int(seed)
+        self.applied_seed = None
+        return {"ok": True, "seed": self.seed, "applied": self._apply_seed()}
+
     def status(self) -> dict:
         alive = self.proc is not None and self.proc.poll() is None
         return {"alive": alive, "pid": (self.proc.pid if self.proc else None),
+                "remote_pid": self.remote_pid, "seed": self.applied_seed or self.seed,
+                "rss_mb": self.remote_rss_mb(), "max_rss_mb": self.max_rss_mb,
                 "host": self.host or "(local)", "local": self.local,
                 "uses": self.uses, "idle_seconds": round(time.time() - self.last_use, 1),
                 "worker": self._remote_worker() if not self.local else _worker_path()}
@@ -298,13 +398,14 @@ SCHEMA = {
     "parameters": {
         "type": "object",
         "properties": {
-            "action": {"type": "string", "enum": ["start", "exec", "status", "stop", "list", "attach", "env"]},
+            "action": {"type": "string", "enum": ["start", "exec", "status", "stop", "list", "attach", "env", "rss", "seed"]},
             "lang": {"type": "string", "enum": ["python", "R"], "description": "语言（默认 python；RNA 分析建议 R）"},
             "purpose": {"type": "string", "enum": ["RNA", "ATAC"], "description": "用途（决定用 R4.41 还是 R4.3.3）"},
             "code": {"type": "string", "description": "要执行的 Python 代码（exec 时必填）"},
             "timeout": {"type": "number", "description": "执行超时秒数，默认 300"},
             "host": {"type": "string", "description": "可选：覆盖集群 host"},
             "kernel_id": {"type": "string", "description": "list 查到的内核 id（attach/stop 用）"},
+            "seed": {"type": "integer", "description": "随机种子（action=seed 时重设；start 默认 20261018）"},
             "workdir": {"type": "string", "description": "可选：集群上的工作目录"},
         },
         "required": ["action"],
@@ -322,7 +423,7 @@ def _cluster_cfg() -> dict:
 
 def cluster_kernel_tool(action: str = "status", code: str = "", timeout: float = 300,
                         host: str = "", workdir: str = "", kernel_id: str = "",
-                        lang: str = "python", purpose: str = "RNA") -> str:
+                        lang: str = "python", purpose: str = "RNA", seed: int = None) -> str:
     sid = ""
     try:
         from memomics.bio_tools.debate_analysis import get_session_sid
@@ -332,8 +433,23 @@ def cluster_kernel_tool(action: str = "status", code: str = "", timeout: float =
     cfg = _cluster_cfg()
     key = f"cluster:{sid or 'default'}"
     if action == "env":
+        cfg2 = _cluster_cfg()
+        fp = verify_env_fingerprint(lang, purpose,
+                                    host=(host or cfg2.get("host") or ""),
+                                    user=cfg2.get("user") or "", port=int(cfg2.get("port") or 22),
+                                    key=cfg2.get("key") or "",
+                                    extra_opts=cfg2.get("extra_ssh_options") or [])
         return json.dumps({"ok": True, "source": "memomics_home/cluster_envs.json",
-                           "envs": env_summary()}, ensure_ascii=False, indent=1)
+                           "envs": env_summary(), "fingerprint_check": fp},
+                          ensure_ascii=False, indent=1)
+    if action in ("rss", "seed"):
+        kern = _session_kernels.get(key)
+        if kern is None:
+            return json.dumps({"ok": False, "error": "当前会话没有运行中的内核，先 start"},
+                              ensure_ascii=False)
+        if action == "rss":
+            return json.dumps(kern.check_memory(force=True), ensure_ascii=False)
+        return json.dumps(kern.reseed(seed if seed is not None else kern.seed), ensure_ascii=False)
     if action == "list":
         return json.dumps({"ok": True, "kernels": list_kernels(),
                            "note": "alive/attachable 只在当前服务进程内有效；服务重启后 ssh 管道断，变量必然丢失"}, ensure_ascii=False, indent=1)
@@ -374,7 +490,8 @@ def _register():
             handler=lambda args, **kw: cluster_kernel_tool(
                 args.get("action", "status"), args.get("code", ""),
                 float(args.get("timeout") or 300), args.get("host", ""), args.get("workdir", ""),
-                args.get("kernel_id", ""), args.get("lang", "python"), args.get("purpose", "RNA")),
+                args.get("kernel_id", ""), args.get("lang", "python"), args.get("purpose", "RNA"),
+                (int(args["seed"]) if args.get("seed") is not None else None)),
         )
     except Exception:
         pass
@@ -498,7 +615,19 @@ def guard_heavy_on_login(host: str, purpose: str = "RNA") -> dict:
             "hint": "cluster_kernel 仅做交互；重活走 qsub"}
 
 
-def verify_env_fingerprint(lang: str = "R", purpose: str = "RNA") -> dict:
+def _ssh_cmd(host="", user="", port=22, key="", extra_opts=None) -> list:
+    """构造 ssh 命令前缀（与 ClusterKernel 一致，便于指纹等一次性远端查询）。"""
+    opts = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "-p", str(port or 22)]
+    if key:
+        opts += ["-i", key]
+    opts += list(extra_opts or [])
+    target = f"{user}@{host}" if user else host
+    return ["ssh", *opts, target]
+
+
+def verify_env_fingerprint(lang: str = "R", purpose: str = "RNA", host: str = "",
+                           user: str = "", port: int = 22, key: str = "",
+                           extra_opts=None) -> dict:
     """决策4：环境指纹校验 —— 现取 R/python 版本与关键包，和记录比对。"""
     rec = _envs_record()
     ent = ((rec.get("envs") or {}).get(str(purpose).upper()) or {})
@@ -506,18 +635,31 @@ def verify_env_fingerprint(lang: str = "R", purpose: str = "RNA") -> dict:
     if not exe:
         return {"ok": False, "error": "环境记录里没有该用途的解释器"}
     import subprocess
+    _remote = bool(host)
     try:
         if str(lang).lower().startswith("r"):
             code = ('cat(R.version.string, "|");'
                     'for (p in c("Seurat","ArchR")) cat(p,"=",as.character(tryCatch(packageVersion(p), error=function(e) "MISSING")),"|")')
-            out = subprocess.run([exe, "-e", code], capture_output=True, text=True, timeout=120).stdout.strip()
+            argv = [exe, "-e", code]
         else:
-            out = subprocess.run([exe, "-c",
-                                  "import sys,pandas;print(sys.version.split()[0],'|pandas=',pandas.__version__)"],
-                                 capture_output=True, text=True, timeout=120).stdout.strip()
+            _py = ("import sys,pandas;print(sys.version.split()[0],'|pandas=',pandas.__version__)")
+            argv = [exe, "-c", _py]
+        if _remote:
+            # 集群环境：必须走 ssh 执行，本地 subprocess 取不到远端版本（原实现的缺陷）
+            import shlex as _shlex
+            _inner = " ".join(_shlex.quote(str(a)) for a in argv)   # 引号必须保留，否则 R 代码被 shell 拆解
+            cmd = _ssh_cmd(host, user, port, key, extra_opts) + [
+                f'cd "$HOME" && {_inner}']
+            p = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+            out = (p.stdout or "").strip() or (p.stderr or "").strip()[-300:]
+            where = f"{user}@{host}" if user else host
+        else:
+            p = subprocess.run(argv, capture_output=True, text=True, timeout=120)
+            out = (p.stdout or "").strip()
+            where = "local"
     except Exception as exc:
         return {"ok": False, "error": f"取指纹失败: {exc}"}
-    return {"ok": True, "exe": exe, "fingerprint": out,
+    return {"ok": True, "where": where, "exe": exe, "fingerprint": out,
             "recorded": {"R": ent.get("R"), "packages": ent.get("R_packages") or
                          ent.get("python_packages")},
             "note": "指纹与记录不一致说明环境被升级/重装，需重新核对后再跑分析"}
