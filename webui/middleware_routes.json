@@ -1,6 +1,11 @@
 {
   "/": "static",
   "/api/ask_form/answer": "public",
+  "/api/bundle/activate": "public",
+  "/api/bundle/export": "public",
+  "/api/bundle/import": "public",
+  "/api/bundle/list": "public",
+  "/api/bundle/preview": "public",
   "/api/citations/resolve": "public",
   "/api/cluster/config": "public",
   "/api/cluster/exec": "public",

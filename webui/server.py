@@ -21928,6 +21928,96 @@ def _cluster_write_config(values: dict) -> dict:
     return out
 
 
+@app.post("/api/bundle/export")
+async def bundle_export(request: Request):
+    """导出资产包（记忆 jsonl / 知识库 / 技能），默认脱敏。"""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    from memomics import bundle as _bundle
+    scopes = body.get("scopes") or ["kb", "skills", "memory"]
+    out_dir = body.get("out") or os.path.join(MEMOMICS_HOME_DIR, "exports")
+    try:
+        res = _bundle.export_bundle(scopes, out_dir, topic=body.get("topic") or None,
+                                    redact=bool(body.get("redact", True)))
+    except Exception as exc:
+        return {"ok": False, "error": f"导出失败: {exc}"}
+    if res.get("ok"):
+        man = res.get("manifest") or {}
+        res["manifest"] = {k: v for k, v in man.items() if k != "files"}   # 别把 4000+ 文件明细丢给前端
+        logger.info(f"[bundle] 导出 {res.get('path')} counts={res.get('counts')}")
+    return res
+
+
+@app.post("/api/bundle/preview")
+async def bundle_preview(request: Request):
+    """预览包：版本 / 冲突 / 疑似密钥（不改任何文件）。"""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    zp = str(body.get("path") or "").strip()
+    if not zp:
+        return {"ok": False, "error": "需要 path"}
+    from memomics import bundle as _bundle
+    try:
+        res = _bundle.preview_bundle(zp)
+    except Exception as exc:
+        return {"ok": False, "error": f"预览失败: {exc}"}
+    if res.get("ok"):
+        res["new_files"] = (res.get("new_files") or [])[:300]
+        res["conflicts"] = (res.get("conflicts") or [])[:300]
+    return res
+
+
+@app.post("/api/bundle/import")
+async def bundle_import(request: Request):
+    """导入（默认 skip 冲突；overrides 里列出的路径才覆盖），导入后自动激活。"""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    zp = str(body.get("path") or "").strip()
+    if not zp:
+        return {"ok": False, "error": "需要 path"}
+    from memomics import bundle as _bundle
+    ov = body.get("overrides") or {}
+    try:
+        res = _bundle.import_bundle(zp, overrides=ov,
+                                    backup=bool(body.get("backup", True)),
+                                    activate_after=bool(body.get("activate", True)))
+    except Exception as exc:
+        return {"ok": False, "error": f"导入失败: {exc}"}
+    if res.get("ok"):
+        logger.info(f"[bundle] 导入 {os.path.basename(zp)} 写入 {len(res.get('written') or [])} "
+                    f"跳过 {len(res.get('skipped') or [])} 记忆+{res.get('memory_added')}")
+    return res
+
+
+@app.post("/api/bundle/activate")
+async def bundle_activate(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    from memomics import bundle as _bundle
+    try:
+        return _bundle.activate(scopes=body.get("scopes") or ["kb", "skills", "memory"])
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@app.get("/api/bundle/list")
+async def bundle_list(out: str = ""):
+    from memomics import bundle as _bundle
+    try:
+        return {"ok": True, "bundles": _bundle.list_bundles(out or None),
+                "default_dir": out or os.path.join(MEMOMICS_HOME_DIR, "exports")}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
 @app.post("/api/cluster/node/delete")
 async def cluster_node_delete(request: Request):
     """删除 remote.nodes 下的一个节点（2026-10-18 用户要求：能加就该能删）。

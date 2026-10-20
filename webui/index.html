@@ -2376,7 +2376,29 @@ document.addEventListener('DOMContentLoaded', applyUILang);
       <div class="info-header" data-i18n="settings_title">设置</div>
       <div class="settings-panel">
         <!-- 已连接的模型快速切换 -->
-        <div class="settings-group">
+        <div class="settings-group" id="bundle-group">
+  <div style="font-weight:600;margin-bottom:4px;">📦 资产包（记忆 / 知识库 / 技能 导入导出）</div>
+  <div style="font-size:11px;color:var(--text-light);margin-bottom:8px;">
+    导出自动脱敏（路径替换为 $MEMOMICS_HOME 等）；导入默认<b>只新增不覆盖</b>，冲突需在预览里勾选。
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <label style="font-size:12px;"><input type="checkbox" id="bundle-scope-kb" checked> 知识库</label>
+    <label style="font-size:12px;"><input type="checkbox" id="bundle-scope-skills" checked> 技能</label>
+    <label style="font-size:12px;"><input type="checkbox" id="bundle-scope-memory" checked> 记忆</label>
+    <input type="text" id="bundle-topic" placeholder="主题（可选，如 deg-analysis）" style="flex:1;min-width:150px;">
+    <button onclick="bundleExport()" style="font-size:12px;">📦 导出</button>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
+    <input type="text" id="bundle-zip-path" placeholder="包文件路径（点『列出包』可点选）" style="flex:1;min-width:220px;">
+    <button onclick="bundleList()" style="font-size:12px;">📂 列出包</button>
+    <button onclick="bundlePreview()" style="font-size:12px;">👀 预览</button>
+    <button onclick="bundleImport()" style="font-size:12px;">⬇ 导入</button>
+  </div>
+  <div id="bundle-list-box" style="font-size:11px;max-height:110px;overflow:auto;margin-top:6px;"></div>
+  <div id="bundle-preview-box" style="font-size:11px;max-height:240px;overflow:auto;margin-top:6px;"></div>
+  <div id="bundle-status" style="font-size:12px;margin-top:6px;"></div>
+</div>
+<div class="settings-group">
           <label data-i18n="connected_models">已连接的模型 (交互框可切换)</label>
           <div id="connected-models-list" style="font-size:12px;"></div>
           <div style="margin-top:6px;font-size:11px;color:var(--text-light);">
@@ -16499,6 +16521,117 @@ async function clusterDeleteNode(name) {
       alert('删除失败：' + ((d && d.error) || '未知'));
     }
   } catch (e) { alert('删除失败：' + e); }
+}
+
+// ===== 📦 资产包（2026-10-20）=====
+function _bundleScopes() {
+  var out = [];
+  ['kb','skills','memory'].forEach(function (k) {
+    var el = document.getElementById('bundle-scope-' + k);
+    if (el && el.checked) out.push(k);
+  });
+  return out;
+}
+function _bundleSay(msg, kind) {
+  var el = document.getElementById('bundle-status');
+  if (!el) return;
+  el.style.color = kind === 'err' ? '#e35' : (kind === 'ok' ? '#2a8' : 'var(--text-light)');
+  el.textContent = msg;
+}
+function _bundlePost(url, body) {
+  return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+    .then(function (r) { return r.json(); });
+}
+function bundleExport() {
+  var scopes = _bundleScopes();
+  if (!scopes.length) return _bundleSay('至少勾选一项', 'err');
+  _bundleSay('导出中…（全量约十几秒）');
+  var t = document.getElementById('bundle-topic');
+  _bundlePost('/api/bundle/export', { scopes: scopes, topic: t ? t.value : '' }).then(function (d) {
+    if (!d.ok) return _bundleSay('导出失败：' + (d.error || ''), 'err');
+    var c = d.counts || {};
+    _bundleSay('✓ 已导出 ' + d.path + '（' + (d.bytes / 1048576).toFixed(2) + ' MB | KB ' + (c.kb || 0) +
+      ' / 技能 ' + (c.skills || 0) + ' / 记忆 ' + (c.memory || 0) + '）', 'ok');
+    var zp = document.getElementById('bundle-zip-path');
+    if (zp) zp.value = d.path || '';
+    bundleList();
+  }).catch(function (e) { _bundleSay('导出异常：' + e, 'err'); });
+}
+function bundleList() {
+  fetch('/api/bundle/list').then(function (r) { return r.json(); }).then(function (d) {
+    var box = document.getElementById('bundle-list-box');
+    if (!box) return;
+    if (!d.ok || !(d.bundles || []).length) {
+      box.innerHTML = '<span style="color:var(--text-light);">（' + (d.default_dir || '') + ' 下暂无包）</span>';
+      return;
+    }
+    box.innerHTML = (d.bundles || []).map(function (b) {
+      return '<div style="cursor:pointer;padding:2px 0;" data-zp="' + b.path +
+        '" onclick="bundlePick(this)">📦 ' + b.mtime + ' · ' + b.mb.toFixed(2) + ' MB · ' + b.name + '</div>';
+    }).join('');
+  }).catch(function (e) { _bundleSay('列包失败：' + e, 'err'); });
+}
+function bundlePick(el) {
+  var zp = document.getElementById('bundle-zip-path');
+  if (zp) zp.value = el.getAttribute('data-zp') || '';
+  bundlePreview();
+}
+var _bundleConflicts = [];
+function bundlePreview() {
+  var zpEl = document.getElementById('bundle-zip-path');
+  var zp = zpEl ? zpEl.value : '';
+  if (!zp) return _bundleSay('先填包路径或点『列出包』', 'err');
+  _bundleSay('预览中…');
+  _bundlePost('/api/bundle/preview', { path: zp }).then(function (d) {
+    if (!d.ok) return _bundleSay('预览失败：' + (d.error || ''), 'err');
+    _bundleConflicts = d.conflicts || [];
+    var box = document.getElementById('bundle-preview-box');
+    var html = '<div style="color:#2a8;">版本 ' + d.schema + ' · 创建 ' + d.created_at + ' · 主题 ' +
+      (d.topic || '（全量）') + ' · 脱敏 ' + (d.redacted ? '是' : '否') + '</div>' +
+      '<div>内容：' + JSON.stringify(d.counts) + ' · 记忆 ' + d.memory_entries + ' 条</div>' +
+      '<div>新增 <b>' + (d.new_files || []).length + '</b> 个 · 冲突 <b style="color:#e35;">' +
+      _bundleConflicts.length + '</b> 个 · 疑似密钥 ' + (d.secrets_found || []).length + ' 个</div>';
+    if ((d.new_files || []).length) {
+      html += '<div style="margin-top:6px;color:var(--text-light);">新增：' +
+        d.new_files.slice(0, 8).map(function (x) { return x.split('/').pop(); }).join('、') +
+        (d.new_files.length > 8 ? ' …' : '') + '</div>';
+    }
+    if (_bundleConflicts.length) {
+      html += '<div style="margin-top:8px;font-weight:600;">冲突（勾选 = 用包里的覆盖本机；默认不勾 = 跳过）</div>';
+      html += _bundleConflicts.slice(0, 60).map(function (c, i) {
+        return '<label style="display:block;padding:1px 0;"><input type="checkbox" data-bci="' + i + '"> ' +
+          c.path.split('/').pop() + ' <span style="color:var(--text-light);">（本机 ' + c.local_mtime + '，' +
+          c.local_bytes + 'B）</span></label>';
+      }).join('');
+      if (_bundleConflicts.length > 60) {
+        html += '<div style="color:var(--text-light);">…共 ' + _bundleConflicts.length + ' 个</div>';
+      }
+    }
+    box.innerHTML = html;
+    _bundleSay('预览完成，确认后点『导入』', 'ok');
+  }).catch(function (e) { _bundleSay('预览异常：' + e, 'err'); });
+}
+function bundleImport() {
+  var zpEl = document.getElementById('bundle-zip-path');
+  var zp = zpEl ? zpEl.value : '';
+  if (!zp) return _bundleSay('先填包路径', 'err');
+  var ov = {};
+  document.querySelectorAll('#bundle-preview-box input[data-bci]').forEach(function (cb) {
+    if (cb.checked) {
+      var i = parseInt(cb.getAttribute('data-bci'), 10);
+      if (_bundleConflicts[i]) ov[_bundleConflicts[i].path] = 'overwrite';
+    }
+  });
+  if (_bundleConflicts.length && !Object.keys(ov).length) {
+    if (!confirm('有 ' + _bundleConflicts.length + ' 个冲突，全部按「跳过」处理（不覆盖本机）。继续导入吗？')) return;
+  }
+  _bundleSay('导入中…（会先自动备份）');
+  _bundlePost('/api/bundle/import', { path: zp, overrides: ov, backup: true, activate: true }).then(function (d) {
+    if (!d.ok) return _bundleSay('导入失败：' + (d.error || ''), 'err');
+    var steps = ((d.activate || {}).steps || []).map(function (s) { return (s.ok ? '✓ ' : '✗ ') + s.step; }).join(' · ');
+    _bundleSay('✓ 导入完成：写入 ' + (d.written || []).length + ' / 跳过 ' + (d.skipped || []).length +
+      ' / 记忆 +' + (d.memory_added || 0) + '　内化：' + steps, 'ok');
+  }).catch(function (e) { _bundleSay('导入异常：' + e, 'err'); });
 }
 
 function clusterAddNode() {
