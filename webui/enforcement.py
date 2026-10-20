@@ -1680,6 +1680,8 @@ _CODE_EDIT_GATED_TOOLS = {"execute_r", "execute_python", "execute_code", "run_sc
 
 
 def arm_code_edit(es: EnforcementState, reason: str = "", data=None) -> bool:
+    # 2026-10-21 用户要求：不再用"代码修改模式"锁 —— 按语义判断即可。
+    return False
     """进入代码修改模式：只改不跑。data=记忆里可供验证的数据路径（可空）。"""
     es.code_edit = True
     es.code_edit_verify = False          # 新一轮请求 = 重新决策（不沿用上次的同意）
@@ -1717,6 +1719,8 @@ def clear_code_edit(es: EnforcementState, grant_exec: bool = False) -> bool:
 
 
 def code_edit_gate(es: EnforcementState, tool_name: str, args=None):
+    # 2026-10-21 用户要求：去掉该锁，一律放行
+    return None
     """代码修改模式：拦执行类工具（None=放行）。"""
     if not code_edit_pending(es):
         return None

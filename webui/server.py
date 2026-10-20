@@ -1877,7 +1877,9 @@ def _build_intent_confirm_prompt(session, user_text, intent):
 # 落地：① 判定"改代码" → 只改不跑（enforcement.code_edit 硬锁，不靠模型自觉）；
 #       ② 记忆里正好有他的数据 → **服务器直接弹窗**问"要不要用这些数据跑一遍验证"；
 #       ③ 答复语义：选"只给代码" → 锁继续；选"用数据验证" → 解锁并允许执行。
-_CODE_EDIT_ENABLED = os.environ.get("MEMOMICS_CODE_EDIT", "1") != "0"
+# 2026-10-21 用户要求：不要这个锁 —— 什么时候跑、什么时候改，按语义判断，不靠锁。
+# 默认关闭；如需恢复旧行为，设环境变量 MEMOMICS_CODE_EDIT=1。
+_CODE_EDIT_ENABLED = os.environ.get("MEMOMICS_CODE_EDIT", "0") == "1"
 
 # 改动动词（用户明确要求"把这东西变一下"）—— 不含 写/编写/生成（那是新做任务，另走 grill/确认）
 # 2026-10-21：区分「改代码」与「改表格/图」——
