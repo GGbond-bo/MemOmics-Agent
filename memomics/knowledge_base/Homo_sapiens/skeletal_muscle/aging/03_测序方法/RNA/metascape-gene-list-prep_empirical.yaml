@@ -1,0 +1,30 @@
+type: kb_entry
+name: metascape-gene-list-prep_empirical
+species: Homo_sapiens
+tissue: skeletal_muscle
+direction: aging
+assay_type: RNA
+last_updated: 2026-10-21 02:26
+source: data_driven
+verified: partially_verified
+quality: medium
+auto_trigger:
+- metascape-gene-list-prep_empirical
+content: 'skill: metascape-gene-list-prep
+
+  quality_score: 9.0
+
+
+  params_used:
+
+  SRC=pathway_score_CLEAN_v3.xlsx; DROP=[SenMayo,Adipogenesis]; 7轴英文长名; tmp+os.replace
+  原子写; CJK断言
+
+
+  result_summary:
+
+  成功：主表 22 行×204 列（20 数据行×200 基因列）+ Axis_legend；CJK 自检通过（全表无中文）；轴序=身份轴+技术伪影+底物代谢+营养感应+收缩装置+衰老炎症环+终末失代偿。目标原路径被外部句柄占用，已自动改写出
+  Muscle_pathway_gene_score_EN_022619.xlsx。'
+evidence: 'record_run(metascape-gene-list-prep): 成功：主表 22 行×204 列（20 数据行×200 基因列）+
+  Axis_legend；CJK 自检通过（全表无中文）；轴序=身份轴+技术伪影+底物代谢+营养感应+收缩装置+衰老炎症环+终末失代偿。目标原路径被外部句柄占用，已自动改写出
+  Muscle_pathway_gene_score_EN_022619.xlsx。'

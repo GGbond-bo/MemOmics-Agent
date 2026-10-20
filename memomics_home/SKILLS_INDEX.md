@@ -316,7 +316,7 @@
 | 111 | windows-bioinformatics-batch-processing | 在Windows上启动长时间运行的生信批量任务（10+样本，每样本>5分钟）时加载，确保进程不因会话中断而死亡，LLM主动监控进度。系统唤醒(#N)主线进度检查也适用 — 协议见 references/agent-side-wakeup-check.md | windows, batch, processing | YEL 讨论触发 |
 | 112 | windows-com-app-automation | 用 Windows COM + 脚本引擎确定性地驱动桌面应用（Illustrator/Photoshop/InDesign/Word/Excel）:cscript→VBScript→CreateObject→DoJavaScriptFile/DoScript 桥，ExtendScript ES3 手拼 JSON、隔离文档写操作的安全模式、可复制的 doctor/探测脚手架。 | Illustrator自动化, 操控Illustrator, 批量改Illustrator, Illustrator脚本, ExtendScript, JSX脚本, COM自动化, Photoshop自动化, InDesign自动化, 脚本控制软件, 软件没有CLI, 桌面软件自动化, 图内文字批量改, cscript, DoJavaScriptFile, 画板操作 | RED 必触发 |
 
-## 09_内置 - MemOmics系统 (24 skills)
+## 09_内置 - MemOmics系统 (25 skills)
 
 | # | Skill | 使用场景 | 触发词 | Trigger |
 |---|---|---|---|---|
@@ -344,6 +344,7 @@
 | 22 | reference-figure-replication | 按用户给的参考图（PDF/PNG/AI 导出件）反推精确规格，用自己的数据 1:1 复刻同款图。触发:按照这张图来画/照着这个风格出图/参考图/图里这些基因照着重画/按图中的顺序和配色重出/和 Figure SX 一样。 | reference, replication | RED 必触发 |
 | 23 | remote-cluster-execution | 远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收；含常驻 R 会话（kernel 式持久化，大 rds 读一次一直用:session_start/exec/save/restore/status/stop）。触发:集群/ssh3/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub/常驻会话/读一次一直用/不要每次重新读取。 | 集群, 远端集群, 集群环境, 集群有哪些环境, 帮我看看集群, ssh3, 用集群跑, 在集群上跑, 投递任务, qsub, slurm, sge, 常驻会话, 读一次一直用, 不要重复读取 rds, kernel 式持久化 | RED 必触发 |
 | 24 | self-improving-agent | 自进化能力:分析成功后自动沉淀经验为新技能；分析失败后自动学习错误模式避免重复犯错；根据使用频率自动优化参数。包括技能沉淀、错误学习、参数进化三大子系统。 | self-improving-agent, self improving agent, self, improving, agent | GRN 按需触发 |
+| 25 | supplementary-table-assembly | 把策展基因集/打分表/注释表组装成可交付的补充表（xlsx/CSV）:按生物功能轴重排、统一英文标签、附加 legend 表、表↔图口径对账。触发:把表格分类排列/按分类重排/重命名导出/重出一张表/补充表/Supplementary Table/表格里不能有中文/表和图对不上/表格行序乱要排一下。 | supplementary, table, assembly | YEL 讨论触发 |
 
 ## 10_多组学整合 - 多组学整合 (11 skills)
 
