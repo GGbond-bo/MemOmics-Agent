@@ -2120,35 +2120,45 @@ document.addEventListener('DOMContentLoaded', applyUILang);
         <div class="image-preview-area" id="image-preview-area" style="display:none;"></div>
 <div id="attach-chips" style="display:none;flex-wrap:wrap;gap:6px;padding:2px 12px 6px;align-items:center;"></div>
       <div class="input-row">
-                <div class="plus-wrap" style="position:relative;">
-          <button type="button" id="plus-btn" class="img-upload-btn" title="添加文件 / 图片"
-                  onclick="toggleFsPanel(event)" style="font-size:18px;line-height:1;font-weight:600;">+</button>
-          <div id="fs-panel" style="display:none;position:absolute;left:0;bottom:112%;z-index:9999;
-               background:#2b3140;border:1px solid #4d5670;border-radius:12px;padding:10px;
-               width:min(600px,78vw);max-height:62vh;box-shadow:0 14px 44px rgba(0,0,0,.65);
-               color:#eef1f7;font-size:13px;">
-            <div style="display:flex;gap:8px;align-items:center;margin-bottom:9px;">
-              <button type="button" onclick="fsUp()" style="padding:5px 11px;border-radius:8px;cursor:pointer;
-                      background:#3a4356;border:1px solid #4d5670;color:#eef1f7;font-size:12px;">⬆ 上级</button>
-              <input id="fs-path" onkeydown="if(event.key==='Enter'){fsGo();}" placeholder="当前路径（回车跳转）"
-                     style="flex:1;padding:6px 10px;background:#1b1f28;border:1px solid #4d5670;
-                     border-radius:8px;color:#eef1f7;font-size:12px;">
-              <button type="button" onclick="fsGo()" style="padding:5px 11px;border-radius:8px;cursor:pointer;
-                      background:#3a4356;border:1px solid #4d5670;color:#eef1f7;font-size:12px;">打开</button>
-              <button type="button" onclick="toggleFsPanel()" title="关闭" style="padding:5px 10px;border-radius:8px;
-                      cursor:pointer;background:transparent;border:1px solid #4d5670;color:#aab3c6;font-size:12px;">✕</button>
-            </div>
-            <div id="fs-list" style="max-height:46vh;overflow:auto;"></div>
-            <div style="margin-top:8px;font-size:11px;color:#a8b0c2;">
-              点文件夹进入 · 点文件即把完整路径插入输入框（不会上传内容）
-            </div>
-          </div>
+                        <div class="plus-wrap" style="position:relative;">
+          <button type="button" id="plus-btn" class="img-upload-btn" title="添加文件 / 图片（选择后插入绝对路径）"
+                  onclick="fsOpen()" style="font-size:18px;line-height:1;font-weight:600;">+</button>
           <input type="file" id="image-file-input" accept="image/*" multiple onchange="handleFileSelect(event)" style="display:none;">
         </div>
         <textarea id="input" data-i18n-ph="input_ph" placeholder="输入您的分析需求... (Enter发送, Shift+Enter换行)&#10;支持粘贴截图、拖拽图片到输入框" rows="3"></textarea>
         <button id="send" onclick="send(false)" data-i18n="send">发送</button>
         <button id="stop" class="stop-btn" onclick="stopAgent()" title="强制停止当前运行" data-i18n="stop">⏹ 停止</button>
       </div>
+<div id="fs-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;
+     align-items:center;justify-content:center;backdrop-filter:blur(2px);">
+  <div style="background:#2b3140;color:#eef1f7;border:1px solid #4d5670;border-radius:14px;padding:16px 18px;
+       width:min(880px,94vw);max-height:88vh;display:flex;flex-direction:column;
+       box-shadow:0 20px 70px rgba(0,0,0,.7);font-size:13px;" onclick="event.stopPropagation()">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+      <button type="button" onclick="fsBack()" title="后退" style="padding:5px 11px;border-radius:8px;cursor:pointer;background:#3a4356;border:1px solid #4d5670;color:#eef1f7;">←</button>
+      <button type="button" onclick="fsForward()" title="前进" style="padding:5px 11px;border-radius:8px;cursor:pointer;background:#3a4356;border:1px solid #4d5670;color:#eef1f7;">→</button>
+      <button type="button" onclick="fsUp()" title="上级文件夹" style="padding:5px 11px;border-radius:8px;cursor:pointer;background:#3a4356;border:1px solid #4d5670;color:#eef1f7;">⬆</button>
+      <div id="fs-crumb" style="flex:1;font-size:12px;color:#c8d0e2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+      <button type="button" onclick="fsClose()" title="关闭" style="padding:5px 11px;border-radius:8px;cursor:pointer;background:transparent;border:1px solid #4d5670;color:#aab3c6;">✕</button>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+      <input id="fs-path" onkeydown="if(event.key==='Enter'){fsGo();}" placeholder="路径（回车跳转）"
+             style="flex:1;padding:7px 10px;background:#1b1f28;border:1px solid #4d5670;border-radius:8px;color:#eef1f7;font-size:12px;">
+      <input id="fs-filter" oninput="fsFilter()" placeholder="筛选当前目录…"
+             style="width:190px;padding:7px 10px;background:#1b1f28;border:1px solid #4d5670;border-radius:8px;color:#eef1f7;font-size:12px;">
+      <button type="button" onclick="fsGo()" style="padding:6px 12px;border-radius:8px;cursor:pointer;background:#3a4356;border:1px solid #4d5670;color:#eef1f7;">打开</button>
+    </div>
+    <div id="fs-list" style="flex:1;min-height:260px;max-height:56vh;overflow:auto;border:1px solid #4d5670;border-radius:10px;padding:6px;background:#232833;"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:10px;flex-wrap:wrap;">
+      <div style="font-size:11px;color:#a8b0c2;">单击选中 · 双击进入文件夹 / 插入文件 · Ctrl+点击可多选 · Esc 关闭</div>
+      <div style="display:flex;gap:8px;">
+        <button type="button" onclick="fsClose()" style="padding:7px 16px;border-radius:8px;cursor:pointer;background:#3a4356;border:1px solid #4d5670;color:#eef1f7;">取消</button>
+        <button type="button" id="fs-add-btn" onclick="fsAddSelected()" style="padding:7px 18px;border-radius:8px;cursor:pointer;background:#3b6ef0;border:1px solid #3b6ef0;color:#fff;font-weight:600;">添加选中</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 
       <div id="steer-hint" style="display:none;padding:4px 12px;font-size:12px;color:var(--primary,#4A90D9);background:rgba(74,144,217,0.08);border-radius:4px;margin:4px 0;" data-i18n="steer_hint">
         💡 Agent 运行中 — 直接输入消息可引导方向（不中断当前工具）
@@ -3378,73 +3388,157 @@ document.addEventListener('input', function (ev) {
   var kept = _attachChips.filter(function (p) { return v.indexOf(p) >= 0; });
   if (kept.length !== _attachChips.length) { _attachChips = kept; _renderChips(); }
 }, true);
-function toggleFsPanel(ev) {
-  if (ev) ev.stopPropagation();
-  var p = document.getElementById('fs-panel');
-  if (!p) return;
-  if (p.style.display === 'block') { p.style.display = 'none'; return; }
-  p.style.display = 'block';
+// ===== 居中文件选择窗口（2026-10-20，像 DSH 那样浏览目录）=====
+var _fsHist = [], _fsIdx = -1, _fsSel = {}, _fsItems = [], _fsCur = '';
+function fsOpen() {
+  var m = document.getElementById('fs-modal');
+  if (!m) return;
+  m.style.display = 'flex';
+  _fsSel = {};
+  var last = '';
+  try { last = localStorage.getItem('mm_fs_last') || ''; } catch (e) { last = ''; }
   var inp = document.getElementById('fs-path');
-  fsGo(inp ? inp.value.trim() : '');
+  if (inp) inp.value = last;
+  var fil = document.getElementById('fs-filter');
+  if (fil) fil.value = '';
+  _fsHist = []; _fsIdx = -1;
+  fsGo(last, true);
 }
-document.addEventListener('click', function (ev) {
-  var p = document.getElementById('fs-panel');
-  if (!p || p.style.display !== 'block') return;
-  if (ev.target.closest && ev.target.closest('.plus-wrap')) return;
-  p.style.display = 'none';
-});
-document.addEventListener('keydown', function (ev) {
-  if (ev.key !== 'Escape') return;
-  var p = document.getElementById('fs-panel');
-  if (p && p.style.display === 'block') p.style.display = 'none';
-});
-function fsGo(p) {
+function fsClose() {
+  var m = document.getElementById('fs-modal');
+  if (m) m.style.display = 'none';
+}
+function fsBack() {
+  if (_fsIdx <= 0) return;
+  _fsIdx--;
+  fsGo(_fsHist[_fsIdx], false);
+}
+function fsForward() {
+  if (_fsIdx >= _fsHist.length - 1) return;
+  _fsIdx++;
+  fsGo(_fsHist[_fsIdx], false);
+}
+function fsUp() {
+  var cur = (_fsCur || '').replace(/\\/g, '/').replace(/\/+$/, '');
+  if (!cur) return fsGo('', true);
+  var parts = cur.split('/');
+  parts.pop();
+  fsGo(parts.join('/') || '', true);
+}
+function _fsCrumb(p) {
+  var el = document.getElementById('fs-crumb');
+  if (!el) return;
+  if (!p) { el.textContent = '🏠 常用位置'; return; }
+  var norm = String(p).replace(/\\/g, '/');
+  var segs = norm.split('/').filter(function (x) { return x !== ''; });
+  var html = ['<span style="cursor:pointer;color:#8fc0ff;" data-p="">🏠</span>'];
+  var acc = '';
+  segs.forEach(function (s) {
+    acc += (acc ? '/' : '') + s;
+    var label = (acc.length === 2 && acc[1] === ':') ? s : s;
+    html.push('<span style="color:#5d677d;"> / </span>' +
+      '<span style="cursor:pointer;color:#8fc0ff;" data-p="' + acc + '">' + label + '</span>');
+  });
+  el.innerHTML = html.join('');
+  el.querySelectorAll('span[data-p]').forEach(function (sp) {
+    sp.onclick = function () { fsGo(sp.getAttribute('data-p'), true); };
+  });
+}
+function fsGo(p, pushHist) {
   var inp = document.getElementById('fs-path');
   var target = (typeof p === 'string' && p) ? p : (inp ? inp.value.trim() : '');
   var box = document.getElementById('fs-list');
-  if (box) box.innerHTML = '<div style="color:#a8b0c2;padding:10px;">加载中…</div>';
+  if (box) box.innerHTML = '<div style="color:#a8b0c2;padding:12px;">加载中…</div>';
   fetch('/api/fs/browse?path=' + encodeURIComponent(target)).then(function (r) { return r.json(); }).then(function (d) {
     if (d.error) {
-      if (box) box.innerHTML = '<div style="color:#ff8fa3;padding:10px;">' + d.error + '</div>';
+      if (box) box.innerHTML = '<div style="color:#ff8fa3;padding:12px;">' + d.error + '</div>';
       return;
     }
-    if (d.is_file) { attachInsertPath(d.abs_path); toggleFsPanel(); return; }
-    if (inp) inp.value = d.path || '';
-    var items = d.items || [];
-    if (!items.length) { box.innerHTML = '<div style="color:#a8b0c2;padding:10px;">（空文件夹）</div>'; return; }
-    box.innerHTML = items.map(function (it) {
-      var e = (it.ext || '').toLowerCase();
-      var icon = it.is_dir ? '📁' :
-        (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.tif', '.tiff'].indexOf(e) >= 0 ? '🖼️' :
-          (['.csv', '.tsv', '.xlsx', '.xls'].indexOf(e) >= 0 ? '📊' :
-            (e === '.pdf' ? '📕' : (['.r', '.py', '.sh', '.rmd', '.ipynb'].indexOf(e) >= 0 ? '⌨️' : '📄'))));
-      var size = it.is_dir ? '' : (' <span style="color:#9aa6bd;font-size:11px;">' +
-        (it.size > 1048576 ? (it.size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(it.size / 1024)) + ' KB') + '</span>');
-      return '<div data-p="' + String(it.path).replace(/"/g, '&quot;') + '" data-d="' + (it.is_dir ? '1' : '0') +
-        '" style="padding:7px 10px;border-radius:8px;cursor:pointer;color:#eef1f7;display:flex;gap:8px;align-items:center;"' +
-        ' onmouseover="this.style.background=\'#3a4356\'" onmouseout="this.style.background=\'transparent\'"' +
-        ' onclick="fsPick(this)">' + icon + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' +
-        it.name + '</span>' + size + '</div>';
-    }).join('');
+    if (d.is_file) {
+      if (pushHist !== false) { attachInsertPath(d.abs_path); fsClose(); }
+      return;
+    }
+    _fsCur = d.path || '';
+    if (inp) inp.value = _fsCur;
+    try { localStorage.setItem('mm_fs_last', _fsCur); } catch (e) { }
+    if (pushHist !== false) {
+      _fsHist = _fsHist.slice(0, _fsIdx + 1);
+      _fsHist.push(_fsCur);
+      _fsIdx = _fsHist.length - 1;
+    }
+    _fsItems = d.items || [];
+    _fsCrumb(_fsCur);
+    _fsSel = {};
+    fsRender();
   }).catch(function (e) {
-    if (box) box.innerHTML = '<div style="color:#ff8fa3;padding:10px;">加载失败：' + e + '</div>';
+    if (box) box.innerHTML = '<div style="color:#ff8fa3;padding:12px;">加载失败：' + e + '</div>';
   });
 }
-function fsPick(el) {
+function fsRender() {
+  var box = document.getElementById('fs-list');
+  if (!box) return;
+  var kw = '';
+  var f = document.getElementById('fs-filter');
+  if (f) kw = (f.value || '').trim().toLowerCase();
+  var items = _fsItems.filter(function (it) { return !kw || String(it.name).toLowerCase().indexOf(kw) >= 0; });
+  if (!items.length) {
+    box.innerHTML = '<div style="color:#a8b0c2;padding:12px;">（没有匹配的文件 / 空文件夹）</div>';
+    _fsUpdateBtn();
+    return;
+  }
+  box.innerHTML = items.map(function (it, i) {
+    var e = (it.ext || '').toLowerCase();
+    var icon = it.is_dir ? '📁' :
+      (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.tif', '.tiff'].indexOf(e) >= 0 ? '🖼️' :
+        (['.csv', '.tsv', '.xlsx', '.xls'].indexOf(e) >= 0 ? '📊' :
+          (e === '.pdf' ? '📕' : (['.r', '.py', '.sh', '.rmd', '.ipynb'].indexOf(e) >= 0 ? '⌨️' : '📄'))));
+    var size = it.is_dir ? '' : ('<span style="color:#9aa6bd;font-size:11px;width:64px;text-align:right;">' +
+      (it.size > 1048576 ? (it.size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(it.size / 1024)) + ' KB') + '</span>');
+    var on = _fsSel[it.path] ? 'background:#3a4356;' : '';
+    return '<div data-p="' + String(it.path).replace(/"/g, '&quot;') + '" data-d="' + (it.is_dir ? '1' : '0') + '"' +
+      ' style="padding:8px 10px;border-radius:8px;cursor:pointer;color:#eef1f7;display:flex;gap:9px;align-items:center;' + on + '"' +
+      ' onmouseover="if(!this.dataset.sel)this.style.background=\'#2f3646\'" onmouseout="if(!this.dataset.sel)this.style.background=\'transparent\'"' +
+      ' onclick="fsClick(this,event)" ondblclick="fsDbl(this)">' +
+      icon + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + it.name + '</span>' + size + '</div>';
+  }).join('');
+  _fsUpdateBtn();
+}
+function fsClick(el, ev) {
   var p = el.getAttribute('data-p');
-  var isDir = el.getAttribute('data-d') === '1';
-  if (isDir) { fsGo(p); return; }
+  var dir = el.getAttribute('data-d') === '1';
+  if (!(ev.ctrlKey || ev.metaKey)) { _fsSel = {}; }
+  if (_fsSel[p]) { delete _fsSel[p]; el.style.background = 'transparent'; delete el.dataset.sel; }
+  else { _fsSel[p] = dir ? 'dir' : 'file'; el.style.background = '#3a4356'; el.dataset.sel = '1'; }
+  _fsUpdateBtn();
+}
+function fsDbl(el) {
+  var p = el.getAttribute('data-p');
+  var dir = el.getAttribute('data-d') === '1';
+  if (dir) { fsGo(p, true); return; }
   attachInsertPath(p);
-  toggleFsPanel();
+  fsClose();
 }
-function fsUp() {
-  var inp = document.getElementById('fs-path');
-  var cur = inp ? inp.value.replace(/\\/g, '/') : '';
-  if (!cur) return fsGo('');
-  var parts = cur.replace(/\/+$/, '').split('/');
-  parts.pop();
-  fsGo(parts.join('/') || '');
+function fsFilter() { fsRender(); }
+function _fsUpdateBtn() {
+  var btn = document.getElementById('fs-add-btn');
+  if (!btn) return;
+  var n = Object.keys(_fsSel).length;
+  btn.textContent = n ? ('添加选中（' + n + '）') : '添加选中';
+  btn.disabled = n === 0;
+  btn.style.opacity = n === 0 ? '.5' : '1';
 }
+function fsAddSelected() {
+  var keys = Object.keys(_fsSel);
+  if (!keys.length) return;
+  keys.forEach(function (p) { if (_fsSel[p] === 'file') attachInsertPath(p); });
+  fsClose();
+}
+document.addEventListener('keydown', function (ev) {
+  if (ev.key !== 'Escape') return;
+  var m = document.getElementById('fs-modal');
+  if (m && m.style.display === 'flex') fsClose();
+});
+
 
 
 function handleFileSelect(e) {
