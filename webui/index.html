@@ -2120,28 +2120,15 @@ document.addEventListener('DOMContentLoaded', applyUILang);
         <div class="image-preview-area" id="image-preview-area" style="display:none;"></div>
 <div id="attach-chips" style="display:none;flex-wrap:wrap;gap:6px;padding:2px 12px 6px;align-items:center;"></div>
       <div class="input-row">
-                <div class="plus-wrap" style="position:relative;">
-          <button type="button" id="plus-btn" class="img-upload-btn" title="添加图片 / 文件"
-                  onclick="toggleFsPanel(event)" style="font-size:18px;line-height:1;font-weight:600;">+</button>
-          <div id="fs-panel" style="display:none;position:absolute;left:0;bottom:112%;z-index:9999;
-               background:#2b3140;border:1px solid #4d5670;border-radius:12px;padding:10px;
-               width:min(600px,78vw);max-height:62vh;box-shadow:0 14px 44px rgba(0,0,0,.65);
-               color:#eef1f7;font-size:13px;">
-            <div style="display:flex;gap:8px;align-items:center;margin-bottom:9px;">
-              <button type="button" onclick="fsUp()" style="padding:5px 11px;border-radius:8px;cursor:pointer;
-                      background:#3a4356;border:1px solid #4d5670;color:#eef1f7;font-size:12px;">⬆ 上级</button>
-              <input id="fs-path" onkeydown="if(event.key==='Enter'){fsGo();}" placeholder="当前路径（回车跳转）"
-                     style="flex:1;padding:6px 10px;background:#1b1f28;border:1px solid #4d5670;
-                     border-radius:8px;color:#eef1f7;font-size:12px;">
-              <button type="button" onclick="fsGo()" style="padding:5px 11px;border-radius:8px;cursor:pointer;
-                      background:#3a4356;border:1px solid #4d5670;color:#eef1f7;font-size:12px;">打开</button>
-              <button type="button" onclick="fsToggle()" title="关闭" style="padding:5px 10px;border-radius:8px;
-                      cursor:pointer;background:transparent;border:1px solid #4d5670;color:#aab3c6;font-size:12px;">✕</button>
-            </div>
-            <div id="fs-list" style="max-height:46vh;overflow:auto;"></div>
-            <div style="margin-top:8px;font-size:11px;color:#a8b0c2;">
-              点文件夹进入 · 点文件即把完整路径插入输入框（不会上传内容）
-            </div>
+        <div class="plus-wrap" style="position:relative;">
+          <button type="button" id="plus-btn" class="img-upload-btn" title="添加图片 / 文件路径"
+                  onclick="toggleAttachMenu(event)" style="font-size:18px;line-height:1;font-weight:600;">+</button>
+          <div id="attach-menu" style="display:none;position:absolute;left:0;bottom:110%;z-index:9999;
+               background:#1d1f27;border:1px solid #3a4152;border-radius:10px;padding:6px;min-width:210px;
+               box-shadow:0 10px 30px rgba(0,0,0,.5);">
+            <div class="att-mi" onclick="attachPickImage()" style="padding:8px 10px;border-radius:7px;cursor:pointer;font-size:13px;">🖼️ 添加图片（可预览/识别文字）</div>
+            <div class="att-mi" onclick="attachOpenFs()" style="padding:8px 10px;border-radius:7px;cursor:pointer;font-size:13px;">📂 选择本机文件（插入路径）</div>
+            <div class="att-mi" onclick="attachPastePath()" style="padding:8px 10px;border-radius:7px;cursor:pointer;font-size:13px;">⌨️ 粘贴文件路径</div>
           </div>
           <input type="file" id="image-file-input" accept="image/*" multiple onchange="handleFileSelect(event)" style="display:none;">
         </div>
@@ -2149,7 +2136,23 @@ document.addEventListener('DOMContentLoaded', applyUILang);
         <button id="send" onclick="send(false)" data-i18n="send">发送</button>
         <button id="stop" class="stop-btn" onclick="stopAgent()" title="强制停止当前运行" data-i18n="stop">⏹ 停止</button>
       </div>
-
+<div id="fs-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;
+     align-items:center;justify-content:center;">
+  <div style="background:#1d1f27;color:#e6e8ee;border:1px solid #333848;border-radius:14px;padding:18px 20px;
+       width:min(720px,94vw);max-height:86vh;overflow:auto;box-shadow:0 18px 60px rgba(0,0,0,.6);font-size:13px;">
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px;">📂 选择文件</div>
+    <div style="font-size:11px;color:#9aa3b5;margin-bottom:10px;">点文件夹进入，点文件即把它的<b>完整路径</b>插入输入框（不会上传内容）。</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+      <button onclick="fsUp()" style="padding:6px 12px;">⬆ 上级</button>
+      <input id="fs-path" style="flex:1;padding:7px 10px;background:#15171e;border:1px solid #2c3140;border-radius:8px;color:#e6e8ee;font-size:12px;" placeholder="输入路径后回车">
+      <button onclick="fsGo()" style="padding:6px 12px;">打开</button>
+    </div>
+    <div id="fs-list" style="max-height:52vh;overflow:auto;border:1px solid #2c3140;border-radius:10px;padding:6px;"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px;">
+      <button onclick="fsClose()" style="padding:7px 16px;">取消</button>
+    </div>
+  </div>
+</div>
 
       <div id="steer-hint" style="display:none;padding:4px 12px;font-size:12px;color:var(--primary,#4A90D9);background:rgba(74,144,217,0.08);border-radius:4px;margin:4px 0;" data-i18n="steer_hint">
         💡 Agent 运行中 — 直接输入消息可引导方向（不中断当前工具）
@@ -3314,76 +3317,21 @@ function handleDrop(e) {
 }
 
 // 文件选择
-// ===== 输入框「+」内联文件面板（2026-10-20）=====
-function fsToggle() {
-  var p = document.getElementById('fs-panel');
-  if (!p) return;
-  if (p.style.display === 'block') { p.style.display = 'none'; return; }
-  p.style.display = 'block';
-  var inp = document.getElementById('fs-path');
-  fsGo(inp ? inp.value.trim() : '');
-}
-function toggleFsPanel(ev) {
+// ===== 输入框「+」附加菜单（2026-10-20）=====
+function toggleAttachMenu(ev) {
   if (ev) ev.stopPropagation();
-  fsToggle();
+  var m = document.getElementById('attach-menu');
+  if (!m) return;
+  m.style.display = (m.style.display === 'block') ? 'none' : 'block';
 }
 document.addEventListener('click', function (ev) {
-  var p = document.getElementById('fs-panel');
-  if (!p || p.style.display !== 'block') return;
-  if (ev.target.closest && ev.target.closest('.plus-wrap')) return;
-  p.style.display = 'none';
+  var m = document.getElementById('attach-menu');
+  if (!m || m.style.display !== 'block') return;
+  if (!ev.target.closest || !ev.target.closest('.plus-wrap')) m.style.display = 'none';
 });
-document.addEventListener('keydown', function (ev) {
-  if (ev.key !== 'Escape') return;
-  var p = document.getElementById('fs-panel');
-  if (p && p.style.display === 'block') p.style.display = 'none';
-});
-function fsGo(p) {
-  var inp = document.getElementById('fs-path');
-  var target = (typeof p === 'string' && p) ? p : (inp ? inp.value.trim() : '');
-  var box = document.getElementById('fs-list');
-  if (box) box.innerHTML = '<div style="color:#a8b0c2;padding:10px;">加载中…</div>';
-  fetch('/api/fs/browse?path=' + encodeURIComponent(target)).then(function (r) { return r.json(); }).then(function (d) {
-    if (d.error) {
-      if (box) box.innerHTML = '<div style="color:#ff8fa3;padding:10px;">' + d.error + '</div>';
-      return;
-    }
-    if (d.is_file) { attachInsertPath(d.abs_path); fsToggle(); return; }
-    if (inp) inp.value = d.path || '';
-    var items = d.items || [];
-    if (!items.length) { box.innerHTML = '<div style="color:#a8b0c2;padding:10px;">（空文件夹）</div>'; return; }
-    box.innerHTML = items.map(function (it) {
-      var e = (it.ext || '').toLowerCase();
-      var icon = it.is_dir ? '📁' :
-        (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.tif', '.tiff'].indexOf(e) >= 0 ? '🖼️' :
-          (['.csv', '.tsv', '.xlsx', '.xls'].indexOf(e) >= 0 ? '📊' :
-            (e === '.pdf' ? '📕' : (['.r', '.py', '.sh', '.rmd', '.ipynb'].indexOf(e) >= 0 ? '⌨️' : '📄'))));
-      var size = it.is_dir ? '' : (' <span style="color:#9aa6bd;font-size:11px;">' +
-        (it.size > 1048576 ? (it.size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(it.size / 1024)) + ' KB') + '</span>');
-      return '<div data-p="' + String(it.path).replace(/"/g, '&quot;') + '" data-d="' + (it.is_dir ? '1' : '0') + '"' +
-        ' style="padding:7px 10px;border-radius:8px;cursor:pointer;color:#eef1f7;display:flex;gap:8px;align-items:center;"' +
-        ' onmouseover="this.style.background=\'#3a4356\'" onmouseout="this.style.background=\'transparent\'"' +
-        ' onclick="fsPick(this)">' + icon + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' +
-        it.name + '</span>' + size + '</div>';
-    }).join('');
-  }).catch(function (e) {
-    if (box) box.innerHTML = '<div style="color:#ff8fa3;padding:10px;">加载失败：' + e + '</div>';
-  });
-}
-function fsPick(el) {
-  var p = el.getAttribute('data-p');
-  var isDir = el.getAttribute('data-d') === '1';
-  if (isDir) { fsGo(p); return; }
-  attachInsertPath(p);
-  fsToggle();
-}
-function fsUp() {
-  var inp = document.getElementById('fs-path');
-  var cur = inp ? inp.value.replace(/\\/g, '/') : '';
-  if (!cur) return fsGo('');
-  var parts = cur.replace(/\/+$/, '').split('/');
-  parts.pop();
-  fsGo(parts.join('/') || '');
+function attachPickImage() {
+  var m = document.getElementById('attach-menu'); if (m) m.style.display = 'none';
+  var f = document.getElementById('image-file-input'); if (f) f.click();
 }
 var _attachChips = [];
 function _attachIcon(p) {
@@ -3452,6 +3400,7 @@ document.addEventListener('input', function (ev) {
   var kept = _attachChips.filter(function (p) { return v.indexOf(p) >= 0; });
   if (kept.length !== _attachChips.length) { _attachChips = kept; _renderChips(); }
 }, true);
+function attachPastePath() {
   var m = document.getElementById('attach-menu'); if (m) m.style.display = 'none';
   var p = prompt('粘贴文件/文件夹的完整路径：', 'E:\\');
   if (p && p.trim()) attachInsertPath(p.trim());
