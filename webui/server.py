@@ -21108,16 +21108,14 @@ async def ws_endpoint(ws: WebSocket):
                             pass
 
                         # ── 2026-08-29 注意力聚焦：最新用户消息前放“本轮唯一任务”转向标记 ──
-                        # 2026-10-21：短回答自动锚定（用户只回 "1"/"2." 时，
-                        # 明确写出「这是回答哪一条提问的第几项」，避免模型靠猜）
-                        try:
-                            user_text = _answer_anchor(conversation_history or [], user_text)
-                        except Exception:
-                            pass
                         # 实证：历史里紧邻的旧问答会把模型注意力吸走 → 回答上一个问题。
                         # 把用户本轮消息摘抄到 system 尾部，明确“只回答这一条、以本轮为准”。
                         try:
-                            _focus_text = (user_text or "").strip()
+                            # 2026-10-21：短回答自动锚定（只改这一份 system 文本，不动 user_text）
+                            try:
+                                _focus_text = _answer_anchor(conversation_history or [], (user_text or "").strip())
+                            except Exception:
+                                _focus_text = (user_text or "").strip()
                             if _focus_text:
                                 _turn_focus = (
                                     "【本轮唯一任务 — 最高优先级】下面是用户刚刚发送的消息，"
