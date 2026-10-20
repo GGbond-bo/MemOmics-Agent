@@ -4,7 +4,7 @@ species: Homo_sapiens
 tissue: skeletal_muscle
 direction: aging
 assay_type: RNA
-last_updated: 2026-09-30 15:54
+last_updated: 2026-10-18 19:16
 source: data_driven
 verified: partially_verified
 quality: medium
@@ -12,19 +12,18 @@ auto_trigger:
 - deg-analysis_empirical
 content: 'skill: deg-analysis
 
-  quality_score: 9.0
+  quality_score: 8.0
 
 
   params_used:
 
-  只读核查第三轮：number_format=''0.0000'' 下实际显示为 0 的格数统计 + 排序方向判定 + 最小非零 fdr 边界
+  Welch two-sided t-test (scipy ttest_ind equal_var=False); 输入长格式 group/gene/expr;
+  6基因×6样本/组; 表头 gene,mean_Aging,mean_T2D,pvalue,test_method; 无图无报告
 
 
   result_summary:
 
-  显示层确诊：fdr<5e-5 即显示 0.0000 → Y_Pre_vs_O_Pre 22692/23178=97.9%、O_Pre_vs_O_Post 98.6%、Y_Pre_vs_Y_Post
-  95.7%、OD_Pre_vs_OD_Post 94.7%、O_Pre_vs_OD_Pre 93.6%。表按 fdr 升序排列（fdr升序=1.000）→ 4478
-  个真实 0 全在第一屏，用户打开即见全是 0.0000。真实非零最小 fdr=1.63e-307（仍显示 0.0000）'
-evidence: 'record_run(deg-analysis): 显示层确诊：fdr<5e-5 即显示 0.0000 → Y_Pre_vs_O_Pre 22692/23178=97.9%、O_Pre_vs_O_Post
-  98.6%、Y_Pre_vs_Y_Post 95.7%、OD_Pre_vs_OD_Post 94.7%、O_Pre_vs_OD_Pre 93.6%。表按 fdr
-  升序排列（fdr升序=1.000）→ 4478 个真实 0 全在第一屏，用户打开即见'
+  6 基因 Aging vs T2D 两组独立 Welch 双侧 t 检验完成，输出 out_r.csv(389B)；GENE1 p=0.000394、GENE3
+  p=0.027087 达 0.05；其余 4 基因不显著'
+evidence: 'record_run(deg-analysis): 6 基因 Aging vs T2D 两组独立 Welch 双侧 t 检验完成，输出 out_r.csv(389B)；GENE1
+  p=0.000394、GENE3 p=0.027087 达 0.05；其余 4 基因不显著'

@@ -15,7 +15,7 @@
 
 ---
 
-## 01_RNA - 单细胞转录组 (46 skills)
+## 01_RNA - 单细胞转录组 (47 skills)
 
 | # | Skill | 使用场景 | 触发词 | Trigger |
 |---|---|---|---|---|
@@ -46,25 +46,26 @@
 | 25 | get_rna_seq_archs4 | When you need get rna seq archs4 analysis | get_rna_seq_archs4, get rna seq archs4, seq, archs4 | YEL 讨论触发 |
 | 26 | grn-pyscenic | 当你需要 基因调控网络 (pySCENIC) 时触发 —— pySCENIC基因调控网络推断。TF调控子/aUCell活性评分 | grn-pyscenic, grn pyscenic, grn, pyscenic | YEL 讨论触发 |
 | 27 | hdwgcna | 适用于: 异质性高, >5K细胞, disease, aging | hdwgcna | YEL 讨论触发 |
-| 28 | immune-deconvolution | 适用于: disease, tumor, immune —— CIBERSORTx+xCell+MCP-counter多方法免疫细胞比例估计 | immune-deconvolution, immune deconvolution, immune, deconvolution | YEL 讨论触发 |
-| 29 | infercnv | 当你需要 单细胞CNV推断 时触发 —— inferCNV肿瘤细胞CNV推断+恶性细胞鉴定 | infercnv | YEL 讨论触发 |
-| 30 | lasso-biomarker-panel | 当你需要 LASSO 生物标志物 时触发 —— LASSO特征选择 → 生物标志物Panel | lasso-biomarker-panel, lasso biomarker panel, lasso, biomarker, panel | YEL 讨论触发 |
-| 31 | pathway-enrichment | Guidance for choosing ORA vs GSEA and interpreting enriched pathways correctly. | pathway-enrichment, pathway enrichment, pathway, enrichment | YEL 讨论触发 |
-| 32 | quantify_and_cluster_cell_motility | When you need quantify and cluster cell motility analysis | quantify, cluster, cell motility, motility | YEL 讨论触发 |
-| 33 | sasp-scoring | 适用于: aging —— SASP gene set scoring + heatmap + group comparison | sasp-scoring, sasp scoring, sasp, scoring | YEL 讨论触发 |
-| 34 | scrna-clustering | 适用于: 所有scRNA-seq —— 从原始数据到细胞注释的完整Seurat v5工作流。含SoupX/DoubletFinder/SCTransform/Harmony/CCA/Pseudobulk DE | 聚类, 分群, cluster, scrna-clustering, scrna clustering, clustering | RED 必触发 |
-| 35 | scrna-eda | 有 h5ad 数据但还没做 QC，或用户说'看看数据'/'数据长什么样'/'数据探索'/'概览'时触发 | EDA, 数据探索, 看看数据, 概览, scrna-eda, scrna eda | RED 必触发 |
-| 36 | scrna-qc | 适用于: 所有scRNA-seq —— 质控+Doublet去除+Ambient RNA去除, 支持人/鼠, 自动推荐阈值 | QC, 质控, scrna-qc, scrna qc, 线粒体, 批次校正, 批次效应 | RED 必触发 |
-| 37 | scrnaseq-scanpy-core-analysis | Scanpy单细胞核心分析:10X数据→QC→归一化→HVG→PCA→邻居图→UMAP→Leiden聚类→marker→注释 | Scanpy, Scanpy流程 | RED 必触发 |
-| 38 | scrnaseq-seurat-core-analysis | 用户有scRNA-seq数据需要R/Seurt基础分析 —— Seurat v5 标准分析: QC → SCTransform → PCA → UMAP → 聚类 → 注释 | Seurat, SCTransform, NormalizeData, Seurat流程 | RED 必触发 |
-| 39 | sctour-trajectory-inference | scTour VAE 深度潜在时间推断 + 向量场 + 跨数据集预测。无需指定起点，无监督学习细胞动力学。 | sctour, trajectory, inference | YEL 讨论触发 |
-| 40 | senescence-detection | 适用于: aging, fibrosis —— SASP scoring + p16/p21 + senescent subpopulation | senescence-detection, senescence detection, senescence, detection | YEL 讨论触发 |
-| 41 | single-cell-cellcycle-scoring | 单细胞/单核细胞周期打分的判读与验证（Seurat CellCycleScoring / cc.genes.updated.2019）:先做真实增殖 marker 阴性对照，再决定能否解读相位标签；含推断单位（ICC/设计效应）、供体级置换、n 核重抽样 bootstrap、BH 校正与结论口径。触发:细胞周期打分 / CellCycleScoring / cc.genes / S.Score | single, cellcycle, scoring | YEL 讨论触发 |
-| 42 | soupx-remove-background | 需去除环境RNA但无GPU，或CellBender的替代/补充 | soupx-remove-background, soupx remove background, soupx, 环境rna | YEL 讨论触发 |
-| 43 | stratified-subsampling | 分层抽样下采样:大数据集→分层(细胞类型/样本)→均衡下采样→代表性数据子集 | stratified-subsampling, stratified subsampling, stratified, subsampling | YEL 讨论触发 |
-| 44 | trajectory-analysis | 适用于: development, regeneration, differentiation | 轨迹, trajectory, 拟时序, pseudotime, Monocle, Slingshot, RNA velocity, scVelo | RED 必触发 |
-| 45 | trajectory-conclusion-validation | 轨迹/拟时序类结论的定稿前验证（换根枚举、换嵌入独立性、供体级配对统计、固定多重检验族、结论分级措辞）。触发:Monocle3/Slingshot/scVelo 跑出伪时间后要下结论、运动或处理前后细胞在轨迹上的位置比较、判断伪时间轴是「分化轨迹」还是「细胞身份差异」、辩论/审稿要求补稳健性检验。 | trajectory, conclusion, validation | YEL 讨论触发 |
-| 46 | upstream-regulator-analysis | 当你需要 上游调控因子分析 时触发 —— 上游调控预测: DEGs → DoRothEA → TF/激酶活性 | upstream, regulator | YEL 讨论触发 |
+| 28 | hierarchical-annotation-rollup | 层级注释回填与大群对账:把亚群（L2）注释按 barcode 打回大群（L1/Celltype）对象前，先用父对象频数表建基准做细胞数对账，并核实各亚群对象的 L2 列名与标签清单。触发:打回亚群/L2注释回填/level2打回大群/亚群细胞数对不对得上/小群注释合并/annotation_L2 合并/层级注释/大群细分亚群。 | hierarchical, annotation, rollup | YEL 讨论触发 |
+| 29 | immune-deconvolution | 适用于: disease, tumor, immune —— CIBERSORTx+xCell+MCP-counter多方法免疫细胞比例估计 | immune-deconvolution, immune deconvolution, immune, deconvolution | YEL 讨论触发 |
+| 30 | infercnv | 当你需要 单细胞CNV推断 时触发 —— inferCNV肿瘤细胞CNV推断+恶性细胞鉴定 | infercnv | YEL 讨论触发 |
+| 31 | lasso-biomarker-panel | 当你需要 LASSO 生物标志物 时触发 —— LASSO特征选择 → 生物标志物Panel | lasso-biomarker-panel, lasso biomarker panel, lasso, biomarker, panel | YEL 讨论触发 |
+| 32 | pathway-enrichment | Guidance for choosing ORA vs GSEA and interpreting enriched pathways correctly. | pathway-enrichment, pathway enrichment, pathway, enrichment | YEL 讨论触发 |
+| 33 | quantify_and_cluster_cell_motility | When you need quantify and cluster cell motility analysis | quantify, cluster, cell motility, motility | YEL 讨论触发 |
+| 34 | sasp-scoring | 适用于: aging —— SASP gene set scoring + heatmap + group comparison | sasp-scoring, sasp scoring, sasp, scoring | YEL 讨论触发 |
+| 35 | scrna-clustering | 适用于: 所有scRNA-seq —— 从原始数据到细胞注释的完整Seurat v5工作流。含SoupX/DoubletFinder/SCTransform/Harmony/CCA/Pseudobulk DE | 聚类, 分群, cluster, scrna-clustering, scrna clustering, clustering | RED 必触发 |
+| 36 | scrna-eda | 有 h5ad 数据但还没做 QC，或用户说'看看数据'/'数据长什么样'/'数据探索'/'概览'时触发 | EDA, 数据探索, 看看数据, 概览, scrna-eda, scrna eda | RED 必触发 |
+| 37 | scrna-qc | 适用于: 所有scRNA-seq —— 质控+Doublet去除+Ambient RNA去除, 支持人/鼠, 自动推荐阈值 | QC, 质控, scrna-qc, scrna qc, 线粒体, 批次校正, 批次效应 | RED 必触发 |
+| 38 | scrnaseq-scanpy-core-analysis | Scanpy单细胞核心分析:10X数据→QC→归一化→HVG→PCA→邻居图→UMAP→Leiden聚类→marker→注释 | Scanpy, Scanpy流程 | RED 必触发 |
+| 39 | scrnaseq-seurat-core-analysis | 用户有scRNA-seq数据需要R/Seurt基础分析 —— Seurat v5 标准分析: QC → SCTransform → PCA → UMAP → 聚类 → 注释 | Seurat, SCTransform, NormalizeData, Seurat流程 | RED 必触发 |
+| 40 | sctour-trajectory-inference | scTour VAE 深度潜在时间推断 + 向量场 + 跨数据集预测。无需指定起点，无监督学习细胞动力学。 | sctour, trajectory, inference | YEL 讨论触发 |
+| 41 | senescence-detection | 适用于: aging, fibrosis —— SASP scoring + p16/p21 + senescent subpopulation | senescence-detection, senescence detection, senescence, detection | YEL 讨论触发 |
+| 42 | single-cell-cellcycle-scoring | 单细胞/单核细胞周期打分的判读与验证（Seurat CellCycleScoring / cc.genes.updated.2019）:先做真实增殖 marker 阴性对照，再决定能否解读相位标签；含推断单位（ICC/设计效应）、供体级置换、n 核重抽样 bootstrap、BH 校正与结论口径。触发:细胞周期打分 / CellCycleScoring / cc.genes / S.Score | single, cellcycle, scoring | YEL 讨论触发 |
+| 43 | soupx-remove-background | 需去除环境RNA但无GPU，或CellBender的替代/补充 | soupx-remove-background, soupx remove background, soupx, 环境rna | YEL 讨论触发 |
+| 44 | stratified-subsampling | 分层抽样下采样:大数据集→分层(细胞类型/样本)→均衡下采样→代表性数据子集 | stratified-subsampling, stratified subsampling, stratified, subsampling | YEL 讨论触发 |
+| 45 | trajectory-analysis | 适用于: development, regeneration, differentiation | 轨迹, trajectory, 拟时序, pseudotime, Monocle, Slingshot, RNA velocity, scVelo | RED 必触发 |
+| 46 | trajectory-conclusion-validation | 轨迹/拟时序类结论的定稿前验证（换根枚举、换嵌入独立性、供体级配对统计、固定多重检验族、结论分级措辞）。触发:Monocle3/Slingshot/scVelo 跑出伪时间后要下结论、运动或处理前后细胞在轨迹上的位置比较、判断伪时间轴是「分化轨迹」还是「细胞身份差异」、辩论/审稿要求补稳健性检验。 | trajectory, conclusion, validation | YEL 讨论触发 |
+| 47 | upstream-regulator-analysis | 当你需要 上游调控因子分析 时触发 —— 上游调控预测: DEGs → DoRothEA → TF/激酶活性 | upstream, regulator | YEL 讨论触发 |
 
 ## 02_ATAC - ATAC/染色质 (11 skills)
 
@@ -315,7 +316,7 @@
 | 111 | windows-bioinformatics-batch-processing | 在Windows上启动长时间运行的生信批量任务（10+样本，每样本>5分钟）时加载，确保进程不因会话中断而死亡，LLM主动监控进度。系统唤醒(#N)主线进度检查也适用 — 协议见 references/agent-side-wakeup-check.md | windows, batch, processing | YEL 讨论触发 |
 | 112 | windows-com-app-automation | 用 Windows COM + 脚本引擎确定性地驱动桌面应用（Illustrator/Photoshop/InDesign/Word/Excel）:cscript→VBScript→CreateObject→DoJavaScriptFile/DoScript 桥，ExtendScript ES3 手拼 JSON、隔离文档写操作的安全模式、可复制的 doctor/探测脚手架。 | Illustrator自动化, 操控Illustrator, 批量改Illustrator, Illustrator脚本, ExtendScript, JSX脚本, COM自动化, Photoshop自动化, InDesign自动化, 脚本控制软件, 软件没有CLI, 桌面软件自动化, 图内文字批量改, cscript, DoJavaScriptFile, 画板操作 | RED 必触发 |
 
-## 09_内置 - MemOmics系统 (23 skills)
+## 09_内置 - MemOmics系统 (24 skills)
 
 | # | Skill | 使用场景 | 触发词 | Trigger |
 |---|---|---|---|---|
@@ -340,8 +341,9 @@
 | 19 | heartbeat-monitor | 长任务心跳监控 — 独立后台进程持续记录进度，Agent 随时读取汇报 | 心跳, 监控, heartbeat, 进度汇报, 跑多久了, 还在跑吗, heartbeat-monitor, heartbeat monitor | RED 必触发 |
 | 20 | ml-classification | 适用于: disease, 有标签数据, 分类/预测 —— LASSO+RandomForest+SVM+SHAP解释, 支持bulk和scRNA | ml-classification, ml classification, classification | GRN 按需触发 |
 | 21 | phylo-create-skill | Create, test, package, and present reusable skills for Phylo's Biomni platform and bioinformatics workflows. | phylo-create-skill, phylo create skill, phylo | GRN 按需触发 |
-| 22 | remote-cluster-execution | 远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收；含常驻 R 会话（kernel 式持久化，大 rds 读一次一直用:session_start/exec/save/restore/status/stop）。触发:集群/ssh3/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub/常驻会话/读一次一直用/不要每次重新读取。 | 集群, 远端集群, 集群环境, 集群有哪些环境, 帮我看看集群, ssh3, 用集群跑, 在集群上跑, 投递任务, qsub, slurm, sge, 常驻会话, 读一次一直用, 不要重复读取 rds, kernel 式持久化 | RED 必触发 |
-| 23 | self-improving-agent | 自进化能力:分析成功后自动沉淀经验为新技能；分析失败后自动学习错误模式避免重复犯错；根据使用频率自动优化参数。包括技能沉淀、错误学习、参数进化三大子系统。 | self-improving-agent, self improving agent, self, improving, agent | GRN 按需触发 |
+| 22 | reference-figure-replication | 按用户给的参考图（PDF/PNG/AI 导出件）反推精确规格，用自己的数据 1:1 复刻同款图。触发:按照这张图来画/照着这个风格出图/参考图/图里这些基因照着重画/按图中的顺序和配色重出/和 Figure SX 一样。 | reference, replication | RED 必触发 |
+| 23 | remote-cluster-execution | 远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收；含常驻 R 会话（kernel 式持久化，大 rds 读一次一直用:session_start/exec/save/restore/status/stop）。触发:集群/ssh3/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub/常驻会话/读一次一直用/不要每次重新读取。 | 集群, 远端集群, 集群环境, 集群有哪些环境, 帮我看看集群, ssh3, 用集群跑, 在集群上跑, 投递任务, qsub, slurm, sge, 常驻会话, 读一次一直用, 不要重复读取 rds, kernel 式持久化 | RED 必触发 |
+| 24 | self-improving-agent | 自进化能力:分析成功后自动沉淀经验为新技能；分析失败后自动学习错误模式避免重复犯错；根据使用频率自动优化参数。包括技能沉淀、错误学习、参数进化三大子系统。 | self-improving-agent, self improving agent, self, improving, agent | GRN 按需触发 |
 
 ## 10_多组学整合 - 多组学整合 (11 skills)
 

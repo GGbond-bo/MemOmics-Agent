@@ -4,7 +4,7 @@ species: Homo_sapiens
 tissue: skeletal_muscle
 direction: exercise
 assay_type: RNA
-last_updated: 2026-10-08 23:39
+last_updated: 2026-10-18 21:59
 source: data_driven
 verified: partially_verified
 quality: medium
@@ -12,22 +12,18 @@ auto_trigger:
 - remote-cluster-execution_empirical
 content: 'skill: remote-cluster-execution
 
-  quality_score: 9.0
+  quality_score: 8.0
 
 
   params_used:
 
-  IN=MuSC_exercise_clean_dele_cluster_umap.rds (662MB); ENV=/hwfssz3/PS_JLU/zhangxiao6/software/miniconda3/envs/R4.41/bin/Rscript;
-  OUT=/hwfssz3/PS_JLU/zhangbo/Muscle_96_38/Umap/umap_prop_20261008; launch=setsid
-  nohup on ssh3 (直接在本节点，不走 SGE 队列以保证 htop 可见)
+  submit via ssh3: job_name=L2_mapback, cpus=8, mem_gb=300, walltime=08:00:00, PATH=envs/R4.41/bin
 
 
   result_summary:
 
-  ssh3 直启成功：ps -u zhangbo11 可见 bash wrapper(PID 127336) + Rscript(127350) + tee(127351)，host=cngb-supermem-a15-3
-  确认跑在 ssh3；脚本自适应 introspect meta.data 后出多张 UMAP(亚群/分组/分面) + 亚群比例堆叠图(counts+100%)，并写比例
-  CSV 与 metadata census CSV'
-evidence: 'record_run(remote-cluster-execution): ssh3 直启成功：ps -u zhangbo11 可见 bash
-  wrapper(PID 127336) + Rscript(127350) + tee(127351)，host=cngb-supermem-a15-3 确认跑在
-  ssh3；脚本自适应 introspect meta.data 后出多张 UMAP(亚群/分组/分面) + 亚群比例堆叠图(counts+100%)，并写比例
-  CSV'
+  submit 回执 exit=124（20s 等待窗口超时）但返回 PID 133905，wrapper 落地 /home/zhangbo11/memomics_jobs/scripts/L2_mapback_ssh3_20261018_215801.sh
+  —— 按铁规 11 不判失败，待一次早期核对确认'
+evidence: 'record_run(remote-cluster-execution): submit 回执 exit=124（20s 等待窗口超时）但返回
+  PID 133905，wrapper 落地 /home/zhangbo11/memomics_jobs/scripts/L2_mapback_ssh3_20261018_215801.sh
+  —— 按铁规 11 不判失败，待一次早期核对确认'
