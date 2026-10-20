@@ -863,8 +863,11 @@ def submit_job(code: str, lang: str = "R", purpose: str = "RNA", slots: int = 4,
                 _mp = _re.search(r"PID:\s*(\d+)", _o2)
                 if _mp:
                     _pid = _mp.group(1)
-                    _lines = [x for x in _o2.splitlines() if x.strip() and not x.startswith("PID:")]
-                    _lstart = " ".join(_lines[0].split()) if _lines else ""
+                    # 2026-10-20 修复：bash -lc 会带 profile 噪音行，必须正则精确取 lstart，
+                    # 否则记录的 lstart 是噪音 → 轮询时"不一致" → 在跑的作业被误判 lost。
+                    import re as _re4
+                    _lm = _re4.search(r"((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\w+\s+\d+\s+[\d:]+\s+\d{4})", _o2)
+                    _lstart = " ".join(_lm.group(1).split()) if _lm else ""
                     _jid = job_key or f"mm{stamp}_{_pid}"
                     try:
                         _ns.register_job(_jid, status="running", pid=_pid, lstart=_lstart,

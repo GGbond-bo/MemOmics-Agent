@@ -271,19 +271,27 @@ def _poll_one_host(_h, running, user="", port=22, key="", extra_opts=None) -> di
         return {"checked": 0, "jobs": {}}
     lines = ["for p in %s; do" % " ".join(str(v["pid"]) for v in running.values())]
     lines.append('  if kill -0 $p 2>/dev/null; then '
-                 'echo "ALIVE:$p:$(ps -o lstart= -p $p 2>/dev/null | tr -s " "):$(ps -o rss= -p $p 2>/dev/null | tr -d " ")";'
-                 ' else echo "DEAD:$p"; fi')
+                 'echo "ALIVE|$p|$(ps -o lstart= -p $p 2>/dev/null | tr -s " ")|$(ps -o rss= -p $p 2>/dev/null | tr -d " ")";'
+                 ' else echo "DEAD|$p"; fi')
     lines.append("done")
     for k, v in running.items():
         ef = v.get("exit_file") or ""
         if ef:
-            lines.append(f'echo "EXIT:{k}:$(cat {ef} 2>/dev/null)"')
+            lines.append(f'echo "EXIT|{k}|$(cat {ef} 2>/dev/null)"')
     script = "\n".join(lines)
     try:
         p = subprocess.run(_ssh_prefix(_h, user, port, key, extra_opts)
                            + [f"bash -s <<'MMEOF'\n{script}\nMMEOF"],
                            capture_output=True, text=True, timeout=60)
         out = p.stdout or ""
+        err = (p.stderr or "")[:200]
+        # 2026-10-20 关键修复：**查询失败不等于进程死了**。
+        # 之前 ssh 偶发失败 → out 为空 → 所有 running 作业被误判 lost（实测踩到）。
+        if p.returncode != 0 and not out.strip():
+            _now = time.time()
+            for _jid in running:
+                update_job(_jid, poll_error=(err or "ssh failed"), poll_error_at=_now, last_check=_now)
+            return {"checked": 0, "error": (err or "ssh failed")[:200], "jobs": {}}
     except Exception as exc:
         return {"checked": 0, "error": str(exc)}
     res = {}
@@ -291,14 +299,18 @@ def _poll_one_host(_h, running, user="", port=22, key="", extra_opts=None) -> di
     dead = set()
     exits = {}
     for ln in out.splitlines():
-        if ln.startswith("ALIVE:"):
-            _, pid, lstart, rss = ln.split(":", 3)
-            alive[pid] = {"lstart": lstart.strip(), "rss_kb": rss.strip()}
-        elif ln.startswith("DEAD:"):
-            dead.add(ln.split(":", 1)[1].strip())
-        elif ln.startswith("EXIT:"):
-            _, jid, val = ln.split(":", 2)
-            exits[jid] = val.strip()
+        # 2026-10-20：分隔符必须是 |（lstart 形如 "Tue Oct 20 11:56:04 2026" 含冒号，
+        # 用 : 分隔会把 lstart 截断成 "Tue Oct 20 11" → 误判 pid 复用 → 在跑的作业变 lost）
+        if ln.startswith("ALIVE|"):
+            parts = ln.split("|", 3)
+            if len(parts) >= 4:
+                alive[parts[1].strip()] = {"lstart": parts[2].strip(), "rss_kb": parts[3].strip()}
+        elif ln.startswith("DEAD|"):
+            dead.add(ln.split("|", 1)[1].strip())
+        elif ln.startswith("EXIT|"):
+            parts = ln.split("|", 2)
+            if len(parts) >= 3:
+                exits[parts[1].strip()] = parts[2].strip()
     now = time.time()
     for jid, rec in running.items():
         pid = str(rec.get("pid"))
@@ -306,8 +318,21 @@ def _poll_one_host(_h, running, user="", port=22, key="", extra_opts=None) -> di
         cur = {"status": rec.get("status")}
         if info:
             # pid 复用防护：启动时间指纹必须一致
-            if rec.get("lstart") and info["lstart"] and rec["lstart"] != info["lstart"]:
-                cur = {"status": "lost", "reason": "pid 被复用（lstart 不一致）"}
+            _a = " ".join(str(rec.get("lstart") or "").split())
+            _b = " ".join(str(info.get("lstart") or "").split())
+            _WD = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+            # 只有两侧都是合法 lstart（星期几开头）才比较 —— 噪音/空值一律不做 pid 复用判定
+            _comparable = bool(_a and _b and _a.split() and _b.split()
+                               and _a.split()[0] in _WD and _b.split()[0] in _WD)
+            if _comparable and _a != _b:
+                _ex0 = exits.get(jid)
+                if _ex0 and _ex0.startswith("EXIT:"):
+                    _c0 = _ex0.split("EXIT:", 1)[1].strip()
+                    cur = {"status": "done" if _c0 == "0" else "failed",
+                           "exit_code": int(_c0) if _c0.lstrip("-").isdigit() else None,
+                           "finished_at": now, "poll_error": "lstart 不一致但已读到退出码"}
+                else:
+                    cur = {"status": "lost", "reason": "pid 被复用（lstart 不一致）"}
             else:
                 rss_gb = round(int(info["rss_kb"] or 0) / 1048576.0, 2) if info["rss_kb"].isdigit() else None
                 peak = max(float(rec.get("peak_rss_gb") or 0), rss_gb or 0)
@@ -318,9 +343,16 @@ def _poll_one_host(_h, running, user="", port=22, key="", extra_opts=None) -> di
                 code = ex.split("EXIT:", 1)[1].strip()
                 cur = {"status": "done" if code == "0" else "failed",
                        "exit_code": int(code) if code.lstrip("-").isdigit() else None,
-                       "finished_at": now}
+                       "finished_at": now, "lost_strikes": 0, "poll_error": None}
             else:
-                cur = {"status": "lost", "reason": "进程消失且无退出码（可能被 OOM kill / 机器重启）"}
+                # 连续 2 次都"没进程也没退出码"才判 lost（防网络抖动/OOM 前的瞬态）
+                _strikes = int(rec.get("lost_strikes") or 0) + 1
+                if _strikes >= 2:
+                    cur = {"status": "lost", "lost_strikes": _strikes,
+                           "reason": "连续 2 次查不到进程且无退出码（疑似 OOM kill / 机器重启）"}
+                else:
+                    cur = {"status": rec.get("status") or "running", "lost_strikes": _strikes,
+                           "poll_error": "进程未找到（第 1 次，先不下结论）"}
         update_job(jid, **cur)
         res[jid] = cur
     return {"checked": len(running), "jobs": res}

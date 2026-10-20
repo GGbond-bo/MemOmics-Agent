@@ -7066,6 +7066,12 @@ def _load_persisted_sessions():
                 from memomics.bio_tools import task_done as _task_done_mod  # noqa: F401  注册 task_done 工具
                 from memomics.bio_tools import dataset_cache as _dataset_cache_mod  # noqa: F401  注册 dataset_cache
                 from memomics.bio_tools import cluster_kernel as _cluster_kernel_mod  # noqa: F401  注册 cluster_kernel
+                try:
+                    from memomics.bio_tools import job_watcher as _job_watcher_mod
+                    _watcher_info = _job_watcher_mod.start_watcher()   # 5 分钟常规 + 30 秒首查
+                    print(f"[MemOmics] 作业轮询器已启动: {_watcher_info}", flush=True)
+                except Exception as _we:
+                    print(f"[MemOmics] 作业轮询器启动失败(不影响主流程): {_we}", flush=True)
             except Exception:
                 pass
             try:
