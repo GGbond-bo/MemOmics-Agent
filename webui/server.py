@@ -17761,11 +17761,21 @@ async def ask_form_answer(req: AskFormAnswerRequest):
             _ans_all = (" ".join(sel) + " " + other).strip()
             _ans_low = _ans_all.lower()
             # 英文按钮可能首字母大写（"Run a verification…"），英文关键词一律大小写无关
-            _want_run = (any(w in _ans_all for w in ("验证", "跑", "测试", "执行", "试一下", "试下"))
-                         or any(w in _ans_low for w in ("run", "test", "verify", "execute")))
+            # 2026-10-21 修：只认"跑/执行/验证"太窄 —— 用户回「重出」「继续」「可以」其实是同意执行，
+            # 却仍被判"只改代码"，导致代码修改模式锁不解除、执行工具反复被拦（2274ab75 拦了 6 次）
+            _want_run = (any(w in _ans_all for w in (
+                "验证", "跑", "测试", "执行", "试一下", "试下",
+                "重出", "重画", "出图", "重新出图", "绘图", "画图", "重做",
+                "继续", "开始", "接着", "继续做", "继续跑", "往下做",
+                "可以", "好的", "没问题", "来吧", "干吧", "做吧", "就这样", "直接跑",
+            ))
+            or any(w in _ans_low for w in (
+                "run", "test", "verify", "execute", "go ahead", "proceed",
+                "continue", "yes", "render", "replot", "ok")))
             # 中英都要认：英文按钮 "Code only, do not run" 里带 run，若不认这些否定词会被误判成「要跑」
             _want_no = (any(w in _ans_all for w in
-                            ("先别", "不要跑", "别跑", "不跑", "只给", "只看", "不执行", "先给"))
+                            ("先别", "不要跑", "别跑", "不跑", "不要执行", "别执行", "不用跑", "先不要",
+"只给", "只看", "不执行", "先给"))
                         or any(w in _ans_low for w in
                                ("code only", "only the code", "only code", "just the code",
                                 "just give me the code", "do not run", "don't run", "dont run",
