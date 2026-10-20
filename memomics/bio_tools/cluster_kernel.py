@@ -868,7 +868,9 @@ def submit_job(code: str, lang: str = "R", purpose: str = "RNA", slots: int = 4,
                     _jid = job_key or f"mm{stamp}_{_pid}"
                     try:
                         _ns.register_job(_jid, status="running", pid=_pid, lstart=_lstart,
-                                         host=host, node=_verdict.get("node") or host,
+                                         host=host, user=user, port=port, key=key,
+                                         extra_opts=list(extra_opts or []),
+                                         node=_verdict.get("node") or host,
                                          script=remote_script, log=remote_log, exit_file=_exitf,
                                          workdir=workdir or "~", lang=lang, purpose=purpose,
                                          mem_gb=_req["mem_gb"], mem_source=_req["source"],
@@ -889,7 +891,9 @@ def submit_job(code: str, lang: str = "R", purpose: str = "RNA", slots: int = 4,
                 return {"ok": False, "error": f"提交失败: {exc}", "qsub_raw": out[:300]}
         if job_id:
             try:
-                _ns.register_job(job_id, status="running", host=host, node=_verdict.get("node") or host,
+                _ns.register_job(job_id, status="running", host=host, user=user, port=port,
+                                 key=key, extra_opts=list(extra_opts or []),
+                                 node=_verdict.get("node") or host,
                                  script=remote_script, log=remote_log, exit_file="", mode="qsub",
                                  mem_gb=_req["mem_gb"], zone=_verdict["zone"])
             except Exception:
