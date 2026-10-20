@@ -226,3 +226,5 @@ memomics_home/cluster_kernels.json
 memomics_home/backups/
 memomics_home/imports/
 memomics_home/exports/
+
+environment.json.bak

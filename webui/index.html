@@ -2118,6 +2118,7 @@ document.addEventListener('DOMContentLoaded', applyUILang);
       <div class="input-grip" id="input-grip" title="↑ 向上拖动拉大输入框（双击还原 100px）" data-i18n-title="drag_grip"></div>
       <div id="paste-hint"></div>
         <div class="image-preview-area" id="image-preview-area" style="display:none;"></div>
+<div id="attach-chips" style="display:none;flex-wrap:wrap;gap:6px;padding:2px 12px 6px;align-items:center;"></div>
       <div class="input-row">
         <div class="plus-wrap" style="position:relative;">
           <button type="button" id="plus-btn" class="img-upload-btn" title="添加图片 / 文件路径"
@@ -3332,16 +3333,73 @@ function attachPickImage() {
   var m = document.getElementById('attach-menu'); if (m) m.style.display = 'none';
   var f = document.getElementById('image-file-input'); if (f) f.click();
 }
+var _attachChips = [];
+function _attachIcon(p) {
+  var e = (String(p).match(/\.[a-z0-9]+$/i) || [''])[0].toLowerCase();
+  if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.tif', '.tiff'].indexOf(e) >= 0) return '🖼️';
+  if (['.csv', '.tsv', '.xlsx', '.xls'].indexOf(e) >= 0) return '📊';
+  if (['.pdf'].indexOf(e) >= 0) return '📕';
+  if (['.r', '.py', '.sh', '.rmd', '.ipynb'].indexOf(e) >= 0) return '⌨️';
+  return '📄';
+}
+function _attachBase(p) {
+  var s = String(p).replace(/[\\/]+$/, '');
+  return s.split(/[\\/]/).pop() || s;
+}
+function _renderChips() {
+  var box = document.getElementById('attach-chips');
+  if (!box) return;
+  if (!_attachChips.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = 'flex';
+  box.innerHTML = _attachChips.map(function (p, i) {
+    return '<span title="' + p.replace(/"/g, '&quot;') + '" style="display:inline-flex;align-items:center;gap:6px;' +
+      'background:rgba(74,144,217,.14);border:1px solid rgba(74,144,217,.4);color:var(--text,#dfe3ec);' +
+      'border-radius:14px;padding:2px 6px 2px 9px;font-size:12px;max-width:320px;">' +
+      _attachIcon(p) + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' +
+      _attachBase(p) + '</span>' +
+      '<span onclick="attachRemoveChip(' + i + ')" title="移除此路径" style="cursor:pointer;font-weight:700;' +
+      'opacity:.6;padding:0 3px;">×</span></span>';
+  }).join('');
+}
 function attachInsertPath(p) {
   var ta = document.getElementById('input');
   if (!ta || !p) return;
+  p = String(p).trim();
   var v = ta.value || '';
   var need = (v && !/[\s\n]$/.test(v)) ? ' ' : '';
   ta.value = v + need + p + ' ';
   ta.focus();
   ta.selectionStart = ta.selectionEnd = ta.value.length;
   if (typeof autoResizeInput === 'function') autoResizeInput();
+  if (_attachChips.indexOf(p) < 0) _attachChips.push(p);
+  _renderChips();
 }
+function attachRemoveChip(i) {
+  var p = _attachChips[i];
+  if (p === undefined) return;
+  var ta = document.getElementById('input');
+  if (ta) {
+    var v = ta.value || '';
+    // 只删掉这一处路径（连同它后面可能跟的一个空格）
+    var idx = v.lastIndexOf(p);
+    if (idx >= 0) {
+      var rest = v.slice(idx + p.length);
+      var before = v.slice(0, idx);
+      ta.value = before + rest.replace(/^\s+/, '');
+      if (ta.value && !/\s$/.test(ta.value)) ta.value += ' ';
+    }
+  }
+  _attachChips.splice(i, 1);
+  _renderChips();
+  if (typeof autoResizeInput === 'function') autoResizeInput();
+}
+// 用户在输入框里手动删掉路径时，chip 自动跟着消失
+document.addEventListener('input', function (ev) {
+  if (!ev.target || ev.target.id !== 'input' || !_attachChips.length) return;
+  var v = ev.target.value || '';
+  var kept = _attachChips.filter(function (p) { return v.indexOf(p) >= 0; });
+  if (kept.length !== _attachChips.length) { _attachChips = kept; _renderChips(); }
+}, true);
 function attachPastePath() {
   var m = document.getElementById('attach-menu'); if (m) m.style.display = 'none';
   var p = prompt('粘贴文件/文件夹的完整路径：', 'E:\\');
