@@ -14400,6 +14400,11 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
         for m in session.get("messages", [])[-20:]:
             if m.get("role") in ("user", "assistant"):
                 history.append({"role": m["role"], "content": m.get("content", m.get("text", ""))})
+                # 2026-10-21：短回答自动锚定到上一条提问的具体项
+                try:
+                    text = _answer_anchor(history, text)
+                except Exception:
+                    pass
 
         # === 不限时运行 ===（支持长任务，关机后Agent还在跑）
         def _do_run():
@@ -21102,6 +21107,12 @@ async def ws_endpoint(ws: WebSocket):
                             pass
 
                         # ── 2026-08-29 注意力聚焦：最新用户消息前放“本轮唯一任务”转向标记 ──
+                        # 2026-10-21：短回答自动锚定（用户只回 "1"/"2." 时，
+                        # 明确写出「这是回答哪一条提问的第几项」，避免模型靠猜）
+                        try:
+                            user_text = _answer_anchor(conversation_history or [], user_text)
+                        except Exception:
+                            pass
                         # 实证：历史里紧邻的旧问答会把模型注意力吸走 → 回答上一个问题。
                         # 把用户本轮消息摘抄到 system 尾部，明确“只回答这一条、以本轮为准”。
                         try:
@@ -22037,6 +22048,33 @@ async def fs_browse(path: str = ""):
                 "items": items[:800]}
     except Exception as exc:
         return {"error": f"读取失败: {exc}"}
+
+
+# ===== 短回答自动锚定（2026-10-21）=====
+# 用户只回一个编号时，把「在回答哪一条提问的第几项」写进消息本身（纯机制，不依赖模型自觉）。
+_NUM_ANSWER_RE = re.compile(r"^\s*(?:选项\s*)?[#（(]?\s*(\d{1,2})\s*[.、)）]?\s*$")
+_NUM_ITEM_RE = re.compile(r"(?m)^\s*(?:选项\s*)?(\d{1,2})\s*[.、)）]\s*(\S[^\n]{0,150})$")
+
+
+def _answer_anchor(prev_msgs, user_text):
+    t = (user_text or "").strip()
+    if not t:
+        return user_text
+    m = _NUM_ANSWER_RE.match(t)
+    if not m:
+        return user_text
+    n = int(m.group(1))
+    for msg in reversed(prev_msgs or []):
+        if msg.get("role") != "assistant":
+            continue
+        content = str(msg.get("content") or "")
+        items = {}
+        for mm in _NUM_ITEM_RE.finditer(content):
+            items[int(mm.group(1))] = mm.group(2).strip()
+        if n in items:
+            return (f"{t}（= 在回答你上一条提问的第 {n} 项：{items[n][:140]}）")
+        return user_text
+    return user_text
 
 
 @app.post("/api/bundle/export")
