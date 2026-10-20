@@ -22112,6 +22112,46 @@ def _answer_anchor(prev_msgs, user_text):
     return user_text
 
 
+_UI_PREFS_PATH = os.path.join(MEMOMICS_HOME_DIR, "ui_prefs.json")
+
+
+@app.get("/api/ui/prefs")
+async def ui_prefs_get():
+    """读取界面偏好（配色主题/背景），localStorage 失效时的兜底。"""
+    try:
+        with open(_UI_PREFS_PATH, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        return {"ok": True, "theme": d.get("theme", ""), "bg": d.get("bg", "")}
+    except Exception:
+        return {"ok": True, "theme": "", "bg": ""}
+
+
+@app.post("/api/ui/prefs")
+async def ui_prefs_set(request: Request):
+    """保存界面偏好到 memomics_home/ui_prefs.json（刷新/重开浏览器都不丢）。"""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    cur = {}
+    try:
+        with open(_UI_PREFS_PATH, "r", encoding="utf-8") as f:
+            cur = json.load(f) or {}
+    except Exception:
+        cur = {}
+    for k in ("theme", "bg"):
+        v = body.get(k)
+        if isinstance(v, str) and v.strip():
+            cur[k] = v.strip()[:40]
+    try:
+        os.makedirs(os.path.dirname(_UI_PREFS_PATH), exist_ok=True)
+        with open(_UI_PREFS_PATH, "w", encoding="utf-8") as f:
+            json.dump(cur, f, ensure_ascii=False)
+        return {"ok": True, **cur}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
 @app.post("/api/bundle/export")
 async def bundle_export(request: Request):
     """导出资产包（记忆 jsonl / 知识库 / 技能），默认脱敏。"""

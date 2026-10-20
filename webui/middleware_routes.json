@@ -141,6 +141,7 @@
   "/api/tasks/{task_id}/retry": "public",
   "/api/todos/{sid}": "session",
   "/api/ui/lang": "public",
+  "/api/ui/prefs": "public",
   "/api/update/apply": "local",
   "/api/update/autocheck": "local",
   "/api/update/cancel": "local",

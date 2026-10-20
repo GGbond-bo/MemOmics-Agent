@@ -1789,6 +1789,9 @@ html[data-bg="chibi"] .img-upload-btn { margin-left:var(--bg-input-balance, 0px)
 html[data-bg="maid"] .chat-input .input-row { flex-wrap:wrap; }
 html[data-bg="maid"] .chat-input textarea { flex:1 1 100%; order:-1; }
 html[data-bg="maid"] .chat-input .img-upload-btn { margin-left:0; margin-right:auto; }
+/* 2026-10-21：按钮换到第二行后，只有「+」被推到左侧，发送/停止没有拉右边的规则，
+   于是三个按钮全挤在左下角（用户截图）。把「发送」拉右侧，停止自然跟在它后面。 */
+html[data-bg="maid"] .chat-input #send { margin-left:auto; }
 </style>
 </head>
 <body>
@@ -10188,6 +10191,7 @@ function setTheme(theme) {
   document.querySelectorAll('.theme-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.theme === theme); });
   if (typeof syncBgArtBox === 'function') syncBgArtBox();   // 宫殿晨/夜随亮暗切换，重算一次保持一致
   try { localStorage.setItem('memomics-theme', theme); } catch(e) {}
+  try { fetch('/api/ui/prefs', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({theme: theme})}); } catch(e) {}
 }
 function cycleTheme() {
   var cur = document.documentElement.getAttribute('data-theme') || 'light';
@@ -10267,6 +10271,7 @@ function setBackground(id) {
   });
   syncBgArtBox();   // 切换后立刻贴合当前交互区，避免先铺满整屏再跳一下
   try { localStorage.setItem('memomics-bg', id); } catch(e) {}
+  try { fetch('/api/ui/prefs', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({bg: id})}); } catch(e) {}
 }
 
 // 背景层自动适配「中间交互区」(.chat-area) 的大小。
@@ -15843,8 +15848,17 @@ document.getElementById('input').addEventListener('input', function() {
 });
 
 // 恢复配色
-try { var savedTheme = localStorage.getItem('memomics-theme'); if (savedTheme) setTheme(savedTheme); } catch(e) {}
-try { var savedBg = localStorage.getItem('memomics-bg'); if (savedBg) setBackground(savedBg); } catch(e) {}
+// 2026-10-21：localStorage 会被浏览器清/换地址就丢，补一条后端兜底
+(async function restoreUiPrefs() {
+  var theme = null, bg = null;
+  try { theme = localStorage.getItem('memomics-theme'); bg = localStorage.getItem('memomics-bg'); } catch(e) {}
+  try {
+    var r = await fetch('/api/ui/prefs'); var d = await r.json();
+    if (d && d.ok) { if (!theme && d.theme) theme = d.theme; if (!bg && d.bg) bg = d.bg; }
+  } catch(e) {}
+  try { if (theme) setTheme(theme); } catch(e) {}
+  try { if (bg) setBackground(bg); } catch(e) {}
+})();
 renderThemeButtons();
 renderBackgroundOptions();
 initBgArtBox();
