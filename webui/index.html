@@ -1786,12 +1786,13 @@ html[data-bg="chibi"] .img-upload-btn { margin-left:var(--bg-input-balance, 0px)
    而输入框两侧还空着（用户截图圈出两侧空档）。把 textarea 提为独占一行、吃满整行
    内容宽；按钮挪到下一行（上传居左、发送/停止居右），不再从两侧挤输入框。
    输入框独占一行后不再偏左，--bg-input-balance 居中补偿也就不需要了（归 0）。 */
-html[data-bg="maid"] .chat-input .input-row { flex-wrap:wrap; }
-html[data-bg="maid"] .chat-input textarea { flex:1 1 100%; order:-1; }
-html[data-bg="maid"] .chat-input .img-upload-btn { margin-left:0; margin-right:auto; }
-/* 2026-10-21：按钮换到第二行后，只有「+」被推到左侧，发送/停止没有拉右边的规则，
-   于是三个按钮全挤在左下角（用户截图）。把「发送」拉右侧，停止自然跟在它后面。 */
-html[data-bg="maid"] .chat-input #send { margin-left:auto; }
+/* 2026-10-21（按用户要求重做）：不再把按钮换行到输入框下面。
+   改为「输入框 + 左右按钮」保持同一行，交互区整体收窄（--bg-content-w 由 syncBgArtBox 算），
+   textarea 用 flex:1 + min-width:0 自动缩，按钮不再被挤下去。 */
+html[data-bg="maid"] .chat-input .input-row { flex-wrap:nowrap; }
+html[data-bg="maid"] .chat-input textarea { flex:1 1 auto; min-width:0; order:0; }
+html[data-bg="maid"] .chat-input .img-upload-btn { margin-left:0; margin-right:0; }
+html[data-bg="maid"] .chat-input button { flex:0 0 auto; }
 </style>
 </head>
 <body>
@@ -15852,9 +15853,10 @@ document.getElementById('input').addEventListener('input', function() {
 (async function restoreUiPrefs() {
   var theme = null, bg = null;
   try { theme = localStorage.getItem('memomics-theme'); bg = localStorage.getItem('memomics-bg'); } catch(e) {}
+  // 2026-10-21：以服务端为准（localStorage 会被清/残留旧值，服务端不会丢）
   try {
     var r = await fetch('/api/ui/prefs'); var d = await r.json();
-    if (d && d.ok) { if (!theme && d.theme) theme = d.theme; if (!bg && d.bg) bg = d.bg; }
+    if (d && d.ok) { if (d.theme) theme = d.theme; if (d.bg) bg = d.bg; }
   } catch(e) {}
   try { if (theme) setTheme(theme); } catch(e) {}
   try { if (bg) setBackground(bg); } catch(e) {}
