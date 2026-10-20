@@ -2139,6 +2139,28 @@ document.addEventListener('DOMContentLoaded', applyUILang);
         <button id="send" onclick="send(false)" data-i18n="send">发送</button>
         <button id="stop" class="stop-btn" onclick="stopAgent()" title="强制停止当前运行" data-i18n="stop">⏹ 停止</button>
       </div>
+<div id="bundle-modal-export" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;align-items:center;justify-content:center;backdrop-filter:blur(2px);">
+  <div style="background:#2b3140;color:#eef1f7;border:1px solid #4d5670;border-radius:14px;padding:20px 22px;width:min(680px,94vw);max-height:86vh;overflow:auto;box-shadow:0 20px 70px rgba(0,0,0,.7);font-size:13px;">
+    <div style="font-size:17px;font-weight:700;margin-bottom:6px;">📦 导出资产包</div>
+    <div style="font-size:12px;color:#a8b0c2;margin-bottom:14px;line-height:1.6;">选择要带走的内容。导出时自动脱敏（本机路径替换成 <code>$MEMOMICS_HOME</code> 等占位符）。</div>
+    <label style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;margin-bottom:8px;border:1px solid #3d465c;border-radius:10px;cursor:pointer;background:#232833;">
+      <input type="checkbox" data-scope="kb" checked style="margin-top:3px;"><span><b style="display:block;margin-bottom:2px;">知识库</b><span style="font-size:11px;color:#9aa6bd;">分析经验与方法沉淀（YAML，含证据链）</span></span></label>
+    <label style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;margin-bottom:8px;border:1px solid #3d465c;border-radius:10px;cursor:pointer;background:#232833;">
+      <input type="checkbox" data-scope="skills" checked style="margin-top:3px;"><span><b style="display:block;margin-bottom:2px;">技能</b><span style="font-size:11px;color:#9aa6bd;">可复用的操作手册（SKILL.md / skill.json）</span></span></label>
+    <label style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;margin-bottom:8px;border:1px solid #3d465c;border-radius:10px;cursor:pointer;background:#232833;">
+      <input type="checkbox" data-scope="memory" checked style="margin-top:3px;"><span><b style="display:block;margin-bottom:2px;">记忆</b><span style="font-size:11px;color:#9aa6bd;">偏好、事实与经验条目（导出为 jsonl）</span></span></label>
+    <div style="display:flex;gap:10px;align-items:center;margin:14px 0;">
+      <span style="font-size:12px;color:#9aa6bd;white-space:nowrap;">主题过滤（可选）</span>
+      <input id="bm-topic" placeholder="例如 deg-analysis；留空 = 全部导出" style="flex:1;padding:7px 10px;background:#1b1f28;border:1px solid #4d5670;border-radius:8px;color:#eef1f7;font-size:12px;">
+    </div>
+    <div id="bm-export-out" style="font-size:12px;line-height:1.7;margin-top:10px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px;">
+      <button onclick="bundleClose('bundle-modal-export')" style="padding:8px 18px;border-radius:8px;cursor:pointer;background:#3a4356;border:1px solid #4d5670;color:#eef1f7;">取消</button>
+      <button id="bm-export-go" onclick="bundleDoExport()" style="padding:8px 18px;border-radius:8px;cursor:pointer;background:#3b6ef0;border:1px solid #3b6ef0;color:#fff;font-weight:600;">开始导出 →</button>
+    </div>
+  </div>
+</div>
+
 <div id="fs-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;
      align-items:center;justify-content:center;backdrop-filter:blur(2px);">
   <div style="background:#2b3140;color:#eef1f7;border:1px solid #4d5670;border-radius:14px;padding:16px 18px;
@@ -2441,6 +2463,14 @@ document.addEventListener('DOMContentLoaded', applyUILang);
   <div id="bundle-preview-box" style="font-size:11px;max-height:240px;overflow:auto;margin-top:6px;"></div>
   <div id="bundle-status" style="font-size:12px;margin-top:6px;"></div>
 </div>
+<div class="settings-group" id="bundle-group">
+  <div style="font-weight:600;margin-bottom:6px;">📦 资产包</div>
+  <div style="font-size:11px;color:var(--text-light);margin-bottom:10px;">
+    把知识库 / 技能 / 记忆打包带走（自动脱敏）。导入不用在这里——直接在对话框里说「导入这个包 &lt;路径&gt;」即可。
+  </div>
+  <button onclick="bundleOpenExport()" style="font-size:13px;padding:8px 18px;">📦 导出资产包</button>
+</div>
+
 <div class="settings-group">
           <label data-i18n="connected_models">已连接的模型 (交互框可切换)</label>
           <div id="connected-models-list" style="font-size:12px;"></div>
@@ -17029,6 +17059,54 @@ function bundleImport() {
     _bundleSay('✓ 导入完成：写入 ' + (d.written || []).length + ' / 跳过 ' + (d.skipped || []).length +
       ' / 记忆 +' + (d.memory_added || 0) + '　内化：' + steps, 'ok');
   }).catch(function (e) { _bundleSay('导入异常：' + e, 'err'); });
+}
+
+// ===== 📦 资产包导出（2026-10-21，只导出；导入在对话框里说）=====
+function bundleClose(id) { var el = document.getElementById(id); if (el) el.style.display = 'none'; }
+function _bmMsgs(id, html, cls) {
+  var el = document.getElementById(id);
+  if (el) el.innerHTML = '<span style="' + (cls || '') + '">' + html + '</span>';
+}
+function bundleOpenExport() {
+  var o = document.getElementById('bm-export-out'); if (o) o.innerHTML = '';
+  var t = document.getElementById('bm-topic'); if (t) t.value = '';
+  var g = document.getElementById('bm-export-go'); if (g) { g.disabled = false; g.textContent = '开始导出 →'; }
+  var m = document.getElementById('bundle-modal-export'); if (m) m.style.display = 'flex';
+}
+function bundleDoExport() {
+  var scopes = [];
+  document.querySelectorAll('#bundle-modal-export input[data-scope]').forEach(function (cb) {
+    if (cb.checked) scopes.push(cb.getAttribute('data-scope'));
+  });
+  if (!scopes.length) return _bmMsgs('bm-export-out', '至少选择一项内容', 'color:#ff8fa3;');
+  var t = document.getElementById('bm-topic');
+  var g = document.getElementById('bm-export-go');
+  if (g) { g.disabled = true; g.textContent = '导出中…'; }
+  _bmMsgs('bm-export-out', '正在导出…（全量约 10-20 秒）', 'color:#ffb454;');
+  fetch('/api/bundle/export', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scopes: scopes, topic: t ? t.value : '' })
+  }).then(function (r) { return r.json(); }).then(function (d) {
+    if (g) { g.disabled = false; g.textContent = '开始导出 →'; }
+    if (!d.ok) return _bmMsgs('bm-export-out', '导出失败：' + (d.error || ''), 'color:#ff8fa3;');
+    var c = d.counts || {}; var man = d.manifest || {};
+    document.getElementById('bm-export-out').innerHTML =
+      '<div style="color:#39d98a;">✓ 导出成功</div>' +
+      '<div style="color:#9aa6bd;">文件：</div><div style="word-break:break-all;">' + d.path + '</div>' +
+      '<div style="color:#9aa6bd;">大小：</div>' + (d.bytes / 1048576).toFixed(2) + ' MB' +
+      '　<span style="color:#9aa6bd;">内容：</span>知识库 ' + (c.kb || 0) + ' / 技能 ' + (c.skills || 0) + ' / 记忆 ' + (c.memory || 0) +
+      '<div style="color:#9aa6bd;">脱敏：</div>替换 ' + (man.redactions_applied || 0) + ' 处本机路径' +
+      '<div style="margin-top:12px;"><button onclick="bundleCopyPath()" style="padding:6px 14px;border-radius:8px;cursor:pointer;background:#3a4356;border:1px solid #4d5670;color:#eef1f7;font-size:12px;">📋 复制路径</button></div>';
+    window._bmLastPath = d.path || '';
+  }).catch(function (e) {
+    if (g) { g.disabled = false; g.textContent = '开始导出 →'; }
+    _bmMsgs('bm-export-out', '导出异常：' + e, 'color:#ff8fa3;');
+  });
+}
+function bundleCopyPath() {
+  var p = window._bmLastPath || '';
+  if (!p) return;
+  try { navigator.clipboard.writeText(p); } catch (e) { prompt('复制路径：', p); }
 }
 
 function clusterAddNode() {
