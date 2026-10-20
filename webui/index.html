@@ -3704,10 +3704,90 @@ function hideAskForm() {
   if (el && el.parentNode) el.parentNode.removeChild(el);
 }
 
+// ===== 多问题表单（2026-10-21）：一张弹窗问 N 个问题，一次提交全部答复 =====
+function _afEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function showAskFormMulti(msg) {
+  try {
+    hideAskForm();
+    var qs = (msg.questions || []).slice(0, 6);
+    _askForm = { msg: msg, form_id: msg.form_id || '', multi_q: true, questions: qs };
+    var ov = document.createElement('div');
+    ov.id = 'askform-overlay';
+    ov.setAttribute('style', 'position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;');
+    var card = document.createElement('div');
+    card.setAttribute('style', 'background:var(--panel,#1b1f27);color:var(--text,#e6e6e6);border:1px solid var(--border,#333a45);border-radius:14px;padding:20px 22px;width:min(680px,94vw);max-height:86vh;overflow:auto;box-shadow:0 18px 60px rgba(0,0,0,.6);');
+    var kindTxt = t(msg.kind === 'intent' ? 'af_kind_intent' : (msg.kind === 'plan' ? 'af_kind_plan' : 'af_kind_clarify'));
+    var html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">';
+    html += '<span style="font-size:16px;font-weight:600;">❓ ' + _afEsc(msg.header || '需要你确认') + '</span>';
+    html += '<span style="font-size:11px;padding:1px 7px;border-radius:9px;background:rgba(90,150,255,.18);color:#7fb0ff;">' + _afEsc(kindTxt) + '</span>';
+    html += '<span style="font-size:11px;color:var(--muted,#9aa4b2);">共 ' + qs.length + ' 个问题</span></div>';
+    qs.forEach(function (q, qi) {
+      html += '<div style="margin:14px 0 4px;font-weight:600;font-size:13px;">' + (qi + 1) + '. ' + _afEsc(q.question) + (q.multi_select ? ' <span style="font-size:11px;color:var(--muted,#9aa4b2);">（可多选）</span>' : '') + '</div>';
+      (q.options || []).forEach(function (lab) {
+        html += '<label style="display:flex;gap:9px;align-items:flex-start;padding:7px 10px;margin-bottom:5px;border:1px solid var(--border,#333a45);border-radius:8px;cursor:pointer;">';
+        html += '<input type="' + (q.multi_select ? 'checkbox' : 'radio') + '" name="af-q' + qi + '" value="' + _afEsc(lab) + '" style="margin-top:2px;"><span>' + _afEsc(lab) + '</span></label>';
+      });
+      if (q.allow_other !== false) {
+        html += '<textarea class="afq-other" data-qi="' + qi + '" rows="2" placeholder="其他（可选，自由填写）" style="width:100%;box-sizing:border-box;margin:4px 0 2px;background:var(--input-bg,#12151b);color:var(--text,#e6e6e6);border:1px solid var(--border,#333a45);border-radius:8px;padding:7px 9px;font-size:12px;resize:vertical;"></textarea>';
+      }
+    });
+    html += '<div id="askform-err" style="display:none;color:#ff6b6b;font-size:12px;margin-top:8px;"></div>';
+    html += '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;">';
+    html += '<button id="askform-later" style="background:transparent;color:var(--muted,#9aa4b2);border:1px solid var(--border,#333a45);border-radius:8px;padding:7px 14px;cursor:pointer;">' + _afEsc(t('af_later')) + '</button>';
+    html += '<button id="askform-submit" style="background:#3b82f6;color:#fff;border:0;border-radius:8px;padding:7px 18px;cursor:pointer;font-weight:600;">' + _afEsc(t('af_submit')) + '</button></div>';
+    html += '<div style="font-size:11px;color:var(--muted,#9aa4b2);margin-top:8px;">' + _afEsc(t('af_lock_note')) + '</div>';
+    card.innerHTML = html;
+    ov.appendChild(card);
+    document.body.appendChild(ov);
+    document.getElementById('askform-later').addEventListener('click', function () {
+      hideAskForm();
+      addProgressItem(t('af_pending_prog'), 'pending', t('af_pending_hint'), _nowTs());
+    });
+    document.getElementById('askform-submit').addEventListener('click', function () { _submitAskFormMulti(); });
+  } catch (err) { console.error('multi ask_form render failed', err); }
+}
+function _submitAskFormMulti() {
+  var f = _askForm;
+  if (!f || !f.multi_q) return;
+  var qs = f.questions || [];
+  var lines = [], missing = [];
+  qs.forEach(function (q, qi) {
+    var sel = [];
+    document.querySelectorAll('input[name="af-q' + qi + '"]:checked').forEach(function (el) { sel.push(el.value); });
+    var othEl = document.querySelector('.afq-other[data-qi="' + qi + '"]');
+    var note = othEl ? String(othEl.value || '').trim() : '';
+    if (!sel.length && !note) { missing.push(qi + 1); return; }
+    var segs = [];
+    if (sel.length) segs.push(t('af_ans_sel') + sel.join(t('af_ans_sep')));
+    if (note) segs.push(t('af_ans_note') + note);
+    lines.push('qid=' + (q.qid || ('q' + (qi + 1))) + ' 针对「' + String(q.question || '').slice(0, 120) + '」：' + segs.join(t('af_ans_sep')));
+  });
+  if (missing.length) {
+    var errEl = document.getElementById('askform-err');
+    if (errEl) { errEl.style.display = 'block'; errEl.textContent = '第 ' + missing.join('、') + ' 题还没回答'; }
+    return;
+  }
+  var btn = document.getElementById('askform-submit');
+  if (btn) { btn.disabled = true; btn.textContent = t('af_sending'); }
+  var ansText = t('af_ans_prefix') + 'qid=' + (f.form_id || '') + ' ' + lines.join(t('af_ans_sep'));
+  try {
+    fetch('/api/ask_form/answer', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: currentSid, form_id: f.form_id, multi: true })
+    });
+  } catch (e) {}
+  hideAskForm();
+  var input = document.getElementById('input');
+  if (!input) { addError(t('af_no_input') + ansText); return; }
+  input.value = input.value.trim() ? (input.value.trim() + '\n' + ansText) : ansText;
+  send();
+}
+
 function showAskForm(msg) {
   try {
     // 只对当前会话显示（避免把别的会话的确认弹到用户脸上）
     if (msg.session_id && currentSid && msg.session_id !== currentSid) { return; }
+    if (msg.questions && msg.questions.length > 1) { showAskFormMulti(msg); return; }
     hideAskForm();
     var _prevForm = (_askForm && _askForm.form_id === (msg.form_id || '')) ? _askForm : null;
     var _prevOther = _prevForm ? ((document.getElementById('askform-other') || {}).value || '') : '';

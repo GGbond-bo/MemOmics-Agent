@@ -133,7 +133,7 @@ def _unreachable_reason(sid: str, srv) -> str:
 
 def emit_form_for_session(sess, question: str, options: list = None, multi_select: bool = False,
                           allow_other: bool = True, header: str = "", kind: str = "clarify",
-                          arm_gate: bool = True) -> tuple:
+                          arm_gate: bool = True, questions: list = None) -> tuple:
     """把确认表单直接发给指定会话（服务器侧确定性弹窗入口）→ (form_id, delivered)。
 
     P4(2026-09-22)：此前只有"模型调 ask_user"一条路 —— 弹不弹全看模型自觉。有些场景
@@ -173,6 +173,7 @@ def emit_form_for_session(sess, question: str, options: list = None, multi_selec
                     "form_options": opts_rich or [],
                     "multi_select": bool(multi_select),
                     "allow_other": True if allow_other is None else bool(allow_other),
+                    "questions": questions or [],
                     "content": f"❓ {q}",
                     "session_id": sid,
                 })
@@ -226,14 +227,29 @@ def emit_form_for_session(sess, question: str, options: list = None, multi_selec
     return form_id, delivered
 
 
-def ask_user(question: str, options: list = None, multi_select: bool = False,
-             allow_other: bool = True, header: str = "", kind: str = "clarify") -> str:
+def ask_user(question: str = "", options: list = None, multi_select: bool = False,
+             allow_other: bool = True, header: str = "", kind: str = "clarify",
+             questions: list = None) -> str:
     """向用户提问澄清 / 弹出意图确认表单（异步：发问题→结束回合→用户回答成为新消息）。
 
     options（可选）：字符串或 {label,desc,recommended} 列表 → 前端弹窗可勾选；
     multi_select=True 可多选；allow_other=True 提供"其他"自由填写。
     kind：clarify（澄清）| intent（开工前意图确认）| plan（方案选择）—— 仅用于标题与审计。
     """
+    # 2026-10-21：支持一次问多个问题（questions 数组），每问带 qid 供精准匹配
+    _qs_norm = []
+    if questions:
+        for _qq in (questions or [])[:6]:
+            _txt = ((_qq.get("question") if isinstance(_qq, dict) else str(_qq)) or "").strip()
+            if not _txt:
+                continue
+            _o, _r = _normalize_options(_qq.get("options") if isinstance(_qq, dict) else None)
+            _qs_norm.append({"qid": str((_qq.get("qid") if isinstance(_qq, dict) else "") or f"q{len(_qs_norm) + 1}"),
+                             "question": _txt, "options": _o, "form_options": _r,
+                             "multi_select": bool(_qq.get("multi_select")) if isinstance(_qq, dict) else False,
+                             "allow_other": (_qq.get("allow_other", True) if isinstance(_qq, dict) else True)})
+    if _qs_norm and not (question or "").strip():
+        question = _qs_norm[0]["question"]
     q = (question or "").strip()
     if not q:
         return json.dumps({"ok": False, "error": "question 不能为空"}, ensure_ascii=False)
@@ -248,7 +264,7 @@ def ask_user(question: str, options: list = None, multi_select: bool = False,
         try:
             form_id, delivered = emit_form_for_session(
                 _srv._sessions.get(sid), q, options=options, multi_select=multi_select,
-                allow_other=allow_other, header=header, kind=kind)
+                allow_other=allow_other, header=header, kind=kind, questions=_qs_norm or None)
         except Exception as e:
             logger.warning(f"[ask_user] 发送失败: {e}")
     if not delivered:
@@ -264,6 +280,7 @@ def ask_user(question: str, options: list = None, multi_select: bool = False,
         "question": q[:500],
         "options": opts or [],
         "multi_select": bool(multi_select),
+        "questions": _qs_norm,
         "instruction": ("❓ 问题已发送给用户（前端弹窗可勾选）。请立即结束本回合，不要再调用"
                         "任何工具（执行类工具在用户答复前会被门禁拦下，白跑一趟）。"
                         "用户回答后会作为新消息发给你，届时再继续。"),
@@ -298,7 +315,12 @@ SCHEMA = {
                             "description": "是否提供\"其他\"自由填写（默认 true）"},
             "header": {"type": "string", "description": "弹窗标题（默认按 kind 生成）"},
             "kind": {"type": "string", "enum": ["clarify", "intent", "plan"],
-                     "description": "clarify=澄清；intent=开工前意图确认；plan=方案选择"}
+
+                    "description": "clarify=澄清；intent=开工前意图确认；plan=方案选择"},
+
+            "questions": {"type": "array",
+
+                          "description": "一次问多个问题（最多6个）：每项 {question, options, multi_select, allow_other, qid}；传了就渲染成一张多问题表单，一次提交全部答复"}
         },
         "required": ["question"]
     }
@@ -319,6 +341,8 @@ def _register():
                 allow_other=args.get("allow_other", True),
                 header=args.get("header", ""),
                 kind=args.get("kind", "clarify"),
+
+                questions=args.get("questions"),
             ),
             emoji="❓",
             max_result_size_chars=1_200,
