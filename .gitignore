@@ -222,3 +222,7 @@ memomics_home/delegations/
 
 memomics_home/cluster_jobs.json
 memomics_home/cluster_kernels.json
+
+memomics_home/backups/
+memomics_home/imports/
+memomics_home/exports/
