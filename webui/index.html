@@ -2377,26 +2377,99 @@ document.addEventListener('DOMContentLoaded', applyUILang);
       <div class="settings-panel">
         <!-- 已连接的模型快速切换 -->
         <div class="settings-group" id="bundle-group">
-  <div style="font-weight:600;margin-bottom:4px;">📦 资产包（记忆 / 知识库 / 技能 导入导出）</div>
-  <div style="font-size:11px;color:var(--text-light);margin-bottom:8px;">
-    导出自动脱敏（路径替换为 $MEMOMICS_HOME 等）；导入默认<b>只新增不覆盖</b>，冲突需在预览里勾选。
+  <div style="font-weight:600;margin-bottom:6px;">📦 资产包</div>
+  <div style="font-size:11px;color:var(--text-light);margin-bottom:10px;">
+    把自己的经验（知识库 / 技能 / 记忆）打包带走，或在另一台机器导入并自动内化。
   </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-    <label style="font-size:12px;"><input type="checkbox" id="bundle-scope-kb" checked> 知识库</label>
-    <label style="font-size:12px;"><input type="checkbox" id="bundle-scope-skills" checked> 技能</label>
-    <label style="font-size:12px;"><input type="checkbox" id="bundle-scope-memory" checked> 记忆</label>
-    <input type="text" id="bundle-topic" placeholder="主题（可选，如 deg-analysis）" style="flex:1;min-width:150px;">
-    <button onclick="bundleExport()" style="font-size:12px;">📦 导出</button>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;">
+    <button onclick="bundleOpenExport()" style="font-size:13px;padding:8px 18px;">📦 导出资产包</button>
+    <button onclick="bundleOpenImport()" style="font-size:13px;padding:8px 18px;">📥 导入资产包</button>
   </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
-    <input type="text" id="bundle-zip-path" placeholder="包文件路径（点『列出包』可点选）" style="flex:1;min-width:220px;">
-    <button onclick="bundleList()" style="font-size:12px;">📂 列出包</button>
-    <button onclick="bundlePreview()" style="font-size:12px;">👀 预览</button>
-    <button onclick="bundleImport()" style="font-size:12px;">⬇ 导入</button>
+</div>
+
+<style>
+.bm-overlay { position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:99999;
+  display:flex; align-items:center; justify-content:center; backdrop-filter:blur(3px); }
+.bm-card { background:#1d1f27; color:#e6e8ee; border:1px solid #333848; border-radius:14px;
+  padding:22px 24px; width:min(680px,92vw); max-height:86vh; overflow:auto;
+  box-shadow:0 18px 60px rgba(0,0,0,.6); font-size:13px; }
+.bm-title { font-size:17px; font-weight:700; margin-bottom:6px; }
+.bm-sub { font-size:12px; color:#9aa3b5; margin-bottom:14px; line-height:1.6; }
+.bm-item { display:flex; gap:10px; align-items:flex-start; padding:10px 12px; margin-bottom:8px;
+  border:1px solid #2c3140; border-radius:10px; cursor:pointer; }
+.bm-item:hover { border-color:#4a5570; background:#232733; }
+.bm-item input { margin-top:3px; }
+.bm-item b { display:block; margin-bottom:2px; }
+.bm-item span { font-size:11px; color:#8d95a8; }
+.bm-row { display:flex; gap:10px; align-items:center; margin:14px 0; }
+.bm-label { font-size:12px; color:#9aa3b5; white-space:nowrap; }
+.bm-row input { flex:1; padding:7px 10px; background:#15171e; border:1px solid #2c3140;
+  border-radius:8px; color:#e6e8ee; font-size:12px; }
+.bm-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:18px; }
+.bm-actions button { padding:8px 18px; font-size:13px; border-radius:8px; cursor:pointer;
+  background:#2a2f3d; color:#dfe3ec; border:1px solid #3a4152; }
+.bm-actions button.bm-primary { background:#3b6ef0; border-color:#3b6ef0; color:#fff; font-weight:600; }
+.bm-actions button:disabled { opacity:.5; cursor:not-allowed; }
+.bm-out { font-size:12px; line-height:1.7; margin-top:10px; }
+.bm-list div { padding:7px 10px; border:1px solid #2c3140; border-radius:8px; margin-bottom:6px;
+  cursor:pointer; font-size:12px; }
+.bm-list div:hover { border-color:#4a5570; background:#232733; }
+.bm-ok { color:#39d98a; } .bm-err { color:#ff6b81; } .bm-warn { color:#ffb454; }
+.bm-cx { max-height:210px; overflow:auto; border:1px solid #2c3140; border-radius:8px; padding:8px 10px; }
+.bm-cx label { display:block; padding:2px 0; font-size:12px; }
+.bm-kv { color:#8d95a8; }
+</style>
+
+<div id="bundle-modal-export" class="bm-overlay" style="display:none;">
+  <div class="bm-card">
+    <div class="bm-title">📦 导出资产包</div>
+    <div class="bm-sub">第一步：选择要带走的内容。导出时自动脱敏（本机路径会替换成 <code>$MEMOMICS_HOME</code> 这类占位符，对方机器也能用）。</div>
+    <label class="bm-item"><input type="checkbox" data-scope="kb" checked><span><b>知识库</b><span>分析经验与方法沉淀（YAML，含证据链）</span></span></label>
+    <label class="bm-item"><input type="checkbox" data-scope="skills" checked><span><b>技能</b><span>可复用的操作手册（SKILL.md / skill.json）</span></span></label>
+    <label class="bm-item"><input type="checkbox" data-scope="memory" checked><span><b>记忆</b><span>偏好、事实与经验条目（导出为 jsonl）</span></span></label>
+    <div class="bm-row">
+      <span class="bm-label">主题过滤（可选）</span>
+      <input id="bm-topic" placeholder="例如 deg-analysis；留空 = 全部导出">
+    </div>
+    <div id="bm-export-out" class="bm-out"></div>
+    <div class="bm-actions">
+      <button onclick="bundleClose('bundle-modal-export')">取消</button>
+      <button class="bm-primary" id="bm-export-go" onclick="bundleDoExport()">开始导出 →</button>
+    </div>
   </div>
-  <div id="bundle-list-box" style="font-size:11px;max-height:110px;overflow:auto;margin-top:6px;"></div>
-  <div id="bundle-preview-box" style="font-size:11px;max-height:240px;overflow:auto;margin-top:6px;"></div>
-  <div id="bundle-status" style="font-size:12px;margin-top:6px;"></div>
+</div>
+
+<div id="bundle-modal-import" class="bm-overlay" style="display:none;">
+  <div class="bm-card">
+    <div class="bm-title">📥 导入资产包</div>
+    <div id="bm-imp-step1">
+      <div class="bm-sub">第一步：选择要导入的包。列表来自 <code>memomics_home/exports</code>，也可以用路径直接指定。</div>
+      <div id="bm-pkg-list" class="bm-list"></div>
+      <div class="bm-row">
+        <span class="bm-label">包路径</span>
+        <input id="bm-zip" placeholder="D:\backup\memomics_bundle_xxx.zip">
+      </div>
+      <div class="bm-actions">
+        <button onclick="bundleClose('bundle-modal-import')">取消</button>
+        <button class="bm-primary" onclick="bundleDoPreview()">预览 →</button>
+      </div>
+    </div>
+    <div id="bm-imp-step2" style="display:none;">
+      <div class="bm-sub">第二步：确认内容。下面列出「会新增哪些」和「哪些已存在（默认跳过，勾选才覆盖）」。</div>
+      <div id="bm-preview" class="bm-out"></div>
+      <div class="bm-actions">
+        <button onclick="bundleBackToPick()">← 返回</button>
+        <button class="bm-primary" onclick="bundleDoImport()">开始导入 →</button>
+      </div>
+    </div>
+    <div id="bm-imp-step3" style="display:none;">
+      <div class="bm-sub">第三步：导入结果。导入前已自动备份，出问题可回滚。</div>
+      <div id="bm-result" class="bm-out"></div>
+      <div class="bm-actions">
+        <button class="bm-primary" onclick="bundleClose('bundle-modal-import')">完成</button>
+      </div>
+    </div>
+  </div>
 </div>
 <div class="settings-group">
           <label data-i18n="connected_models">已连接的模型 (交互框可切换)</label>
@@ -16523,118 +16596,157 @@ async function clusterDeleteNode(name) {
   } catch (e) { alert('删除失败：' + e); }
 }
 
-// ===== 📦 资产包（2026-10-20）=====
-function _bundleScopes() {
-  var out = [];
-  ['kb','skills','memory'].forEach(function (k) {
-    var el = document.getElementById('bundle-scope-' + k);
-    if (el && el.checked) out.push(k);
+// ===== 📦 资产包（2026-10-20，弹窗式引导）=====
+var _bmConflicts = [];
+function bundleClose(id) { var el = document.getElementById(id); if (el) el.style.display = 'none'; }
+function _bmMsgs(id, html, cls) {
+  var el = document.getElementById(id);
+  if (el) el.innerHTML = '<span class="' + (cls || '') + '">' + html + '</span>';
+}
+function _bmPost(url, body) {
+  return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}) }).then(function (r) { return r.json(); });
+}
+function bundleOpenExport() {
+  var o = document.getElementById('bm-export-out'); if (o) o.innerHTML = '';
+  var t = document.getElementById('bm-topic'); if (t) t.value = '';
+  var g = document.getElementById('bm-export-go'); if (g) g.disabled = false;
+  document.getElementById('bundle-modal-export').style.display = 'flex';
+}
+function bundleDoExport() {
+  var scopes = [];
+  document.querySelectorAll('#bundle-modal-export input[data-scope]').forEach(function (cb) {
+    if (cb.checked) scopes.push(cb.getAttribute('data-scope'));
   });
-  return out;
-}
-function _bundleSay(msg, kind) {
-  var el = document.getElementById('bundle-status');
-  if (!el) return;
-  el.style.color = kind === 'err' ? '#e35' : (kind === 'ok' ? '#2a8' : 'var(--text-light)');
-  el.textContent = msg;
-}
-function _bundlePost(url, body) {
-  return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
-    .then(function (r) { return r.json(); });
-}
-function bundleExport() {
-  var scopes = _bundleScopes();
-  if (!scopes.length) return _bundleSay('至少勾选一项', 'err');
-  _bundleSay('导出中…（全量约十几秒）');
-  var t = document.getElementById('bundle-topic');
-  _bundlePost('/api/bundle/export', { scopes: scopes, topic: t ? t.value : '' }).then(function (d) {
-    if (!d.ok) return _bundleSay('导出失败：' + (d.error || ''), 'err');
+  if (!scopes.length) return _bmMsgs('bm-export-out', '至少选择一项内容', 'bm-err');
+  var t = document.getElementById('bm-topic');
+  var go = document.getElementById('bm-export-go');
+  if (go) go.disabled = true;
+  _bmMsgs('bm-export-out', '正在导出…（全量约 10-20 秒，请稍候）', 'bm-warn');
+  _bmPost('/api/bundle/export', { scopes: scopes, topic: t ? t.value : '' }).then(function (d) {
+    if (go) go.disabled = false;
+    if (!d.ok) return _bmMsgs('bm-export-out', '导出失败：' + (d.error || ''), 'bm-err');
     var c = d.counts || {};
-    _bundleSay('✓ 已导出 ' + d.path + '（' + (d.bytes / 1048576).toFixed(2) + ' MB | KB ' + (c.kb || 0) +
-      ' / 技能 ' + (c.skills || 0) + ' / 记忆 ' + (c.memory || 0) + '）', 'ok');
-    var zp = document.getElementById('bundle-zip-path');
-    if (zp) zp.value = d.path || '';
-    bundleList();
-  }).catch(function (e) { _bundleSay('导出异常：' + e, 'err'); });
+    _bmMsgs('bm-export-out',
+      '<span class="bm-ok">✓ 导出成功</span><br>' +
+      '<span class="bm-kv">文件：</span>' + d.path + '<br>' +
+      '<span class="bm-kv">大小：</span>' + (d.bytes / 1048576).toFixed(2) + ' MB<br>' +
+      '<span class="bm-kv">内容：</span>知识库 ' + (c.kb || 0) + ' 条 / 技能 ' + (c.skills || 0) +
+      ' 个 / 记忆 ' + (c.memory || 0) + ' 条<br>' +
+      '<span class="bm-kv">脱敏：</span>替换了 ' + ((d.manifest || {}).redactions_applied || 0) + ' 处本机路径' +
+      (d.manifest && d.manifest.locators_redacted ? '（证据定位 locator 已脱敏，导入后需复核）' : ''), 'bm-ok');
+    var box = document.getElementById('bm-export-out');
+    if (box) {
+      box.innerHTML += '<div style="margin-top:12px;"><button onclick="bundleCopyPath(\'' +
+        String(d.path || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'") +
+        '\')" style="font-size:12px;padding:6px 14px;">📋 复制路径</button></div>';
+    }
+    var zp = document.getElementById('bm-zip'); if (zp) zp.value = d.path || '';
+  }).catch(function (e) { if (go) go.disabled = false; _bmMsgs('bm-export-out', '导出异常：' + e, 'bm-err'); });
 }
-function bundleList() {
+function bundleCopyPath(p) {
+  try { navigator.clipboard.writeText(p); _bmMsgs('bm-export-out', '已复制到剪贴板', 'bm-ok'); }
+  catch (e) { prompt('复制路径：', p); }
+}
+function bundleOpenImport() {
+  ['bm-imp-step1', 'bm-imp-step2', 'bm-imp-step3'].forEach(function (id, i) {
+    var el = document.getElementById(id); if (el) el.style.display = i === 0 ? 'block' : 'none';
+  });
+  document.getElementById('bundle-modal-import').style.display = 'flex';
+  var list = document.getElementById('bm-pkg-list');
+  if (list) list.innerHTML = '<span class="bm-kv">加载中…</span>';
   fetch('/api/bundle/list').then(function (r) { return r.json(); }).then(function (d) {
-    var box = document.getElementById('bundle-list-box');
-    if (!box) return;
+    if (!list) return;
     if (!d.ok || !(d.bundles || []).length) {
-      box.innerHTML = '<span style="color:var(--text-light);">（' + (d.default_dir || '') + ' 下暂无包）</span>';
+      list.innerHTML = '<span class="bm-kv">（' + (d.default_dir || '') + ' 里还没有导出的包，可在下面直接填路径）</span>';
       return;
     }
-    box.innerHTML = (d.bundles || []).map(function (b) {
-      return '<div style="cursor:pointer;padding:2px 0;" data-zp="' + b.path +
-        '" onclick="bundlePick(this)">📦 ' + b.mtime + ' · ' + b.mb.toFixed(2) + ' MB · ' + b.name + '</div>';
+    list.innerHTML = (d.bundles || []).map(function (b) {
+      return '<div onclick="bundlePickPkg(this)" data-zp="' + b.path + '">📦 ' + b.mtime + ' · ' +
+        b.mb.toFixed(2) + ' MB · ' + b.name + '</div>';
     }).join('');
-  }).catch(function (e) { _bundleSay('列包失败：' + e, 'err'); });
+  }).catch(function () { if (list) list.innerHTML = '<span class="bm-err">读取失败</span>'; });
 }
-function bundlePick(el) {
-  var zp = document.getElementById('bundle-zip-path');
+function bundlePickPkg(el) {
+  var zp = document.getElementById('bm-zip');
   if (zp) zp.value = el.getAttribute('data-zp') || '';
-  bundlePreview();
+  bundleDoPreview();
 }
-var _bundleConflicts = [];
-function bundlePreview() {
-  var zpEl = document.getElementById('bundle-zip-path');
-  var zp = zpEl ? zpEl.value : '';
-  if (!zp) return _bundleSay('先填包路径或点『列出包』', 'err');
-  _bundleSay('预览中…');
-  _bundlePost('/api/bundle/preview', { path: zp }).then(function (d) {
-    if (!d.ok) return _bundleSay('预览失败：' + (d.error || ''), 'err');
-    _bundleConflicts = d.conflicts || [];
-    var box = document.getElementById('bundle-preview-box');
-    var html = '<div style="color:#2a8;">版本 ' + d.schema + ' · 创建 ' + d.created_at + ' · 主题 ' +
-      (d.topic || '（全量）') + ' · 脱敏 ' + (d.redacted ? '是' : '否') + '</div>' +
-      '<div>内容：' + JSON.stringify(d.counts) + ' · 记忆 ' + d.memory_entries + ' 条</div>' +
-      '<div>新增 <b>' + (d.new_files || []).length + '</b> 个 · 冲突 <b style="color:#e35;">' +
-      _bundleConflicts.length + '</b> 个 · 疑似密钥 ' + (d.secrets_found || []).length + ' 个</div>';
+function bundleBackToPick() {
+  document.getElementById('bm-imp-step2').style.display = 'none';
+  document.getElementById('bm-imp-step1').style.display = 'block';
+}
+function bundleDoPreview() {
+  var zpEl = document.getElementById('bm-zip');
+  var zp = zpEl ? zpEl.value.trim() : '';
+  if (!zp) return _bmMsgs('bm-preview', '请先选择或填写包路径', 'bm-err');
+  document.getElementById('bm-imp-step1').style.display = 'none';
+  document.getElementById('bm-imp-step2').style.display = 'block';
+  _bmMsgs('bm-preview', '读取中…', 'bm-warn');
+  _bmPost('/api/bundle/preview', { path: zp }).then(function (d) {
+    if (!d.ok) return _bmMsgs('bm-preview', '预览失败：' + (d.error || ''), 'bm-err');
+    _bmConflicts = d.conflicts || [];
+    var c = d.counts || {};
+    var html = '<span class="bm-ok">✓ 包读取成功</span><br>' +
+      '<span class="bm-kv">版本：</span>' + d.schema + ' · 创建 ' + d.created_at + ' · 主题 ' +
+      (d.topic || '（全量）') + ' · 脱敏 ' + (d.redacted ? '是' : '否') + '<br>' +
+      '<span class="bm-kv">内容：</span>知识库 ' + (c.kb || 0) + ' / 技能 ' + (c.skills || 0) +
+      ' / 记忆 ' + (d.memory_entries || 0) + ' 条<br>' +
+      '<span class="bm-kv">将新增：</span><b class="bm-ok">' + (d.new_files || []).length + '</b> 个文件' +
+      '　<span class="bm-kv">已存在（默认跳过）：</span><b class="bm-warn">' + _bmConflicts.length + '</b> 个' +
+      ((d.secrets_found || []).length ? '<br><span class="bm-err">⚠ 发现 ' + d.secrets_found.length + ' 个疑似密钥文件（已拒绝打包）</span>' : '');
     if ((d.new_files || []).length) {
-      html += '<div style="margin-top:6px;color:var(--text-light);">新增：' +
-        d.new_files.slice(0, 8).map(function (x) { return x.split('/').pop(); }).join('、') +
-        (d.new_files.length > 8 ? ' …' : '') + '</div>';
+      html += '<div style="margin-top:8px;"><span class="bm-kv">新增示例：</span>' +
+        d.new_files.slice(0, 6).map(function (x) { return x.split('/').pop(); }).join('、') +
+        (d.new_files.length > 6 ? ' …' : '') + '</div>';
     }
-    if (_bundleConflicts.length) {
-      html += '<div style="margin-top:8px;font-weight:600;">冲突（勾选 = 用包里的覆盖本机；默认不勾 = 跳过）</div>';
-      html += _bundleConflicts.slice(0, 60).map(function (c, i) {
-        return '<label style="display:block;padding:1px 0;"><input type="checkbox" data-bci="' + i + '"> ' +
-          c.path.split('/').pop() + ' <span style="color:var(--text-light);">（本机 ' + c.local_mtime + '，' +
-          c.local_bytes + 'B）</span></label>';
-      }).join('');
-      if (_bundleConflicts.length > 60) {
-        html += '<div style="color:var(--text-light);">…共 ' + _bundleConflicts.length + ' 个</div>';
+    if (_bmConflicts.length) {
+      html += '<div style="margin-top:12px;font-weight:600;">勾选 = 用包里的覆盖本机（不勾就保留你的）</div>' +
+        '<div class="bm-cx">' + _bmConflicts.slice(0, 80).map(function (cc, i) {
+          return '<label><input type="checkbox" data-bci="' + i + '"> ' + cc.path +
+            ' <span class="bm-kv">（本机 ' + cc.local_mtime + '，' + cc.local_bytes + 'B）</span></label>';
+        }).join('') + '</div>';
+      if (_bmConflicts.length > 80) {
+        html += '<div class="bm-kv">…共 ' + _bmConflicts.length + ' 个（只显示前 80）</div>';
       }
     }
-    box.innerHTML = html;
-    _bundleSay('预览完成，确认后点『导入』', 'ok');
-  }).catch(function (e) { _bundleSay('预览异常：' + e, 'err'); });
+    document.getElementById('bm-preview').innerHTML = html;
+  }).catch(function (e) { _bmMsgs('bm-preview', '预览异常：' + e, 'bm-err'); });
 }
-function bundleImport() {
-  var zpEl = document.getElementById('bundle-zip-path');
-  var zp = zpEl ? zpEl.value : '';
-  if (!zp) return _bundleSay('先填包路径', 'err');
+function bundleDoImport() {
+  var zpEl = document.getElementById('bm-zip');
+  var zp = zpEl ? zpEl.value.trim() : '';
   var ov = {};
-  document.querySelectorAll('#bundle-preview-box input[data-bci]').forEach(function (cb) {
+  document.querySelectorAll('#bm-preview input[data-bci]').forEach(function (cb) {
     if (cb.checked) {
       var i = parseInt(cb.getAttribute('data-bci'), 10);
-      if (_bundleConflicts[i]) ov[_bundleConflicts[i].path] = 'overwrite';
+      if (_bmConflicts[i]) ov[_bmConflicts[i].path] = 'overwrite';
     }
   });
-  if (_bundleConflicts.length && !Object.keys(ov).length) {
-    if (!confirm('有 ' + _bundleConflicts.length + ' 个冲突，全部按「跳过」处理（不覆盖本机）。继续导入吗？')) return;
+  var n = Object.keys(ov).length;
+  if (_bmConflicts.length && !n) {
+    if (!confirm('有 ' + _bmConflicts.length + ' 个同文件，全部按「跳过」处理（不覆盖你本机的版本）。继续导入吗？')) return;
   }
-  _bundleSay('导入中…（会先自动备份）');
-  _bundlePost('/api/bundle/import', { path: zp, overrides: ov, backup: true, activate: true }).then(function (d) {
-    if (!d.ok) return _bundleSay('导入失败：' + (d.error || ''), 'err');
-    var steps = ((d.activate || {}).steps || []).map(function (s) { return (s.ok ? '✓ ' : '✗ ') + s.step; }).join(' · ');
-    _bundleSay('✓ 导入完成：写入 ' + (d.written || []).length + ' / 跳过 ' + (d.skipped || []).length +
-      ' / 记忆 +' + (d.memory_added || 0) + '　内化：' + steps, 'ok');
-  }).catch(function (e) { _bundleSay('导入异常：' + e, 'err'); });
+  document.getElementById('bm-imp-step2').style.display = 'none';
+  document.getElementById('bm-imp-step3').style.display = 'block';
+  _bmMsgs('bm-result', '导入中…（会先自动备份，随后重建索引完成内化）', 'bm-warn');
+  _bmPost('/api/bundle/import', { path: zp, overrides: ov, backup: true, activate: true }).then(function (d) {
+    if (!d.ok) return _bmMsgs('bm-result', '导入失败：' + (d.error || ''), 'bm-err');
+    var steps = ((d.activate || {}).steps || []).map(function (s) {
+      return '<div>' + (s.ok ? '<span class="bm-ok">✓</span>' : '<span class="bm-err">✗</span>') +
+        ' ' + s.step + ' — ' + (s.detail || '') + '</div>';
+    }).join('');
+    document.getElementById('bm-result').innerHTML =
+      '<span class="bm-ok">✓ 导入完成</span><br>' +
+      '<span class="bm-kv">写入：</span>' + (d.written || []).length + ' 个文件　' +
+      '<span class="bm-kv">跳过：</span>' + (d.skipped || []).length + ' 个　' +
+      '<span class="bm-kv">记忆新增：</span>' + (d.memory_added || 0) + ' 条<br>' +
+      '<span class="bm-kv">自动备份：</span>' + (d.backup || '（未备份）') + '<br>' +
+      '<div style="margin-top:10px;font-weight:600;">内化步骤</div>' + steps;
+  }).catch(function (e) { _bmMsgs('bm-result', '导入异常：' + e, 'bm-err'); });
 }
 
-function clusterAddNode() {
+function clusterAddNode() {function clusterAddNode() {
   var box = document.getElementById('cc-nodes');
   if (!box) return;
   var c = _clusterCfg || {};
