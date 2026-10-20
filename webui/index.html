@@ -2121,8 +2121,8 @@ document.addEventListener('DOMContentLoaded', applyUILang);
 <div id="attach-chips" style="display:none;flex-wrap:wrap;gap:6px;padding:2px 12px 6px;align-items:center;"></div>
       <div class="input-row">
                         <div class="plus-wrap" style="position:relative;">
-          <button type="button" id="plus-btn" class="img-upload-btn" title="添加文件 / 图片（选择后插入绝对路径）"
-                  onclick="fsOpen()" style="font-size:18px;line-height:1;font-weight:600;">+</button>
+          <button type="button" id="plus-btn" class="img-upload-btn" title="添加文件 / 图片（弹出系统对话框，插入绝对路径）"
+                  onclick="fsPickNative()" style="font-size:18px;line-height:1;font-weight:600;">+</button>
           <input type="file" id="image-file-input" accept="image/*" multiple onchange="handleFileSelect(event)" style="display:none;">
         </div>
         <textarea id="input" data-i18n-ph="input_ph" placeholder="输入您的分析需求... (Enter发送, Shift+Enter换行)&#10;支持粘贴截图、拖拽图片到输入框" rows="3"></textarea>
@@ -3388,6 +3388,33 @@ document.addEventListener('input', function (ev) {
   var kept = _attachChips.filter(function (p) { return v.indexOf(p) >= 0; });
   if (kept.length !== _attachChips.length) { _attachChips = kept; _renderChips(); }
 }, true);
+// ===== 原生文件对话框（2026-10-20）：点「+」直接弹 Windows「打开」窗口 =====
+var _fsPicking = false;
+function fsPickNative(mode) {
+  if (_fsPicking) return;
+  _fsPicking = true;
+  var btn = document.getElementById('plus-btn');
+  if (btn) { btn.style.opacity = '.45'; btn.title = '等待你在系统对话框里选择…'; }
+  fetch('/api/fs/pick', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode: mode || 'file', multiple: true })
+  }).then(function (r) { return r.json(); }).then(function (d) {
+    _fsPicking = false;
+    if (btn) { btn.style.opacity = '1'; btn.title = '添加文件 / 图片（弹出系统对话框，插入绝对路径）'; }
+    if (d.cancelled) return;
+    if (!d.ok) {
+      if (d.busy) return;
+      alert('打开文件对话框失败：' + (d.error || '未知错误') + '\n（可改用「浏览目录」窗口）');
+      return;
+    }
+    (d.paths || []).forEach(function (p) { attachInsertPath(p); });
+  }).catch(function (e) {
+    _fsPicking = false;
+    if (btn) { btn.style.opacity = '1'; }
+    alert('打开文件对话框异常：' + e);
+  });
+}
+
 // ===== 居中文件选择窗口（2026-10-20，像 DSH 那样浏览目录）=====
 var _fsHist = [], _fsIdx = -1, _fsSel = {}, _fsItems = [], _fsCur = '';
 function fsOpen() {

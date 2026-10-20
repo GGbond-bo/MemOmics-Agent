@@ -40,6 +40,7 @@
   "/api/file/read": "local",
   "/api/files": "public",
   "/api/fs/browse": "public",
+  "/api/fs/pick": "public",
   "/api/health": "public",
   "/api/imagegen/config": "public",
   "/api/kb": "public",

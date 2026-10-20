@@ -21928,6 +21928,72 @@ def _cluster_write_config(values: dict) -> dict:
     return out
 
 
+import threading as _threading_fs
+_fs_pick_lock = _threading_fs.Lock()
+
+
+@app.post("/api/fs/pick")
+async def fs_pick(request: Request):
+    """弹出 **Windows 原生「打开」对话框**，返回选中的绝对路径。
+
+    为什么能拿到真实路径：浏览器里的 <input type=file> 受安全限制只给文件名；但
+    MemOmics 的本地服务进程运行在用户交互式桌面会话里（session 1），由它弹原生
+    对话框（tkinter/filedialog），选完把路径回给页面 —— 就是 DSH 那种体验。
+    """
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    mode = str(body.get("mode") or "file").lower()
+    multiple = bool(body.get("multiple", True))
+    title = str(body.get("title") or ("选择文件夹" if mode == "dir" else "选择文件"))
+    if body.get("dry_run"):
+        try:
+            import tkinter  # noqa: F401
+            return {"ok": True, "dry_run": True, "available": True, "mode": mode}
+        except Exception as exc:
+            return {"ok": False, "available": False, "error": f"tkinter 不可用: {exc}"}
+
+    def _run_native():
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            root.attributes("-topmost", True)
+            root.update()
+        except Exception:
+            pass
+        try:
+            if mode == "dir":
+                picked = filedialog.askdirectory(title=title, mustexist=True, parent=root)
+                return {"ok": bool(picked), "paths": [picked] if picked else [], "cancelled": not picked}
+            if multiple:
+                picked = filedialog.askopenfilenames(title=title, parent=root)
+                return {"ok": bool(picked), "paths": list(picked), "cancelled": not picked}
+            one = filedialog.askopenfilename(title=title, parent=root)
+            return {"ok": bool(one), "paths": [one] if one else [], "cancelled": not one}
+        finally:
+            try:
+                root.destroy()
+            except Exception:
+                pass
+
+    if not _fs_pick_lock.acquire(blocking=False):
+        return {"ok": False, "busy": True, "error": "已经有一个文件选择窗口打开了"}
+    try:
+        import asyncio as _aio
+        res = await _aio.to_thread(_run_native)
+    except Exception as exc:
+        res = {"ok": False, "error": f"弹窗失败: {exc}"}
+    finally:
+        _fs_pick_lock.release()
+    if res.get("ok"):
+        logger.info(f"[fs/pick] 用户选择 {len(res.get('paths') or [])} 个路径")
+    return res
+
+
 @app.get("/api/fs/browse")
 async def fs_browse(path: str = ""):
     """本机文件浏览器（给输入框「+」用）：列出目录，点选后前端把**绝对路径**插进输入框。
