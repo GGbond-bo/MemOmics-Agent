@@ -1880,6 +1880,23 @@ def _build_intent_confirm_prompt(session, user_text, intent):
 _CODE_EDIT_ENABLED = os.environ.get("MEMOMICS_CODE_EDIT", "1") != "0"
 
 # 改动动词（用户明确要求"把这东西变一下"）—— 不含 写/编写/生成（那是新做任务，另走 grill/确认）
+# 2026-10-21：区分「改代码」与「改表格/图」——
+# 原判定把「脚本/函数/程序/script/function」当代码信号，导致用户说「把表格的列名改一下，
+# 脚本里那个函数顺手修修」这类话被判成"改代码"。现在改为：
+#   · 强代码信号：文件扩展名 / 代码块 / shebang / library( / rscript / 明确"代码/源码"
+#   · 数据对象：表格 / Excel / CSV / 列名 / 配色 / 字体 / 图例 …（出现且无强信号 → 不锁）
+_STRONG_CODE_HINTS = (
+    ".py", ".r ", ".r\u3000", ".rmd", ".sh", ".ipynb", ".js", ".ts", ".pl", ".cpp", ".sql",
+    "```", "def ", "#!/", "library(", "rscript", "代码块", "代码文件", "源码文件",
+)
+_CODE_EDIT_CODE_NOUNS = (
+    "脚本", "代码", "函数", "程序", "script", "function", "snippet", "notebook",
+)
+_CODE_EDIT_DATA_OBJECTS = (
+    "表格", "excel", "xlsx", "xls", "csv", "tsv", "数据框", "dataframe",
+    "列名", "表头", "行名", "单元格", "数值", "配色", "颜色", "字体", "字号", "图例",
+    "坐标轴", "柱状图", "小提琴图", "热图", "火山图", "图片", "图上", "图中",
+)
 _CODE_EDIT_VERBS = (
     "改一下", "改下", "改改", "改成", "改为", "改一改", "修改", "修一下", "修下", "修好", "修正",
     "优化", "完善", "重构", "重写", "改进", "增强", "补上", "加上", "加个", "增加", "去掉",
@@ -1922,8 +1939,15 @@ def _code_edit_mode(text):
         return ""
     if not any(h in low for h in _CODE_EDIT_HINTS):
         return ""
+    # 2026-10-21：先看"用户自己说要跑"（最高优先：说了跑就不锁）
     if any(r in low for r in _CODE_EDIT_RUN):
         return "verify"
+    # 再看"改的是表格/图"：出现数据对象、没有强代码信号、且**没提脚本/代码/函数**
+    # → 这是"改动表格/图"，不是改代码，不锁
+    if (any(d in low for d in _CODE_EDIT_DATA_OBJECTS)
+            and not any(sig in low for sig in _STRONG_CODE_HINTS)
+            and not any(noun in low for noun in _CODE_EDIT_CODE_NOUNS)):
+        return ""
     return "edit"
 
 
