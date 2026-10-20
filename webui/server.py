@@ -21928,6 +21928,51 @@ def _cluster_write_config(values: dict) -> dict:
     return out
 
 
+@app.get("/api/fs/browse")
+async def fs_browse(path: str = ""):
+    """本机文件浏览器（给输入框「+」用）：列出目录，点选后前端把**绝对路径**插进输入框。
+
+    path 为空 → 盘符 + 主目录 + 桌面；path 是文件 → 返回该文件的绝对路径。
+    """
+    import string as _string
+    try:
+        if not path:
+            home = os.path.expanduser("~")
+            items = [{"name": "🏠 主目录", "path": home.replace("\\", "/"), "is_dir": True, "size": 0, "ext": ""}]
+            for sub, label in (("Desktop", "🖥 桌面"), ("Downloads", "⬇ 下载"), ("Documents", "📄 文档")):
+                p2 = os.path.join(home, sub)
+                if os.path.isdir(p2):
+                    items.append({"name": label, "path": p2.replace("\\", "/"), "is_dir": True, "size": 0, "ext": ""})
+            for letter in _string.ascii_uppercase:
+                base = f"{letter}:\\"
+                if os.path.exists(base):
+                    items.append({"name": f"💽 {letter}:", "path": base.replace("\\", "/"),
+                                  "is_dir": True, "size": 0, "ext": ""})
+            return {"path": "", "parent": "", "items": items}
+        p = os.path.realpath(path)
+        if os.path.isfile(p):
+            return {"path": p.replace("\\", "/"), "is_file": True, "abs_path": p}
+        if not os.path.isdir(p):
+            return {"error": f"路径不存在: {path}"}
+        items = []
+        for it in sorted(Path(p).iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
+            if it.name.startswith(".") or it.name == "__pycache__":
+                continue
+            try:
+                st = it.stat()
+            except Exception:
+                continue
+            items.append({"name": it.name, "path": str(it).replace("\\", "/"),
+                          "is_dir": it.is_dir(),
+                          "size": st.st_size if it.is_file() else 0,
+                          "ext": it.suffix.lower()})
+        return {"path": p.replace("\\", "/"),
+                "parent": str(Path(p).parent).replace("\\", "/"),
+                "items": items[:800]}
+    except Exception as exc:
+        return {"error": f"读取失败: {exc}"}
+
+
 @app.post("/api/bundle/export")
 async def bundle_export(request: Request):
     """导出资产包（记忆 jsonl / 知识库 / 技能），默认脱敏。"""

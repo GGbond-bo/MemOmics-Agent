@@ -39,6 +39,7 @@
   "/api/file/raw": "local",
   "/api/file/read": "local",
   "/api/files": "public",
+  "/api/fs/browse": "public",
   "/api/health": "public",
   "/api/imagegen/config": "public",
   "/api/kb": "public",
