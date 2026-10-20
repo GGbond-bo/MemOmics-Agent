@@ -228,3 +228,5 @@ memomics_home/imports/
 memomics_home/exports/
 
 environment.json.bak
+
+memomics_home/ui_prefs.json
