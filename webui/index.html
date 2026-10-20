@@ -2121,8 +2121,18 @@ document.addEventListener('DOMContentLoaded', applyUILang);
 <div id="attach-chips" style="display:none;flex-wrap:wrap;gap:6px;padding:2px 12px 6px;align-items:center;"></div>
       <div class="input-row">
                         <div class="plus-wrap" style="position:relative;">
-          <button type="button" id="plus-btn" class="img-upload-btn" title="添加文件 / 图片（弹出系统对话框，插入绝对路径）"
-                  onclick="fsPickNative()" style="font-size:18px;line-height:1;font-weight:600;">+</button>
+          <button type="button" id="plus-btn" class="img-upload-btn" title="添加文件 / 文件夹 / 图片（系统对话框，插入绝对路径）"
+                  onclick="fsPickMenu(event)" style="font-size:18px;line-height:1;font-weight:600;">+</button>
+          <div id="plus-menu" style="display:none;position:absolute;left:0;bottom:112%;z-index:9999;
+               background:#2b3140;border:1px solid #4d5670;border-radius:10px;padding:6px;min-width:210px;
+               box-shadow:0 12px 36px rgba(0,0,0,.6);color:#eef1f7;font-size:13px;">
+            <div class="pm-item" onclick="fsPickMode('file')" style="padding:9px 12px;border-radius:8px;cursor:pointer;">
+              📄 选择文件<span style="color:#a8b0c2;font-size:11px;">（可多选，插入绝对路径）</span>
+            </div>
+            <div class="pm-item" onclick="fsPickMode('dir')" style="padding:9px 12px;border-radius:8px;cursor:pointer;">
+              📁 选择文件夹<span style="color:#a8b0c2;font-size:11px;">（插入目录绝对路径）</span>
+            </div>
+          </div>
           <input type="file" id="image-file-input" accept="image/*" multiple onchange="handleFileSelect(event)" style="display:none;">
         </div>
         <textarea id="input" data-i18n-ph="input_ph" placeholder="输入您的分析需求... (Enter发送, Shift+Enter换行)&#10;支持粘贴截图、拖拽图片到输入框" rows="3"></textarea>
@@ -3388,6 +3398,33 @@ document.addEventListener('input', function (ev) {
   var kept = _attachChips.filter(function (p) { return v.indexOf(p) >= 0; });
   if (kept.length !== _attachChips.length) { _attachChips = kept; _renderChips(); }
 }, true);
+// ===== 「+」小菜单：选择文件 / 选择文件夹（2026-10-20）=====
+function fsPickMenu(ev) {
+  if (ev) ev.stopPropagation();
+  var m = document.getElementById('plus-menu');
+  if (!m) return;
+  m.style.display = (m.style.display === 'block') ? 'none' : 'block';
+}
+function fsPickMode(mode) {
+  var m = document.getElementById('plus-menu');
+  if (m) m.style.display = 'none';
+  fsPickNative(mode);
+}
+document.addEventListener('click', function (ev) {
+  var m = document.getElementById('plus-menu');
+  if (!m || m.style.display !== 'block') return;
+  if (ev.target.closest && ev.target.closest('.plus-wrap')) return;
+  m.style.display = 'none';
+});
+document.addEventListener('mouseover', function (ev) {
+  var it = ev.target.closest ? ev.target.closest('.pm-item') : null;
+  if (it) it.style.background = '#3a4356';
+});
+document.addEventListener('mouseout', function (ev) {
+  var it = ev.target.closest ? ev.target.closest('.pm-item') : null;
+  if (it) it.style.background = 'transparent';
+});
+
 // ===== 原生文件对话框（2026-10-20）：点「+」直接弹 Windows「打开」窗口 =====
 var _fsPicking = false;
 function fsPickNative(mode) {
