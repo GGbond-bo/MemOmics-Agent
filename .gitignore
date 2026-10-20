@@ -219,3 +219,6 @@ memomics_home/runtime/
 
 memomics_home/spill/
 memomics_home/delegations/
+
+memomics_home/cluster_jobs.json
+memomics_home/cluster_kernels.json
