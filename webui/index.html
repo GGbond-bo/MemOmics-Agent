@@ -3814,7 +3814,9 @@ async function _submitAskForm() {
   }
   var btn = document.getElementById('askform-submit');
   if (btn) { btn.disabled = true; btn.textContent = t('af_sending'); }
-  var ansText = t('af_ans_prefix') + (f.question ? tf('af_ans_re', String(f.question).slice(0, 120)) : '');
+  var _qid = (f.form_id || f.formId || f.qid || '');
+      var ansText = t('af_ans_prefix') + (_qid ? ('qid=' + _qid + ' ') : '') +
+        (f.question ? tf('af_ans_re', String(f.question).slice(0, 120)) : '');
   var segs = [];
   if (sel.length) { segs.push(t('af_ans_sel') + sel.join(t('af_ans_sep'))); }
   if (other) { segs.push(t('af_ans_note') + other); }
