@@ -898,8 +898,52 @@ html[data-theme="dark"] .ev-chain .ev-t, #kb-node-modal .ev-chain .ev-t { color:
 .chat-float-bar button { border:none; border-radius:20px; padding:8px 16px; font-size:13px; cursor:pointer; box-shadow:0 2px 10px rgba(0,0,0,0.18); transition:opacity 0.2s,transform 0.15s; }
 .chat-float-bar button:hover { transform:translateY(-1px); }
 .float-goto-bottom { background:var(--primary,#4A90D9); color:#fff; }
-.chat-input .input-info { display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:11px; color:var(--text-light); }
+.chat-input .input-info { display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:11px; color:var(--text-light); position:relative; }
 .chat-input .model-select { font-size:11px; padding:2px 8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); }
+/* 2026-10-21：模型+思考强度一体化弹层（DSH-Claude-Style-Reasoning-Slider 形态） */
+.model-picker { position:relative; display:inline-block; }
+.chat-input .model-chip { font-size:11px; padding:2px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); cursor:pointer; max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:bottom; }
+.chat-input .model-chip:hover { border-color:var(--primary); color:var(--primary); }
+.chat-input .model-chip .eff { color:var(--primary); font-weight:600; margin-left:5px; }
+.mp-menu { position:absolute; bottom:calc(100% + 6px); right:0; width:288px; background:var(--panel); border:1px solid var(--border); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.22); padding:8px 10px 10px; z-index:1500; display:none; }
+.mp-menu.on { display:block; }
+.mp-models { max-height:260px; overflow-y:auto; }
+.mp-group { font-size:10px; color:var(--text-light); padding:6px 8px 2px; font-weight:700; }
+.mp-item { padding:6px 8px; border-radius:7px; cursor:pointer; font-size:12px; color:var(--text); }
+.mp-item:hover { background:var(--primary-light); }
+.mp-item.cur { background:var(--primary-light); font-weight:600; }
+.mp-divider { border-top:1px solid var(--border); margin:8px 0 10px; }
+/* 档位字渐变流动（插件同款）：低/中静态紫，高蓝紫流动，最深五彩流动 */
+.model-chip .eff, .eff-level-name { color:#8c73c9; font-weight:600; }
+#model-picker[data-eff="high"] .model-chip .eff, #model-picker[data-eff="high"] .eff-level-name {
+  background:linear-gradient(90deg,#9ec2ff,#6aa2ff,#9ec2ff); background-size:200% auto;
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+  animation:eff-flow 4s linear infinite; }
+#model-picker[data-eff="max"] .model-chip .eff, #model-picker[data-eff="max"] .eff-level-name {
+  background:linear-gradient(90deg,#c9b9ea,#ae9aef,#a2c1ff,#c5b0f4,#c9b9ea); background-size:200% auto;
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+  animation:eff-flow 3.2s linear infinite; }
+@keyframes eff-flow { to { background-position:200% center; } }
+/* 2026-10-21：Claude 风格吸附滑块（DSH-Claude-Style-Reasoning-Slider 同款交互） */
+.eff-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:3px; }
+.eff-level-name { font-size:13px; font-weight:600; color:#8c73c9; }
+.eff-help { width:16px; height:16px; border-radius:50%; border:1px solid var(--border); color:var(--text-light); font-size:10px; display:inline-flex; align-items:center; justify-content:center; cursor:help; }
+.eff-axis { display:flex; justify-content:space-between; font-size:10.5px; color:var(--text-light); margin-bottom:6px; }
+.eff-slider { position:relative; height:24px; touch-action:none; }
+.eff-track { position:absolute; top:2px; bottom:2px; left:0; right:0; border-radius:999px; background:var(--border); }
+/* 招牌紫像素渐变：全宽铺在轨道上，用 clip-path 按档位裁右缘 —— 越往右颜色越深（仿插件渐变映射） */
+.eff-grad { position:absolute; top:2px; bottom:2px; left:0; right:0; border-radius:999px; background:linear-gradient(90deg,#dccdf0 0%,#d4c2ee 14%,#c8b2e8 32%,#b99ee2 52%,#aa88dc 72%,#9c74d8 88%,#8f62d4 100%); clip-path:inset(0 100% 0 0); transition:clip-path .18s ease; }
+/* Max 档专属：像素抖动纹理（两层错位棋盘 + 右深左浅 mask），插件里像素场的平价 CSS 版 */
+.eff-pixels { position:absolute; top:2px; bottom:2px; left:0; right:0; border-radius:999px; pointer-events:none; opacity:0; transition:opacity .25s ease;
+  background-image:repeating-conic-gradient(rgba(255,255,255,.5) 0% 25%, transparent 0% 50%), repeating-conic-gradient(rgba(140,98,212,.35) 0% 25%, transparent 0% 50%);
+  background-size:5px 5px, 9px 9px; background-position:0 0, 2px 3px;
+  -webkit-mask:linear-gradient(90deg, transparent 15%, #000 85%); mask:linear-gradient(90deg, transparent 15%, #000 85%); }
+.eff-pixels.on { opacity:.55; }
+.eff-thumb { position:absolute; top:50%; left:0%; width:16px; height:16px; border-radius:5px; background:#fff; border:2px solid #8c73c9; box-shadow:0 1px 5px rgba(0,0,0,.3); transform:translate(-50%,-50%); transition:left .18s ease; cursor:grab; z-index:2; }
+.eff-thumb:active { cursor:grabbing; }
+.eff-slider.dragging .eff-thumb, .eff-slider.dragging .eff-grad { transition:none; }
+.eff-labels { display:flex; justify-content:space-between; font-size:10px; color:var(--text-light); margin-top:3px; }
+.eff-note { font-size:10px; color:var(--text-light); margin-top:7px; }
 
 /* 图片粘贴/上传 */
 .image-preview-area { display:flex; gap:8px; flex-wrap:wrap; padding:4px 0 8px 0; min-height:0; }
@@ -1843,7 +1887,7 @@ var I18N = {
     'detect_local':'🔍 检测本地模型 (Ollama/LM Studio/vLLM)','api_provider':'API 提供商',
     'model_default':'模型 (选择默认)','api_base':'API Base URL (自动填充)','api_key':'API Key',
     'save_key':'保存 Key','delete_key':'删除 Key','protocol':'传输协议',
-    'custom_model':'自定义模型 ID (可选)','custom_model_ph':'留空用上方选择','set_as_current':'设为当前模型',
+    'custom_model':'自定义模型 ID (可选)','custom_model_ph':'留空用上方选择','set_as_current':'设置全局模型','set_as_current_hint':'全局默认模型：新会话一律使用；未单独选过模型的会话也会跟随切换',
     'imagegen_label':'🖼️ 图像生成 (聊天里说「画一张…」即可用)','imagegen_loading':'读取中…',
     'base_url':'Base URL','model_id':'模型 ID','default_size':'默认尺寸 (横屏/竖屏在 config 里可另配)',
     'default_size2':'默认尺寸','imagegen_size_ph':'1024x1024 或 2K','not_connected':'未连接',
@@ -1934,7 +1978,7 @@ var I18N = {
     'detect_local':'🔍 Detect local models (Ollama/LM Studio/vLLM)','api_provider':'API Provider',
     'model_default':'Model (global default)','api_base':'API Base URL (auto-filled)','api_key':'API Key',
     'save_key':'Save Key','delete_key':'Delete Key','protocol':'Protocol',
-    'custom_model':'Custom model ID (optional)','custom_model_ph':'Empty = use selection above','set_as_current':'Set as default model',
+    'custom_model':'Custom model ID (optional)','custom_model_ph':'Empty = use selection above','set_as_current':'Set as global model','set_as_current_hint':'Global default model: all new sessions use it; sessions without their own choice follow it too',
     'imagegen_label':'🖼️ Image generation (say "draw ..." in chat)','imagegen_loading':'Loading...',
     'base_url':'Base URL','model_id':'Model ID','default_size':'Default size (landscape/portrait configurable)',
     'default_size2':'Default size','imagegen_size_ph':'1024x1024 or 2K','not_connected':'Not connected',
@@ -2057,7 +2101,10 @@ document.addEventListener('DOMContentLoaded', applyUILang);
     <div class="sidebar-nav">
       <div class="nav-item active" onclick="switchView('chat')" id="nav-chat" data-i18n="nav_chat">💬 对话分析</div>
       <div class="nav-item" onclick="switchView('results')" id="nav-results" data-i18n="nav_results">📊 分析结果</div>
-      <div class="nav-item" onclick="switchView('files')" id="nav-files" data-i18n="nav_files">📁 文件浏览</div>
+      <!-- 2026-10-23（用户要求）：去掉侧栏「📁 文件浏览」入口。仅保留一个隐藏 DOM 占位，
+           好让 switchView() 里的 nav-<view> 引用不空转；面板本体 panel-files 与
+           browseFiles 逻辑一并休眠（老深链/内部调用不会报错，只是不再出现在侧栏）。 -->
+      <div id="nav-files" style="display:none;" aria-hidden="true"></div>
       <div class="nav-item" onclick="switchView('kb')" id="nav-kb" data-i18n="nav_kb">📚 知识库</div>
       <div class="nav-item" onclick="switchView('skills')" id="nav-skills" data-i18n="nav_skills">🧩 Skill库</div>
       <div class="nav-item" onclick="switchView('settings')" id="nav-settings" data-i18n="nav_settings">⚙️ 设置</div>
@@ -2069,10 +2116,10 @@ document.addEventListener('DOMContentLoaded', applyUILang);
       <div class="nav-item" onclick="openDcsConsole()" id="nav-dcs" data-i18n="nav_dcs">☁️ DCS 云</div>
       <div class="nav-item" onclick="openEnvManager()" id="nav-env-mgr" data-i18n="nav_env_mgr">🧩 环境管理</div>
       <!-- 2026-09-28：原「🎨 背景」（cycleTheme 快捷切换）改为片头设置入口；
-           配色主题仍在「设置 → 配色主题」里，功能未动。cycleTheme() 函数保留未删。 -->
-      <div class="nav-item" onclick="openIntroSettings()" id="nav-intro" style="font-size:12px;color:#888;" title="片头动画设置：选片源、选播放时机，也可以彻底关闭">🎬 片头设置</div>
+           配色主题仍在「设置 → 配色主题」里，功能未动。cycleTheme() 函数保留未删。
+           2026-10-23（用户要求）：片头设置不再占侧栏一行，已挪进「设置」面板第一组。 -->
     </div>
-    <div class="sidebar-footer" id="footer-info">MemOmics v1</div>
+    <div class="sidebar-footer" id="footer-info" title="版本信息加载中…">MemOmics …</div>
     <div class="sidebar-footer" style="padding-top:0;">
       <span id="update-check-btn" onclick="showUpdateDialog()" title="检查更新" style="cursor:pointer;font-size:12px;color:var(--text-light);">🔄 检查更新</span>
       <span id="update-status-dot" style="display:none;margin-left:6px;font-size:11px;"></span>
@@ -2143,6 +2190,26 @@ document.addEventListener('DOMContentLoaded', applyUILang);
         <button id="send" onclick="send(false)" data-i18n="send">发送</button>
         <button id="stop" class="stop-btn" onclick="stopAgent()" title="强制停止当前运行" data-i18n="stop">⏹ 停止</button>
       </div>
+<!-- 2026-10-21：Provider Key 弹窗——选 provider 直接弹小窗填 Key + 当场拉模型（上游真实反馈） -->
+<div id="provider-key-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99998;align-items:center;justify-content:center;backdrop-filter:blur(2px);">
+  <div style="background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px 22px;width:min(440px,92vw);box-shadow:0 12px 40px rgba(0,0,0,.3);">
+    <div style="font-size:15px;font-weight:700;margin-bottom:2px;" id="pkm-title">🔑 配置 API Key</div>
+    <div style="font-size:11px;color:var(--text-light);margin-bottom:12px;" id="pkm-sub"></div>
+    <label style="font-size:12px;color:var(--text-light);">Base URL</label>
+    <input type="text" id="pkm-url" readonly style="width:100%;margin:3px 0 10px;padding:7px 9px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text-light);font-size:12px;box-sizing:border-box;">
+    <label style="font-size:12px;color:var(--text-light);">API Key</label>
+    <input type="password" id="pkm-key" placeholder="sk-..." style="width:100%;margin:3px 0 4px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text);font-size:13px;box-sizing:border-box;">
+    <div id="pkm-hint" style="font-size:11px;color:var(--text-light);margin-bottom:12px;"></div>
+    <div id="pkm-status" style="font-size:12px;margin-bottom:10px;max-height:110px;overflow:auto;line-height:1.6;"></div>
+    <div style="font-size:11px;color:var(--text-light);line-height:1.5;margin-bottom:8px;">保存后会自动逐个检测，连不上的模型不会出现在选择器里（状态区可「↩ 恢复」）</div>
+    <div style="display:flex;gap:6px;justify-content:flex-end;align-items:center;">
+      <button id="pkm-delete" onclick="providerKeyModalDelete()" style="display:none;padding:4px 10px;border-radius:6px;cursor:pointer;background:transparent;border:1px solid var(--danger);color:var(--danger);font-size:11.5px;line-height:1.4;margin-right:auto;">删除 Key</button>
+      <button onclick="providerKeyModalClose()" style="padding:4px 12px;border-radius:6px;cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--text-light);font-size:11.5px;line-height:1.4;">取消</button>
+      <button id="pkm-save" onclick="providerKeyModalSave()" style="padding:4px 13px;border-radius:6px;cursor:pointer;background:var(--primary);border:1px solid var(--primary);color:#fff;font-size:11.5px;font-weight:600;line-height:1.4;white-space:nowrap;">保存并拉取模型</button>
+    </div>
+  </div>
+</div>
+
 <div id="bundle-modal-export" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;align-items:center;justify-content:center;backdrop-filter:blur(2px);">
   <div style="background:#2b3140;color:#eef1f7;border:1px solid #4d5670;border-radius:14px;padding:20px 22px;width:min(680px,94vw);max-height:86vh;overflow:auto;box-shadow:0 20px 70px rgba(0,0,0,.7);font-size:13px;">
     <div style="font-size:17px;font-weight:700;margin-bottom:6px;">📦 导出资产包</div>
@@ -2213,7 +2280,28 @@ document.addEventListener('DOMContentLoaded', applyUILang);
       </div>
       <div class="input-info">
         <span data-i18n="enter_hint">Enter发送 · Shift+Enter换行</span>
-        <select class="model-select" id="model-select" onchange="onModelSelect()"></select>
+        <!-- 2026-10-21：模型+思考强度一体化弹层（DSH-Claude-Style-Reasoning-Slider 形态：点模型名 → 模型列表 + 吸附滑块） -->
+        <div class="model-picker" id="model-picker">
+          <button type="button" class="model-chip" id="model-chip" onclick="toggleModelPicker(event)" title="选择模型 / 调整思考强度"><span id="model-chip-label">选择模型</span><span class="eff" id="model-chip-effort"></span> <span class="chev">⌃</span></button>
+          <div class="mp-menu" id="mp-menu">
+            <div class="mp-models" id="mp-models"></div>
+            <div class="mp-divider"></div>
+            <div class="eff-head">
+              <span class="eff-level-name" id="eff-slider-cur">全局</span>
+              <span class="eff-help" title="思考强度：只对当前选中的模型单独生效；「全局」= 跟随全局档位（设置里不再单独占地方）">?</span>
+            </div>
+            <div class="eff-axis"><span>更快</span><span>更聪明</span></div>
+            <div class="eff-slider" id="eff-slider">
+              <div class="eff-track"></div>
+              <div class="eff-grad" id="eff-grad"></div>
+              <div class="eff-pixels" id="eff-pixels"></div>
+              <div class="eff-thumb" id="eff-thumb"></div>
+            </div>
+            <div class="eff-labels"><span>Default</span><span>Low</span><span>Medium</span><span>High</span><span>Max</span></div>
+            <div class="eff-note" id="eff-note">跟随全局档位</div>
+          </div>
+        </div>
+        <select class="model-select" id="model-select" onchange="onModelSelect()" style="display:none;"></select>
       </div>
     </div>
   </div>
@@ -2444,30 +2532,16 @@ document.addEventListener('DOMContentLoaded', applyUILang);
     <div id="panel-settings" style="display:none;">
       <div class="info-header" data-i18n="settings_title">设置</div>
       <div class="settings-panel">
+        <!-- 2026-10-23（用户要求）：片头设置从侧栏挪进设置面板 -->
+        <div class="settings-group" id="intro-settings-group">
+          <div style="font-weight:600;margin-bottom:6px;">🎬 片头设置</div>
+          <div style="font-size:11px;color:var(--text-light);margin-bottom:10px;">
+            新会话的整屏片头动画：选片源、选播放时机，也可以彻底关掉。
+          </div>
+          <button onclick="openIntroSettings()" title="打开片头设置" style="font-size:13px;padding:8px 18px;">🎬 打开片头设置</button>
+        </div>
         <!-- 已连接的模型快速切换 -->
         <div class="settings-group" id="bundle-group">
-  <div style="font-weight:600;margin-bottom:4px;">📦 资产包（记忆 / 知识库 / 技能 导入导出）</div>
-  <div style="font-size:11px;color:var(--text-light);margin-bottom:8px;">
-    导出自动脱敏（路径替换为 $MEMOMICS_HOME 等）；导入默认<b>只新增不覆盖</b>，冲突需在预览里勾选。
-  </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-    <label style="font-size:12px;"><input type="checkbox" id="bundle-scope-kb" checked> 知识库</label>
-    <label style="font-size:12px;"><input type="checkbox" id="bundle-scope-skills" checked> 技能</label>
-    <label style="font-size:12px;"><input type="checkbox" id="bundle-scope-memory" checked> 记忆</label>
-    <input type="text" id="bundle-topic" placeholder="主题（可选，如 deg-analysis）" style="flex:1;min-width:150px;">
-    <button onclick="bundleExport()" style="font-size:12px;">📦 导出</button>
-  </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
-    <input type="text" id="bundle-zip-path" placeholder="包文件路径（点『列出包』可点选）" style="flex:1;min-width:220px;">
-    <button onclick="bundleList()" style="font-size:12px;">📂 列出包</button>
-    <button onclick="bundlePreview()" style="font-size:12px;">👀 预览</button>
-    <button onclick="bundleImport()" style="font-size:12px;">⬇ 导入</button>
-  </div>
-  <div id="bundle-list-box" style="font-size:11px;max-height:110px;overflow:auto;margin-top:6px;"></div>
-  <div id="bundle-preview-box" style="font-size:11px;max-height:240px;overflow:auto;margin-top:6px;"></div>
-  <div id="bundle-status" style="font-size:12px;margin-top:6px;"></div>
-</div>
-<div class="settings-group" id="bundle-group">
   <div style="font-weight:600;margin-bottom:6px;">📦 资产包</div>
   <div style="font-size:11px;color:var(--text-light);margin-bottom:10px;">
     把知识库 / 技能 / 记忆打包带走（自动脱敏）。导入不用在这里——直接在对话框里说「导入这个包 &lt;路径&gt;」即可。
@@ -2488,45 +2562,41 @@ document.addEventListener('DOMContentLoaded', applyUILang);
         <!-- 添加新 Provider Key -->
         <div class="settings-group">
           <label data-i18n="api_provider">API 提供商</label>
-          <select id="settings-provider-select" onchange="onProviderSelect()" style="width:100%;"></select>
+          <select id="settings-provider-select" onchange="onProviderSelect(true)" style="width:100%;"></select>
+          <div style="margin-top:6px;">
+            <button onclick="openProviderKeyModal(document.getElementById('settings-provider-select').value)" title="配置/更新该提供商的 Key 并当场拉取模型（上游真实反馈）" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🔑 配置 Key / 拉取模型</button>
+          </div>
+          <!-- 2026-10-21：自定义提供商并入 API 提供商下拉（选「➕ 自定义」展开；原独立段落已删） -->
+          <div id="cp-box" style="display:none;margin-top:8px;border:1px dashed var(--border);border-radius:8px;padding:10px;">
+            <div style="font-size:11px;color:var(--text-light);margin-bottom:6px;">任意 OpenAI 兼容端点：填 URL + Key → 自动拉取模型 → 添加后自动选中并绑定</div>
+            <div id="custom-providers-list" style="font-size:11px;margin-bottom:8px;"></div>
+            <div style="display:flex;gap:4px;">
+              <input type="text" id="cp-name" placeholder="名称（留空自动填）" style="flex:1;min-width:100px;font-size:12px;">
+              <input type="text" id="cp-url" placeholder="URL: https://opencode.ai/zen/go/v1 或完整 …/v1/chat/completions" style="flex:3;min-width:200px;font-size:12px;">
+            </div>
+            <div style="display:flex;gap:4px;margin-top:4px;">
+              <input type="password" id="cp-api-key" placeholder="API Key" style="flex:2;min-width:150px;font-size:12px;">
+              <button onclick="discoverCustomModels()" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--primary);color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">🔍 自动拉取模型</button>
+            </div>
+            <div style="display:flex;gap:4px;margin-top:4px;">
+              <input type="text" id="cp-models" placeholder="模型名，逗号分隔（点「自动拉取模型」自动填充，可再手动增删）" style="flex:3;min-width:180px;font-size:12px;">
+              <button onclick="addCustomProvider()" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--success);color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">添加并绑定</button>
+            </div>
+            <div id="cp-status" style="font-size:11px;color:var(--text-light);margin-top:2px;"></div>
+          </div>
         </div>
-        <div class="settings-group">
+        <div class="settings-group hide-when-custom">
           <label data-i18n="model_default">模型 (选择默认)</label>
           <select id="settings-model" onchange="onSettingsModelSelect()"></select>
           <div id="settings-provider-note" style="font-size:11px;color:var(--text-light);margin-top:4px;"></div>
-          <div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-            <button onclick="refreshProviderModels()" id="settings-models-refresh-btn" style="font-size:11px;padding:2px 10px;border-radius:4px;background:var(--border);color:var(--text);border:none;cursor:pointer;">🔄 拉取模型</button>
-            <span id="settings-models-refresh-status" style="font-size:11px;color:var(--text-light);"></span>
-          </div>
         </div>
-        <div class="settings-group">
-          <label>思考强度 (reasoning effort)</label>
-          <select id="settings-effort" onchange="onEffortSelect()">
-            <option value="off">off（默认：不发送，行为不变）</option>
-            <option value="low">low（快，推理最少）</option>
-            <option value="medium">medium</option>
-            <option value="high">high</option>
-            <option value="max">max（最深，最慢；上游可能忽略）</option>
-          </select>
-          <div id="settings-effort-note" style="font-size:11px;color:var(--text-light);margin-top:4px;">
-            仅对支持该参数的上游生效；实测 dcs-cloud 的 max 档抖动较大。
-          </div>
-        </div>
-        <div class="settings-group">
+        <!-- 思考强度已移到交互框右下角（模型选择器旁），2026-10-21；设置页不再单独占一块 -->
+        <div class="settings-group hide-when-custom">
           <label data-i18n="api_base">API Base URL (自动填充)</label>
           <input type="text" id="settings-base-url" placeholder="https://api.deepseek.com/v1" readonly>
         </div>
-        <div class="settings-group">
-          <label data-i18n="api_key">API Key</label>
-          <div style="display:flex;gap:4px;">
-            <input type="password" id="settings-api-key" placeholder="sk-..." style="flex:1;">
-            <button onclick="saveProviderKey()" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--primary);color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;" data-i18n="save_key">保存 Key</button>
-            <button onclick="deleteProviderKey()" title="删除该 Provider 已保存的 API Key" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--danger);color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;" data-i18n="delete_key">删除 Key</button>
-          </div>
-          <div id="settings-api-key-hint" style="font-size:11px;color:var(--text-light);margin-top:2px;"></div>
-          <div id="settings-api-key-status" style="font-size:11px;margin-top:2px;"></div>
-        </div>
-        <div class="settings-group">
+        <!-- API Key 内联区已移除（2026-10-22）：Key 的填/删/拉取全部收进「配置 Key / 拉取模型」弹窗 -->
+        <div class="settings-group hide-when-custom">
           <label data-i18n="protocol">传输协议</label>
           <select id="settings-provider">
             <option value="openai">OpenAI 兼容</option>
@@ -2534,31 +2604,11 @@ document.addEventListener('DOMContentLoaded', applyUILang);
             <option value="google">Google</option>
           </select>
         </div>
-        <div class="settings-group">
-          <label data-i18n="custom_model">自定义模型 ID (可选)</label>
-          <input type="text" id="settings-custom-model" data-i18n-ph="custom_model_ph" placeholder="留空用上方选择" style="font-size:12px;">
-        </div>
-        <button class="save-btn" onclick="saveModel()" data-i18n="set_as_current">设为当前模型</button>
+        <!-- 自定义模型 ID 输入已移除（2026-10-22 精简）：直接用上方模型下拉 -->
+        <button class="save-btn hide-when-custom" onclick="saveModel()" data-i18n="set_as_current">设置全局模型</button>
+        <div data-i18n="set_as_current_hint" class="hide-when-custom" style="font-size:11px;color:var(--text-light);margin-top:6px;">全局默认模型：新会话一律使用；未单独选过模型的会话也会跟随切换</div>
         <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
-        <!-- 自定义提供商（2026-08-27：任意 OpenAI 兼容端点 + 自动发现模型） -->
-        <div class="settings-group">
-          <label>⭐ 自定义提供商（输入 URL + Key，自动发现模型）</label>
-          <div id="custom-providers-list" style="font-size:11px;margin-bottom:8px;"></div>
-          <div style="display:flex;gap:4px;">
-            <input type="text" id="cp-name" placeholder="名称（可自动填）" style="flex:1;min-width:100px;font-size:12px;">
-            <input type="text" id="cp-url" placeholder="URL: https://opencode.ai/zen/go/v1 或完整 …/v1/chat/completions" style="flex:3;min-width:200px;font-size:12px;">
-          </div>
-          <div style="display:flex;gap:4px;margin-top:4px;">
-            <input type="password" id="cp-api-key" placeholder="API Key" style="flex:2;min-width:150px;font-size:12px;">
-            <button onclick="discoverCustomModels()" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--primary);color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">🔍 发现模型</button>
-          </div>
-          <div style="display:flex;gap:4px;margin-top:4px;">
-            <input type="text" id="cp-models" placeholder="模型名，逗号分隔（点「发现模型」自动填充，可再手动增删）" style="flex:3;min-width:180px;font-size:12px;">
-            <button onclick="addCustomProvider()" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:var(--success);color:#fff;cursor:pointer;font-size:12px;white-space:nowrap;">添加</button>
-          </div>
-          <div id="cp-status" style="font-size:11px;color:var(--text-light);margin-top:2px;"></div>
-        </div>
-        <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
+        <!-- 自定义提供商已并入上方「API 提供商」下拉的「➕ 自定义」选项（2026-10-21） -->
         <!-- 图像生成配置 -->
         <div class="settings-group">
           <label>🖼️ 图像生成 (聊天里说「画一张…」即可用)</label>
@@ -2998,8 +3048,10 @@ function handleMessage(msg) {
     _lastTool = msg.tool || '';
     _lastStalled = !!msg.stalled;
     _lastTurns = msg.turns || 0;
+    _lastPhase = msg.phase || '';
+    if (msg.phase_elapsed !== undefined && msg.phase_elapsed !== null) _lastPhaseStartTs = Date.now() - msg.phase_elapsed * 1000;
     if (msg.elapsed !== undefined && msg.elapsed !== null) _runStartTs = Date.now() - msg.elapsed * 1000;
-    updateLiveStatus(msg.elapsed, msg.api_calls, msg.tool, msg.stalled, msg.turns);
+    updateLiveStatus(msg.elapsed, msg.api_calls, msg.tool, msg.stalled, msg.turns, msg.phase, msg.phase_elapsed);
     _startLiveStatusTicker();
     return;
   }
@@ -3688,7 +3740,8 @@ async function send(background) {
     imageUrls = await uploadPendingImages();
   }
   // 检查 agent 是否正在运行 — 如果在运行，走 steer 中途引导
-  if (typeof agentRunning !== 'undefined' && agentRunning && targetSid && !background) {
+  // 2026-10-21： steer 仅限「当前会话自己在跑」——别的会话在跑不再把本会话的消息误判成引导
+  if (typeof agentRunning !== 'undefined' && agentRunning && targetSid && !background && _currentRunningSid === targetSid) {
 
     // agent 运行中，发 steer 引导消息
     if (currentSid === targetSid) addUserMsg(text, imageUrls);
@@ -3714,6 +3767,7 @@ async function send(background) {
   document.getElementById('stop').classList.add('active');
   setFloatBar(true);
   agentRunning = true;
+  _currentRunningSid = targetSid;  // 2026-10-21：发送即锚定运行会话，steer 判定（_currentRunningSid===targetSid）立刻成立
   document.getElementById('steer-hint').style.display = '';
     _runStartTs = Date.now();
     _lastHeartbeatTs = 0;
@@ -4143,7 +4197,7 @@ function _nowTs() {
 }
 
 // === 运行状态条（实时可见"还在跑/跑了多久/在干什么"，2026-08-14）===
-var _runStartTs = null, _lastHeartbeatTs = 0, _lastApiCalls = 0, _lastTool = '', _lastStalled = false, _lastTurns = 0, _liveStatusTimer = null;
+var _runStartTs = null, _lastHeartbeatTs = 0, _lastApiCalls = 0, _lastTool = '', _lastStalled = false, _lastTurns = 0, _liveStatusTimer = null, _lastPhase = '', _lastPhaseStartTs = 0;
 // 2026-09-26：最后一次"界面有新内容"的时刻。此前 _lastActivityTs 只在 tool_progress
 // 分支里赋值（而且是隐式全局），delta/reasoning 都不算 → 静默计时根本没数据可用。
 var _lastActivityTs = 0;
@@ -4176,7 +4230,7 @@ function _silentSeconds(now) {
   return Math.max(0, Math.floor((now - base) / 1000));
 }
 
-function updateLiveStatus(elapsed, apiCalls, tool, stalled, turns) {
+function updateLiveStatus(elapsed, apiCalls, tool, stalled, turns, phase, phaseElapsed) {
   var el = _ensureLiveStatus();
   if (!el) return;
   el.style.display = 'block';
@@ -4185,6 +4239,8 @@ function updateLiveStatus(elapsed, apiCalls, tool, stalled, turns) {
   var parts = ['🔄 运行中', '已用 ' + _fmtDur(elapsed)];
   if (apiCalls !== undefined && apiCalls !== null) parts.push(apiCalls + ' 次工具调用');
   if (tool) parts.push('当前: ' + tool);
+  // 2026-10-21：思考相位明说 —— 工具空窗 = 在等模型回复。用户反馈"任务很久，实际在思考，看着像卡死"。
+  else if (phase === 'llm') parts.push('🧠 等待模型回复 · 本次已等 ' + _fmtDur(Math.max(0, phaseElapsed || 0)));
   if (turns) parts.push('第 ' + turns + ' 轮');
   // 2026-09-26 用户反馈「有时候会卡住，长时间不输出内容」。实测长工具（一场
   // debate_analysis 15-21 分钟）期间聊天区一个字都不新增，用户分不清是在跑还是死了。
@@ -4223,7 +4279,8 @@ function _startLiveStatusTicker() {
     // 静默超过 60s 时也要每秒刷 —— 否则"已 N 秒无新输出"这个数字自己不会走，
     // 用户看到的还是像卡死。（2026-09-26）
     if (_silentSeconds(now) >= 60 || !_lastHeartbeatTs || now - _lastHeartbeatTs > 60000) {
-      updateLiveStatus((now - _runStartTs) / 1000, _lastApiCalls, _lastTool, _lastStalled, _lastTurns);
+      updateLiveStatus((now - _runStartTs) / 1000, _lastApiCalls, _lastTool, _lastStalled, _lastTurns,
+        _lastPhase, _lastPhaseStartTs ? (now - _lastPhaseStartTs) / 1000 : 0);
     }
   }, 1000);
 }
@@ -8033,6 +8090,20 @@ function switchSession(sid) {
   // 记住当前会话（2026-08-08：刷新后 autoSelectLatestSession 优先恢复它）
   try { localStorage.setItem('memomics_last_session', sid); } catch(e) {}
   loadPinnedSkills(sid);  // P8: 切会话/刷新恢复会话时同步该会话的置顶 skill
+  // 2026-10-21：技能触发标记随会话隔离 —— 会话1 的「本轮应加载/已加载/为什么命中」
+  // 不再带进会话2（用户要求：会话完全独立）。标记存进各会话自己的渲染缓存。
+  try {
+    if (_prevSid) {
+      var _pm = _ensureSessionRenderCache(_prevSid);
+      _pm.skillMarks = { expected: _p8.expected, turnUsed: _p8.turnUsed, hits: _sk3.hits, invoke: _sk3.invoke };
+    }
+    var _nm2 = _ensureSessionRenderCache(sid).skillMarks || null;
+    _p8.expected = (_nm2 && _nm2.expected) || [];
+    _p8.turnUsed = (_nm2 && _nm2.turnUsed) || {};
+    _sk3.hits = (_nm2 && _nm2.hits) || [];
+    _sk3.invoke = (_nm2 && _nm2.invoke) || null;
+    _sk3RenderHits();
+  } catch (e) {}
 
   // === 会话级独立模型：切会话时实时从后端拉会话级 current 刷新下拉框+徽章 ===
   // （2026-08-08 重构：原来用 _allSessions 列表缓存的 model 字段猜测，
@@ -8257,7 +8328,10 @@ function switchView(view) {
   var panelMap = { chat: 'panel-info', results: 'panel-results', files: 'panel-files', kb: 'panel-kb', skills: 'panel-skills', settings: 'panel-settings', memory: 'panel-memory', context: 'panel-context', weixin: 'panel-weixin', tasks: 'panel-tasks' };
   var views = ['chat', 'results', 'files', 'kb', 'skills', 'settings', 'memory', 'context', 'weixin'];
   views.forEach(function(v) {
-    document.getElementById('nav-' + v).classList.toggle('active', v === view);
+    // 2026-10-23：侧栏已去掉「📁 文件浏览」入口（nav-files 只剩隐藏占位）——
+    // 这里加存在性判断，视图表/引用的任何一项被裁掉都不会再抛错。
+    var _el = document.getElementById('nav-' + v);
+    if (_el) _el.classList.toggle('active', v === view);
   });
 
   // 显示对应右侧面板
@@ -8395,7 +8469,11 @@ async function refreshModelUI() {
       groups[g].items.forEach(function(m) {
         var mBase = ((m.base_url || '').replace(/\/+$/, '') || '').toLowerCase();
         var matched = (m.id === curModelId) && (!curBase || mBase === curBase);
-        html += '<option value="' + m.id + '\\u0001' + (m.provider_id || '') + '"' + (matched ? ' selected' : '') + '>' + m.name + '</option>';
+        // 2026-10-22 修：这里原来写的是 '\\u0001'（字面量反斜杠+u0001），而 onModelSelect()
+        // 用 split('\u0001') 按真正的 U+0001 分割 → 永远分不开：provider_id 丢失、模型名里
+        // 还带着 "\u0001opencode-go" 尾巴，后端查不到 → 报「模型 'xxx' 未配置 API Key」。
+        // 现在值格式统一为：<model id> + U+0001 + <provider id>。
+        html += '<option value="' + m.id + '\u0001' + (m.provider_id || '') + '"' + (matched ? ' selected' : '') + '>' + m.name + '</option>';
       });
       html += '</optgroup>';
     });
@@ -8405,13 +8483,15 @@ async function refreshModelUI() {
       return m.id === curModelId && (!curBase || mBase === curBase);
     });
     if (!hasCur && currentModel.model) {
-      html += '<optgroup label="当前模型"><option value="' + currentModel.model + '\\u0001" selected>' + currentModel.model + '</option></optgroup>';
+      html += '<optgroup label="当前模型"><option value="' + currentModel.model + '\u0001" selected>' + currentModel.model + '</option></optgroup>';
     }
     sel.innerHTML = html;
   }
   if (_mySeq !== _modelUICtl) return;  // 过期结果丢弃
   var badge = document.getElementById('model-badge');
   if (badge) badge.textContent = currentModel.model || '未设置';
+  loadEffortSetting();   // 2026-10-21：模型一变就同步右下角思考强度选择器（按模型覆盖）
+  _renderModelChip();    // 2026-10-21：模型胶囊与弹层列表同步（原生 select 隐藏做数据底座）
   return d;
 }
 
@@ -8422,7 +8502,7 @@ async function loadModels() {
     try {
       var vr = await fetch('/api/version');
       var vd = await vr.json();
-      document.getElementById('footer-info').innerHTML = 'MemOmics v1 · ' + (vd.version || '?') + ' · ' + (vd.started || '');
+      applyFooterVersion(vd);
     } catch(e) {}
     // 2026-08-23 迁移 MiMo-Code：启动后拉取自动检查结果 → footer 状态点
     try {
@@ -8458,11 +8538,30 @@ function mmTopBanner(id, html, bg, fg, bd) {
   document.body.appendChild(el);
   try { document.body.style.paddingTop = '46px'; } catch (e) {}
 }
+// 2026-10-21：侧栏底部常驻版本标识（用户要求：一眼看到当前是哪个版本）。
+// 显示磁盘安装版本 pkg_version（更新应用后立即变化）；restart_required 时加 ⚠️ 提示重启。
+function applyFooterVersion(d) {
+  try {
+    var fi = document.getElementById('footer-info');
+    if (!fi || !d) return;
+    var diskV = d.pkg_version || '';
+    fi.textContent = 'MemOmics' + (diskV ? ' ' + diskV : '') + (d.restart_required ? ' ⚠️' : '');
+    fi.title = '当前安装版本：' + (diskV || '?')
+      + ((d.code_version_at_start && d.code_version_at_start !== diskV) ? '\n运行中版本：' + d.code_version_at_start + '（重启后切到新版）' : '')
+      + ((d.version && d.version !== 'unknown') ? '\ngit commit：' + d.version : '')
+      + (d.started ? '\n本次启动：' + d.started : '')
+      + (d.restart_required ? '\n⚠️ 磁盘已是新版，重启后生效' : '');
+  } catch (e) {}
+}
+async function refreshFooterVersion() {
+  try { var r = await fetch('/api/version'); applyFooterVersion(await r.json()); } catch (e) {}
+}
 async function checkStaleVersion() {
   try {
     var r = await fetch('/api/version');
     var d = await r.json();
     if (!d) return;
+    applyFooterVersion(d);
     if (d.restart_required) {
       mmTopBanner('mm-stale-banner',
         '⚠️ 代码已更新到 <b>' + (d.pkg_version || '') + '</b>，但当前运行的还是旧版本 <b>' +
@@ -8504,28 +8603,29 @@ async function loadProviders() {
     html += renderGroup('国际大厂');
     delete groups['★ DCS Cloud (推荐)']; delete groups['国内服务']; delete groups['国际大厂'];
     Object.keys(groups).sort().forEach(function(g) { html += renderGroup(g); });
+    // 2026-10-21：自定义提供商并入本下拉（用户要求删掉独立段落），选中后展开内联表单
+    html += '<option value="__custom__">➕ 自定义提供商（任意 OpenAI 兼容端点）…</option>';
+    // 2026-10-21：保留用户当前选择 —— 刷新/保存 Key/加自定义后不再被拽回当前模型的
+    // provider（用户反馈「老是跳到 DCS」）。仅首次渲染（或所选 provider 已被删）才归位一次。
+    var prevPid = sel.value || '';
     sel.innerHTML = html;
-    // 恢复当前模型对应的 provider（不硬编码 dcs-cloud）：优先记忆，其次按 base_url 匹配当前模型
-    var curPid = localStorage.getItem('memomics_last_provider') || 'dcs-cloud';
-    if (currentModel && currentModel.base_url) {
-      var baseMatch = allProviders.find(function(p) { return p.api === currentModel.base_url; });
-      if (baseMatch) curPid = baseMatch.id;
-    }
-    if (!allProviders.some(function(p) { return p.id === curPid; })) curPid = 'dcs-cloud';
-    sel.value = curPid;
-    await onProviderSelect();
-    if (currentModel && currentModel.base_url) {
-      var curUrl = currentModel.base_url.toLowerCase().replace(/\/$/, '');
-      for (var i = 0; i < allProviders.length; i++) {
-        if (allProviders[i].api && allProviders[i].api.toLowerCase().replace(/\/$/, '').indexOf(curUrl) >= 0) {
-          sel.value = allProviders[i].id;
-          await onProviderSelect();
-          break;
+    var _stillThere = prevPid && (allProviders.some(function(p) { return p.id === prevPid; }) || prevPid === '__custom__');
+    if (!_stillThere) {
+      // 首次：优先用 localStorage 记住的用户选择；记忆失效才按当前模型 base_url 归位
+      var curPid = localStorage.getItem('memomics_last_provider') || '';
+      if (!curPid || !allProviders.some(function(p) { return p.id === curPid; })) {
+        curPid = 'dcs-cloud';
+        if (currentModel && currentModel.base_url) {
+          var baseMatch = allProviders.find(function(p) { return p.api === currentModel.base_url; });
+          if (baseMatch) curPid = baseMatch.id;
         }
+        if (!allProviders.some(function(p) { return p.id === curPid; })) curPid = 'dcs-cloud';
       }
-      var modelSel = document.getElementById('settings-model');
-      if (modelSel && currentModel.model) modelSel.value = currentModel.model;
+      sel.value = curPid;
+    } else {
+      sel.value = prevPid;
     }
+    await onProviderSelect();
     var pSel = document.getElementById('settings-provider');
     if (pSel && currentModel.provider) pSel.value = currentModel.provider;
     await refreshConnectedModels();
@@ -8535,6 +8635,299 @@ async function loadProviders() {
 }
 
 // === 自定义提供商（2026-08-27）===
+// 2026-10-21：下拉选「➕ 自定义」时展开内联表单，隐藏只适用于已有 provider 的字段
+function _toggleCustomProviderUI(on) {
+  var box = document.getElementById('cp-box');
+  if (box) box.style.display = on ? 'block' : 'none';
+  document.querySelectorAll('.hide-when-custom').forEach(function(el) { el.style.display = on ? 'none' : ''; });
+  if (on) loadCustomProviders();
+}
+
+// === Provider Key 弹窗（2026-10-21：选 provider 直接弹小窗填 Key + 拉模型）===
+var _pkmPid = '';
+var _pkmProbeTimer = null;      // 模型可用性检测的轮询定时器（0.4）
+var _pkmProbePid = '';
+var _probeCache = {};           // pid -> {results:{}, usable, tested, updated_at}（0.4）
+function openProviderKeyModal(pid) {
+  var provider = allProviders.find(function(p) { return p.id === pid; });
+  if (!provider) return;
+  _pkmPid = pid;
+  document.getElementById('pkm-title').textContent = '🔑 ' + (provider.name || pid);
+  document.getElementById('pkm-sub').textContent = provider.has_key
+    ? ('🔑 已绑定 Key：直接点下面按钮就能刷新模型列表（不用再输 Key；要用新 Key 就在上面填一个覆盖）')
+    : '首次配置：填入 Key → 保存并拉取模型（Key 会绑在这家 provider 上，以后拉取不用再输）';
+  document.getElementById('pkm-url').value = provider.api || '';
+  var k = document.getElementById('pkm-key');
+  k.value = '';
+  k.placeholder = provider.has_key ? '（已绑定，留空即可；只有换 Key 时才填）' : (provider.key_hint || 'sk-...');
+  document.getElementById('pkm-hint').textContent = provider.env_var ? ('环境变量：' + provider.env_var) : '';
+  var _saveBtn0 = document.getElementById('pkm-save');
+  if (_saveBtn0) _saveBtn0.textContent = provider.has_key ? '刷新模型列表' : '保存并拉取模型';
+  document.getElementById('pkm-status').innerHTML = '';
+  document.getElementById('pkm-delete').style.display = provider.has_key ? '' : 'none';
+  // 2026-10-22：模型可用性检测改为**静默自动**（用户要求：不要那个测试按键，拉取时自己过滤）
+  //   保存并拉取模型 → 自动逐个试点火 → 连不上的直接摘掉，选择器里只留下能用的。
+  if (_pkmProbeTimer) { clearInterval(_pkmProbeTimer); _pkmProbeTimer = null; }
+  _pkmProbePid = pid;
+  // 2026-10-22 修：这里原来写了一个不存在的函数名 pkmProbeStatus() —— 打开弹窗即抛
+  // ReferenceError，弹窗根本打不开（用户报「没办法点击添加key/拉取模型」）。现在改为
+  // 真实存在的 _pkmLoadProbeState()，且任何异常都不得阻塞弹窗打开。
+  if (provider.has_key) {
+    try { _pkmLoadProbeState(pid); } catch (e) { console.warn('探测状态读取失败(不阻塞弹窗):', e); }
+  }
+  document.getElementById('provider-key-modal').style.display = 'flex';
+  setTimeout(function() { k.focus(); }, 60);
+}
+// 读取并渲染某 provider 的探测状态：跑着→显示进度并接上轮询；有结论→显示汇总；没测过→提示
+async function _pkmLoadProbeState(pid) {
+  var st = document.getElementById('pkm-status');
+  try {
+    var r = await fetch('/api/providers/' + encodeURIComponent(pid) + '/models/probe/status', { cache: 'no-store' });
+    var d = await r.json();
+    _probeCache[pid] = d;
+    if (!st || _pkmProbePid !== pid) return;
+    if (d && d.running) {
+      _startProbePoll(pid);   // 接着看进度（不会重复启动检测）
+      return;
+    }
+    if (!d || d.never_tested || !d.tested) {
+      st.innerHTML = '<span style="color:var(--text-light);">该 provider 还没有检测结论（保存并拉取模型时会自动检测）</span>';
+      return;
+    }
+    st.innerHTML = _probeSummaryHtml(d);
+    // 2026-10-22：有「判失败」的模型就顺手复检一遍（用户反馈「明明可用却标不可用」——
+    // 多半是换 key / 上游恢复之前的旧结论卡着）。只重测失败的那几个，几秒出结果。
+    _pkmRecheckFailed(pid, d);
+  } catch (e) {
+    if (st && _pkmProbePid === pid) {
+      st.innerHTML = '<span style="color:var(--text-light);">探测状态读取失败（不影响保存 Key / 拉取模型）</span>';
+    }
+  }
+}
+async function _pkmRecheckFailed(pid, status) {
+  try {
+    var failed = Object.keys((status && status.results) || {}).filter(function(k) {
+      return status.results[k] && status.results[k].usable === false;
+    });
+    if (!failed.length) return;
+    var r = await fetch('/api/providers/' + encodeURIComponent(pid) + '/models/recheck',
+                        { method: 'POST' });
+    var d = await r.json();
+    if (!r.ok || !d.ok || !d.rechecked) return;
+    var st = document.getElementById('pkm-status');
+    if (st && _pkmProbePid === pid) {
+      st.innerHTML += '<br><span style="color:var(--text-light);">🔄 正在复检 ' + d.rechecked +
+                      ' 个上次不可用的模型（换过 key 或上游恢复了就会自动转回可用）…</span>';
+    }
+    // 等复检结果落盘后刷新标记
+    setTimeout(async function() {
+      try {
+        await refreshProbeMarks(pid);
+        await loadProviders();
+        if (document.getElementById('settings-provider-select').value === pid) await onProviderSelect();
+        var st2 = document.getElementById('pkm-status');
+        if (st2 && _pkmProbePid === pid && _probeCache[pid]) st2.innerHTML = _probeSummaryHtml(_probeCache[pid]);
+      } catch (e) {}
+    }, 9000);
+  } catch (e) { /* 复检失败不打扰 */ }
+}
+// 2026-10-22：模型可用性检测（🧪 测可用性）
+//   背景：拉取模型只验证 /models 能列清单，不等于每个模型都能出话——实测
+//   opencode-go 的 36 个模型里，grok-* / gpt-*-luna / claude-haiku-5-5 等返回
+//   400 ModelProtocolUnsupported、muse-spark-* 受训练期限制、longcat-2.0 端点停用。
+//   这里逐个真发一条最小请求（max_tokens=1），把结论落到 provider_keys.json，
+//   回来后模型下拉会给不可用的打 ⚠️ 标记。
+function _probeLabel(m, apiBase) {
+  var label = m.name;
+  if (m.usable === false) label = '⚠️ ' + label + '（实测不可用）';
+  return label;
+}
+async function providerKeyModalProbe() {
+  // 2026-10-22：弹窗上已删除「🧪 测可用性」按键（用户要求）。保留函数仅供内部调用，
+  // 静默跑一次检测+剪除。
+  return _pkmAutoProbeAfterPull(_pkmPid, true);
+}
+// 「保存并拉取模型」后自动接一次检测并剪除（用户要求：拉回来的清单里只留下连得上的）
+async function _pkmAutoProbeAfterPull(pid, silent) {
+  if (!pid) return;
+  _pkmProbePid = pid;
+  var st = document.getElementById('pkm-status');
+  if (st && !silent) {
+    st.innerHTML = '<span style="color:var(--text-light);">🧪 模型已拉取，正在逐个检测可用性（自动去掉连不上的）…</span>';
+  }
+  try {
+    var r = await fetch('/api/providers/' + encodeURIComponent(pid) + '/models/probe', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ drop_failed: true })   // 无条件剪除
+    });
+    var d = await r.json();
+    if (!r.ok || d.error) { return; }
+    _probeCache[pid] = null;
+    _startProbePoll(pid);
+  } catch (e) { /* 自动检测失败不打扰用户 */ }
+}
+async function pkmRestorePruned(pid) {
+  if (!pid) return;
+  try {
+    var r = await fetch('/api/providers/' + encodeURIComponent(pid) + '/models/prune', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restore: true })
+    });
+    var d = await r.json();
+    if (!d.ok) { showToast('恢复失败：' + (d.error || '')); return; }
+    showToast('已恢复 ' + (d.count || 0) + ' 个模型（下拉里又会带 ⚠️）');
+    _probeCache[pid] = null;
+    await loadProviders();
+    if (document.getElementById('settings-provider-select').value === pid) await onProviderSelect();
+  } catch (e) { showToast('恢复失败：' + e); }
+}
+function _startProbePoll(pid) {
+  if (_pkmProbeTimer) clearInterval(_pkmProbeTimer);
+  _pkmProbePid = pid;
+  var tick = async function() {
+    if (_pkmProbePid !== pid) { clearInterval(_pkmProbeTimer); _pkmProbeTimer = null; return; }
+    try {
+      var r = await fetch('/api/providers/' + encodeURIComponent(pid) + '/models/probe/status', { cache: 'no-store' });
+      var d = await r.json();
+      _probeCache[pid] = d;
+      var inModal = (document.getElementById('provider-key-modal').style.display !== 'none');
+      var st = document.getElementById('pkm-status');
+      if (inModal && st) {
+        var line = '';
+        if (d.running) {
+          line = '<span style="color:var(--text-light);">🧪 检测中 ' + (d.tested || 0) + ' / ' + (d.total || '?') + ' —— 可用 ' +
+                 (d.usable || 0) + ' · 不可用 ' + (d.failed || 0) + '（可关掉弹窗，后台继续）</span>';
+        } else if (d.never_tested) {
+          line = '<span style="color:var(--text-light);">该 provider 还没有检测结论（保存并拉取模型时会自动检测）</span>';
+        } else {
+          line = _probeSummaryHtml(d);
+        }
+        st.innerHTML = line;
+
+      }
+      if (!d.running) {
+        clearInterval(_pkmProbeTimer);
+        _pkmProbeTimer = null;
+        // 检测完 → 刷新下拉（自动剪除过的清单只剩连得上的；未剪除的给不可用模型打 ⚠️）
+        await refreshProbeMarks(pid);
+        await loadProviders();
+        var _pr = allProviders.find(function(x) { return x.id === pid; });
+        if (_pr && document.getElementById('settings-provider-select').value === pid) await onProviderSelect();
+        if (inModal && st) { try { st.innerHTML = _probeSummaryHtml(_probeCache[pid] || d); } catch (e) {} }
+      }
+    } catch (e) { /* 轮询失败不打断，下一拍再试 */ }
+  };
+  tick();
+  _pkmProbeTimer = setInterval(tick, 2000);
+}
+function _probeSummaryHtml(d) {
+  var pruned = (d && d.pruned) || [];
+  var html = '<span style="color:' + (d.failed ? 'var(--danger)' : 'var(--success)') + ';">🧪 已检测 ' + (d.tested || 0) +
+             ' 个模型：可用 ' + (d.usable || 0) + ' · 不可用 ' + (d.failed || 0) + '</span>';
+  var bad = [];
+  var res = d.results || {};
+  Object.keys(res).forEach(function(k) { if (res[k] && res[k].usable === false) bad.push(k); });
+  if (pruned.length) {
+    // 自动剪除过的：这些已经从清单里拿掉，选择器里不会再出现
+    html += '<br><span style="font-size:11px;color:var(--text-light);">已自动去掉 ' + pruned.length +
+            ' 个连不上的模型（不再出现在模型选择器）：' + escapeHtml(pruned.slice(0, 12).join('、')) +
+            (pruned.length > 12 ? (' 等 ' + pruned.length + ' 个') : '') + '</span>';
+    html += '<br><a href="#" onclick="pkmRestorePruned(\'' + escapeHtml(_pkmProbePid || _pkmPid) + '\'); return false;" ' +
+            'style="font-size:11px;color:var(--primary);">↩ 恢复这些模型</a>';
+  } else if (bad.length) {
+    html += '<br><span style="font-size:11px;color:var(--text-light);">不可用：' + escapeHtml(bad.slice(0, 12).join('、')) +
+            (bad.length > 12 ? (' 等 ' + bad.length + ' 个') : '') + '</span>';
+    html += '<br><span style="font-size:11px;color:var(--text-light);">这些模型在下拉里标了 ⚠️ —— 选中会直接报错，别用。</span>';
+  }
+  if (d.updated_at) html += '<br><span style="font-size:11px;color:var(--text-light);">检测时间：' + escapeHtml(d.updated_at) +
+                            '（打开本弹窗会自动复检上次失败的模型，换过 key 或上游恢复就会翻回可用）</span>';
+  return html;
+}
+async function refreshProbeMarks(pid) {
+  try {
+    var r = await fetch('/api/providers/' + encodeURIComponent(pid) + '/models/probe/status', { cache: 'no-store' });
+    _probeCache[pid] = await r.json();
+  } catch (e) {}
+}
+function providerKeyModalClose() { document.getElementById('provider-key-modal').style.display = 'none'; }
+async function providerKeyModalDelete() {
+  // 2026-10-22：删除通道收进弹窗（原内联「删除 Key」按钮已随精简移除）
+  var provider = allProviders.find(function(p) { return p.id === _pkmPid; });
+  if (!provider || !provider.has_key) return;
+  if (!confirm('确定删除 ' + (provider.name || _pkmPid) + ' 的 API Key？删除后需重新配置才能使用。')) return;
+  try {
+    var r = await fetch('/api/providers/' + encodeURIComponent(_pkmPid) + '/key', { method: 'DELETE' });
+    var d = await r.json();
+    if (d.ok) {
+      showToast('✅ Key 已删除: ' + (provider.name || _pkmPid));
+      providerKeyModalClose();
+      await loadProviders();
+    } else {
+      document.getElementById('pkm-status').innerHTML = '<span style="color:var(--danger);">❌ 删除失败: ' + escapeHtml(d.error || '') + '</span>';
+    }
+  } catch (e) {
+    document.getElementById('pkm-status').innerHTML = '<span style="color:var(--danger);">❌ 请求异常：' + escapeHtml(String(e)) + '</span>';
+  }
+}
+async function providerKeyModalSave() {
+  var key = document.getElementById('pkm-key').value.trim();
+  var st = document.getElementById('pkm-status');
+  var btn = document.getElementById('pkm-save');
+  // 2026-10-22（用户诉求）：key 绑在每家 provider 上，已绑定过的**不用再输**。
+  //   不填 key 点按钮 = 用已绑定的 key 刷新模型列表（后端空 key 分支处理）。
+  var _prov = (allProviders || []).find(function(x) { return x.id === _pkmPid; });
+  var _bound = !!(_prov && _prov.has_key);
+  if (!key && !_bound) {
+    st.innerHTML = '<span style="color:var(--danger);">这家还没有绑定 API Key：填入 Key 后点「保存并拉取模型」即可（之后拉取就不用再输）</span>';
+    return;
+  }
+  btn.disabled = true;
+  st.innerHTML = key
+    ? '<span style="color:var(--text-light);">⏳ 保存 Key…</span>'
+    : '<span style="color:var(--text-light);">🔑 使用已绑定的 Key，正在刷新模型列表…（不用重输 Key）</span>';
+  try {
+    var r = await fetch('/api/providers/' + encodeURIComponent(_pkmPid) + '/key', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ api_key: key })
+    });
+    var d = await r.json();
+    if (!r.ok || !d.ok) {
+      st.innerHTML = '<span style="color:var(--danger);">❌ 保存失败：' + escapeHtml(d.error || ('HTTP ' + r.status)) + '</span>';
+      btn.disabled = false; return;
+    }
+    // 保存成功 → 立即真拉一次模型，把上游真实反馈摆出来（不会再"以为保存了其实不能用"）
+    var pulled = d.models_pulled;   // auto_pull 类 provider 存 Key 时后端已顺手拉过
+    var _autoDropped = true;   // 2026-10-22：一律自动检测+剪除（用户要求，不再给开关）
+    if (!pulled) {
+      st.innerHTML = '<span style="color:var(--text-light);">' +
+                     (key ? '✓ Key 已保存，正在拉取模型…' : '🔑 正在用已绑定的 Key 刷新模型…') +
+                     (_autoDropped ? '（拉完会自动检测，只保留连得上的）' : '') + '</span>';
+      var rr = await fetch('/api/providers/' + encodeURIComponent(_pkmPid) + '/models/refresh', { method: 'POST' });
+      pulled = await rr.json();
+      if (!rr.ok) pulled = { ok: false, error: (pulled && pulled.error) || ('HTTP ' + rr.status) };
+    }
+    if (pulled && pulled.ok) {
+      st.innerHTML = '<span style="color:var(--success);">✅ 已拉取 ' + (pulled.count || '?') + ' 个模型' +
+                     (_autoDropped ? '，正在自动检测可用性…（只保留连得上的）' : '') + '</span>';
+      await loadProviders();
+      if (_autoDropped) {
+        // 2026-10-22：拉取完自动接一次检测（弹窗收起，检测在后台跑；进度随时可再打开看）
+        setTimeout(function() { providerKeyModalClose(); }, 900);
+        setTimeout(function() { _pkmAutoProbeAfterPull(_pkmPid); }, 1400);
+      } else {
+        setTimeout(providerKeyModalClose, 1200);
+      }
+    } else {
+      var err = (pulled && pulled.error) || '未知错误';
+      st.innerHTML = '<span style="color:var(--danger);">⚠️ Key 已保存，但拉取模型失败：<b>' + escapeHtml(err) + '</b><br>' +
+        '<span style="font-size:11px;">这说明上游拒绝了这把 Key（失效/无权限/欠费）。Key 已存好，换一把再来点「保存并拉取模型」即可。</span></span>';
+      await loadProviders();
+    }
+  } catch (e) {
+    st.innerHTML = '<span style="color:var(--danger);">❌ 请求异常：' + escapeHtml(String(e)) + '</span>';
+  }
+  btn.disabled = false;
+}
 async function loadCustomProviders() {
   try {
     var r = await fetch('/api/providers/custom', { cache: 'no-store' });
@@ -8578,10 +8971,14 @@ async function addCustomProvider() {
     document.getElementById('cp-url').value = '';
     document.getElementById('cp-api-key').value = '';
     document.getElementById('cp-models').value = '';
-    status.textContent = '已添加 ' + name + '（' + d.provider_id + '）— 可在上方下拉选它设默认模型';
-    status.style.color = 'var(--success)';
+    // 2026-10-21：添加后自动选中并绑定——重建下拉 → 选中新 provider → 拉取它的模型列表
+    await loadProviders();
+    var _sel = document.getElementById('settings-provider-select');
+    if (_sel && d.provider_id) { _sel.value = d.provider_id; }
+    await onProviderSelect();
+    var _note = document.getElementById('settings-provider-note');
+    if (_note) _note.innerHTML = '<span style="color:var(--success);">✅ 已添加并绑定「' + escapeHtml(name) + '」，模型已自动拉取。管理/删除：重新选「➕ 自定义提供商」即可</span>';
     loadCustomProviders();
-    loadProviders();
   } catch(e) { status.textContent = '添加失败: ' + e.message; status.style.color = 'var(--danger)'; }
 }
 
@@ -8637,43 +9034,39 @@ function _modelInUse(m, apiBase) {
 }
 
 function _modelOptionsHtml(models, apiBase) {
-  var cur = currentModel || {};
-  var html = '', inList = false;
+  // 2026-10-21：只列该 provider 的模型——不注入、不选中「当前使用的模型」（用户明确要求）
+  // 2026-10-22：带 🧪 检测结论——实测不可用的模型打 ⚠️ 并在下拉里写明原因
+  var html = '';
   (models || []).forEach(function(m) {
-    var inUse = _modelInUse(m, apiBase);
-    if (inUse) inList = true;
-    var label = m.name + (inUse ? ' ✅使用中' : '');
+    var label = m.name;
     if (m.reasoning) label += ' [推理]';
     if (m.tool_call) label += ' [工具]';
-    html += '<option value="' + escapeHtml(m.id) + '"' + (inUse ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+    if (m.usable === false) {
+      label = '⚠️ ' + label + '（实测不可用）';
+      var _why = m.probe_error || '实测不可用';
+      if (/401|403/.test(_why)) _why += ' —— 请更新该 provider 的 API Key';
+      html += '<option value="' + escapeHtml(m.id) + '" title="' + escapeHtml(_why) + '">' + escapeHtml(label) + '</option>';
+      return;
+    }
+    html += '<option value="' + escapeHtml(m.id) + '">' + escapeHtml(label) + '</option>';
   });
-  if (cur.model && !inList) {
-    html = '<option value="' + escapeHtml(cur.model) + '" selected>' + escapeHtml(cur.model) +
-           ' ✅使用中（不在拉取列表）</option>' + html;
-  }
   return html;
 }
 
-async function onProviderSelect() {
+async function onProviderSelect(userInitiated) {
   var pid = document.getElementById('settings-provider-select').value;
+  // 2026-10-21：「➕ 自定义」伪选项 → 展开内联表单，不进入常规 provider 逻辑
+  if (pid === '__custom__') { _toggleCustomProviderUI(true); return; }
+  _toggleCustomProviderUI(false);
   if (!pid) return;
+  if (userInitiated === true) {
+    // 用户亲手选的：直接弹小窗（Key 填写/更新/删除 + 拉模型的唯一通道，2026-10-22）
+    var _p0 = allProviders.find(function(p) { return p.id === pid; });
+    if (_p0) openProviderKeyModal(pid);
+  }
   localStorage.setItem('memomics_last_provider', pid);
   var provider = allProviders.find(function(p) { return p.id === pid; });
   if (!provider) return;
-  var statusEl = document.getElementById('settings-api-key-status');
-  if (statusEl) {
-    if (provider.has_key) {
-      statusEl.innerHTML = '<span style="color:#2d8659;">\u2713 已保存 Key</span>';
-    } else {
-      statusEl.innerHTML = '<span style="color:var(--text-light);">未保存 Key</span>';
-    }
-  }
-  var hint = document.getElementById('settings-api-key-hint');
-  if (hint) {
-    if (provider.env_var) {
-      hint.textContent = '环境变量: ' + provider.env_var + (provider.id === 'dcs-cloud' ? ' · DCS Cloud 一个 key 通吃所有模型' : '');
-    } else { hint.textContent = ''; }
-  }
   document.getElementById('settings-base-url').value = provider.api || '';
   document.getElementById('settings-provider').value = 'openai';
   // 编程套餐说明 / 拉取状态（2026-10-07）
@@ -8684,133 +9077,53 @@ async function onProviderSelect() {
     if (provider.auto_pull) noteHtml += (noteHtml ? '<br>' : '') + '<span style="color:#2d8659;">保存 Key 后自动拉取套餐模型</span>';
     noteEl.innerHTML = noteHtml;
   }
-  var keyHint = provider.key_hint || 'sk-...';
-  if (provider.has_key) {
-    document.getElementById('settings-api-key').placeholder = '\u2713 已保存，输入新 key 可覆盖';
-    document.getElementById('settings-api-key').value = '';
-  } else {
-    document.getElementById('settings-api-key').placeholder = keyHint;
-    document.getElementById('settings-api-key').value = '';
-  }
   try {
     var r = await fetch('/api/providers/' + encodeURIComponent(pid) + '/models');
     var d = await r.json();
     currentProviderModels = d.models || [];
+    // 2026-10-22：把 🧪 检测结论合并进模型列表（不可用的打 ⚠️）。优先用已有缓存，
+    // 没有则拉一次状态接口；同一个 provider 检测完会刷新缓存，避免重复请求。
+    try {
+      var pr = _probeCache[pid];
+      if (!pr) {
+        var rp = await fetch('/api/providers/' + encodeURIComponent(pid) + '/models/probe/status', { cache: 'no-store' });
+        pr = await rp.json();
+        _probeCache[pid] = pr;
+      }
+      var pres = (pr && pr.results) || {};
+      currentProviderModels.forEach(function(m) {
+        var hit = pres[m.id];
+        if (hit && typeof hit.usable === 'boolean') {
+          m.usable = hit.usable;
+          m.probe_error = hit.error || '';
+        }
+      });
+    } catch (e) {}
     var sel = document.getElementById('settings-model');
     // 2026-10-12：选项带「✅使用中」并按它选中；使用中的模型不在列表里也保留一条
     // （原来不在列表就静默回退到第一个 → 界面显示的"使用的模型"其实是错的）。
     sel.innerHTML = _modelOptionsHtml(currentProviderModels, provider.api || d.base_url || '');
     var _rSt0 = document.getElementById('settings-models-refresh-status');
     if (_rSt0) {
-      // 2026-10-12：把「使用中」和「模型来源」合成一行（原来来源那段会把使用中覆盖掉）。
-      var _cur0 = (currentModel || {}).model || '';
-      var _use0 = _cur0
-        ? ('使用中：' + _cur0 + (currentProviderModels.some(function(x) { return x.id === _cur0; })
-            ? '' : '（不在拉取列表，已保留）'))
-        : '';
+      // 2026-10-21：只报「模型来源」，不再标「使用中」（选中哪家就纯展示哪家的模型）
+      // 2026-10-22：有 🧪 结论时补一行可用性汇总（拉到了不等于能用）
       var _src0 = (d.source && d.source !== 'catalog')
         ? ('模型来源：已拉取' + (d.updated_at ? ('（' + d.updated_at + '）') : ''))
         : '';
-      _rSt0.textContent = [_use0, _src0].filter(Boolean).join(' · ');
+      var _probeInfo = d.probe || _probeCache[pid];
+      if (_probeInfo && _probeInfo.tested) {
+        _src0 += (_src0 ? '　' : '') + '🧪 实测可用 ' + (_probeInfo.usable || 0) + '/' + _probeInfo.tested +
+                  (_probeInfo.failed ? ('，' + _probeInfo.failed + ' 个不可用（下拉里带 ⚠️）') : '');
+      }
+      _rSt0.textContent = _src0;
     }
   } catch(e) {
     document.getElementById('settings-model').innerHTML = '<option value="">(无法加载模型)</option>';
   }
 }
 
-// 保存当前 Provider 的 Key
-async function saveProviderKey() {
-  var pid = document.getElementById('settings-provider-select').value;
-  var key = document.getElementById('settings-api-key').value.trim();
-  if (!pid) { alert('请选择 Provider'); return; }
-  if (!key) { alert('请输入 API Key'); return; }
-  var r = await fetch('/api/providers/' + pid + '/key', {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ api_key: key })
-  });
-  var d = await r.json();
-  if (d.ok) {
-    var pName = allProviders.find(function(p) { return p.id === pid; });
-    pName = pName ? pName.name : pid;
-    var extraMsg = '';
-    var pulled = d.models_pulled;
-    if (pulled) {
-      extraMsg = pulled.ok
-        ? ('\n\u2705 已自动拉取 ' + pulled.count + ' 个套餐模型')
-        : ('\n\u26a0 模型自动拉取失败: ' + (pulled.error || ''));
-    }
-    alert('\u2705 Key 已保存: ' + pName + extraMsg + '\\n现在可以在交互框切换该 Provider 的模型了');
-    document.getElementById('settings-api-key').value = '';
-    document.getElementById('settings-api-key').placeholder = '\u2713 已保存';
-    await loadProviders();
-    // 2026-10-12：保存 Key 会**自动拉取**该 provider 的模型 → 交互框下拉/徽章/已连接列表
-    // 都要跟着重建（旧实现只刷设置页，交互框那边一直显示旧列表/旧模型）。
-    await refreshModelUI();
-    await refreshConnectedModels();
-  } else {
-    alert('\u274c 保存失败: ' + (d.error || ''));
-  }
-}
-
-// 手动拉取当前 Provider 的可用模型（2026-10-07：编程套餐/自定义端点通用）
-async function refreshProviderModels() {
-  var pid = document.getElementById('settings-provider-select').value;
-  if (!pid) { alert('请选择 Provider'); return; }
-  var btn = document.getElementById('settings-models-refresh-btn');
-  var st = document.getElementById('settings-models-refresh-status');
-  if (btn) btn.disabled = true;
-  if (st) st.textContent = '拉取中…（最长 15 秒）';
-  try {
-    var r = await fetch('/api/providers/' + encodeURIComponent(pid) + '/models/refresh', { method: 'POST' });
-    var d = await r.json();
-    if (!r.ok || !d.ok) {
-      // 2026-10-12：端点不支持 /v1/models 或响应过慢时，不要只丢一句"拉取失败"——
-      // 模型列表会自动沿用内置目录，不影响使用；使用中的模型仍按当前会话识别。
-      if (st) st.textContent = '\u274c ' + (d.error || '拉取失败') +
-        '（拿不到该端点的 /models 时会沿用内置模型目录；不影响「使用中」识别）';
-      return;
-    }
-    currentProviderModels = d.models || [];
-    var sel = document.getElementById('settings-model');
-    var _apiBase = (document.getElementById('settings-base-url') || {}).value || '';
-    var _curM = (currentModel || {}).model || '';
-    var _hit = _curM && currentProviderModels.some(function(x) { return x.id === _curM; });
-    if (sel) sel.innerHTML = _modelOptionsHtml(currentProviderModels, _apiBase);
-    if (st) {
-      // 2026-10-12：拉取后直接把"正在用的是哪个模型"写在状态行里，
-      // 列表里找不到它也不谎报（已在上面的下拉里保留一条并选中）。
-      st.textContent = '\u2705 已拉取 ' + d.count + ' 个模型' +
-        (_curM ? (' · 使用中：' + _curM + (_hit ? '（已选中）' : '（不在拉取列表，已保留）')) : '');
-    }
-    await loadProviders(); // 同步「已连接的模型」列表
-    // 2026-10-12：拉取会**替换**该 provider 的模型列表，交互框下拉/顶部徽章/「已连接模型」
-    // 都是据此渲染的 —— 旧实现拉完只更新设置页那一个下拉，其它展示位仍旧值。统一刷一遍。
-    await refreshModelUI();
-    await refreshConnectedModels();
-  } catch(e) {
-    if (st) st.textContent = '\u274c ' + e.message;
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-// 删除当前 Provider 的 Key（批D 2026-08-15）
-async function deleteProviderKey() {
-  var pid = document.getElementById('settings-provider-select').value;
-  if (!pid) { alert('请选择 Provider'); return; }
-  var provider = allProviders.find(function(p) { return p.id === pid; });
-  if (!provider || !provider.has_key) { alert('该 Provider 未保存 Key'); return; }
-  if (!confirm('确定删除 ' + (provider.name || pid) + ' 的 API Key？删除后需重新配置才能使用该 Provider。')) return;
-  var r = await fetch('/api/providers/' + encodeURIComponent(pid) + '/key', { method: 'DELETE' });
-  var d = await r.json();
-  if (d.ok) {
-    alert('✅ Key 已删除: ' + (provider.name || pid));
-    document.getElementById('settings-api-key').placeholder = 'sk-...';
-    await loadProviders();
-  } else {
-    alert('❌ 删除失败: ' + (d.error || ''));
-  }
-}
+// 2026-10-22：saveProviderKey/refreshProviderModels/deleteProviderKey 已随内联区一并移除
+// （Key 的填/删/拉取统一走「配置 Key / 拉取模型」弹窗：openProviderKeyModal/providerKeyModalSave/providerKeyModalDelete）
 
 // === 图像生成配置 (image_gen) ===
 async function loadImageGenConfig() {
@@ -8976,7 +9289,7 @@ async function saveLocalModel(modelId, baseUrl, serverName) {
 function onModelSelect() {
   var selVal = document.getElementById('model-select').value;
   if (!selVal) return;
-  var parts = selVal.split('\\u0001');
+  var parts = selVal.split('\u0001');
   var modelId = parts[0];
   var providerId = parts[1] || '';
   // 2026-08-08 重新设计：不依赖 /api/models/available 查找（旧页面/数据异常时
@@ -8991,7 +9304,7 @@ function onModelSelect() {
         return;
       }
       currentModel = d2.current;
-      document.getElementById('footer-info').innerHTML = 'MemOmics v1';
+      refreshFooterVersion();
       // 统一刷新所有模型展示（下拉框/徽章从后端实时拉，保证一致）
       await refreshModelUI();
       refreshContextUsage();
@@ -9008,52 +9321,169 @@ function onModelSelect() {
 }
 
 
-// === 思考强度（2026-10-18）===
+// === 思考强度（2026-10-18 引入；2026-10-21 移到交互框右下角胶囊 + Claude 风格吸附滑块）===
+// 通用轻提示（showToast 被多处调用但从未定义过——2026-10-21 补上；内部容错绝不抛出）
+var _mmToastTimer = null;
+function showToast(msg) {
+  try {
+    var el = document.getElementById('mm-toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'mm-toast';
+      el.style.cssText = 'position:fixed;left:50%;bottom:120px;transform:translateX(-50%);background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:8px 16px;font-size:12.5px;z-index:99999;box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:70vw;';
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.style.display = 'block';
+    if (_mmToastTimer) clearTimeout(_mmToastTimer);
+    _mmToastTimer = setTimeout(function() { el.style.display = 'none'; }, 2200);
+  } catch (e) {}
+}
+var _EFFORT_LEVELS = ['off', 'low', 'medium', 'high', 'max'];
+var _EFFORT_LABELS = { off: 'Default', low: 'Low', medium: 'Medium', high: 'High', max: 'Max' };
+var _EFFORT_NOTES = { off: '跟随全局档位', low: '最快，推理最少', medium: '均衡', high: '更深推理', max: '最深、最慢；上游可能忽略' };
+var _effortIdx = 0;
+function _effortRender(animate) {
+  var pct = (_effortIdx / 4) * 100;
+  var sl = document.getElementById('eff-slider');
+  if (sl) sl.classList.toggle('dragging', !animate);
+  var th = document.getElementById('eff-thumb'), gr = document.getElementById('eff-grad');
+  if (th) th.style.left = pct + '%';
+  if (gr) gr.style.clipPath = 'inset(0 ' + (100 - pct) + '% 0 0)';   // 紫渐变按档位裁右缘，越深越紫
+  var px = document.getElementById('eff-pixels');
+  if (px) px.classList.toggle('on', _EFFORT_LEVELS[_effortIdx] === 'max');   // 最深档亮像素场
+  var lv = _EFFORT_LEVELS[_effortIdx];
+  var mp = document.getElementById('model-picker');
+  if (mp) mp.setAttribute('data-eff', lv);   // 档位字渐变流动（高=蓝紫/最深=五彩，插件同款）
+  var cur = document.getElementById('eff-slider-cur');
+  if (cur) cur.textContent = _EFFORT_LABELS[lv];
+  var note = document.getElementById('eff-note');
+  if (note) note.textContent = _EFFORT_NOTES[lv];
+}
 async function loadEffortSetting() {
   try {
     var d = await (await fetch('/api/model/reasoning_effort')).json();
-    var sel = document.getElementById('settings-effort');
-    if (sel && d && d.level) { sel.value = d.level; }
-    var note = document.getElementById('settings-effort-note');
-    if (note && d && d.model) {
-      var per = (d.model_efforts || {})[d.model];
-      note.textContent = per
-        ? ('当前模型 ' + d.model + ' 单独设为 ' + per + '（优先于全局）')
-        : '全局 ' + (d.level || 'off') + '；仅对支持该参数的上游生效（dcs-cloud 的 max 档抖动较大）。';
-    }
+    if (!d) return;
+    var m = (typeof currentModel !== 'undefined' && currentModel && currentModel.model) || '';
+    var lv = ((d.model_efforts || {})[m]) || 'off';   // off = 无单独覆盖 → 跟随全局
+    _effortIdx = Math.max(0, _EFFORT_LEVELS.indexOf(lv));
+    var ce = document.getElementById('model-chip-effort');
+    if (ce) ce.textContent = _EFFORT_LABELS[lv] || 'Default';   // DSH 形态：模型名后跟档位
+    var chip = document.getElementById('model-chip');
+    if (chip) chip.title = '选择模型 / 调整思考强度\n思考强度（当前模型：' + (m || '?') + '）只对它单独生效；「全局」= 跟随全局档位（' + (d.level || 'off') + '）';
+    _effortRender(true);
   } catch (e) {}
 }
 
-async function onEffortSelect() {
-  var sel = document.getElementById('settings-effort');
-  if (!sel) return;
-  var lvl = sel.value;
+// === 模型+思考强度一体化弹层（2026-10-21，DSH-Claude-Style-Reasoning-Slider 形态）===
+var _mpOptions = [];
+function toggleModelPicker(e) {
+  if (e && e.stopPropagation) e.stopPropagation();
+  var m = document.getElementById('mp-menu');
+  if (m) m.classList.toggle('on');
+}
+document.addEventListener('click', function(e) {
+  var m = document.getElementById('mp-menu');
+  if (m && m.classList.contains('on') && !m.contains(e.target)) m.classList.remove('on');
+});
+function _renderModelChip() {
+  var sel = document.getElementById('model-select');
+  var lab = document.getElementById('model-chip-label');
+  var list = document.getElementById('mp-models');
+  if (!sel || !lab || !list) return;
+  var opt = sel.options[sel.selectedIndex];
+  lab.textContent = opt ? opt.textContent : ((typeof currentModel !== 'undefined' && currentModel && currentModel.model) || '选择模型');
+  _mpOptions = [];
+  var html = '';
+  for (var i = 0; i < sel.children.length; i++) {
+    var grp = sel.children[i];
+    var opts = (grp.tagName === 'OPTGROUP') ? grp.children : [grp];
+    if (grp.tagName === 'OPTGROUP') html += '<div class="mp-group">' + escapeHtml(grp.label) + '</div>';
+    for (var j = 0; j < opts.length; j++) {
+      var o = opts[j];
+      if (!o || !o.value) continue;
+      _mpOptions.push(o.value);
+      html += '<div class="mp-item' + (o.value === sel.value ? ' cur' : '') + '" data-idx="' + (_mpOptions.length - 1) + '">' + escapeHtml(o.textContent) + '</div>';
+    }
+  }
+  list.innerHTML = html || '<div class="mp-group">暂无已连接模型（先到设置里配 Key）</div>';
+}
+function pickModelFromIdx(idx) {
+  var sel = document.getElementById('model-select');
+  if (!sel || !_mpOptions[idx]) return;
+  sel.value = _mpOptions[idx];
+  var m = document.getElementById('mp-menu');
+  if (m) m.classList.remove('on');
+  onModelSelect();   // 原生切换流程不变（换完 refreshModelUI 会重渲弹层列表与胶囊）
+}
+(function _initModelPicker() {
+  var list = document.getElementById('mp-models');
+  if (list) list.addEventListener('click', function(e) {
+    var it = e.target.closest ? e.target.closest('.mp-item') : null;
+    if (it) pickModelFromIdx(+it.getAttribute('data-idx'));
+  });
+})();
+
+async function _effortCommit() {
+  var lvl = _EFFORT_LEVELS[_effortIdx];
+  var m = (typeof currentModel !== 'undefined' && currentModel && currentModel.model) || '';
   try {
+    var body = { level: lvl };
+    if (m) body.model = m;   // 有当前模型 → 按模型覆盖（后端 off=移除覆盖，回到跟随全局）
     var r = await fetch('/api/model/reasoning_effort', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({level: lvl})
+      body: JSON.stringify(body)
     });
     var d = await r.json();
-    if (d && d.ok) { showToast('思考强度：' + lvl); }
+    if (d && d.ok) { showToast('思考强度' + (m ? '（' + m + '）' : '（全局）') + '：' + (lvl === 'off' ? 'Default（跟随全局）' : (_EFFORT_LABELS[lvl] || lvl))); }
     else { showToast('设置失败：' + ((d && d.error) || '未知')); }
   } catch (e) { showToast('设置失败：' + e); }
   loadEffortSetting();
 }
 
-function onSettingsModelSelect() {
-  var modelId = document.getElementById('settings-model').value;
-  var m = currentProviderModels.find(function(x) { return x.id === modelId; });
-  if (m && m.description) {
-    document.getElementById('settings-api-key-hint').title = m.description;
+// 吸附滑块：按下/拖动实时跟手（无过渡），松手吸附到档位（带过渡动画）并提交
+(function _initEffortSlider() {
+  var sl = document.getElementById('eff-slider');
+  if (!sl) return;
+  var dragging = false, moved = false;
+  function idxFromEvent(e) {
+    var r = sl.getBoundingClientRect();
+    var x = (e.clientX - r.left) / r.width;
+    return Math.max(0, Math.min(4, Math.round(x * 4)));
   }
+  sl.addEventListener('pointerdown', function (e) {
+    e.preventDefault(); e.stopPropagation();
+    dragging = true; moved = false;
+    try { sl.setPointerCapture(e.pointerId); } catch (err) {}
+    var i = idxFromEvent(e);
+    if (i !== _effortIdx) { _effortIdx = i; moved = true; }
+    _effortRender(false);
+  });
+  sl.addEventListener('pointermove', function (e) {
+    if (!dragging) return;
+    var i = idxFromEvent(e);
+    if (i !== _effortIdx) { _effortIdx = i; moved = true; _effortRender(false); }
+  });
+  sl.addEventListener('pointerup', function () {
+    if (!dragging) return;
+    dragging = false;
+    _effortRender(true);   // 松手吸附动画
+    if (moved) _effortCommit();
+  });
+})();
+
+function onSettingsModelSelect() {
+  // 2026-10-22：API Key 内联区已移除（Key 管理收进弹窗），此钩子不再写 hint
 }
 
 async function saveModel() {
   var pid = document.getElementById('settings-provider-select').value;
-  var customModel = document.getElementById('settings-custom-model').value.trim();
+  var _cmEl = document.getElementById('settings-custom-model');   // 2026-10-22：输入已移除，防御
+  var customModel = _cmEl ? _cmEl.value.trim() : '';
   var modelId = customModel || document.getElementById('settings-model').value;
   var baseUrl = document.getElementById('settings-base-url').value;
-  var apiKey = document.getElementById('settings-api-key').value.trim();
+  var _akEl = document.getElementById('settings-api-key');        // 2026-10-22：内联区已移除，防御
+  var apiKey = _akEl ? _akEl.value.trim() : '';
   var provider = document.getElementById('settings-provider').value;
   // 2026-10-11：后端不再把明文 key 发给浏览器（迎接弹窗/设置页曾能看到它）。
   // 这里只判断"该 provider 是否已存过 key"，真正的 key 由后端从 provider_keys 里取。
@@ -9067,19 +9497,21 @@ async function saveModel() {
   }
   if (!modelId) { alert('\u26a0\ufe0f 请选择模型'); return; }
   // 同时把 Key 保存到 provider_keys，这样交互框下拉框能立即看到模型
-  try {
-    await fetch('/api/providers/' + pid + '/key', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ api_key: apiKey })
-    });
-  } catch(e) {}
-  // 设置页"设为当前模型"= 全局默认模型：不带 session_id（后端会广播到所有未锁定会话，
+  if (apiKey) {   // 2026-10-22：内联输入已移除，空 key 时跳过——否则会把已存 Key 覆盖成空串
+    try {
+      await fetch('/api/providers/' + pid + '/key', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ api_key: apiKey })
+      });
+    } catch(e) {}
+  }
+  // 设置页"设置全局模型"= 全局默认模型：不带 session_id（后端会广播到所有未锁定会话，
   // 新会话一律继承全局默认；会话级切换请用交互框下拉框）
   var r = await fetch('/api/models/switch', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ model: modelId, base_url: baseUrl, provider: provider, api_key: apiKey }) });
   var d = await r.json();
   if (d && d.error) { alert('\u26a0\ufe0f 切换失败：' + d.error); return; }
   currentModel = d.current;
-  document.getElementById('footer-info').innerHTML = 'MemOmics v1';
+  refreshFooterVersion();
   // 统一刷新所有模型展示（下拉框/徽章从后端实时拉）
   await refreshModelUI();
   // 同步会话列表（切走再切回时 switchSession 显示最新模型）
@@ -16964,117 +17396,6 @@ async function clusterDeleteNode(name) {
       alert('删除失败：' + ((d && d.error) || '未知'));
     }
   } catch (e) { alert('删除失败：' + e); }
-}
-
-// ===== 📦 资产包（2026-10-20）=====
-function _bundleScopes() {
-  var out = [];
-  ['kb','skills','memory'].forEach(function (k) {
-    var el = document.getElementById('bundle-scope-' + k);
-    if (el && el.checked) out.push(k);
-  });
-  return out;
-}
-function _bundleSay(msg, kind) {
-  var el = document.getElementById('bundle-status');
-  if (!el) return;
-  el.style.color = kind === 'err' ? '#e35' : (kind === 'ok' ? '#2a8' : 'var(--text-light)');
-  el.textContent = msg;
-}
-function _bundlePost(url, body) {
-  return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
-    .then(function (r) { return r.json(); });
-}
-function bundleExport() {
-  var scopes = _bundleScopes();
-  if (!scopes.length) return _bundleSay('至少勾选一项', 'err');
-  _bundleSay('导出中…（全量约十几秒）');
-  var t = document.getElementById('bundle-topic');
-  _bundlePost('/api/bundle/export', { scopes: scopes, topic: t ? t.value : '' }).then(function (d) {
-    if (!d.ok) return _bundleSay('导出失败：' + (d.error || ''), 'err');
-    var c = d.counts || {};
-    _bundleSay('✓ 已导出 ' + d.path + '（' + (d.bytes / 1048576).toFixed(2) + ' MB | KB ' + (c.kb || 0) +
-      ' / 技能 ' + (c.skills || 0) + ' / 记忆 ' + (c.memory || 0) + '）', 'ok');
-    var zp = document.getElementById('bundle-zip-path');
-    if (zp) zp.value = d.path || '';
-    bundleList();
-  }).catch(function (e) { _bundleSay('导出异常：' + e, 'err'); });
-}
-function bundleList() {
-  fetch('/api/bundle/list').then(function (r) { return r.json(); }).then(function (d) {
-    var box = document.getElementById('bundle-list-box');
-    if (!box) return;
-    if (!d.ok || !(d.bundles || []).length) {
-      box.innerHTML = '<span style="color:var(--text-light);">（' + (d.default_dir || '') + ' 下暂无包）</span>';
-      return;
-    }
-    box.innerHTML = (d.bundles || []).map(function (b) {
-      return '<div style="cursor:pointer;padding:2px 0;" data-zp="' + b.path +
-        '" onclick="bundlePick(this)">📦 ' + b.mtime + ' · ' + b.mb.toFixed(2) + ' MB · ' + b.name + '</div>';
-    }).join('');
-  }).catch(function (e) { _bundleSay('列包失败：' + e, 'err'); });
-}
-function bundlePick(el) {
-  var zp = document.getElementById('bundle-zip-path');
-  if (zp) zp.value = el.getAttribute('data-zp') || '';
-  bundlePreview();
-}
-var _bundleConflicts = [];
-function bundlePreview() {
-  var zpEl = document.getElementById('bundle-zip-path');
-  var zp = zpEl ? zpEl.value : '';
-  if (!zp) return _bundleSay('先填包路径或点『列出包』', 'err');
-  _bundleSay('预览中…');
-  _bundlePost('/api/bundle/preview', { path: zp }).then(function (d) {
-    if (!d.ok) return _bundleSay('预览失败：' + (d.error || ''), 'err');
-    _bundleConflicts = d.conflicts || [];
-    var box = document.getElementById('bundle-preview-box');
-    var html = '<div style="color:#2a8;">版本 ' + d.schema + ' · 创建 ' + d.created_at + ' · 主题 ' +
-      (d.topic || '（全量）') + ' · 脱敏 ' + (d.redacted ? '是' : '否') + '</div>' +
-      '<div>内容：' + JSON.stringify(d.counts) + ' · 记忆 ' + d.memory_entries + ' 条</div>' +
-      '<div>新增 <b>' + (d.new_files || []).length + '</b> 个 · 冲突 <b style="color:#e35;">' +
-      _bundleConflicts.length + '</b> 个 · 疑似密钥 ' + (d.secrets_found || []).length + ' 个</div>';
-    if ((d.new_files || []).length) {
-      html += '<div style="margin-top:6px;color:var(--text-light);">新增：' +
-        d.new_files.slice(0, 8).map(function (x) { return x.split('/').pop(); }).join('、') +
-        (d.new_files.length > 8 ? ' …' : '') + '</div>';
-    }
-    if (_bundleConflicts.length) {
-      html += '<div style="margin-top:8px;font-weight:600;">冲突（勾选 = 用包里的覆盖本机；默认不勾 = 跳过）</div>';
-      html += _bundleConflicts.slice(0, 60).map(function (c, i) {
-        return '<label style="display:block;padding:1px 0;"><input type="checkbox" data-bci="' + i + '"> ' +
-          c.path.split('/').pop() + ' <span style="color:var(--text-light);">（本机 ' + c.local_mtime + '，' +
-          c.local_bytes + 'B）</span></label>';
-      }).join('');
-      if (_bundleConflicts.length > 60) {
-        html += '<div style="color:var(--text-light);">…共 ' + _bundleConflicts.length + ' 个</div>';
-      }
-    }
-    box.innerHTML = html;
-    _bundleSay('预览完成，确认后点『导入』', 'ok');
-  }).catch(function (e) { _bundleSay('预览异常：' + e, 'err'); });
-}
-function bundleImport() {
-  var zpEl = document.getElementById('bundle-zip-path');
-  var zp = zpEl ? zpEl.value : '';
-  if (!zp) return _bundleSay('先填包路径', 'err');
-  var ov = {};
-  document.querySelectorAll('#bundle-preview-box input[data-bci]').forEach(function (cb) {
-    if (cb.checked) {
-      var i = parseInt(cb.getAttribute('data-bci'), 10);
-      if (_bundleConflicts[i]) ov[_bundleConflicts[i].path] = 'overwrite';
-    }
-  });
-  if (_bundleConflicts.length && !Object.keys(ov).length) {
-    if (!confirm('有 ' + _bundleConflicts.length + ' 个冲突，全部按「跳过」处理（不覆盖本机）。继续导入吗？')) return;
-  }
-  _bundleSay('导入中…（会先自动备份）');
-  _bundlePost('/api/bundle/import', { path: zp, overrides: ov, backup: true, activate: true }).then(function (d) {
-    if (!d.ok) return _bundleSay('导入失败：' + (d.error || ''), 'err');
-    var steps = ((d.activate || {}).steps || []).map(function (s) { return (s.ok ? '✓ ' : '✗ ') + s.step; }).join(' · ');
-    _bundleSay('✓ 导入完成：写入 ' + (d.written || []).length + ' / 跳过 ' + (d.skipped || []).length +
-      ' / 记忆 +' + (d.memory_added || 0) + '　内化：' + steps, 'ok');
-  }).catch(function (e) { _bundleSay('导入异常：' + e, 'err'); });
 }
 
 // ===== 📦 资产包导出（2026-10-21，只导出；导入在对话框里说）=====

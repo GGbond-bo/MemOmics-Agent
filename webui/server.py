@@ -4153,7 +4153,8 @@ def _effective_models(p, saved=None):
             if isinstance(m, dict) and m.get("id"):
                 out.append({"id": m["id"], "name": m.get("name") or m["id"],
                             "reasoning": bool(m.get("reasoning")),
-                            "tool_call": bool(m.get("tool_call", True))})
+                            "tool_call": bool(m.get("tool_call", True)),
+                            "usable": m.get("usable")})
             elif isinstance(m, str) and m.strip():
                 out.append({"id": m.strip(), "name": m.strip(),
                             "reasoning": False, "tool_call": True})
@@ -8787,6 +8788,9 @@ async def set_reasoning_effort(request: Request):
     model_id = str(body.get("model") or "").strip()
     if model_id:
         # 按模型覆盖：写 config.yaml 的 llm.model_efforts.<model_id>
+        # 2026-10-21 修复：原实现 io 未导入 + 写了垃圾占位文件 + 只改第一处 model_efforts
+        # （config 里存在重复 llm 段时 yaml 末段生效，覆盖写丢了）。现在：无 io 依赖、
+        # 不写占位文件、所有 model_efforts 段同步替换、缺失时插到每个 llm 段开头。
         try:
             import yaml
             p = _effort_cfg_path()
@@ -8797,22 +8801,24 @@ async def set_reasoning_effort(request: Request):
                 effs.pop(model_id, None)
             else:
                 effs[model_id] = level
-            llm["model_efforts"] = effs
-            d["llm"] = llm
-            _atomic_write_json(os.path.join(MEMOMICS_HOME_DIR, ".effort_tmp.json"), d)  # 仅占位，下面用稳定写
-            ok = _write_effort(str(llm.get("reasoning_effort") or "off"))
-            # 用 yaml 原样回写 model_efforts（该段是纯数据，可整体替换）
-            with io.open(p, "r", encoding="utf-8", newline="") as f:
+            new_block = "  model_efforts:\n" + "".join(
+                f"    {k}: {v}\n" for k, v in effs.items()) if effs else "  model_efforts: {}\n"
+            with open(p, "r", encoding="utf-8", newline="") as f:
                 raw = f.read()
             eol2 = "\r\n" if "\r\n" in raw else "\n"
             txt = raw.replace("\r\n", "\n")
             import re as _re
-            new_block = "  model_efforts:\n" + "".join(
-                f"    {k}: {v}\n" for k, v in effs.items()) if effs else "  model_efforts: {}\n"
-            txt = _re.sub(r"  model_efforts:\n(?:    [^\n]*\n)*", new_block, txt, count=1)
-            if "model_efforts:" not in txt:
-                txt = txt.replace("llm:\n", "llm:\n" + new_block, 1)
-            with io.open(p, "w", encoding="utf-8", newline="") as f:
+            # 2026-10-21 关键修复：llm 段内历史残留的多个 model_efforts 键（内联 {} 与
+            # 块形式都有）必须先全部清掉再插唯一规范块 —— yaml 重复键「后者生效」，
+            # 不先清的话新写入会被后面的 {} 影子覆盖（实测写 high 读回 {}）。
+            txt = _re.sub(r"(?m)^  model_efforts: \{\}[ \t]*\n", "", txt)
+            txt = _re.sub(r"(?m)^  model_efforts:[ \t]*\n(?:    [^\n]*\n)+", "", txt)
+            _idx = txt.rfind("llm:\n")
+            if _idx < 0:
+                txt = txt.rstrip("\n") + "\nllm:\n" + new_block
+            else:
+                txt = txt[:_idx] + "llm:\n" + new_block + txt[_idx + 5:]
+            with open(p, "w", encoding="utf-8", newline="") as f:
                 f.write(txt.replace("\n", eol2) if eol2 != "\n" else txt)
             return {"ok": True, "level": llm.get("reasoning_effort") or "off",
                     "model": model_id, "model_effort": level}
@@ -9808,7 +9814,10 @@ async def switch_model(payload: dict):
                 continue
             if _prov_hint and _pid != _prov_hint:
                 continue
-            for _m in _p.get("models", []):
+            # 2026-10-22：改走 _effective_models —— 原来只查目录预设（_p["models"]），
+            # 于是「拉取到的模型」（如 opencode-go 的 36 个）一律查不到 → 报
+            # 「模型 'xxx' 未配置 API Key」，而用户明明刚保存过 key。用户实测踩到过。
+            for _m in _effective_models(_p, _saved):
                 if _m["id"] == model:
                     base_url = _p["api"]
                     api_key = _saved["api_key"]
@@ -10129,30 +10138,71 @@ async def save_imagegen_config(body: dict):
         return JSONResponse({"error": f"保存图像生成配置失败: {exc}"}, status_code=400)
 
 
-def _pull_provider_models(pid, p, api_key, timeout=15.0):
-    """向 provider 端点拉取模型列表并保存（保存 key 自动拉取 / 手动刷新共用）。"""
+def _pull_provider_models(pid, p, api_key, timeout=10.0):
+    """向 provider 端点拉取模型列表并保存（保存 key 自动拉取 / 手动刷新共用）。
+
+    两种「拉取不到」的兜底（2026-10-22 用户实测反馈）：
+
+    1) **端点没有 /models（或该端点挂死）**：云平台网关常见。实测 DCS Cloud 的
+       unified 网关 /models 等 60 秒都不响应（ReadTimeout），但同一把 key 的
+       /chat/completions 是好的（deepseek-flash / glm-5.2 等实测 200）。这种情况
+       直接报「拉取失败」会让用户以为「云平台不能用」——改用**目录预设清单**顶上，
+       带上 note 说明，后面的自动检测再逐个验证真实可用性。
+    2) **已有检测结论**：拉回来的清单立刻按上次结论剪一遍，否则重新拉取会把
+       之前过滤掉的不可用模型又写回来（用户报「没有过滤掉」就是这个原因）。
+    """
     try:
         from memomics.coding_plans import fetch_plan_models
     except Exception as exc:
         return {"ok": False, "error": f"拉取模块加载失败: {exc}"}
+    catalog = p.get("models") if isinstance(p.get("models"), list) else []
     res = fetch_plan_models({
         "id": pid, "api": p.get("api", ""),
         "models_url": p.get("models_url"),
         "extra_headers": p.get("extra_headers"),
     }, api_key, timeout=timeout)
+    fallback = False
+    note = ""
     if not res.get("ok"):
-        return {"ok": False, "error": res.get("error", "拉取失败"),
-                "tried": res.get("tried", [])}
-    models = res.get("models") or []
+        if not catalog:
+            return {"ok": False, "error": res.get("error", "拉取失败"),
+                    "tried": res.get("tried", [])}
+        models = [{"id": m.get("id"), "name": m.get("name") or m.get("id"),
+                   "reasoning": bool(m.get("reasoning")), "tool_call": bool(m.get("tool_call", True))}
+                  for m in catalog if isinstance(m, dict) and m.get("id")]
+        fallback = True
+        note = ("该端点没有可用的 /models 接口（或它不响应）——已改用内置清单，"
+                "保存后会逐个检测真实可用性，连不上的不会出现在选择器里")
+        url_used = "catalog-fallback"
+        print(f"[MemOmics] provider {pid} 的 /models 不可用（{res.get('error', '')[:80]}）"
+              f"→ 回退内置清单 {len(models)} 个", flush=True)
+    else:
+        models = res.get("models") or []
+        url_used = res.get("url_used", "")
     saved = _provider_keys.setdefault(pid, {})
     saved["models"] = models
-    saved["models_source"] = res.get("url_used", "")
+    saved["models_source"] = url_used
+    saved["models_origin"] = "catalog-fallback" if fallback else "endpoint"
     saved["models_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # 0) 把本次拉到的模型并入「见过的模型」记忆（检测面只增不缩）
+    try:
+        _known_ids_add(pid, [str(m.get("id") if isinstance(m, dict) else m) for m in models])
+    except Exception as _ke:
+        print(f"[WARN] known_ids 写入失败（不阻塞）: {_ke}", flush=True)
+    # ① 立刻按已有检测结论剪一遍（重新拉取不再把不可用的写回来）
+    try:
+        _prev_results = (_probe_get(pid).get("results") or {})
+        pruned = _prune_models_from_saved(pid, _prev_results) if _prev_results else []
+    except Exception as _pe:
+        pruned = []
+        print(f"[WARN] 拉取后剪除失败（不阻塞）: {_pe}", flush=True)
     _save_provider_keys()
     _sync_custom_providers_to_memomics(pid)
-    print(f"[MemOmics] provider {pid} 已拉取 {len(models)} 个模型（{res.get('url_used', '')}）", flush=True)
+    print(f"[MemOmics] provider {pid} 已拉取 {len(models)} 个模型（{url_used}）"
+          + (f"，按上次结论过滤 {len(pruned)} 个" if pruned else ""), flush=True)
     return {"ok": True, "provider": pid, "count": len(models), "models": models,
-            "url_used": res.get("url_used", "")}
+            "url_used": url_used, "fallback": fallback, "note": note,
+            "pruned_by_last_probe": pruned}
 
 
 @app.get("/api/providers/{pid}/models")
@@ -10162,18 +10212,35 @@ async def get_provider_models(pid: str):
     if not p:
         return JSONResponse({"error": f"Provider '{pid}' not found"}, status_code=404)
     saved = _provider_keys.get(pid) or {}
+    probe_rows = (_probe_get(pid).get("results") or {})
+    # 2026-10-22：有检测结论时，**实测不可用的模型不进选择器**（用户反馈：设置里的
+    # 「模型(选择默认)」下拉拉的是目录预设 36 个，把已过滤的也列出来了，看起来像
+    # 「明明可用却标不可用」）。这里统一口径：不可用的直接不下发。
+    _with_probe = len((saved.get("models") or [])) > 0 and bool(probe_rows)
     models = []
     for m in _effective_models(p, saved):
-        models.append({
+        if _with_probe and (probe_rows.get(str(m["id"])) or {}).get("usable") is False:
+            continue
+        row = {
             "id": m["id"], "name": m["name"],
             "reasoning": m.get("reasoning", False),
             "tool_call": m.get("tool_call", False),
-        })
+        }
+        # 2026-10-22：带上探针结论（usable/error），前端给不可用模型打标 ⚠️，
+        # 避免用户选中一个「拉得到、但协议/套餐不让用」的模型才吃报错。
+        entry = probe_rows.get(str(m["id"]))
+        if isinstance(entry, dict):
+            row["usable"] = bool(entry.get("usable"))
+            row["probe_error"] = entry.get("error", "")
+            row["probe_ms"] = entry.get("ms", 0)
+        models.append(row)
     return {"provider": pid, "models": models, "base_url": p["api"],
             "source": saved.get("models_source") or "catalog",
             "updated_at": saved.get("models_updated_at") or "",
             "auto_pull": bool(p.get("auto_pull")),
-            "note": p.get("note", ""), "key_hint": p.get("key_hint", "")}
+            "note": p.get("note", ""), "key_hint": p.get("key_hint", ""),
+            "probe": _probe_snapshot(pid),
+            "pruned": (_probe_get(pid).get("pruned") or {}).get("ids") or []}
 
 
 @app.post("/api/providers/{pid}/models/refresh")
@@ -10187,11 +10254,478 @@ async def refresh_provider_models(pid: str):
     if not _is_valid_api_key(api_key) and not saved.get("local"):
         return JSONResponse({"error": "请先保存该 provider 的 API Key，再拉取模型"},
                             status_code=400)
-    result = _pull_provider_models(pid, p, api_key)
+    result = _pull_provider_models(pid, p, api_key, timeout=10.0)
     if not result.get("ok"):
         return JSONResponse({"error": result.get("error", "拉取失败"),
                              "tried": result.get("tried", [])}, status_code=400)
     return result
+
+
+def _probe_env_int(name, default):
+    """读取探针并发/超时环境变量（坏值不炸，回默认）。"""
+    try:
+        return max(1, int(str(os.environ.get(name, "")).strip()))
+    except Exception:
+        return default
+
+
+_PROBE_JOBS = {}          # pid -> {total, done, results, started_at, finished_at, error, running}
+_PROBE_LOCK = _threading.Lock()
+_PROBE_MAX_WORKERS = _probe_env_int("MEMOMICS_MODEL_PROBE_WORKERS", 3)
+_PROBE_TIMEOUT = float(_probe_env_int("MEMOMICS_MODEL_PROBE_TIMEOUT", 45))
+
+
+def _probe_get(pid):
+    """取该 provider 已持久化的探针结论（provider_keys.json 的 probe 字段）。"""
+    saved = _provider_keys.get(pid) or {}
+    d = saved.get("probe")
+    return d if isinstance(d, dict) else {}
+
+
+def _known_ids_get(pid):
+    """该 provider 见过的全部模型 id（顺带把目录预设并进来）。"""
+    saved = _provider_keys.get(pid) or {}
+    out = [str(x) for x in ((_probe_get(pid).get("known_ids") or [])) if x]
+    for m in (saved.get("models") or []):
+        mid = str(m.get("id") if isinstance(m, dict) else m)
+        if mid and mid not in out:
+            out.append(mid)
+    for m in (_PROVIDERS_INDEX.get(pid, {}).get("models") or []):
+        mid = str(m.get("id") if isinstance(m, dict) else m)
+        if mid and mid not in out:
+            out.append(mid)
+    return out
+
+
+def _model_usable(pid, model_id):
+    """模型可用性（三态）：True 可用 / False 实测不可用 / None 未测。
+
+    只对「拉取到清单」上的模型可信；目录预设模型没测过 → None（界面不标）。
+    """
+    res = (_probe_get(pid).get("results") or {}).get(str(model_id))
+    if isinstance(res, dict) and "usable" in res:
+        return bool(res.get("usable"))
+    return None
+
+
+def _probe_snapshot(pid):
+    """给前端的一行汇总（未检测过返回 None）。"""
+    probe = _probe_get(pid)
+    if not probe.get("results"):
+        return None
+    return {"tested": probe.get("tested", 0),
+            "usable": probe.get("usable", 0),
+            "failed": probe.get("failed", 0),
+            "updated_at": probe.get("updated_at", "")}
+
+
+def _run_model_probe(pid, p, api_key, model_ids, drop_failed=False):
+    """后台线程：逐个真发最小请求，把结论写回 provider_keys.json。
+
+    并发小（默认 3）：聚合网关对同 key 并发敏感，且要避免把限流误判成「模型不可用」。
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from memomics.coding_plans import probe_chat_model
+
+    def _one(mid):
+        try:
+            return probe_chat_model(p, api_key, mid, timeout=_PROBE_TIMEOUT)
+        except Exception as exc:  # 探针本身出问题也要有结论，不能让整个任务挂掉
+            return {"id": mid, "usable": False, "status": 0,
+                    "error": f"探针异常：{type(exc).__name__}: {exc}"[:200], "ms": 0}
+
+    results = {}
+    usable = failed = 0
+    workers = max(1, min(_PROBE_MAX_WORKERS, len(model_ids) or 1))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for res in pool.map(_one, model_ids):
+            mid = str(res.get("id") or "")
+            if not mid:
+                continue
+            results[mid] = res
+            if res.get("usable"):
+                usable += 1
+            else:
+                failed += 1
+            with _PROBE_LOCK:
+                job = _PROBE_JOBS.get(pid)
+                if job is not None:
+                    job["done"] = len(results)
+                    job["usable"] = usable
+                    job["failed"] = failed
+                    job["results"] = results
+    saved = _provider_keys.setdefault(pid, {})
+    _prev_known = list((saved.get("probe") or {}).get("known_ids") or [])
+    for _r in results.values():
+        _rid = str(_r.get("id") or "")
+        if _rid and _rid not in _prev_known:
+            _prev_known.append(_rid)
+    saved["probe"] = {
+        "results": results,
+        "tested": len(results),
+        "usable": usable,
+        "failed": failed,
+        "models_source": saved.get("models_source", ""),
+        # 见过的全部模型 id（含已被剪除的）：下次检测按并集测，避免检测面越缩越小
+        "known_ids": sorted(set(list(_prev_known) + [str(r.get("id")) for r in results.values() if r.get("id")])),
+        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    # 2026-10-22（用户要求）：「保存并拉取模型」后自动检测，只保留联通的模型 ——
+    # 实测不可用的直接从清单里摘掉（不放进模型选择器）。摘掉的记进 probe.pruned，
+    # 可用 /models/prune?restore=1 一键恢复。
+    if drop_failed:
+        _removed = _prune_models_from_saved(pid, results)
+        if _removed:
+            print(f"[MemOmics] provider {pid} 已自动过滤 {len(_removed)} 个实测不可用的模型："
+                  f"{', '.join(_removed[:8])}{'…' if len(_removed) > 8 else ''}", flush=True)
+    _save_provider_keys()
+    with _PROBE_LOCK:
+        job = _PROBE_JOBS.get(pid)
+        if job is not None:
+            job.update({"running": False, "results": results,
+                        "finished_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+    print(f"[MemOmics] provider {pid} 模型可用性检测完成：{usable} 可用 / {failed} 不可用（共 {len(results)}）",
+          flush=True)
+
+
+_KNOWN_IDS_CAP = 500          # known_ids 上限（防无限膨胀）
+
+
+def _known_ids_add(pid, ids):
+    """把模型 id 并进 probe.known_ids（只增不缩）。
+
+    2026-10-22 用户需求链路的第三次修正：剪除会把不可用模型从 models 清单拿掉，
+    如果检测面只看「当前清单」，就会越测越窄、上游恢复的模型永远回不来。
+    所以这里维护一份「见过的全部模型」记忆：拉取时写入、检测时全测。
+    """
+    saved = _provider_keys.get(pid) or {}
+    probe = saved.get("probe") if isinstance(saved.get("probe"), dict) else {}
+    known = [str(x) for x in (probe.get("known_ids") or []) if x]
+    have = set(known)
+    for mid in ids or []:
+        mid = str(mid or "")
+        if mid and mid not in have:
+            known.append(mid)
+            have.add(mid)
+    if len(known) > _KNOWN_IDS_CAP:
+        # 超限：保留「当前清单里还有的」+ 最近的，其余丢弃
+        cur = {str(m.get("id") if isinstance(m, dict) else m)
+               for m in (saved.get("models") or [])}
+        keep = [x for x in known if x in cur] + [x for x in known if x not in cur]
+        known = keep[:_KNOWN_IDS_CAP]
+    probe["known_ids"] = known
+    saved["probe"] = probe
+    _provider_keys[pid] = saved
+    return known
+
+
+def _prune_models_from_saved(pid, results):
+    """把实测不可用的模型从保存的模型清单里摘掉，并把摘除记录写进 probe.pruned。
+
+    返回被摘掉的模型 id 列表（空列表 = 本次没有可摘的）。只动 provider_keys.json，
+    想恢复就调 /api/providers/{pid}/models/prune?restore=1（或重新拉取）。
+    """
+    saved = _provider_keys.get(pid) or {}
+    models = saved.get("models")
+    if not isinstance(models, list) or not models:
+        return []
+    bad = {str(k) for k, v in (results or {}).items()
+           if isinstance(v, dict) and v.get("usable") is False}
+    good_now = {str(k) for k, v in (results or {}).items()
+                if isinstance(v, dict) and v.get("usable") is True}
+    # 2026-10-22：复检后翻正的模型必须从 pruned 记录里剔除 —— 否则界面会一直说「已去掉 N 个」
+    # 而其中有的已经能用了（本轮离线回归抓到的真 bug）。
+    if good_now:
+        _probe0 = saved.get("probe") if isinstance(saved.get("probe"), dict) else {}
+        _pr0 = _probe0.get("pruned") if isinstance(_probe0.get("pruned"), dict) else None
+        if _pr0 and _pr0.get("ids"):
+            _kept = [x for x in _pr0["ids"] if str(x) not in good_now]
+            if _kept:
+                _pr0["ids"] = _kept
+                _probe0["pruned"] = _pr0
+                saved["probe"] = _probe0
+                _provider_keys[pid] = saved
+            else:
+                _probe0.pop("pruned", None)
+                saved["probe"] = _probe0
+                _provider_keys[pid] = saved
+    if not bad:
+        return []
+    kept, removed = [], []
+    for m in models:
+        mid = str(m.get("id") if isinstance(m, dict) else m)
+        if mid in bad:
+            removed.append(mid)
+        else:
+            kept.append(m)
+    if not removed:
+        # 2026-10-22：本轮没有从清单里摘到东西，但「已知不可用且早已不在清单」的模型
+        # 仍然要记进 pruned —— 否则上一次剪除过的模型丢了标记，弹窗里的「↩ 恢复」入口
+        # 就再也看不到（用户要的就是「知道哪些被拿掉了」）。
+        known = [str(x) for x in ((saved.get("probe") or {}).get("known_ids") or [])]
+        present = {str(m.get("id") if isinstance(m, dict) else m) for m in models}
+        missing = [mid for mid in known if mid in bad and mid not in present]
+        if missing:
+            probe = saved.get("probe") if isinstance(saved.get("probe"), dict) else {}
+            pr = probe.get("pruned") if isinstance(probe.get("pruned"), dict) else {}
+            pr["ids"] = sorted(set(list(pr.get("ids") or []) + missing))
+            pr["at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            probe["pruned"] = pr
+            saved["probe"] = probe
+            _provider_keys[pid] = saved
+            return missing
+        return []
+    saved["models"] = kept
+    probe = saved.get("probe") if isinstance(saved.get("probe"), dict) else {}
+    pruned = probe.get("pruned") if isinstance(probe.get("pruned"), dict) else {}
+    pruned["ids"] = sorted(set(list(pruned.get("ids") or []) + removed))
+    pruned["at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    probe["pruned"] = pruned
+    saved["probe"] = probe
+    _provider_keys[pid] = saved
+    return removed
+
+
+def _restore_pruned_models(pid):
+    """把之前自动摘掉的模型恢复回清单（按 probe.results 里的名字重建）。"""
+    saved = _provider_keys.get(pid) or {}
+    probe = saved.get("probe") if isinstance(saved.get("probe"), dict) else {}
+    pruned = (probe.get("pruned") or {}).get("ids") or []
+    if not pruned:
+        return []
+    results = probe.get("results") or {}
+    models = saved.get("models") if isinstance(saved.get("models"), list) else []
+    have = {str(m.get("id") if isinstance(m, dict) else m) for m in models}
+    restored = []
+    for mid in pruned:
+        if mid in have:
+            continue
+        models.append({"id": mid, "name": mid, "reasoning": False, "tool_call": True,
+                       "_restored": True,
+                       "_last_probe_error": (results.get(mid) or {}).get("error", "")})
+        restored.append(mid)
+    saved["models"] = models
+    probe.pop("pruned", None)
+    saved["probe"] = probe
+    _provider_keys[pid] = saved
+    return restored
+
+
+def _start_model_probe(pid, p, api_key, drop_failed=False):
+    """启动（或复用正在跑的）模型可用性检测。返回 (是否新启动, 任务快照)。
+
+    drop_failed=True 时，检测完成后自动把实测不可用的模型从该 provider 的模型清单里
+    摘掉（用户的诉求：「保存和拉取模型的时候就只保留联通的模型」）。
+    """
+    saved = _provider_keys.get(pid) or {}
+    models = _effective_models(p, saved)
+    model_ids = [str(m.get("id")) for m in models if isinstance(m, dict) and m.get("id")]
+    # 2026-10-22：检测列表取「见过的全部模型」（known_ids 累积式，只增不缩）——
+    # 光用当前清单会越测越窄（剪除后只剩可用的），上游恢复的模型永远回不来。
+    model_ids = list(dict.fromkeys(list(_probe_get(pid).get("known_ids") or []) + model_ids))
+    if not model_ids:
+        return False, {"error": "该 provider 还没有模型清单：先点「保存并拉取模型」"}
+    with _PROBE_LOCK:
+        job = _PROBE_JOBS.get(pid)
+        if isinstance(job, dict) and job.get("running"):
+            return False, dict(job)
+        job = {
+            "pid": pid, "total": len(model_ids), "done": 0,
+            "usable": 0, "failed": 0, "results": {}, "running": True,
+            "started_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "finished_at": "", "error": "",
+        }
+        _PROBE_JOBS[pid] = job
+    # 2026-10-22：探针必须带上网关要求的额外请求头。目录（_CHINA_PROVIDERS）里没有
+    # extra_headers —— opencode.ai 网关的 x-opencode-session 只存在 config.yaml 的
+    # custom_providers[] 里（同步时写入）。不合并就一律 400 MissingSessionID，
+    # 会把整家 provider 的模型误判成「不可用」。
+    try:
+        _extra = _provider_extra_headers_for(p.get("api", ""))
+    except Exception:
+        _extra = {}
+    if _extra:
+        p = dict(p)
+        _merged = dict(p.get("extra_headers") or {})
+        for _k, _v in _extra.items():
+            if _v:
+                _merged[str(_k)] = str(_v)
+        p["extra_headers"] = _merged
+    _threading.Thread(target=_run_model_probe, args=(pid, dict(p), api_key, model_ids, bool(drop_failed)),
+                      daemon=True, name=f"model-probe-{pid}").start()
+    print(f"[MemOmics] provider {pid} 开始模型可用性检测：共 {len(model_ids)} 个模型"
+          f"（并发 {_PROBE_MAX_WORKERS}，单模型超时 {_PROBE_TIMEOUT:.0f}s）", flush=True)
+    return True, dict(job)
+
+
+@app.post("/api/providers/{pid}/models/probe")
+async def probe_provider_models(pid: str, body: dict = None):
+    """真发一条最小请求，逐个验证「拉取到的模型」现在能不能用（后台跑，前端轮询进度）。
+
+    与 /models/refresh 的区别：那是列目录，这是逐个试点火。发现的不可用模型
+    会落进 provider_keys.json 的 probe 字段。
+
+    请求体 {"drop_failed": true}：检测完成后自动把不可用的模型从清单里摘掉
+    （用户要求「只保留联通的模型」）——「保存并拉取模型」流程默认走这个模式。
+    """
+    p = _PROVIDERS_INDEX.get(pid)
+    if not p:
+        return JSONResponse({"error": f"Provider '{pid}' not found"}, status_code=404)
+    saved = _provider_keys.get(pid) or {}
+    api_key = saved.get("api_key") or ""
+    if not _is_valid_api_key(api_key) and not saved.get("local"):
+        return JSONResponse({"error": "请先保存该 provider 的 API Key，再检测模型可用性"},
+                            status_code=400)
+    drop_failed = bool((body or {}).get("drop_failed"))
+    started, job = _start_model_probe(pid, p, api_key, drop_failed=drop_failed)
+    if job.get("error"):
+        return JSONResponse(job, status_code=400)
+    return {"ok": True, "provider": pid, "started": started, "total": job.get("total", 0),
+            "done": job.get("done", 0), "running": bool(job.get("running")),
+            "usable": job.get("usable", 0), "failed": job.get("failed", 0),
+            "note": ("正在检测中（并发 %d，单模型超时 %.0fs）——可关掉弹窗，进度会保留"
+                     % (_PROBE_MAX_WORKERS, _PROBE_TIMEOUT)) if started else "已在检测中，直接查看进度"}
+
+
+def _recheck_model_job_state(pid):
+    with _PROBE_LOCK:
+        j = _PROBE_JOBS.get(pid)
+        return bool(isinstance(j, dict) and j.get("running"))
+
+
+def _run_model_recheck(pid, p, api_key, ids):
+    """只重测指定模型（用于复检旧结论），成功的清标记，失败的刷新原因。"""
+    from concurrent.futures import ThreadPoolExecutor
+    from memomics.coding_plans import probe_chat_model
+
+    def _one(mid):
+        try:
+            return probe_chat_model(p, api_key, mid, timeout=_PROBE_TIMEOUT)
+        except Exception as exc:
+            return {"id": mid, "usable": False, "status": 0,
+                    "error": f"复检异常：{type(exc).__name__}: {exc}"[:200], "ms": 0}
+
+    workers = max(1, min(_PROBE_MAX_WORKERS, len(ids) or 1))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        results = {str(r.get("id")): r for r in pool.map(_one, ids) if r.get("id")}
+    # 合并进 probe.results
+    saved = _provider_keys.setdefault(pid, {})
+    probe = saved.get("probe") if isinstance(saved.get("probe"), dict) else {}
+    cur = probe.get("results") if isinstance(probe.get("results"), dict) else {}
+    cur.update(results)
+    probe["results"] = cur
+    probe["tested"] = len(cur)
+    probe["usable"] = sum(1 for v in cur.values() if isinstance(v, dict) and v.get("usable"))
+    probe["failed"] = sum(1 for v in cur.values() if isinstance(v, dict) and v.get("usable") is False)
+    probe["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    saved["probe"] = probe
+    # 复检后重新剪除（成功的不再被摘）
+    try:
+        _prune_models_from_saved(pid, cur)
+    except Exception as exc:
+        print(f"[WARN] 复检后剪除失败（不阻塞）: {exc}", flush=True)
+    _save_provider_keys()
+    _sync_custom_providers_to_memomics(pid)
+    ok = [k for k, v in results.items() if isinstance(v, dict) and v.get("usable")]
+    bad = [k for k, v in results.items() if isinstance(v, dict) and v.get("usable") is False]
+    print(f"[MemOmics] provider {pid} 复检 {len(results)} 个：转可用 {len(ok)} 个"
+          f"{('（' + ', '.join(ok[:6]) + '）') if ok else ''}；仍不可用 {len(bad)} 个", flush=True)
+
+
+@app.post("/api/providers/{pid}/models/recheck")
+async def recheck_provider_models(pid: str):
+    """复检「上次判定失败」的模型（最多 20 个）：可用性可能有变化（换 key / 上游恢复）。
+
+    返回 {"rechecked": n, "now_usable": [...], "still_failed": [...]}；没有待复检的
+    模型时返回 rechecked=0 —— 界面据此显示「上次结论仍然有效」。
+    """
+    p = _PROVIDERS_INDEX.get(pid)
+    if not p:
+        return JSONResponse({"error": f"Provider '{pid}' not found"}, status_code=404)
+    saved = _provider_keys.get(pid) or {}
+    api_key = saved.get("api_key") or ""
+    if not _is_valid_api_key(api_key) and not saved.get("local"):
+        return JSONResponse({"error": "请先保存该 provider 的 API Key"}, status_code=400)
+    if _recheck_model_job_state(pid):
+        return {"ok": True, "rechecked": 0, "note": "整组检测正在跑，复检跳过"}
+    results = (_probe_get(pid).get("results") or {})
+    failed = [str(k) for k, v in results.items()
+              if isinstance(v, dict) and v.get("usable") is False]
+    if not failed:
+        return {"ok": True, "rechecked": 0, "note": "没有需要复检的模型"}
+    failed = failed[:20]
+    # 复检也要带上网关要求的额外头（同 _start_model_probe）
+    try:
+        _extra = _provider_extra_headers_for(p.get("api", ""))
+    except Exception:
+        _extra = {}
+    if _extra:
+        p = dict(p)
+        _merged = dict(p.get("extra_headers") or {})
+        for _k, _v in _extra.items():
+            if _v:
+                _merged[str(_k)] = str(_v)
+        p["extra_headers"] = _merged
+    _threading.Thread(target=_run_model_recheck,
+                      args=(pid, dict(p), api_key, failed),
+                      daemon=True, name=f"model-recheck-{pid}").start()
+    return {"ok": True, "provider": pid, "rechecked": len(failed), "ids": failed,
+            "note": "正在复检上次判失败的模型，几秒后看下拉标记"}
+
+
+@app.post("/api/providers/{pid}/models/prune")
+async def prune_provider_models(pid: str, payload: dict = None):
+    """手动剪除实测不可用的模型；body {"restore": true} 则恢复之前被剪除的模型。
+
+    自动流程（保存并拉取模型 → 检测 → 剪除）用不上它；这里是给「想手动清一次」
+    和「误删了要捞回来」留的出口。剪除只动 provider_keys.json 的模型清单。
+    """
+    p = _PROVIDERS_INDEX.get(pid)
+    if not p:
+        return JSONResponse({"error": f"Provider '{pid}' not found"}, status_code=404)
+    body = payload if isinstance(payload, dict) else {}
+    if body.get("restore"):
+        restored = _restore_pruned_models(pid)
+        _save_provider_keys()
+        _sync_custom_providers_to_memomics(pid)
+        return {"ok": True, "provider": pid, "restored": restored, "count": len(restored)}
+    results = (_probe_get(pid).get("results") or {})
+    if not results:
+        return JSONResponse({"error": "该 provider 还没有检测结论：先点「🧪 测可用性」或保存并拉取模型"},
+                            status_code=400)
+    removed = _prune_models_from_saved(pid, results)
+    _save_provider_keys()
+    _sync_custom_providers_to_memomics(pid)
+    return {"ok": True, "provider": pid, "removed": removed, "count": len(removed),
+            "remaining": len((_provider_keys.get(pid) or {}).get("models") or [])}
+
+
+@app.get("/api/providers/{pid}/models/probe/status")
+async def probe_provider_models_status(pid: str):
+    """模型可用性检测进度 + 结论（进程内存里的实时任务 + provider_keys.json 的历史结论）。"""
+    job = None
+    with _PROBE_LOCK:
+        cur = _PROBE_JOBS.get(pid)
+        if isinstance(cur, dict):
+            job = dict(cur)
+            job["results"] = dict(cur.get("results") or {})
+    snapshot = _probe_snapshot(pid)
+    if job is None and snapshot is None:
+        return {"ok": True, "provider": pid, "running": False, "tested": 0, "total": 0,
+                "usable": 0, "failed": 0, "results": {}, "updated_at": "", "never_tested": True}
+    return {"ok": True, "provider": pid,
+            "running": bool(job.get("running")) if job else False,
+            "total": (job or {}).get("total", (snapshot or {}).get("tested", 0)),
+            "tested": len((job or {}).get("results") or {}) if job else (snapshot or {}).get("tested", 0),
+            "usable": (job or {}).get("usable", (snapshot or {}).get("usable", 0)),
+            "failed": (job or {}).get("failed", (snapshot or {}).get("failed", 0)),
+            "results": (job or {}).get("results") or {},
+            "started_at": (job or {}).get("started_at", ""),
+            "finished_at": (job or {}).get("finished_at", ""),
+            "pruned": (_probe_get(pid).get("pruned") or {}).get("ids") or [],
+            "updated_at": (snapshot or {}).get("updated_at", "") or (job or {}).get("finished_at", "")}
+
+
 
 
 _OPENCODE_SESSION_HOST = "opencode.ai"
@@ -10365,13 +10899,30 @@ def _sync_custom_providers_to_memomics(pid=None):
 
 @app.post("/api/providers/{pid}/key")
 async def save_provider_key(pid: str, payload: dict):
-    """保存指定 provider 的 API Key（同时同步 MemOmics config.yaml custom_providers）"""
+    """保存指定 provider 的 API Key（同时同步 MemOmics config.yaml custom_providers）。
+
+    2026-10-22（用户诉求「key 应该像 DSH 那样绑在每家 provider 上，之后随时能拉当前
+    可用模型、不可用就自己剔除，别再让我重输 key」）：
+      · 传了 api_key → 更新绑定并同步到底座；
+      · **不传 api_key（空）且这家已绑定过** → 不动 key，直接用它拉一次模型（纯刷新）；
+      · 空 key 且从未绑定 → 明确提示"这家还没绑定 Key"。
+    """
     if pid not in _PROVIDERS_INDEX:
         return JSONResponse({"error": f"Provider '{pid}' not found"}, status_code=404)
     key = (payload.get("api_key") or "").strip()
-    if not key:
-        return JSONResponse({"error": "api_key is required"}, status_code=400)
     _prev_saved = _provider_keys.get(pid) or {}
+    kept_existing = False
+    if not key:
+        _bound = str(_prev_saved.get("api_key") or "")
+        if _is_valid_api_key(_bound) or _prev_saved.get("local"):
+            key = _bound
+            kept_existing = True
+            print(f"[MemOmics] provider {pid}：未传新 key，用已绑定的 key 刷新模型列表", flush=True)
+        else:
+            return JSONResponse(
+                {"error": f"「{_PROVIDERS_INDEX[pid].get('name') or pid}」还没有绑定 API Key："
+                          f"填入 Key 保存一次即可（之后拉取模型不用再输）",
+                 "need_key": True}, status_code=400)
     _provider_keys[pid] = {"api_key": key, "base_url": _PROVIDERS_INDEX[pid]["api"]}
     if _prev_saved.get("models"):
         # 换 key 不清空已拉取的模型列表（下次拉取会覆盖）
@@ -10696,7 +11247,14 @@ async def list_available_models(session_id: str = ""):
             continue
         is_current = (cur_cfg.get("api_key") == saved.get("api_key") and
                       cur_cfg.get("base_url") == p["api"])
+        # 2026-10-22：实测不可用的模型不进「快速切换」列表 —— 会话模型下拉、
+        # 「已连接的模型」都读这里。之前只过滤了 provider 级清单，这里漏了，
+        # 造成「清单 25 个、下拉仍列 36 个」的错位（用户反馈的核心现象）。
+        _probe_rows = (_probe_get(pid).get("results") or {})
+        _has_pulled = len((saved.get("models") or [])) > 0
         for m in _effective_models(p, saved):
+            if _has_pulled and (_probe_rows.get(str(m["id"])) or {}).get("usable") is False:
+                continue
             models.append({
                 "id": m["id"], "name": m["name"],
                 "provider_id": pid, "provider_name": p["name"].split("(")[0].strip(),
@@ -15625,7 +16183,7 @@ async def kb_coverage_api():
 
 
 @app.get("/api/kb/graph")
-async def kb_graph_api():
+def kb_graph_api():  # 2026-10-21：async→def 下放线程池——纯同步 IO（rglob+open+yaml），曾在事件循环上堵 16.1s（slow_loop.log 12:28 现行）
     """知识库图谱：路径层级节点（物种/组织/方向/分类/文件）+ auto_trigger 内容关联边（只读）"""
     try:
         import yaml
@@ -15750,7 +16308,7 @@ async def kb_graph_api():
 # --- Skill 浏览 ---
 
 @app.get("/api/skills")
-async def list_skills():
+def list_skills():  # 2026-10-21：async→def 下放线程池——纯同步目录扫描，任务运行期间不再堵事件循环（用户反馈：跑任务时 Skill库一直"加载中"）
     """列出所有 skill, 按类型分类"""
     # category 字段值 -> 显示分类名 的映射
     JSON_CATEGORY_MAP = {
@@ -16050,7 +16608,7 @@ async def bulk_toggle_skills(request: Request):
     disabled = _read_disabled_skills()
     if category_filter:
         # Get all skills in this category
-        skills_data = await list_skills()
+        skills_data = await asyncio.to_thread(list_skills)  # list_skills 2026-10-21 起为同步（线程池）
         names = [s["name"] for s in skills_data["skills"] if s["category"] == category_filter]
     if action == "disable":
         disabled.update(names)
@@ -16076,10 +16634,10 @@ async def list_enabled_skills():
 
 
 @app.get("/api/skills/catalog")
-async def skills_catalog(q: str = "", category: str = "", limit: int = 0):
+def skills_catalog(q: str = "", category: str = "", limit: int = 0):  # 2026-10-21：async→def 下放线程池
     """P8: 置顶选择器用的 skill 清单（含触发等级/触发词/适用场景/禁用状态）"""
     try:
-        base = await list_skills()
+        base = list_skills()
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
     disabled = _read_disabled_skills()
@@ -16317,7 +16875,11 @@ language: {req.language}
 
 @app.get("/api/results/{sid}")
 @app.get("/api/results/{sid}")
-async def list_results(sid: str, path: str = "", sort: str = "time_desc", lang: str = "zh"):
+async def list_results(sid: str, path: str = "", sort: str = "time_desc", lang: str = "zh"):  # 函数体零 await；另行包装见下
+    return await asyncio.to_thread(_list_results_sync, sid, path, sort, lang)
+
+
+def _list_results_sync(sid: str, path: str = "", sort: str = "time_desc", lang: str = "zh"):  # 2026-10-21：原 list_results 整体下放线程池（任务期间结果面板轮询曾堵事件循环，slow_loop.log 今日现行）
     """列出会话分析结果目录（每次实时扫描磁盘，不用缓存）
 
     sort（P5 2026-09-22 / P5.1 修订）：
@@ -17633,7 +18195,11 @@ async def latest_debate(sid: str):
 
 
 @app.get("/api/results/{sid}/figures")
-async def list_figures(sid: str, sort: str = "time_desc"):
+async def list_figures(sid: str, sort: str = "time_desc"):  # 函数体零 await；另行包装见下
+    return await asyncio.to_thread(_list_figures_sync, sid, sort)
+
+
+def _list_figures_sync(sid: str, sort: str = "time_desc"):  # 2026-10-21：原 list_figures 整体下放线程池（同上，slow_loop.log 今日现行）
     """列出会话所有 figures（递归扫描 png/jpg/svg/pdf）
 
     sort（P5 2026-09-22）：time_desc（默认，最新出的图排最上面）/ time_asc（旧行为）/ name
@@ -20541,6 +21107,10 @@ async def ws_endpoint(ws: WebSocket):
                             _live_tool = _s.get("_live_tool", "") or ""
                             _live_since = _s.get("_live_tool_ts") or 0
                             _stalled = bool(_live_tool) and (time.time() - _live_since) > 180
+                            # 2026-10-21：区分「执行工具 / 等待模型」相位 —— 用户反馈长时间思考像卡死。
+                            # _live_tool_ts 在工具结束清空时同样刷新为当前时刻，可作本相位起点。
+                            _phase = "tool" if _live_tool else "llm"
+                            _phase_elapsed = int(time.time() - (_live_since or _turn_start))
                             # 2026-08-16: 任务进程 CPU/内存监控（内核 worker/后台进程最新采样）
                             _proc = {}
                             try:
@@ -20557,6 +21127,8 @@ async def ws_endpoint(ws: WebSocket):
                                 "turns": int(_s.get("_turn_count", 0) or 0),
                                 "tool": _live_tool,
                                 "stalled": _stalled,
+                                "phase": _phase,
+                                "phase_elapsed": _phase_elapsed,
                                 "proc": _proc or None,
                                 "ts": datetime.now().strftime("%H:%M:%S"),
                                 "session_id": _s["id"]})

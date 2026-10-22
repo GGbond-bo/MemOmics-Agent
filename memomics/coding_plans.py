@@ -23,6 +23,7 @@ alibaba-coding-plan / stepfun 插件与 auth.py 常量），以及 DSH 插件
 from __future__ import annotations
 
 import json as _json
+import time
 import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional
@@ -245,3 +246,175 @@ def fetch_plan_models(provider: Dict[str, Any], api_key: str, timeout: float = 1
 
 def is_coding_plan(provider_id: str) -> bool:
     return (provider_id or "").strip() in {p["id"] for p in CODING_PLAN_PROVIDERS}
+
+
+# ── 模型可用性探针（2026-10-22）────────────────────────────────────────────
+# 背景（用户反馈「点『配置 Key / 拉取模型』拉到的模型不能使用」）：拉取只打
+# /models 列目录，**不代表每个模型都经由 OpenAI /chat/completions 协议对当前
+# 套餐开放**。实测 opencode.ai/zen/go 一把 key 下 36 个模型里：
+#   · 25 个正常出话；
+#   · grok-4.7 / gpt-6-luna / claude-haiku-5-5 等 6 个返回 400
+#     ModelProtocolUnsupported（走 Anthropic Messages / Responses 协议）；
+#   · muse-spark-* / gemini-4-argon 受「Go 模型训练期」限制、mimo-v2.5-pro
+#     模式不支持、longcat-2.0 端点停用（402）。
+# 所以这里补一层「真发一条最小请求」的探针，把结论落进 provider_keys.json，
+# 让模型下拉能标出哪些不能用，而不是等用户选中了才吃一嘴报错。
+
+_PROTO_ERR_HINTS = (
+    "ModelProtocolUnsupported",
+    "does not support this protocol",
+    "unsupported protocol",
+    "protocol not supported",
+)
+
+_UPSTREAM_UNAVAILABLE_HINTS = (
+    "Endpoint is unavailable",
+    "endpoint is unavailable",
+    "not available",
+    "model is unavailable",
+    "no available channel",
+)
+
+
+def _post_chat_json(url: str, headers: Dict[str, str], payload: Dict[str, Any],
+                    timeout: float = 45.0) -> Dict[str, Any]:
+    """POST 一条 JSON 到 chat 端点，**不按状态码抛异常**（探针要看错误正文分类）。
+
+    返回 {"ok": bool, "status": int, "text": str, "error": str}。
+    """
+    try:
+        import httpx  # memomics 底座依赖，与 _http_get_json 同一优先序
+        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+            resp = client.post(url, headers=headers, json=payload)
+            return {"ok": resp.status_code < 400, "status": resp.status_code,
+                    "text": (resp.text or "")[:800], "error": ""}
+    except ImportError:
+        pass
+    except Exception as exc:  # 连接/超时/SSL：当作探针失败，不抛给上层
+        return {"ok": False, "status": 0, "text": "", "error": f"{type(exc).__name__}: {exc}"[:200]}
+    try:
+        body = _json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=body, method="POST", headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return {"ok": 200 <= resp.status < 400, "status": resp.status,
+                    "text": resp.read().decode("utf-8", "replace")[:800], "error": ""}
+    except urllib.error.HTTPError as exc:
+        try:
+            text = exc.read().decode("utf-8", "replace")[:800]
+        except Exception:
+            text = ""
+        return {"ok": False, "status": int(exc.code or 0), "text": text, "error": ""}
+    except Exception as exc:
+        return {"ok": False, "status": 0, "text": "", "error": f"{type(exc).__name__}: {exc}"[:200]}
+
+
+def _classify_probe_failure(status: int, text: str, error: str) -> str:
+    """把探针失败翻译成一句用户能看懂的话（决定要不要继续试别的模型）。"""
+    low = (text or "").lower()
+    for hint in _PROTO_ERR_HINTS:
+        if hint.lower() in low:
+            return "该模型不支持 OpenAI /chat/completions 协议（走 Anthropic Messages / Responses 等），换协议才能用"
+    for hint in _UPSTREAM_UNAVAILABLE_HINTS:
+        if hint.lower() in low:
+            return "上游端点当前不可用（停用/维护/无可用通道）"
+    if status == 401:
+        return "401 —— API Key 无效或无权限（换一把有效 key 后重试）"
+    if status == 402:
+        return "402 —— 欠费或该模型需单独付费/订阅"
+    if status == 403:
+        return "403 —— 上游拒绝：多因套餐未开通、模型未授权或被风控拦截"
+    if status == 404:
+        return "404 —— 该端点不存在这个模型（网关路径或模型名不符）"
+    if status == 429:
+        return "429 —— 触发上游限流（稍后重试，或降并发）"
+    if status == 400:
+        detail = text[:160] if text else "上游未给出原因"
+        return f"400 —— 上游拒绝该请求：{detail}"
+    if status == 0:
+        return f"连不上端点：{error or '网络/超时'}"
+    if status >= 500:
+        return f"{status} —— 上游服务端错误（多为临时故障，可稍后重试）"
+    return f"HTTP {status}：{(text or error or '上游未给出原因')[:160]}"
+
+
+def _candidate_chat_urls(base: str) -> List[str]:
+    """chat 端点候选路径（与 _candidate_urls 同思路：不同网关路径规则不一样）。
+
+    Kimi 编程套餐的 chat 在 /coding/v1/chat/completions（base 是 /coding），
+    opencode 与 DCS 的 base 已经含 /v1 —— 所以要先试 base，再试 base + /v1。
+    """
+    base = str(base or "").rstrip("/")
+    urls: List[str] = []
+    if not base:
+        return urls
+    urls.append(f"{base}/chat/completions")
+    if not base.endswith("/v1"):
+        urls.append(f"{base}/v1/chat/completions")
+    return urls
+
+
+def probe_chat_model(provider: Dict[str, Any], api_key: str, model_id: str,
+                     timeout: float = 45.0, max_tokens: int = 1,
+                     user_agent: str = "MemOmics/1.0") -> Dict[str, Any]:
+    """真发一条最小请求，判定某个模型**现在**能不能出话。
+
+    与 fetch_plan_models 的差别：那是「列目录」，这是「试点火」。只发
+    max_tokens=1、内容 'hi' 的最小请求，成本可忽略；失败时按响应正文分类，
+    让界面能说清「为什么不能用」。
+
+    返回 {"id", "usable": bool, "status": int, "error": str, "ms": int}
+    """
+    base = str(provider.get("api") or "").rstrip("/")
+    if not base:
+        return {"id": model_id, "usable": False, "status": 0,
+                "error": "该 provider 未配置 API 地址", "ms": 0}
+    headers = {"Content-Type": "application/json", "User-Agent": user_agent}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    # extra_headers（opencode.ai 的 x-opencode-session、Kimi Code 的 UA 等）必须带上，
+    # 否则会得到「假失败」：实测不带 x-opencode-session 一律 400 MissingSessionID。
+    extra = provider.get("extra_headers")
+    if isinstance(extra, dict):
+        for key, value in extra.items():
+            if value:
+                headers[str(key)] = str(value)
+    payload = {
+        "model": model_id,
+        "messages": [{"role": "user", "content": "hi"}],
+        "max_tokens": int(max_tokens),
+        "stream": False,
+    }
+    # 2026-10-22：按候选路径试（Kimi 套餐在 /coding/v1/chat/completions，固定拼
+    # <base>/chat/completions 会 404，把 4 个能用的模型全误判成不可用）。
+    # 只有 404/405 才换下一个候选；其它错误是本模型的真实结论，直接采纳。
+    t0 = time.time()
+    last = None
+    url_used = ""
+    for cand in _candidate_chat_urls(base):
+        res = _post_chat_json(cand, headers, payload, timeout=timeout)
+        last = res
+        url_used = cand
+        if res.get("ok"):
+            return {"id": model_id, "usable": True, "status": int(res.get("status") or 200),
+                    "error": "", "ms": int((time.time() - t0) * 1000), "url_used": cand}
+        if int(res.get("status") or 0) not in (404, 405):
+            break
+    res = last or {}
+    # 2026-10-22（对齐 DSH 的容错口径）：单次失败可能是限流/抖动 —— 重试一次再判死，
+    # 避免把「刚好抽风一次」的模型误摘掉（用户实测 beam-free 等免费模型会这样）。
+    _st = int(res.get("status") or 0)
+    if _st not in (401, 402, 403):          # 认证/欠费/风控类不重试（重试也没用）
+        time.sleep(1.2)
+        for cand in _candidate_chat_urls(base):
+            _res2 = _post_chat_json(cand, headers, payload, timeout=timeout)
+            if _res2.get("ok"):
+                return {"id": model_id, "usable": True, "status": int(_res2.get("status") or 200),
+                        "error": "", "ms": int((time.time() - t0) * 1000),
+                        "url_used": cand, "retried": True}
+            if int(_res2.get("status") or 0) not in (404, 405):
+                res, url_used = _res2, cand
+                break
+    ms = int((time.time() - t0) * 1000)
+    reason = _classify_probe_failure(int(res.get("status") or 0), res.get("text") or "", res.get("error") or "")
+    return {"id": model_id, "usable": False, "status": int(res.get("status") or 0),
+            "error": reason, "ms": ms, "url_used": url_used}
