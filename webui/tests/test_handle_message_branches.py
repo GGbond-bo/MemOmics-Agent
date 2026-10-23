@@ -46,7 +46,10 @@ def test_new_figure_single_branch():
     types = _chain_types(_html())
     assert types.count("new_figure") == 1, "new_figure 又写成两个分支了"
     i = _html().index("} else if (msg.type === 'new_figure')")
-    assert "handleNewFigure" in _html()[i:i + 300]
+    # 2026-10-23：分支里加了「老图/回放不算新图」的闸门，调用点后移 —— 改成按分支体精确计数
+    j = _html().index("} else if (msg.type === 'event')", i)
+    seg = _html()[i:j]
+    assert seg.count("handleNewFigure(msg.figure)") == 1, "new_figure 分支必须且只能调用一次 handleNewFigure"
 
 
 def test_chain_is_still_well_formed():

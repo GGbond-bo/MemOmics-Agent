@@ -2164,6 +2164,7 @@ var I18N_DYN = {
 ' 个被跳过的文件）':' skipped files)',
 ' 个角色':' roles',
 ' 个锚点在各方发言原文中找不到（可能来自证据卡，也可能是整理时补的），请抽查：':' anchors not found in the original statements of the parties (possibly from evidence cards, or added during editing); please spot-check: ',
+' 个问题':' questions',
 ' 创建成功！':' Created successfully!',
 ' 启用':' Enable',
 ' 回合 · ':' rounds · ',
@@ -2197,7 +2198,9 @@ var I18N_DYN = {
 ' 脚本':' scripts',
 ' 行':' lines',
 ' 轮':' rounds',
+' 针对「':' Re: “',
 ' 项':' items',
+' 题还没回答':' questions unanswered',
 '(共 ':'(of ',
 '(无法加载模型)':'(Failed to load models)',
 '(无题目)':'(No question)',
@@ -2386,9 +2389,11 @@ var I18N_DYN = {
 '⬇ 下载原始 JSON':'⬇ Download Raw JSON',
 '⬇ 导出引用':'⬇ Export Citation',
 '⬇ 队列':'⬇ Queue',
+'、':', ',
 '「💾 保存」':'💾 Save',
 '「🔌 自检」':'🔌 Self-Check',
 '「🔑 安装公钥」':'🔑 Install Public Key',
+'」：':'”: ',
 '一键全流程：对全部未完成文献跑 翻译→9项提炼→证据链知识→双语锚定（幂等跳过已完成步骤；篇级并发 2 路）':'One-click full pipeline: runs translation → 9-item distillation → evidence-chain knowledge → bilingual anchoring for all unfinished papers (idempotent, skips completed steps; 2 papers in parallel)',
 '一键把当前目录下所有 PDF（含子目录）导入文献库':'Import every PDF in the current folder (including subfolders) into the literature library in one click',
 '上一句（译文）':'Previous Sentence (Translation)',
@@ -2447,6 +2452,7 @@ var I18N_DYN = {
 '全部物种':'All Species',
 '全部状态':'All Statuses',
 '全部禁用':'Disable All',
+'共 ':'Total ',
 '关键参数':'Key Parameters',
 '关闭':'Close',
 '关闭 (Esc)':'Close (Esc)',
@@ -5024,7 +5030,7 @@ function showAskFormMulti(msg) {
     var html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">';
     html += '<span style="font-size:16px;font-weight:600;">❓ ' + _afEsc(msg.header || T('需要你确认')) + '</span>';
     html += '<span style="font-size:11px;padding:1px 7px;border-radius:9px;background:rgba(90,150,255,.18);color:#7fb0ff;">' + _afEsc(kindTxt) + '</span>';
-    html += '<span style="font-size:11px;color:var(--muted,#9aa4b2);">共 ' + qs.length + ' 个问题</span></div>';
+    html += '<span style="font-size:11px;color:var(--muted,#9aa4b2);">' + T('共 ') + qs.length + T(' 个问题') + '</span></div>';
     qs.forEach(function (q, qi) {
       html += '<div style="margin:14px 0 4px;font-weight:600;font-size:13px;">' + (qi + 1) + '. ' + _afEsc(q.question) + (q.multi_select ? ' <span style="font-size:11px;color:var(--muted,#9aa4b2);">' + T('（可多选）') + '</span>' : '') + '</div>';
       (q.options || []).forEach(function (lab) {
@@ -5064,11 +5070,11 @@ function _submitAskFormMulti() {
     var segs = [];
     if (sel.length) segs.push(t('af_ans_sel') + sel.join(t('af_ans_sep')));
     if (note) segs.push(t('af_ans_note') + note);
-    lines.push('qid=' + (q.qid || ('q' + (qi + 1))) + ' 针对「' + String(q.question || '').slice(0, 120) + '」：' + segs.join(t('af_ans_sep')));
+    lines.push('qid=' + (q.qid || ('q' + (qi + 1))) + T(' 针对「') + String(q.question || '').slice(0, 120) + T('」：') + segs.join(t('af_ans_sep')));
   });
   if (missing.length) {
     var errEl = document.getElementById('askform-err');
-    if (errEl) { errEl.style.display = 'block'; errEl.textContent = T('第 ') + missing.join('、') + ' 题还没回答'; }
+    if (errEl) { errEl.style.display = 'block'; errEl.textContent = T('第 ') + missing.join(T('、')) + T(' 题还没回答'); }
     return;
   }
   var btn = document.getElementById('askform-submit');

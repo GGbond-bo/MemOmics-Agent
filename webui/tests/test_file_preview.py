@@ -650,6 +650,9 @@ def test_p5_frontend_has_no_hardcoded_chinese():
         body = re.sub(r"/\*.*?\*/", "", body, flags=re.S)
         body = re.sub(r"^\s*//.*$", "", body, flags=re.M)
         body = re.sub(r"\s+//[^\n]*$", "", body, flags=re.M)   # 行尾注释（注释里可以有中文）
+        # 2026-10-23：通用翻译层 T('中文') 是受认可的新通道（渲染时按语言取值）——
+        # 扫描前整段剥掉；剩下的裸中文才算真残留。
+        body = re.sub(r"\bT\('(?:[^'\\]|\\.)*'\)", "", body)
         for line in body.split("\n"):
             if cjk.search(line):
                 bad.append("%s: %s" % (name, line.strip()[:120]))

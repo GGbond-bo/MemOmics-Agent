@@ -44,7 +44,10 @@ def _fn(html: str, name: str) -> str:
 
 def _nb_js() -> str:
     html = _html()
-    parts = ["var _nbPending = [];"]
+    parts = ["var _nbPending = [];",
+             # 2026-10-23：Notebook 文案走通用翻译层 T()；沙箱里给身份函数（断言中文口径）
+             "var UI_LANG = 'zh';",
+             "function T(s) { return s; }"]
     parts += [_fn(html, n) for n in PURE_FUNCS]
     parts.append("module.exports = {%s, setPending: function (p) { _nbPending = p; }};"
                  % ", ".join("%s: %s" % (n, n) for n in PURE_FUNCS))
