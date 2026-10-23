@@ -43,7 +43,7 @@ Usage
 
     rb.save("report.html")
 
-Author: Biomni (Phylo) — generated for zhangbo11
+Author: Biomni (Phylo) — generated for user
 """
 
 import base64

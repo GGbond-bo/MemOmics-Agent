@@ -44,7 +44,7 @@ OAuth needs a browser, but the loopback callback runs on the machine where Herme
 
 ```bash
 # Option A: SSH port forwarding (preferred)
-ssh -N -L 8642:127.0.0.1:8642 user@remote-host    # in a local terminal
+ssh -N -L 8642:login-host:22 user@remote-host    # in a local terminal
 hermes setup --portal                              # on the remote, open the printed URL in your local browser
 
 # Option B: device-code login (works from Cloud Shell, Codespaces, EC2 Instance Connect)

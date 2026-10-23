@@ -695,7 +695,7 @@ def _selftest() -> None:  # pragma: no cover - 手工验证用
     print("逃逸     :", p.check("fs.read", "E:/data/../secret").code)
     print("公网     :", p.check("net.fetch", "https://example.com/a").code)
     print("内网     :", p.check("net.fetch", "http://169.254.169.254/latest").code)
-    print("本地     :", p.check("net.fetch", "http://127.0.0.1:8899/api/version").code)
+    print("本地     :", p.check("net.fetch", "http://login-host:22/api/version").code)
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -51,7 +51,7 @@
       "auto_score": 0.0,
       "approved": false,
       "custom_script": false,
-      "result": "MF_2000（2132 肌核/48 样本/6 组）细胞周期打分完成：相位 G1 43.8%/S 31.0%/G2M 25.2%。真实增殖标志物 MKI67 检出率 0.00%（全部核/组/供体）、CCNB1≤0.44%、CDK1≤0.37% → 终末分化肌核几乎无增殖细胞。组间比较：样本级 KW 仅 G2M.Score p=0.018（Pre 组 pct_G2M p=0.028），两两 Wilc"
+      "result": "示例数据（2132 肌核/48 样本/6 组）细胞周期打分完成：相位 G1 43.8%/S 31.0%/G2M 25.2%。真实增殖标志物 MKI67 检出率 0.00%（全部核/组/供体）、CCNB1≤0.44%、CDK1≤0.37% → 终末分化肌核几乎无增殖细胞。组间比较：样本级 KW 仅 G2M.Score p=0.018（Pre 组 pct_G2M p=0.028），两两 Wilc"
     }
   ],
   "proven_script": "01_cellcycle_scoring_stats.R / 03_cellcycle_figures_only.R / 06_final_robustness.R",

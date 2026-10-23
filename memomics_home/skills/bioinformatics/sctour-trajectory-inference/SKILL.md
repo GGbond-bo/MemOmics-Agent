@@ -60,7 +60,7 @@ prerequisites:
 > ```
 > 此验证步骤**不可跳过**。宁可多检查一次，不可漏一份记录。
 >
-> **⚠️ 结果路径**：所有输出必须放在 `results/` 下（项目根目录下的 `results/`，如 `E:/MemOmics-Agent/results/`），**绝对不放桌面，不放 `hermes-agent/results/`。** 2026-07-08 会话教训：memory 误写为 `hermes-agent/results/` 导致日志放错位置，用户指出后才修正。基路径统一为 `{MEMOMICS_ROOT}/results/`（读取 `memomics_home/.install_path` 获取真实路径）。`generate_report` 的 `output_path` 必须指定，不依赖默认桌面路径。
+> **⚠️ 结果路径**：所有输出必须放在 `results/` 下（项目根目录下的 `results/`，如 `<安装目录>，**绝对不放桌面，不放 `hermes-agent/results/`。** 2026-07-08 会话教训：memory 误写为 `hermes-agent/results/` 导致日志放错位置，用户指出后才修正。基路径统一为 `{MEMOMICS_ROOT}/results/`（读取 `memomics_home/.install_path` 获取真实路径）。`generate_report` 的 `output_path` 必须指定，不依赖默认桌面路径。
 >
 > ⚠️ **目录结构**：每步执行后必须创建 `figures/` `results/` `scripts/` `data/` `log/` 五个子目录。`log/` 目录是强制保留的，包含 `analysis.log`、`debate_*.json`、`run_record_*.json`。
 
@@ -72,7 +72,7 @@ prerequisites:
 
 | 物种 | 组织 | 方向 | 日期 | 评分 |
 |:----|:----|:----|:----:|:----:|
-| 人类 | 骨骼肌 | 衰老 | 2026-07-08 | 9.0 |
+| 人类 | 示例组织 | 衰老 | 2026-07-08 | 9.0 |
 
 ---
 
@@ -555,7 +555,7 @@ results/<species>_<tissue>_<direction>_<date>/03_advanced/scTour/
 └── scTour_Trajectory_Report.html  # 综合HTML报告
 ```
 
-> **重要**：结果基路径为 `results/`（如 `E:/MemOmics-Agent/results/`）。HTML 报告生成到结果目录下，**不放桌面**。
+> **重要**：结果基路径为 `results/`（如 `<安装目录> 报告生成到结果目录下，**不放桌面**。
 
 ---
 
@@ -667,7 +667,7 @@ route_b.obs['ptime'] = tnode_b.get_time()
 >     print(f"{condition} Zone1: mean_ptime={pt.mean():.3f}")
 > ```
 >
-> **实际案例（人类骨骼肌衰老，11,630 cells，2026-07-08 验证结果）**：
+> **实际案例（示例研究场景，11,630 cells，2026-07-08 验证结果）**：
 >
 > | 条件 | Zone1 伪时间均值 | 解读 |
 > |:----|:--------------:|:----:|
@@ -712,7 +712,7 @@ print(f"rho = {rho:.3f}, p = {p_val:.4f}")
 
 **Zone1 内部验证**：如果 Zone1 底部（MYH7+）年龄显著低于 Zone1 顶部（COL19A1+），则支持"慢肌→去神经化"方向。
 
-**实际案例（人类骨骼肌衰老，11,630 cells）—— 年龄梯度验证基准：**
+**实际案例（示例研究场景，11,630 cells）—— 年龄梯度验证基准：**
 
 | 亚群 | 平均年龄 | 平均伪时间 | 伪时间排名 | 年龄排名 |
 |:----|:-------:|:---------:|:---------:|:-------:|
@@ -865,7 +865,7 @@ fig.tight_layout()
 
 报告保存到 `results/.../03_advanced/scTour/`，**不保存到桌面**。
 - **报告生成前必须先加载 `bioinformatics-html-report` skill**（`skill_view('bioinformatics-html-report')`），不可凭记忆手写 report builder 代码。
-- 可复用模板：`templates/generate_html_report.py`（2026-07-08 人类骨骼肌 SMF 双路线分析验证通过），修改路径和解读文本即可使用。
+- 可复用模板：`templates/generate_html_report.py`（2026-07-08 人类示例组织 SMF 双路线分析验证通过），修改路径和解读文本即可使用。
 
 #### 图片引入策略（2026-07-08 用户强制执行 — 不可违反）
 
@@ -1040,7 +1040,7 @@ print(f"✅ 报告验证通过 ({len(checks)}/{len(checks)})")
 - Blackwell GPU 设置: `references/blackwell-gpu-setup.md` — RTX 50 系列 CUDA 配置
 - 多配置对比工作流（2026-07-07 第一次运行）: `references/multi-config-comparison-20260707.md` — 3 config comparison, run2_encoder won
 - 多配置对比工作流（2026-07-08 第二次运行）: `references/multi-config-comparison-20260708.md` — 同一数据不同辩论标准, run1_balanced won
-- SMF 亚群转换分析（骨骼肌衰老去神经/再神经支配路线）: `references/smf-subcluster-transition-analysis.md` — **v2（2026-07-08）** SMF亚聚类Zone1~Zone6+NMJ的生物学解读模型。**关键修正**：Zone1从MYH1+（快肌）→MYH7+（慢肌）。新增Zone1内部梯度结构（MYH7→去神经→COL19A1）、双路线独立scTour方法论（解决单轴混淆问题）、GALNTL6/FKBP5桥梁基因、Zone4超补偿假说。
+- SMF 亚群转换分析（示例组织衰老去神经/再神经支配路线）: `references/smf-subcluster-transition-analysis.md` — **v2（2026-07-08）** SMF亚聚类Zone1~Zone6+NMJ的生物学解读模型。**关键修正**：Zone1从MYH1+（快肌）→MYH7+（慢肌）。新增Zone1内部梯度结构（MYH7→去神经→COL19A1）、双路线独立scTour方法论（解决单轴混淆问题）、GALNTL6/FKBP5桥梁基因、Zone4超补偿假说。
 - skill_evolution 静默失败修复: `references/skill-evolution-silent-failure.md` — 当 record_run 返回 Success 但不落盘时的排查和修复方法
 - 报告内容清单（报告生成前必查）: `references/report-content-checklist.md` — 8项必备内容的详细检查标准
 - 完整报告生成脚本: `scripts/generate_full_report.py` — 可复用的综合HTML报告生成器

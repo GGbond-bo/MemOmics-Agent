@@ -739,7 +739,7 @@ docker run -d \
 model:
   provider: custom
   model: my-model
-  base_url: http://127.0.0.1:8000/v1
+  base_url: http://login-host:22/v1
   api_key: "none"
 ```
 
@@ -762,7 +762,7 @@ You should see a JSON response listing your served model. If this fails, check:
 
 ### Ollama
 
-Ollama works the same way. If Ollama runs on the host, use `host.docker.internal:11434` (macOS/Windows) or `127.0.0.1:11434` (Linux with `--network host`). If Ollama runs in its own container on the same Docker network:
+Ollama works the same way. If Ollama runs on the host, use `host.docker.internal:11434` (macOS/Windows) or `login-host:22` (Linux with `--network host`). If Ollama runs in its own container on the same Docker network:
 
 ```yaml
 model:

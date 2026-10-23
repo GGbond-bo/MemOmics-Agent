@@ -11,7 +11,7 @@ import shutil
 import subprocess
 from datetime import datetime
 
-ENV_PATH = "E:/MemOmics-Agent/memomics_home/environment.json"
+ENV_PATH = "<安装目录>"
 
 def load_env():
     """加载环境文件"""
@@ -31,8 +31,8 @@ def discover_python():
     paths = {}
     # 系统 Python (CellBender 宿主)
     candidates = [
-        r"C:\Users\23136\AppData\Local\Programs\Python\Python312\python.exe",
-        r"C:\Users\23136\AppData\Local\Programs\Python\Python311\python.exe",
+        r"<用户目录>",
+        r"<用户目录>",
         r"C:\Python312\python.exe",
     ]
     for c in candidates:
@@ -44,7 +44,7 @@ def discover_python():
     
     # venv Python
     venv_candidates = [
-        r"E:\MemOmics-Agent\.venv\Scripts\python.exe",
+        r"<安装目录>",
     ]
     for c in venv_candidates:
         if os.path.exists(c):

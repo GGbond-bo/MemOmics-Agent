@@ -72,9 +72,9 @@ for sh, nm in zip(xl.sheet_names, ["Aging","DM","Ex_Young","Ex_Old","Ex_DM"]):
 - 被挡掉的行里**只有它一个** `|coef|` 超过已标池最大值 → **用户直觉对，是真盲区**，如实承认（不要替规则辩护）。
 - 被挡掉的行**一批都差不多大** → 规则合理，把分布摆出来即可。
 
-## 5. 工作实例（2026-09-30 · 人骨骼肌 · 5 对比 × 8 MF 亚群）
+## 5. 工作实例（2026-09-30 · 人示例组织 · 5 对比 × 8 MF 亚群）
 
-- 输入 `D:/我的下载/DEG_fdr05_coef025_5contrasts.xlsx`（已过滤 FDR<0.05 & |coef|≥0.25）
+- 输入 `<数据目录>/DEG_fdr05_coef025_5contrasts.xlsx`（已过滤 FDR<0.05 & |coef|≥0.25）
 - sheet 名 = 对比字符串：`Y_Pre_vs_O_Pre / O_Pre_vs_OD_Pre / Y_Pre_vs_Y_Post / O_Pre_vs_O_Post / OD_Pre_vs_OD_Post`
 - 列：`gene, celltype, regulation, coef, se, z, p, fdr, direction, n_cells, nRUV_used, method, comparison, coef_D, p_D, fdr_D`
 - 规则（`task3/scripts/42_volcano5_8sub_FINAL.R:88–93`）：

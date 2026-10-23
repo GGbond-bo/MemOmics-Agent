@@ -4,15 +4,15 @@ import asyncio, json, time
 import websockets
 
 SID = "memomics-2274ab75"
-WS_URL = "ws://127.0.0.1:8899/ws"
+WS_URL = "ws://login-host:22/ws"
 
 MSGS = [
-    "用 E:/骨骼肌锻炼/MF_AUCell_meta.csv 画一张 RP_high+ 亚群 scoreROS 的小提琴图，先看 scripts/ 有没有现成脚本。",
+    "用 <数据目录> 画一张 RP_high+ 亚群 scoreROS 的小提琴图，先看 scripts/ 有没有现成脚本。",
     "R 里 %>% 管道符是干什么的？一句话。",
 ]
 
 async def last_turn():
-    path = r"E:\MemOmics-Agent\results\memomics-2274ab75\token_usage.jsonl"
+    path = r"<安装目录>"
     last = None
     for line in open(path, encoding="utf-8"):
         line = line.strip()

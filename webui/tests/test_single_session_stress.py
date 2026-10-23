@@ -116,9 +116,9 @@ class TestB_Hygiene_Extremes:
         txt2 = open(req_p, encoding="utf-8").read()
         assert "不要调用任何工具" not in txt2
         # 路径但不带要求词 → 也存（文件路径是要点）
-        srv._extract_and_store_requirements(s, "用 E:/骨骼肌锻炼/MF_AUCell_meta.csv")
+        srv._extract_and_store_requirements(s, "用 <数据目录>")
         txt3 = open(req_p, encoding="utf-8").read()
-        assert "MF_AUCell_meta.csv" in txt3
+        assert "示例评分方法_meta.csv" in txt3
 
 
 # ══ C. P5 增量边界 + 并发 writer ══
@@ -338,12 +338,12 @@ class TestG_EnvAndConfirm_Extremes:
         s = self._reqs(tmp_path)
         for msg in ("R 4.5.3 装在 E:/R-libs",
                     "python 是 3.12.10，conda 环境是 base",
-                    "服务器 IP 是 10.0.0.5，数据库在 127.0.0.1:5432",
+                    "服务器 IP 是 10.0.0.5，数据库在 login-host:22",
                     "本机 R 库路径 E:/R-libs/R-4.5.3",
                     "R version 4.5.3 on this server, libs at E:/R-libs"):
             srv._extract_and_store_requirements(s, msg)
         txt = open(os.path.join(s["results_dir"], "REQUIREMENTS.md"), encoding="utf-8").read()
-        assert "R-4.5.3" in txt and "127.0.0.1:5432" in txt and "3.12.10" in txt
+        assert "R-4.5.3" in txt and "login-host:22" in txt and "3.12.10" in txt
         assert "[环境]" in txt, "环境句应带 [环境] 前缀"
 
     def test_confirm_question_not_stored(self, tmp_path):

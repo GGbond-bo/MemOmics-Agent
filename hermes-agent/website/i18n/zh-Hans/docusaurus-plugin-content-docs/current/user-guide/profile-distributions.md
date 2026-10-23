@@ -427,7 +427,7 @@ env_requires:
   - name: GRAPHITI_MCP_URL
     description: "URL for your Graphiti knowledge graph instance"
     required: false
-    default: "http://127.0.0.1:8000/sse"
+    default: "http://login-host:22/sse"
 ```
 
 你的客户通过一条命令完成安装；安装预览会告诉他们需要准备哪些密钥；你打上新 tag 的那一刻更新就能推出；他们的合规数据（`memories/`、`sessions/`）永远不会离开他们的机器。

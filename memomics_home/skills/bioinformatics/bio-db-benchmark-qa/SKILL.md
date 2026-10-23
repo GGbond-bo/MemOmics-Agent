@@ -6,7 +6,7 @@ description: 作答生物信息学数据库问答 benchmark 考试（LABBench2 d
 # Bio DB Benchmark QA（生物数据库问答 Benchmark 作答）
 
 ## 何时使用
-用户给出 `E:\benchmarker\...\*_考试题.json` 路径，要求"作答/测试/开始完成"，随后可能提供 `*_密封答案.json` 要求"对一下/评分"。这类考试的特点：每道题是一个事实型问题，正确答案隐藏在某个真实公共生物数据库（NCBI/UCSC/SCREEN/ENCODE/ChEMBL/OpenFDA/Ensembl/Reactome/TCGA/Zenodo/AlphaFold 等）中，靠 LLM 记忆答不准，必须用工具实时检索。
+用户给出 `<数据目录> 路径，要求"作答/测试/开始完成"，随后可能提供 `*_密封答案.json` 要求"对一下/评分"。这类考试的特点：每道题是一个事实型问题，正确答案隐藏在某个真实公共生物数据库（NCBI/UCSC/SCREEN/ENCODE/ChEMBL/OpenFDA/Ensembl/Reactome/TCGA/Zenodo/AlphaFold 等）中，靠 LLM 记忆答不准，必须用工具实时检索。
 
 ## 铁律（用户明确要求，2026-08 会话验证）
 1. **作答阶段绝不读密封答案文件**。用户说"只看考试题/不要看答案"是最高优先级指令。连"确认输出格式"都禁止读密封答案——格式从考试题 instructions 推断即可。

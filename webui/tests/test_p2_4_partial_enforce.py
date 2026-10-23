@@ -206,9 +206,9 @@ def test_c2_net_fetch_enforced_denies_before_any_io(sb, monkeypatch, no_proxy):
 def test_c3_loopback_probe_survives(sb, monkeypatch):
     """net.local（本机服务发现）没被强制，强制 net.fetch 也不该连坐。"""
     monkeypatch.setenv("MEMOMICS_SANDBOX_ENFORCE", "net.fetch")
-    local = SB.gate("net.local", "http://127.0.0.1:11434/v1/models", source="test.c3")
+    local = SB.gate("net.local", "http://login-host:22/v1/models", source="test.c3")
     assert local.allow is True and local.blocked is False and local.code == "ok_local"
-    fetch = SB.gate("net.fetch", "http://127.0.0.1:11434/v1/models", source="test.c3")
+    fetch = SB.gate("net.fetch", "http://login-host:22/v1/models", source="test.c3")
     assert fetch.allow is False and fetch.blocked is True
 
 

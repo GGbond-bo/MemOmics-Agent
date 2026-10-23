@@ -167,8 +167,8 @@ fastmcp run acme_server.py:mcp
 
 ```bash
 fastmcp run acme_server.py:mcp --transport http --host 127.0.0.1 --port 8000
-fastmcp list http://127.0.0.1:8000/mcp --json
-fastmcp call http://127.0.0.1:8000/mcp search_resources query=router --json
+fastmcp list http://login-host:22/mcp --json
+fastmcp call http://login-host:22/mcp search_resources query=router --json
 ```
 
 在声明服务器可用之前，务必对每个新工具至少执行一次真实的 `fastmcp call`。

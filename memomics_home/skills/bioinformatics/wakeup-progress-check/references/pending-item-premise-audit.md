@@ -40,7 +40,7 @@ import re; print(sorted(set(re.findall(r"10\.\d{4,9}/[-._;()/:A-Za-z0-9]+", txt)
 
 ### 案例（可复现的具体数字）
 
-- 文件：`E:/文献/AI/Closed-loop transfer enables artificial intelligence to yield chemical knowledge.pdf`
+- 文件：`<数据目录> transfer enables artificial intelligence to yield chemical knowledge.pdf`
   24,214,769 B，16 页。
 - 元数据直读得：DOI `10.1038/s41586-024-07892-1`；title 同名；一作 `Nicholas H. Angello`；
   通讯 `Aspuru-Guzik / Burke / Schroeder / Diao / Jackson`；出处 **Nature 633, 351 (2024-09-12)**。

@@ -104,4 +104,4 @@ sigs <- list(
 | Ependymal | ❌ 人缺失 | — |
 | VS | ❌ 人缺失 | — |
 
-**注**：40人文章 ATAC 未做细胞注释，需用 snRNA (GSE278576) + TransferData 细分到和猴一样的亚群粒度。
+**注**：40人文章 ATAC 未做细胞注释，需用 snRNA (GSE000000) + TransferData 细分到和猴一样的亚群粒度。

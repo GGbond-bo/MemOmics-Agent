@@ -49,7 +49,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-MEMOMICS_HOME = Path(os.environ.get("MEMOMICS_HOME", r"E:/MemOmics-Agent/memomics_home"))
+MEMOMICS_HOME = Path(os.environ.get("MEMOMICS_HOME", r"<安装目录>"))
 SOUL = MEMOMICS_HOME / "SOUL.md"
 
 

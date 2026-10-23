@@ -172,7 +172,7 @@ per-task `0s` 全是渲染值，见 `delegation-orchestration` ⓪-g）⇒ **不
 唤醒 / deleg 回执轮会注入一段 `📌 用户最近诉求（本会话 · 仅供参考，需用户确认）`。
 **实测（2026-10-14）：它混入了别的会话的原话。** 本轮块内有一条
 
-> 帮我看看 `E:\MemOmics-Agent` 目录下有没有 README.md 和 AGENTS.md，然后告诉我这个项目是干什么的
+> 帮我看看 `<安装目录> 目录下有没有 README.md 和 AGENTS.md，然后告诉我这个项目是干什么的
 
 核验（只读，两条）：
 - `session_search(query="MemOmics 项目 介绍 架构 目录", sort="newest")` → 只命中 `memomics-75ba0499` / `memomics-440038cf`；

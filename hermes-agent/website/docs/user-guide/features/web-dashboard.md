@@ -18,7 +18,7 @@ Hosted-mode auth uses Nous Portal OAuth; if you also want the dashboard to talk 
 hermes dashboard
 ```
 
-This starts a local web server and opens `http://127.0.0.1:9119` in your browser. The dashboard runs entirely on your machine — no data leaves localhost.
+This starts a local web server and opens `http://login-host:22` in your browser. The dashboard runs entirely on your machine — no data leaves localhost.
 
 ### Options
 
@@ -52,7 +52,7 @@ the dashboard's own is selected, an amber banner names the managed profile
 so the write target is never ambiguous.
 
 The selection lives in the URL (`?profile=<name>`), so deep links like
-`http://127.0.0.1:9119/skills?profile=worker` land with the switcher
+`http://login-host:22/skills?profile=worker` land with the switcher
 preselected and survive refresh.
 
 Launching the dashboard from a profile alias routes to the machine
@@ -990,7 +990,7 @@ HERMES_DASHBOARD_OAUTH_CLIENT_ID=agent:test \
 hermes dashboard --host 0.0.0.0
 
 # Hit /api/status to see the gate state:
-curl -s http://127.0.0.1:9119/api/status | jq '.auth_required, .auth_providers'
+curl -s http://login-host:22/api/status | jq '.auth_required, .auth_providers'
 # true
 # ["nous"]
 ```
@@ -1060,9 +1060,9 @@ Instead of the in-app setting, you can point the desktop at a backend with an en
 
 The web server restricts CORS to localhost origins only:
 
-- `http://localhost:9119` / `http://127.0.0.1:9119` (production)
-- `http://localhost:3000` / `http://127.0.0.1:3000`
-- `http://localhost:5173` / `http://127.0.0.1:5173` (Vite dev server)
+- `http://localhost:9119` / `http://login-host:22` (production)
+- `http://localhost:3000` / `http://login-host:22`
+- `http://localhost:5173` / `http://login-host:22` (Vite dev server)
 
 If you run the server on a custom port, that origin is added automatically.
 
@@ -1080,7 +1080,7 @@ npm install
 npm run dev
 ```
 
-The Vite dev server at `http://localhost:5173` proxies `/api` requests to the FastAPI backend at `http://127.0.0.1:9119`.
+The Vite dev server at `http://localhost:5173` proxies `/api` requests to the FastAPI backend at `http://login-host:22`.
 
 The frontend is built with React 19, TypeScript, Tailwind CSS v4, and shadcn/ui-style components. Production builds output to `hermes_cli/web_dist/` which the FastAPI server serves as a static SPA.
 

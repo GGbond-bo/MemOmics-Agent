@@ -200,11 +200,11 @@ LIVE_TASK = {
     "exit_code": None,
     "error": "",
     "cmd": "Rscript qc.R --in a.rds",
-    "session_dir": "E:/MemOmics-Agent/results/memomics-b145cef6",
+    "session_dir": "<安装目录>",
     "env_line": "R 4.5.3 / R-libs E:/R-libs/R-4.5.3 / 258 包",
     "params": {"样本数": "12", "最小基因数": "200"},
     "outputs": [{"path": "results/qc.png", "exists": True, "size": 2048}, {"path": "results/none.txt", "exists": False, "size": None}],
-    "log": "E:/MemOmics-Agent/log/qc.log",
+    "log": "<安装目录>",
     "log_size": 4096,
     "log_tail": "读入完成\n开始训练\n",
     "stage": "训练",
@@ -219,7 +219,7 @@ LIVE_TASK = {
     "eta_basis": "按 12 次同类型历史",
     "eta_source": "history",
     "eta_confidence": "高",
-    "script_path": "E:/MemOmics-Agent/results/memomics-b145cef6/qc.R",
+    "script_path": "<安装目录>",
     "script_text": "print('hi')\n",
     "cancel_requested": False,
     "cancel_by": "",
@@ -419,7 +419,7 @@ console.log(JSON.stringify({ html: html, wired: wired, grey: grey, done: done,
 # T13(2026-09-24)：入口搬到顶部横栏 + 右侧抽屉 + 跨会话不串
 CURRENT_SID = "memomics-b145cef6"
 OTHER_SID = "memomics-aaaa1111"
-MY_TASK = dict(LIVE_TASK, task_id="qc-mine", session_id=CURRENT_SID, session_title="骨骼肌 QC 跑通")
+MY_TASK = dict(LIVE_TASK, task_id="qc-mine", session_id=CURRENT_SID, session_title="示例组织 QC 跑通")
 OTHER_TASK = dict(LIVE_TASK, task_id="qc-other", title="别人的 ATAC", session_id=OTHER_SID,
                   session_title="ATAC 比对（另一个会话）", status="queued", pid=None)
 
@@ -470,7 +470,7 @@ console.log(JSON.stringify({ opened: opened, all: all, badge: badge, tip: tip, t
 
     # 会话标清楚：当前会话在前、别的会话在后，别的会话卡片压暗
     allh = got["all"]
-    assert "💬 当前会话" in allh and "骨骼肌 QC 跑通" in allh
+    assert "💬 当前会话" in allh and "示例组织 QC 跑通" in allh
     assert "💬 别的会话" in allh and "ATAC 比对（另一个会话）" in allh
     assert allh.index("💬 当前会话") < allh.index("💬 别的会话"), "当前会话没排到最前"
     assert "task-row other" in allh, "别的会话的卡片没压暗 —— 用户分不出哪条是自己的"
@@ -830,7 +830,7 @@ def test_t17_extreme_payloads_do_not_break_the_panel():
         "fat": dict(LIVE_TASK, status="done", duration_sec=61.0, progress_pct=100,
                     params=dict([("参数%02d" % i, "v%d" % i) for i in range(26)] +
                                 [("样本数", "12"), ("细胞数", "8000"),
-                                 ("组织", "骨骼肌"), ("最小基因数", "200")]),
+                                 ("组织", "示例组织"), ("最小基因数", "200")]),
                     outputs=[{"path": "results/o%02d.png" % i, "exists": i % 2 == 0,
                               "size": i * 100} for i in range(60)]),
         "only_retry_params": dict(LIVE_TASK, params={"重试来源": "a", "重试根": "b", "第几次重试": "2"}),
@@ -899,7 +899,7 @@ console.log(JSON.stringify(res));
 # 机器上真有会话在跑分析（会话活的，但没有走 task_run 契约），面板却是空的。
 # 契约任务之外必须把活着的会话画出来，并且点得动（切到那条会话看进度）。
 LIVE_SESSION = {
-    "sid": "memomics-live01", "title": "骨骼肌 QC", "ask": "帮我看下这批数据的质控",
+    "sid": "memomics-live01", "title": "示例组织 QC", "ask": "帮我看下这批数据的质控",
     "msg_count": 3, "last_active": "2026-09-24 16:20:00", "elapsed_sec": 725,
     "last_tool": "execute_r", "tool_age_sec": 12, "stalled": False,
     "todos_total": 6, "todos_done": 2, "doing": "按样本汇总 QC 指标", "next": "聚类",
@@ -931,7 +931,7 @@ console.log(JSON.stringify({ html: out.store['task-list'].innerHTML, counts: out
     assert r.returncode == 0, r.stderr
     got = json.loads(r.stdout.strip().splitlines()[-1])
     h = got["html"]
-    for token in ["memomics-live01", "骨骼肌 QC", "已跑 12m5s", "在做 R 长脚本（execute_r），已 12s",
+    for token in ["memomics-live01", "示例组织 QC", "已跑 12m5s", "在做 R 长脚本（execute_r），已 12s",
                   "计划 2/6 步",
                   "PID 12345", "812 MB", "当前步骤：按样本汇总 QC 指标", "分析进行中", "data-live-sid"]:
         assert token in h, "面板里看不到 %s" % token
@@ -991,14 +991,14 @@ console.log(JSON.stringify({ a: P.liveSectionHtml([]), b: P.liveSectionHtml(unde
 # 用户原话（2026-09-24）："我点击后台任务之后，没办法看到该任务的详细信息，比如参数，主要环境等等。"
 # 面板必须自己回答"拿什么参数、在什么环境里跑的、出了什么产物"，而不是只把人丢进对话里。
 LIVE_DETAIL = {
-    "ok": True, "sid": "memomics-live01", "title": "骨骼肌 QC", "ask": "帮我看下这批数据的质控",
+    "ok": True, "sid": "memomics-live01", "title": "示例组织 QC", "ask": "帮我看下这批数据的质控",
     "live": True, "is_running": True, "elapsed_sec": 725, "msg_count": 3,
     "current": {"sid": "memomics-live01", "last_tool": "execute_r", "tool_age_sec": 12,
                 "tool_expect_sec": 1800, "stalled": False, "proc": {"pid": 12345, "rss_mb": 812},
                 "elapsed_sec": 725},
     "todos": [{"title": "读数据", "status": "completed"}, {"title": "算 QC 指标", "status": "in_progress"}],
     "tools": [{"ts": "2026-09-24T16:20:01", "tool": "execute_r",
-               "args": 'obj <- readRDS("E:/release/_memtest/data/MF_2000.rds")',
+               "args": 'obj <- readRDS("<发布目录>")',
                "result": '{"status": "success", "output": "51227 x 2132"}'}],
     "stats": {"tool_calls": 7, "tools": {"execute_r": 2}, "skills": ["scrna-qc"],
               "rail_pre": 1, "rail_post": 0, "debate_calls": 0, "files_written": 1},
@@ -1007,12 +1007,12 @@ LIVE_DETAIL = {
                  "mtime": 1.0}],
     "artifacts": [{"rel": "results/qc_metrics_summary.csv", "size": 4096, "mtime": 1.0},
                   {"rel": "figures/qc_violin.png", "size": 204800, "mtime": 1.0}],
-    "env": {"python": "E:/MemOmics-Agent/.venv/Scripts/python.exe", "cwd": "E:/MemOmics-Agent",
+    "env": {"python": "<安装目录>", "cwd": "<安装目录>",
             "r_version": "R-4.5.3", "rscript": "C:/Program Files/R/R-4.5.3/bin/x64/Rscript.exe",
             "r_lib_user": "E:/R-libs/R-4.5.3", "r_pkg_count": 258, "r_key_pkgs": ["Seurat", "harmony"],
             "memomics_env": {"MEMOMICS_PORT": "8899"}, "env_updated": "2026-09-24"},
-    "paths": {"session_dir": "E:/MemOmics-Agent/results/memomics-live01",
-              "system_log": "E:/MemOmics-Agent/results/memomics-live01/log/system_log.jsonl",
+    "paths": {"session_dir": "<安装目录>",
+              "system_log": "<安装目录>",
               "tasks_dir": "C:/memomics_home/runtime/tasks"},
     "task": None,
 }
@@ -1047,7 +1047,7 @@ setTimeout(function() {
     assert got["live"] == "memomics-live01" and got["tab"] is None, "详情页没把状态切到活会话"
     h = got["html"]
     for token in ["你的要求", "帮我看下这批数据的质控", "运行参数", "readRDS",
-                  "MF_2000.rds", "主要环境", "R-4.5.3", "Rscript", "E:/R-libs/R-4.5.3", "Seurat",
+                  "示例数据.rds", "主要环境", "R-4.5.3", "Rscript", "E:/R-libs/R-4.5.3", "Seurat",
                   "MEMOMICS_PORT", "产物（2 个文件）", "results/qc_metrics_summary.csv", "4.0 KB",
                   "辩论记录（1 次）", "need_more_info", "先补阈值敏感性分析再定去留",
                   "切到会话", "PID 12345", "工具调用 7 次", "铁轨审查"]:

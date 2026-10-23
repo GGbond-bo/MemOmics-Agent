@@ -40,16 +40,16 @@ description: "通过 curl 调用 SiYuan Note API，在自托管知识库中搜�
 3. 将其存储在 `~/.hermes/.env` 中：
    ```
    SIYUAN_TOKEN=your_token_here
-   SIYUAN_URL=http://127.0.0.1:6806
+   SIYUAN_URL=http://login-host:22
    ```
-   若未设置，`SIYUAN_URL` 默认为 `http://127.0.0.1:6806`。
+   若未设置，`SIYUAN_URL` 默认为 `http://login-host:22`。
 
 ## API 基础
 
 所有 SiYuan API 调用均为 **POST 请求，携带 JSON 请求体**。每个请求遵循以下模式：
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/..." \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/..." \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"param": "value"}'
@@ -90,7 +90,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/..." \
 ### 搜索（全文）
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/search/fullTextSearchBlock" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/search/fullTextSearchBlock" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"query": "meeting notes", "page": 0}' | jq '.data.blocks[:5]'
@@ -101,7 +101,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/search/fullTextSearchB
 直接查询块数据库。仅 SELECT 语句是安全的。
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/query/sql" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/query/sql" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"stmt": "SELECT id, content, type, box FROM blocks WHERE content LIKE '\''%keyword%'\'' AND type='\''p'\'' LIMIT 20"}' | jq '.data'
@@ -114,7 +114,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/query/sql" \
 以 Kramdown（类 Markdown）格式返回块内容。
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/block/getBlockKramdown" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/block/getBlockKramdown" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"id": "20210808180117-6v0mkxr"}' | jq '.data.kramdown'
@@ -123,7 +123,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/block/getBlockKramdown
 ### 读取子块
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/block/getChildBlocks" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/block/getChildBlocks" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"id": "20210808180117-6v0mkxr"}' | jq '.data'
@@ -132,7 +132,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/block/getChildBlocks" 
 ### 获取人类可读路径
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/filetree/getHPathByID" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/filetree/getHPathByID" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"id": "20210808180117-6v0mkxr"}' | jq '.data'
@@ -141,7 +141,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/filetree/getHPathByID"
 ### 获取块属性
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/attr/getBlockAttrs" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/attr/getBlockAttrs" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"id": "20210808180117-6v0mkxr"}' | jq '.data'
@@ -150,7 +150,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/attr/getBlockAttrs" \
 ### 列出笔记本
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/notebook/lsNotebooks" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/notebook/lsNotebooks" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{}' | jq '.data.notebooks[] | {id, name, closed}'
@@ -159,7 +159,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/notebook/lsNotebooks" 
 ### 列出笔记本中的文档
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/filetree/listDocsByPath" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/filetree/listDocsByPath" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"notebook": "NOTEBOOK_ID", "path": "/"}' | jq '.data.files[] | {id, name}'
@@ -168,7 +168,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/filetree/listDocsByPat
 ### 创建文档
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/filetree/createDocWithMd" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/filetree/createDocWithMd" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -181,7 +181,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/filetree/createDocWith
 ### 创建笔记本
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/notebook/createNotebook" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/notebook/createNotebook" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name": "My New Notebook"}' | jq '.data.notebook.id'
@@ -190,7 +190,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/notebook/createNoteboo
 ### 向文档追加块
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/block/appendBlock" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/block/appendBlock" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -205,7 +205,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/block/appendBlock" \
 ### 更新块内容
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/block/updateBlock" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/block/updateBlock" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -218,7 +218,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/block/updateBlock" \
 ### 重命名文档
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/filetree/renameDocByID" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/filetree/renameDocByID" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"id": "DOCUMENT_ID", "title": "New Title"}'
@@ -229,7 +229,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/filetree/renameDocByID
 自定义属性必须以 `custom-` 为前缀：
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/attr/setBlockAttrs" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/attr/setBlockAttrs" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -244,7 +244,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/attr/setBlockAttrs" \
 ### 删除块
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/block/deleteBlock" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/block/deleteBlock" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"id": "BLOCK_ID"}'
@@ -256,7 +256,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/block/deleteBlock" \
 ### 将文档导出为 Markdown
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/export/exportMdContent" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/export/exportMdContent" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"id": "DOCUMENT_ID"}' | jq -r '.data.content'
@@ -301,5 +301,5 @@ mcp_servers:
     args: ["-y", "@porkll/siyuan-mcp"]
     env:
       SIYUAN_TOKEN: "your_token"
-      SIYUAN_URL: "http://127.0.0.1:6806"
+      SIYUAN_URL: "http://login-host:22"
 ```

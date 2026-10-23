@@ -28,7 +28,7 @@ SGE qmaster 不可达（`scheduler: none`）；节点间是共享 NFS；用户�
 
 - **零三方依赖**：任何有 R 的环境都能跑，不为装个 Rserve 去污染别人的只读环境；
 - **不开公网端口**：投递方（本机）和 daemon 通过**共享目录**通信，节点不监听任何端口；
-- **可见性**：daemon 就是一个普通 Rscript 进程，`ps -u zhangbo11` / htop 里看得见（满足铁规 11）；
+- **可见性**：daemon 就是一个普通 Rscript 进程，`ps -u user` / htop 里看得见（满足铁规 11）；
 - **抗断线**：`setsid`/`nohup` 脱离 ssh 会话，MobaXterm 关掉不影响它。
 
 ## 3. 目录布局与协议
@@ -72,9 +72,9 @@ SGE qmaster 不可达（`scheduler: none`）；节点间是共享 NFS；用户�
 用户验收标准（原话）：「测试就用读取 rds 跑 umap，隔几分钟再跑 findermarker，看看能否重新利用之前的
 rds，而不是重新读取。」
 
-- 输入：`/hwfssz3/PS_JLU/zhangbo/Muscle_96_38/Umap/MuSC_exercise_clean_dele_cluster_umap.rds`
+- 输入：`/cluster/share/user/Muscle_96_38/Umap/MuSC_exercise_clean_dele_cluster_umap.rds`
   （661.8MB；与 `light.rds$src` 和 `musc_umap_prop_ssh3.R` 用的是**同一个文件**）；
-- 节点：`ssh23`（cngb-compute-f23-2，503GB 内存、余量 495GB；小节点也够）；
+- 节点：`node4`（compute-node，503GB 内存、余量 495GB；小节点也够）；
 - 会话：`s-20261009-014300-vq48`，pid **109595**，R 4.4.1（`R4.41` env），daemon 脚本
   `memomics_cache/bin/r_session_daemon.R`。
 
@@ -92,7 +92,7 @@ objects=19 / rss_h=3.0GB`，`done/` 下 8 个结果文件，`out/` 下 `umap_ver
 
 ## 6. 实测踩坑（改代码前必读）
 
-1. **`setsid -f` 不是到处都有**：ssh23 的 setsid 不支持 `-f`（报 `invalid option -- 'f'`，直接死在启动）。
+1. **`setsid -f` 不是到处都有**：node4 的 setsid 不支持 `-f`（报 `invalid option -- 'f'`，直接死在启动）。
    现方案：`setsid -f` 可用就用，否则 `setsid`，再否则 `nohup`；配合 `>> session.log 2>&1 < /dev/null`。
 2. **`ps -o pid=,rss=` 在这种 ps 上会被吃掉**（procps-ng 3.3.10 实测：`-o pid=,rss=` → `,rss=`，pid 列丢失）。
    用 `-o pid,rss,etime,stat,args | tail -n +2`。
@@ -113,7 +113,7 @@ objects=19 / rss_h=3.0GB`，`done/` 下 8 个结果文件，`out/` 下 `umap_ver
 - **检查点**：`session_save`（可 `objects=` 只存小对象，几秒；全存大对象要几分钟+GB 级磁盘）；
   `session_stop(save=true)` 会先存再退。
 - **清场/重启后**：`session_start(session_id=<旧>, restore='latest')`。
-- **可见性**：MobaXterm 里 `ps -u zhangbo11 | grep R` 能看到 daemon；`htop` 同用户同机可见；
+- **可见性**：MobaXterm 里 `ps -u user | grep R` 能看到 daemon；`htop` 同用户同机可见；
   `tail -f <会话目录>/session.log` 看实时事件。
 - **配置**：`memomics_home/config.yaml` 的 `remote.session`（`env` 默认 `R4.41`、`roots` 找 Rscript 的
   根目录、`dir` 会话根、`load_timeout`/`wait`/`save_wait` 等待上限）；节点级可覆盖

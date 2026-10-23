@@ -753,7 +753,7 @@ Cron 任务在完全全新的 agent 会话中运行。Prompt 必须包含 agent 
 
 **错误：** `"Check on that server issue"`
 
-**正确：** `"SSH into server 192.168.1.100 as user 'deploy', check if nginx is running with 'systemctl status nginx', and verify https://example.com returns HTTP 200."`
+**正确：** `"SSH into server 10.0.0.1 as user 'deploy', check if nginx is running with 'systemctl status nginx', and verify https://example.com returns HTTP 200."`
 
 ## 安全性
 

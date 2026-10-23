@@ -27,7 +27,7 @@ import sys
 import time
 import urllib.request
 
-ROOT = r"E:/MemOmics-Agent"
+ROOT = r"<安装目录>"
 PORT = 8899
 ENGINE = os.path.join(ROOT, "memomics", "bio_tools", "skill_evolution.py")
 SMOKE = os.path.join(ROOT, "results", "memomics-afd2d418", "scripts", "smoke_engine_after_restart.py")

@@ -1,7 +1,7 @@
 # 程序轴图的轴命名 与 代码交付形态（实测记录 2026-10-14）
 
 本文是 `deg-mixed-design` SKILL.md「程序轴图的轴设计 / 轴命名 / 代码交付」一节的实测底稿。
-场景：骨骼肌 MF AUCell 程序打分图（FigA2 五效应矩阵图 + FigA3 亚群矩阵图），
+场景：示例组织 MF AUCell 程序打分图（FigA2 五效应矩阵图 + FigA3 亚群矩阵图），
 17 程序 / 5 轴 / 10 亚群，脚本 `fig_A2_5effects_v5_rawp.R`、`fig_A3_CNS_v6.R`。
 
 ---
@@ -65,7 +65,7 @@ PubMed 检索 `muscle decompensation` 命中 8 篇，逐篇归类：
 
 | 核实项 | 实测结果 |
 |---|---|
-| 打分列是否已在数据里 | ✅ `scoreI_AUC` / `scoreII_AUC` / `scoreIIa_AUC` / `scoreIIx_AUC`（`MF_AUCell_meta.csv` 第 35–38 列） |
+| 打分列是否已在数据里 | ✅ `scoreI_AUC` / `scoreII_AUC` / `scoreIIa_AUC` / `scoreIIx_AUC`（`示例评分方法_meta.csv` 第 35–38 列） |
 | 效应表是否已覆盖 | ✅ `effect5_effsize_v3.csv` 含 22 score × 5 效应 × 10 亚群 = **1100 行**完整效应量 + p |
 | 结论 | **两版图都无需重算统计量**，只需重排行/轴 |
 

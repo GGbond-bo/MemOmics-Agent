@@ -11,11 +11,11 @@ import asyncio, json, time
 import websockets
 
 SID = "memomics-2274ab75"
-WS_URL = "ws://127.0.0.1:8899/ws"
-PLAN = r"E:\MemOmics-Agent\results\memomics-2274ab75\task_plan.md"
+WS_URL = "ws://login-host:22/ws"
+PLAN = r"<安装目录>"
 
 def last_self_checks(n=6):
-    path = r"E:\MemOmics-Agent\results\memomics-2274ab75\token_usage.jsonl"
+    path = r"<安装目录>"
     out = []
     for line in open(path, encoding="utf-8"):
         line = line.strip()
@@ -107,7 +107,7 @@ async def main():
             "message": "后台任务还在跑吗？用 process 检查一下，一句话回答。"}, ensure_ascii=False))
         await wait_turns(ws)
         import os
-        path = r"E:\MemOmics-Agent\results\memomics-2274ab75\token_usage.jsonl"
+        path = r"<安装目录>"
         last = None
         for line in open(path, encoding="utf-8"):
             line = line.strip()

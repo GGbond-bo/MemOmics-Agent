@@ -171,7 +171,7 @@ GSEA/ORA功能富集分析。clusterProfiler/gseapy。GO/KEGG/Reactome/MSigDB
 | human | skeletal_muscle | aging | 2026-09-15 | rebuild_clean_v3.py + write_clean_v3_xlsx.py + fig_signature_integrity_check.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-15 | signature_jaccard_axes.py + write_axis_classification.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-24 | 12_kegg_YPost_vs_OPost.R + 12b_kegg_validation.R + 12c_kegg_collapse_plot.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | inspect_MF_2000.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | inspect_示例数据.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-24 | env_pkg_and_design_probe.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-24 | 01_pseudobulk_limma_A_B_C.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-24 | 01_pseudobulk_limma_A_B_C.R | - | - |  |

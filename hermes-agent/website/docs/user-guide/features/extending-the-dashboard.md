@@ -817,7 +817,7 @@ Discovery results are cached per dashboard process. After adding a new plugin, e
 
 ```bash
 # Force a rescan without restart
-curl http://127.0.0.1:9119/api/dashboard/plugins/rescan
+curl http://login-host:22/api/dashboard/plugins/rescan
 ```
 
 …or restart `hermes dashboard`.
@@ -899,11 +899,11 @@ Read the plugin source (`strike-freedom-cockpit/dashboard/dist/index.js` in the 
 ## Troubleshooting
 
 **My theme doesn't appear in the picker.**
-Check that the file is in `~/.hermes/dashboard-themes/` and ends in `.yaml` or `.yml`. Refresh the page. Run `curl http://127.0.0.1:9119/api/dashboard/themes` — your theme should be in the response. If the YAML has a parse error, the dashboard logs to `errors.log` under `~/.hermes/logs/`.
+Check that the file is in `~/.hermes/dashboard-themes/` and ends in `.yaml` or `.yml`. Refresh the page. Run `curl http://login-host:22/api/dashboard/themes` — your theme should be in the response. If the YAML has a parse error, the dashboard logs to `errors.log` under `~/.hermes/logs/`.
 
 **My plugin's tab doesn't show up.**
 1. Check the manifest is at `~/.hermes/plugins/<name>/dashboard/manifest.json` (note the `dashboard/` subdirectory).
-2. `curl http://127.0.0.1:9119/api/dashboard/plugins/rescan` to force re-discovery.
+2. `curl http://login-host:22/api/dashboard/plugins/rescan` to force re-discovery.
 3. Open browser dev tools → Network — confirm `manifest.json`, `index.js`, and any CSS loaded without 404s.
 4. Open browser dev tools → Console — look for errors during the IIFE or `window.__HERMES_PLUGINS__ is undefined` (indicates the SDK didn't initialize, usually a React render crash earlier).
 5. Verify your bundle calls `window.__HERMES_PLUGINS__.register(...)` with the **same name** as `manifest.json:name`.

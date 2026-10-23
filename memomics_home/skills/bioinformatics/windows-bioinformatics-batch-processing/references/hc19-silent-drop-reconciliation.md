@@ -1,6 +1,6 @@
 # hc19 静默丢失案例 — 完成度对账 + watchdog 数组双副本修复
 
-**Session**: memomics-1135ed52 | **日期**: 2026-08-07 | **任务**: GSE278576 人海马 40 样本 ArchR QC（createArrowFiles minTSS=4/minFrags=3000 → addDoubletScores → filterDoublets(filterRatio=2) → 保存 filtered Arrow + CSV）
+**Session**: memomics-1135ed52 | **日期**: 2026-08-07 | **任务**: GSE000000 人海马 40 样本 ArchR QC（createArrowFiles minTSS=4/minFrags=3000 → addDoubletScores → filterDoublets(filterRatio=2) → 保存 filtered Arrow + CSV）
 
 ## 案例结论（一句话）
 
@@ -23,8 +23,8 @@
 ## 修复（三步）
 
 1. **双副本同步 patch watchdog 数组**：
-   - `E:/release/guardian_authority/watchdog_v3.sh`（guardian 权威副本）
-   - `E:/MemOmics-Agent/results/memomics-1135ed52/batch/watchdog_v3.sh`（运行副本）
+   - `<发布目录> 权威副本）
+   - `<安装目录>
    - 数组改为 `(hc40 hc212191 hc35 hc9 hc19 hc73)` — hc19 放 hc73 前（小样本先跑，避免大样本页文件失败饿死 hc19）
    - ⚠️ guardian.sh 每轮 `cmp -s AUTH/f batch/f`，不一致就 AUTH 覆盖 batch → **只改 batch 会被回滚**；两处同改后 `cmp -s` 一致 = 安全
 2. **替换 watchdog 实例**：

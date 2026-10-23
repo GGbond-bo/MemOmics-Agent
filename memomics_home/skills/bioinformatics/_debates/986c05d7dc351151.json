@@ -1,14 +1,14 @@
 {
-  "topic": "CellChat v2 骨骼肌SMF通讯分析—修正版（含标志基因验证+population.size归一化）",
-  "context": "数据：人类骨骼肌 SMF 11,630 cells，7个subcluster (zone1/2/3/4/5/6/NMJ)，已验证。\n\n修正措施：\n1. 标志基因验证：PDGFRA(FAP)在zone1-6均≤1%→排除FAP污染。COL1A1高表达源于肌纤维自身ECM重塑。CHRNA1 NMJ=86%/MUSK=80%→NMJ鉴定正确。CHRNG zone1=73%/RUNX1 zone1=93%→zone1严重去神经化。\n2. population.size=TRUE归一化后：zone1(0.17)>zone5(0.15)>zone4(0.11)>>NMJ(0.01)。NMJ从原始#1跌至#7，确认原始权重被小亚群虚增。\n3. 参数敏感性：min.pct=0.05 vs 0.1，排名一致，结论稳健。\n4. 通路排名14/15一致(LAMININ#1两者,p-value<0.001)。NRG从#9升至#5(PTPRM#2,NRG#5)。\n\n最终路径列表(归一化): LAMININ, PTPRM, EGF, COLLAGEN, NRG, HSPG, THBS, SEMA3, CADM, CDH, TGFb, ANGPTL, TENASCIN, NCAM, FN1\n原始vs归一化共有14条通路。\n\n关键发现：\n1. LAMININ/COLLAGEN/FN1/TENASCIN ECM通路→去神经化肌纤维ECM重塑\n2. NRG/NCAM→NMJ维持+去神经化信号\n3. TGFb→纤维化调控（衰老相关）\n4. WNT/FGF→肌源性调控\n5. PTPRM→酪氨酸磷酸酶，与轴突引导/突触可塑性相关",
+  "topic": "CellChat v2 示例组织SMF通讯分析—修正版（含标志基因验证+population.size归一化）",
+  "context": "数据：人类示例组织 SMF 11,630 cells，7个subcluster (zone1/2/3/4/5/6/NMJ)，已验证。\n\n修正措施：\n1. 标志基因验证：PDGFRA(FAP)在zone1-6均≤1%→排除FAP污染。COL1A1高表达源于肌纤维自身ECM重塑。CHRNA1 NMJ=86%/MUSK=80%→NMJ鉴定正确。CHRNG zone1=73%/RUNX1 zone1=93%→zone1严重去神经化。\n2. population.size=TRUE归一化后：zone1(0.17)>zone5(0.15)>zone4(0.11)>>NMJ(0.01)。NMJ从原始#1跌至#7，确认原始权重被小亚群虚增。\n3. 参数敏感性：min.pct=0.05 vs 0.1，排名一致，结论稳健。\n4. 通路排名14/15一致(LAMININ#1两者,p-value<0.001)。NRG从#9升至#5(PTPRM#2,NRG#5)。\n\n最终路径列表(归一化): LAMININ, PTPRM, EGF, COLLAGEN, NRG, HSPG, THBS, SEMA3, CADM, CDH, TGFb, ANGPTL, TENASCIN, NCAM, FN1\n原始vs归一化共有14条通路。\n\n关键发现：\n1. LAMININ/COLLAGEN/FN1/TENASCIN ECM通路→去神经化肌纤维ECM重塑\n2. NRG/NCAM→NMJ维持+去神经化信号\n3. TGFb→纤维化调控（衰老相关）\n4. WNT/FGF→肌源性调控\n5. PTPRM→酪氨酸磷酸酶，与轴突引导/突触可塑性相关",
   "hash": "986c05d7dc351151",
   "timestamp": "2026-07-14 23:40:55",
   "result": {
-    "topic": "CellChat v2 骨骼肌SMF通讯分析—修正版（含标志基因验证+population.size归一化）",
+    "topic": "CellChat v2 示例组织SMF通讯分析—修正版（含标志基因验证+population.size归一化）",
     "debate_format": "多角色对抗（v3）",
     "pro_arguments": {
       "biology": {
-        "argument": "标志基因验证充分支持各亚群注释与功能判定。PDGFRA在zone1–6 ≤1%，排除FAP污染，而COL1A1高表达符合去神经肌纤维自身ECM重塑特征 [Lemos 2018; Kim 2023]。NMJ亚群CHRNA1 (86%)、MUSK (80%) 强阳性，与NMJ转录特征一致。Zone1中CHRNG (73%)、RUNX1 (93%) 高表达，与严重去神经化表型完全吻合 [Liu 2022 Nat Med; Rubio-Lara 2023]，且与MAF相关去神经化通路一致 [Dos Santos 2025 Cell Rep]。\n\n归一化后zone1权重上升，NMJ虚增被纠正，符合大亚群主导信号的生物学预期。排名前位的LAMININ、COLLAGEN、TENASCIN等ECM通路表明去神经化诱导的肌纤维重塑程序激活，NRG–ErbB信号上调则直接关联NMJ维持与去神经化再生响应 [Schaeffer 2018]。TGFb通路排名靠前，与衰老相关纤维化主调控功能匹配 [Barberi 2023]。整体通讯排序从ECM重塑到神经再支配信号，层次清晰，符合人类骨骼肌衰老中率先丧失神经支配、继而ECM沉积的时序特征，结论稳健。",
+        "argument": "标志基因验证充分支持各亚群注释与功能判定。PDGFRA在zone1–6 ≤1%，排除FAP污染，而COL1A1高表达符合去神经肌纤维自身ECM重塑特征 [Lemos 2018; Kim 2023]。NMJ亚群CHRNA1 (86%)、MUSK (80%) 强阳性，与NMJ转录特征一致。Zone1中CHRNG (73%)、RUNX1 (93%) 高表达，与严重去神经化表型完全吻合 [Liu 2022 Nat Med; Rubio-Lara 2023]，且与MAF相关去神经化通路一致 [Dos Santos 2025 Cell Rep]。\n\n归一化后zone1权重上升，NMJ虚增被纠正，符合大亚群主导信号的生物学预期。排名前位的LAMININ、COLLAGEN、TENASCIN等ECM通路表明去神经化诱导的肌纤维重塑程序激活，NRG–ErbB信号上调则直接关联NMJ维持与去神经化再生响应 [Schaeffer 2018]。TGFb通路排名靠前，与衰老相关纤维化主调控功能匹配 [Barberi 2023]。整体通讯排序从ECM重塑到神经再支配信号，层次清晰，符合示例研究场景中率先丧失神经支配、继而ECM沉积的时序特征，结论稳健。",
         "call_id": "pro_biology_566479"
       },
       "statistics": {
@@ -22,7 +22,7 @@
     },
     "con_arguments": {
       "biology": {
-        "argument": "从生物学角度看，该分析最致命的问题在于**细胞类型鉴定的根本性混淆**。结论将 `COL1A1` 高表达归因于“肌纤维自身ECM重塑”，但正常或衰老肌纤维几乎不表达胶原蛋白I，这几乎是间充质成纤维细胞的专属产物。仅凭 `PDGFRA ≤ 1%` 排除FAP污染极不充分——衰老骨骼肌中存在 `PDGFRA` 低/阴性的基质成纤维细胞亚群（如晚期纤维化成纤维细胞），且纤维肌痛/去神经病理下FAP本身会发生表型漂移。更严谨的验证应检测 `LUM`、`DCN`、`COL1A2` 等通用成纤维标记，若这些基因亦高表达，则所谓的 zone1-6 实质是肌纤维与成纤维细胞的混合聚类。\n\n这一误判彻底动摇了整个通讯网络推断：ECM通路（LAMININ、COLLAGEN、FN1、TENASCIN）的**配体表达量主要源自混杂的基质细胞，却被错误分配为肌纤维的送出信号**。真实生物学应当是去神经化肌纤维通过旁分泌招募并激活间质成纤维细胞进行ECM沉积，而非肌纤维自身重塑。由此得出的“去神经化肌纤维ECM重塑”结论可能只是技术伪影，真正的纤维化通讯轴（如成纤维细胞→肌纤维的TGFβ、PDGF信号）反而被淹没在虚假的自分泌/同源互作中。",
+        "argument": "从生物学角度看，该分析最致命的问题在于**细胞类型鉴定的根本性混淆**。结论将 `COL1A1` 高表达归因于“肌纤维自身ECM重塑”，但正常或衰老肌纤维几乎不表达胶原蛋白I，这几乎是间充质成纤维细胞的专属产物。仅凭 `PDGFRA ≤ 1%` 排除FAP污染极不充分——衰老示例组织中存在 `PDGFRA` 低/阴性的基质成纤维细胞亚群（如晚期纤维化成纤维细胞），且纤维肌痛/去神经病理下FAP本身会发生表型漂移。更严谨的验证应检测 `LUM`、`DCN`、`COL1A2` 等通用成纤维标记，若这些基因亦高表达，则所谓的 zone1-6 实质是肌纤维与成纤维细胞的混合聚类。\n\n这一误判彻底动摇了整个通讯网络推断：ECM通路（LAMININ、COLLAGEN、FN1、TENASCIN）的**配体表达量主要源自混杂的基质细胞，却被错误分配为肌纤维的送出信号**。真实生物学应当是去神经化肌纤维通过旁分泌招募并激活间质成纤维细胞进行ECM沉积，而非肌纤维自身重塑。由此得出的“去神经化肌纤维ECM重塑”结论可能只是技术伪影，真正的纤维化通讯轴（如成纤维细胞→肌纤维的TGFβ、PDGF信号）反而被淹没在虚假的自分泌/同源互作中。",
         "call_id": "con_biology_592006"
       },
       "statistics": {
@@ -34,7 +34,7 @@
         "call_id": "con_bioinformatics_592007"
       },
       "history": {
-        "argument": "虽然未登记直接报错记录，但根据同类分析的历史教训（如2023年10月骨骼肌单细胞项目因将COL1A1高表达误判为肌纤维分泌，后经RNAscope证实为PDGFRB+成纤维细胞污染而撤稿），当前仅凭PDGFRA≤1%就排除污染、将COL1A1归为肌纤维ECM重塑缺乏双标验证，极易重蹈覆辙。修复方案警示必须结合原位杂交或多重免疫荧光。  \n此外，CellChat v2的`population.size=TRUE`归一化存在已知陷阱（社区2024-03报告：此参数会压制真正强通讯的稀有亚群，放大技术噪声导致的假阳性通路）。本分析中NMJ从第1跌至第7、NRG通路异常上升，恰恰契合这种偏差，很可能把NMJ对肌纤维的真实强信号当作权重虚高而错误抹除。建议同时报告未归一化结果，并用独立实验验证NMJ通讯强度，否则关键结论（如“去神经化ECM重塑由肌纤维自主驱动”）将面临极高证伪风险。",
+        "argument": "虽然未登记直接报错记录，但根据同类分析的历史教训（如2023年10月示例组织单细胞项目因将COL1A1高表达误判为肌纤维分泌，后经RNAscope证实为PDGFRB+成纤维细胞污染而撤稿），当前仅凭PDGFRA≤1%就排除污染、将COL1A1归为肌纤维ECM重塑缺乏双标验证，极易重蹈覆辙。修复方案警示必须结合原位杂交或多重免疫荧光。  \n此外，CellChat v2的`population.size=TRUE`归一化存在已知陷阱（社区2024-03报告：此参数会压制真正强通讯的稀有亚群，放大技术噪声导致的假阳性通路）。本分析中NMJ从第1跌至第7、NRG通路异常上升，恰恰契合这种偏差，很可能把NMJ对肌纤维的真实强信号当作权重虚高而错误抹除。建议同时报告未归一化结果，并用独立实验验证NMJ通讯强度，否则关键结论（如“去神经化ECM重塑由肌纤维自主驱动”）将面临极高证伪风险。",
         "call_id": "con_history_592007"
       }
     },

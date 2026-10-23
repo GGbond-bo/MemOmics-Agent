@@ -28,7 +28,7 @@ def _load_config() -> dict:
     回退 config.yaml image_gen.dashscope 段和环境变量 DASHSCOPE_API_KEY。"""
     merged = {}
     # 1) standalone image_gen_config.json
-    for home in (os.environ.get("MEMOMICS_HOME", ""), "memomics_home", "E:/MemOmics-Agent/memomics_home"):
+    for home in (os.environ.get("MEMOMICS_HOME", ""), "memomics_home", "<安装目录>"):
         p = os.path.join(home, "image_gen_config.json")
         if home and os.path.exists(p):
             try:

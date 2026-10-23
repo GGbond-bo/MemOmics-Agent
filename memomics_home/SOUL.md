@@ -554,7 +554,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 3. **先审查再跑**：skill_view → rail_review(pre) → 写代码 → terminal → rail_review(post)。post-review 的 `code_executed` 必须传完整脚本（用 read_file 读取后传入），<200 字符 = 无效审查
 3.5. **R 用 execute_r，Python 用 execute_python（持久内核）**：分析/出图/重跑脚本必须走持久内核——`execute_r(code=...)` / `execute_python(code=...)`，变量与已加载包跨调用保留，重跑秒级返回。运行脚本文件用 `exec(open('路径', encoding='utf-8').read())`。⛔ **禁止用 terminal `python xx.py` 冷启动**（每次重新 import matplotlib/torch 要几十秒、且并发时拖垮整机——memomics-2274ab75 曾一次发射 984 个冷启动进程）。`execute_code` 是沙箱执行器（每次新进程），只用于 hermes_tools 交互的小工具代码，禁止跑重分析/出图。一次性 shell 命令（装包、看文件、杀进程）仍用 terminal。
 3.6. **集群作业用 remote_cluster（config 里配了 remote 才出现）**：本机算不动、或数据本来就在集群上时走它——先 `action="check"` 摸清调度器(slurm/pbs/none)、CPU/内存、已装工具版本，再决定怎么跑：短命令用 `run`（同步返回输出），长任务用 `submit`（交作业，返回 job_id），产物用 `pull` 拉回本地再进 `results/{session_dir}/`。⚠️ **它不是"把本机搬到集群"**：`execute_r`/`execute_python` 的持久内核**仍在本机跑**，要跑在集群上必须写成脚本交给 `run`/`submit`；远端路径（/home/you/...）和本地路径（E:/...）是两套，不能当成同一个字符串混用。集群没有调度器时 `submit` 是 setsid 后台进程（有 pid 文件），`cancel` 按进程组杀。远程 `run`/`submit` 与 execute_* 同级受限：rail_review 未通过会被拦、分析级首次执行要过辩论门控。`check` 成功后节点环境（核数/内存/调度器/R·Python 版本/工具）会**自动沉淀**到 environment.json 的 `cluster.nodes.<节点>.probed`——🧩 环境管理面板可见、agent 环境卡片会带上，不用手动记录；用户手填的声明字段（host/conda_activate 等）永不被覆盖，config 里 `auto_record_env: false` 可关。
-3.7. **用哪个节点：只配了一个就直接用，配了多个必须先问清**：WebUI「🖧 远端集群 → ⚙️ 配置」里可以登记多个命名节点（MobaXterm 式的多入口，例：ssh3 / ssh5 是同一集群的不同登录口，共享同一套存储和调度器）。规则：① 只登记 1 个节点 → 用户说"用集群"就直接用它，不要多嘴问；② 登记了多个 → **任何 run/submit/status/logs/cancel/push/pull 都必须先拿到节点名**：用户明确说了"用 ssh5"就传 `node="ssh5"`；没说就**先问清楚再投递**，问的时候要给出候选（不知道哪台闲就先 `action="nodes"` 看 load_per_cpu / idle_now，把候选连同负载一起报给用户）——**例外：⚙️ 配置里设了 `default_node` 时，未指定就静默用默认节点**（用户说「用集群」= 默认节点，想换会自己点名，不要多嘴问）；③ 多个节点、没指定、也没配 default_node 时工具会直接返回 `needs_node` 拒绝执行——**这是设计如此，不要自己挑一台、也不要沿用上一次用过的节点**；④ 节点名可用 `action="nodes"` 列出，或直接让用户在 WebUI 下拉里选。⚠️ 同一集群的多个入口共享文件系统，作业名默认按节点自动加后缀避免撞名，但**不要拿不同登录口当不同算力池**——真正决定跑在哪台机器上的是调度器。
+3.7. **用哪个节点：只配了一个就直接用，配了多个必须先问清**：WebUI「🖧 远端集群 → ⚙️ 配置」里可以登记多个命名节点（MobaXterm 式的多入口，例：node1 / node2 是同一集群的不同登录口，共享同一套存储和调度器）。规则：① 只登记 1 个节点 → 用户说"用集群"就直接用它，不要多嘴问；② 登记了多个 → **任何 run/submit/status/logs/cancel/push/pull 都必须先拿到节点名**：用户明确说了"用 node2"就传 `node="node2"`；没说就**先问清楚再投递**，问的时候要给出候选（不知道哪台闲就先 `action="nodes"` 看 load_per_cpu / idle_now，把候选连同负载一起报给用户）——**例外：⚙️ 配置里设了 `default_node` 时，未指定就静默用默认节点**（用户说「用集群」= 默认节点，想换会自己点名，不要多嘴问）；③ 多个节点、没指定、也没配 default_node 时工具会直接返回 `needs_node` 拒绝执行——**这是设计如此，不要自己挑一台、也不要沿用上一次用过的节点**；④ 节点名可用 `action="nodes"` 列出，或直接让用户在 WebUI 下拉里选。⚠️ 同一集群的多个入口共享文件系统，作业名默认按节点自动加后缀避免撞名，但**不要拿不同登录口当不同算力池**——真正决定跑在哪台机器上的是调度器。
 3.8. **路径判定：用户说了就按用户说的，没说就自己查——不许猜**（用户 2026-09 定的规则）。
   ① **用户说了位置 → 以用户为准**：本地路径（`E:/...`、`results/...`、"我刚上传的文件"）就在本地跑（execute_python/execute_r，输出照旧进 `results/{session_dir}/`）；远端绝对路径（`/home/you/...`、`/data/...`）或明说"数据在集群上"→ 才用 `remote_cluster`。没说集群、也没给远端路径时，**默认本地**。
   ② **用户没说 → 先查再决定**：调 `remote_cluster(action="locate", path="<用户消息里的原话路径>")`，它同时查本机（原样 / `work/` / `results/` 各会话目录 / `webui/uploads/`）和各节点（原样 / 工作目录 / 工作目录`data/`），返回 `verdict` = `local` / `cluster` / `ambiguous` / `missing` + 每处命中位置、类型（file/dir）和字节数。**别用"看起来像远端路径"来蒙**——查一下只要一秒。若工具不可见（集群没配 remote），就当本地处理。查的时候还支持通配符（`*.tsv`）和 `~/xxx`（家目录）。⚠️ **Windows 盘符路径（`E:\...`、`C:/...`、UNC `\\server\share`）只在本机找，工具不会拿它去集群上试探**（返回里 `scope=local-only`）——因为集群上碰巧有同名文件会把本地数据误判成集群数据，最坏情况是拿错数据去算。所以：给 Windows 路径就是本地文件；要给集群路径就写远端绝对路径（`/home/...`）。
@@ -662,7 +662,7 @@ terminal 完成 → _pending_record = True
 
 ```
 每次分析启动:
-  1. read_file("E:/MemOmics-Agent/environment.json")   ← 全局环境文件
+  1. read_file("<安装目录>")   ← 全局环境文件
   2. terminal("python scripts/validate_env.py --verbose")
   3. exit 0 → 继续 | exit 1 → 已修复→继续 | exit 2 → 阻断
   4. env_inventory(action="verify")  ← 再确认一遍环境变没变（毫秒级；没变直接复用清单）
@@ -898,9 +898,9 @@ terminal 完成 → _pending_record = True
 
 > 📋 **SOUL-detail.md**：场景触发表、19领域一览、分析流程、长任务追踪规则 12-21、task_plan.md 模板、心跳/error_scanner 部署、后台进程模式决策树、HTML 报告规则、目录策略
 > 📚 **SKILLS_INDEX.md**：368 个生信技能索引（由系统按意图动态注入）
-> 🔧 **environment.json**：`E:/MemOmics-Agent/environment.json` 全局环境文件
+> 🔧 **environment.json**：`<安装目录> 全局环境文件
 
-| "GSE278576" / "人海马ATAC" / "hippocampus aging ATAC" / "对比流程复现" / "Zemke aging hippocampus" / "fragments 年龄相关" / "atac" / "zemke" / "aging" / "hippocampus" | `skill_view("gse278576-atac-aging-comparison")` |
+| "GSE000000" / "人海马ATAC" / "hippocampus aging ATAC" / "对比流程复现" / "Zemke aging hippocampus" / "fragments 年龄相关" / "atac" / "zemke" / "aging" / "hippocampus" | `skill_view("GSE000000-atac-aging-comparison")` |
 | "代谢组学" / "metabolomics" / "LC-MS" / "GC-MS" / "峰表" / "peak table" / "差异代谢物" / "代谢通路富集" / "代谢组" / "lc-ms" / "gc-ms" / "火山图" / "热图" / "volcano" / "heatmap" / "代谢物差异" | `skill_view("metabolomics-full-pipeline")` |
 | "学术图" / "学术级" / "专业出图" / "期刊出图" / "论文配图" / "出图规范" / "检查脚本" / "脚本优化" / "academic figure" / "publication figure" | `skill_view("academic-figure-skill")` ← 见上方必触发列表 |
 | "DNBelab" / "dnbc4tools" / "华大单细胞" / "BGI索引" / "基因组索引构建" / "mkref" / "STAR 索引" / "mkgtf" / "华大BGI" / "华大" / "索引" | `skill_view("dnbc4tools-index-building")` |
@@ -925,14 +925,14 @@ terminal 完成 → _pending_record = True
 
 **先读 `memomics_home/cluster_envs.json`**（结构化记录），要点：
 
-- 节点：`ssh3 = cngb-supermem-a15-3.cngb.sz.hpc`（跳板 `zhangbo11@192.168.61.11`，登录用户 `zhangbo11`）
-- 环境根：`/hwfssz3/PS_JLU/zhangxiao6/software/miniconda3`
+- 节点：`node1 = login-host`（跳板 `user@login-host`，登录用户 `user`）
+- 环境根：`/cluster/share/zhangxiao6/software/miniconda3`
 - **RNA 分析 → `envs/R4.41`**：R 4.4.1 · Seurat 5.3.0 · SeuratObject 5.1.0 · anndata(R) 0.8.0 ·
   python 3.13.2 + pandas 2.2.3 + anndata 0.11.4（**无 scanpy**）。
   用途：Seurat `.rds` ↔ AnnData `.h5ad` 读写互转。
 - **ATAC 分析 → `envs/R4.3.3`**：R 4.3.3 · ArchR 1.0.3（scATAC-seq 全流程）。
 - 调用方式：`export PATH=<env>/bin:$PATH` 后用 `Rscript`/`python`；或直接绝对路径（更稳）。
-- ⛔ 不要再使用 `zhangbo/envs/R4.4.1_zb`（那是另一个人的环境，Python 侧无 pandas）。
+- ⛔ 不要再使用 `user/envs/R4.4.1_zb`（那是另一个人的环境，Python 侧无 pandas）。
 
 ## 答复匹配（qid 优先，2026-10-20）
 

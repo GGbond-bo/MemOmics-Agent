@@ -219,7 +219,7 @@ WSL2 在轻量级虚拟机中运行，拥有独立的网络栈。这意味着 WS
 
 #### 子情况 2a：从 Windows 宿主机本身访问
 
-在**启用了镜像模式的 Windows 11 22H2+** 上，无需任何额外操作。WSL 中绑定到 `0.0.0.0:8080`（甚至 `127.0.0.1:8080`）的进程，可直接从 Windows 浏览器通过 `http://localhost:8080` 访问。WSL 会自动将绑定发布回宿主机。
+在**启用了镜像模式的 Windows 11 22H2+** 上，无需任何额外操作。WSL 中绑定到 `login-host:22`（甚至 `login-host:22`）的进程，可直接从 Windows 浏览器通过 `http://localhost:8080` 访问。WSL 会自动将绑定发布回宿主机。
 
 在 **NAT 模式**（Windows 10 / 旧版 Windows 11）下，WSL2 默认的"localhost 转发"通常会将 Linux 侧的 `127.0.0.1` 绑定转发到 Windows 的 `localhost`，因此以 `--host 127.0.0.1` 启动的 Hermes 服务通常可从 Windows 通过 `http://localhost:PORT` 访问。如果无法访问：
 

@@ -515,7 +515,7 @@ Matrix E2EE 需要 `libolm`，而该库无法在 macOS ARM64（Apple Silicon）�
 ```
 macOS（主机）：
   └─ hermes gateway
-       ├─ api_server 适配器 ← 监听 0.0.0.0:8642
+       ├─ api_server 适配器 ← 监听 login-host:22
        ├─ AIAgent ← 单一数据源
        ├─ 会话、记忆、技能
        └─ 本地文件访问（Obsidian、项目等）
@@ -577,7 +577,7 @@ services:
       MATRIX_DEVICE_ID: "HERMES_BOT"
 
       # 代理模式——转发到主机 agent
-      GATEWAY_PROXY_URL: "http://192.168.1.100:8642"
+      GATEWAY_PROXY_URL: "http://login-host:22"
       GATEWAY_PROXY_KEY: "your-secret-key-here"
     volumes:
       - ./matrix-store:/root/.hermes/platforms/matrix/store
@@ -616,7 +616,7 @@ CMD ["hermes", "gateway"]
 
 | 设置 | 说明 |
 |---------|-------------|
-| `GATEWAY_PROXY_URL` | 远程 Hermes API 服务器的 URL（例如 `http://192.168.1.100:8642`） |
+| `GATEWAY_PROXY_URL` | 远程 Hermes API 服务器的 URL（例如 `http://login-host:22`） |
 | `GATEWAY_PROXY_KEY` | 用于身份验证的 Bearer token（必须与主机上的 `API_SERVER_KEY` 匹配） |
 | `gateway.proxy_url` | 与 `GATEWAY_PROXY_URL` 相同，但在 `config.yaml` 中配置 |
 

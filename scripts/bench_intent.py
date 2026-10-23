@@ -10,8 +10,8 @@ chat / knowledge_ask / analysis / direct_exec / research_plan /
 progress_check / result_check / cancel_task / self_intro
 """
 import sys, json, os, time
-sys.path.insert(0, r'E:\MemOmics-Agent\webui')
-sys.path.insert(0, r'E:\MemOmics-Agent\hermes-agent')
+sys.path.insert(0, r'<安装目录>')
+sys.path.insert(0, r'<安装目录>')
 
 # 标注集：message_id -> (期望意图, 期望实体或'')
 LABELS = {
@@ -58,7 +58,7 @@ LABELS = {
 }
 
 import sqlite3, re
-DB = r'E:\MemOmics-Agent\memomics_home\state.db'
+DB = r'<安装目录>'
 c = sqlite3.connect(f'file:{DB}?mode=ro', uri=True)
 texts = {}
 for mid in LABELS:

@@ -54,7 +54,7 @@ describe('external link helpers', () => {
   it('blocks private, link-local, and intranet hosts', () => {
     expect(isTitleFetchable('http://10.0.0.12/path')).toBe(false)
     expect(isTitleFetchable('http://172.22.5.4/path')).toBe(false)
-    expect(isTitleFetchable('http://192.168.1.22/path')).toBe(false)
+    expect(isTitleFetchable('http://10.0.0.1/path')).toBe(false)
     expect(isTitleFetchable('http://169.254.169.254/latest/meta-data')).toBe(false)
     expect(isTitleFetchable('http://[fd00::1]/')).toBe(false)
     expect(isTitleFetchable('http://[fe80::1]/')).toBe(false)

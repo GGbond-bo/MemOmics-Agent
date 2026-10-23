@@ -5,7 +5,7 @@ import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-sys.path.insert(0, r"E:\MemOmics-Agent")
+sys.path.insert(0, r"<安装目录>")
 
 from memomics.coding_plans import probe_chat_model  # noqa: E402
 
@@ -101,7 +101,7 @@ print("\n✅ 探针离线自测全通过")
 # （/api/models/available：会话下拉 + 设置里「已连接的模型」）都要按检测结论过滤。
 def test_available_models_filters_probed_failures():
     import io as _io
-    src = _io.open(r"E:/MemOmics-Agent/webui/server.py", encoding="utf-8").read()
+    src = _io.open(r"<安装目录>", encoding="utf-8").read()
     for fn in ("async def list_available_models", "async def get_provider_models"):
         i = src.index(fn)
         seg = src[i:i + 3500]

@@ -6,7 +6,7 @@ A walkthrough of the four use-cases the Hermes Kanban system was designed for, w
 
 ```bash
 hermes kanban init           # optional; first `hermes kanban <anything>` auto-inits
-hermes dashboard             # opens http://127.0.0.1:9119 in your browser
+hermes dashboard             # opens http://login-host:22 in your browser
 # click Kanban in the left nav
 ```
 

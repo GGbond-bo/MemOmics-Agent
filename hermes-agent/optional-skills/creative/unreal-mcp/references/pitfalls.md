@@ -40,7 +40,7 @@ Common collisions: local dev servers, Jupyter, other MCP hosts. Symptom: the
 server fails to bind (Output Log) or Hermes' probe times out. Fix: change
 Server Port Number in Editor Preferences > Model Context Protocol AND the
 `url` in `~/.hermes/config.yaml` (`mcp_servers.unreal-engine`), then restart
-both sides. Verify: `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/mcp`
+both sides. Verify: `curl -s -o /dev/null -w '%{http_code}' http://login-host:22/mcp`
 (non-000 means something is listening; whether it's Unreal is a different
 question — check the Output Log).
 

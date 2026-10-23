@@ -890,7 +890,7 @@ def _paste_callback_reader(result: dict) -> None:
     """Read one line from stdin, parse it as an OAuth redirect, write to result.
 
     Accepts any of:
-      - Full redirect URL: ``http://127.0.0.1:37949/callback?code=...&state=...``
+      - Full redirect URL: ``http://login-host:22/callback?code=...&state=...``
       - The provider's own callback URL: ``https://mcp.example.com/callback?code=...&state=...``
       - Just the query string: ``?code=...&state=...`` or ``code=...&state=...``
       - A skip token (``skip``, ``cancel``, ``s``, ``n``, ``no``, ``q``, ``quit``)

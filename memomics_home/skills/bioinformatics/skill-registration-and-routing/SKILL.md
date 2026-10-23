@@ -150,7 +150,7 @@ python scripts/check_skills_gate.py     # 期望 [skills-gate] PASS
 |------|------|------|
 | `_match_red_skill_triggers("自然语言")` → `[]` | 索引该行关键词是名称派生 | 真关键词写进 **skill.json** → `--build` → grep 索引行复核 |
 | 索引行关键词 = 技能名 + 空格分词 + 单词 | 原本只有 1 条关键词（`len>=2` 不成立）→ 跌落名称派生 | 补到 ≥10 条，重建 |
-| 索引行关键词 = 名称派生，但 skill.json 里**明明写了** `trigger_keywords` | 写成了**一条斜杠串**：`["集群/ssh 节点/云上算力/他把数据放集群上"]` —— **斜杠不是分隔符**，整个串算 1 条 → 照样 `len>=2` 不成立（2026-10-08 实测：`remote-cluster-execution` 因此"看着注册好了"却永命不中，中文「集群」全 miss） | 改成**真数组**，一词一条：`["集群","远端集群","集群环境","ssh3","用集群跑","在集群上跑","投递任务","qsub","slurm","sge"]` → `--build` → matcher 实跑复核 |
+| 索引行关键词 = 名称派生，但 skill.json 里**明明写了** `trigger_keywords` | 写成了**一条斜杠串**：`["集群/ssh 节点/云上算力/他把数据放集群上"]` —— **斜杠不是分隔符**，整个串算 1 条 → 照样 `len>=2` 不成立（2026-10-08 实测：`remote-cluster-execution` 因此"看着注册好了"却永命不中，中文「集群」全 miss） | 改成**真数组**，一词一条：`["集群","远端集群","集群环境","node1","用集群跑","在集群上跑","投递任务","qsub","slurm","sge"]` → `--build` → matcher 实跑复核 |
 | 手写关键词「自己消失了」 | `--build` 回填用名称派生值覆盖 | 写完 skill.json 后**必须 grep 复核**；被清了就重写 |
 | `索引有 WebUI 看不到的技能: ['X']` | 技能目录不在 `list_skills()` 扫描根 | 迁到 `memomics_home/skills/bioinformatics/` |
 | `有 N 个 RED 技能没有任何路由用例` | RED 技能未进 `cases` | 补用例（先确认能命中），或写 `coverage_exempt` + 理由 |

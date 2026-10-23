@@ -36,7 +36,7 @@ loadNamespace("hdWGCNA"); .h <- asNamespace("hdWGCNA"); GETFN <- function(f) get
 set.seed(123)
 
 ## ---------------- 改这里 ----------------
-BASE      <- "E:/MemOmics-Agent/results/<session_dir>"
+BASE      <- "<安装目录>"
 PRIMARY   <- "phase2_network_k5type_f005_pow9.rds"   # 已建网对象（data/ 下）
 WN        <- "MF_wgcna"
 POW       <- 9

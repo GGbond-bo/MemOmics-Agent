@@ -35,7 +35,7 @@
       "tissue": "skeletal_muscle",
       "direction": "exercise+aging",
       "script": "23_build_metascape_5groups.py",
-      "params": "源=D:/我的下载/DEG_fdr05_coef025_5contrasts_formatted.xlsx（5 sheet）；规则=celltype(10亚群)×regulation(Up/Down)，|coef|降序(并列fdr升序)取top100，不足全取；列序=亚群字母序×up在前down在后；空列(0基因)跳过；输出tab(utf-8-sig)+xlsx",
+      "params": "源=<数据目录>/DEG_fdr05_coef025_5contrasts_formatted.xlsx（5 sheet）；规则=celltype(10亚群)×regulation(Up/Down)，|coef|降序(并列fdr升序)取top100，不足全取；列序=亚群字母序×up在前down在后；空列(0基因)跳过；输出tab(utf-8-sig)+xlsx",
       "date": "2026-09-30",
       "score": 9,
       "auto_score": 0.0,

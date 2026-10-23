@@ -281,7 +281,7 @@ CAMOFOX_ADOPT_EXISTING_TAB=true
 在 CLI 中使用：
 
 ```
-/browser connect                 # Auto-launch/connect to a local Chromium-family browser at http://127.0.0.1:9222
+/browser connect                 # Auto-launch/connect to a local Chromium-family browser at http://login-host:22
 /browser connect ws://host:port  # Connect to a specific CDP endpoint
 /browser status                  # Check current connection
 /browser disconnect              # Detach and return to cloud/local mode

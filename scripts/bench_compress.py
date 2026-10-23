@@ -7,9 +7,9 @@ REQUIREMENTS.md + conclusions.md 各放 5 条。跑 server 的真实折叠链
 检查关键事实在发给模型的最终上下文里的保留率。
 """
 import sys, os, json, tempfile
-sys.path.insert(0, r'E:\MemOmics-Agent\webui')
-sys.path.insert(0, r'E:\MemOmics-Agent\hermes-agent')
-os.environ.setdefault('MEMOMICS_HOME', r'E:\MemOmics-Agent\memomics_home')
+sys.path.insert(0, r'<安装目录>')
+sys.path.insert(0, r'<安装目录>')
+os.environ.setdefault('MEMOMICS_HOME', r'<安装目录>')
 os.environ['MEMOMICS_ROLLUP_BUDGET'] = '30000'
 os.environ['MEMOMICS_ROLLUP_TAIL'] = '8'
 

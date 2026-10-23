@@ -437,7 +437,7 @@ def run_complete_pipeline(base_dir, sample_names,
 
 if __name__ == "__main__":
     # Example: Run complete pipeline on monkey skeletal muscle data
-    BASE_DIR = r"E:\monkey"
+    BASE_DIR = r"<数据目录>"
     SAMPLES = [
         "CRR278961", "CRR278962", "CRR278963", "CRR278964",
         "CRR278998", "CRR279006", "CRR279013", "CRR279014",

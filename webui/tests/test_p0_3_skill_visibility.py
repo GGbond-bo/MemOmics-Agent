@@ -192,7 +192,7 @@ def test_b2_ignores_urls_paths_fractions_and_app_commands():
         "看下 https://example.com/a/b?q=/scrna-qc 这个链接",
         "打开 work/papers/abc.pdf",
         "E:/work/data/run.csv 在这",
-        "C:\\Users\\23136\\data\\x.h5ad",
+        "<用户目录>",
         "A/B 测试 and/or 二选一",
         "2026/09/23 发布的新版本",
         "1/2 的样本",

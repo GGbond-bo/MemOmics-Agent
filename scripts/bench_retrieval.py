@@ -5,9 +5,9 @@
 跑 holographic prefetch（真实库四源）输出各源 Top 结果，供人工相关性评分。
 """
 import sys, os, json
-sys.path.insert(0, r'E:\MemOmics-Agent\webui')
-sys.path.insert(0, r'E:\MemOmics-Agent\hermes-agent')
-os.environ.setdefault('MEMOMICS_HOME', r'E:\MemOmics-Agent\memomics_home')
+sys.path.insert(0, r'<安装目录>')
+sys.path.insert(0, r'<安装目录>')
+os.environ.setdefault('MEMOMICS_HOME', r'<安装目录>')
 
 from plugins.memory.holographic import HolographicMemoryProvider, _enhance_query
 
@@ -26,7 +26,7 @@ QUERIES = [
     ("q12", "猴孬海马怎么注释", "memomics-cd677556"),  # 错别字鲁棒性
 ]
 
-p = HolographicMemoryProvider(config={'db_path': r'E:\MemOmics-Agent\memomics_home\memory_store.db'})
+p = HolographicMemoryProvider(config={'db_path': r'<安装目录>'})
 p.initialize(session_id='memomics-cd677556')
 
 report = {}
@@ -47,7 +47,7 @@ for qid, q, sid in QUERIES:
         for l in lines[:5]:
             print("    ", l[:130])
 
-with open(r'E:\MemOmics-Agent\scripts\bench_retrieval_raw.json', 'w', encoding='utf-8') as f:
+with open(r'<安装目录>', 'w', encoding='utf-8') as f:
     json.dump(report, f, ensure_ascii=False, indent=1)
 p.shutdown()
 print("\nsaved scripts/bench_retrieval_raw.json")

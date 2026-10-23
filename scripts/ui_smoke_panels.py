@@ -16,16 +16,16 @@ def main():
     proc = subprocess.Popen(
         [EDGE, "--headless=new", "--remote-debugging-port=9335",
          "--remote-allow-origins=*", "--user-data-dir={0}".format(udd),
-         "--no-first-run", "--disable-gpu", "http://127.0.0.1:8899/"],
+         "--no-first-run", "--disable-gpu", "http://login-host:22/"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         for _ in range(60):
             try:
-                json.loads(urllib.request.urlopen("http://127.0.0.1:9335/json/version", timeout=3).read())
+                json.loads(urllib.request.urlopen("http://login-host:22/json/version", timeout=3).read())
                 break
             except Exception:
                 time.sleep(0.5)
-        targets = json.loads(urllib.request.urlopen("http://127.0.0.1:9335/json/list", timeout=5).read())
+        targets = json.loads(urllib.request.urlopen("http://login-host:22/json/list", timeout=5).read())
         page = next((t for t in targets if t.get("type") == "page" and "8899" in t.get("url", "")), None)
         assert page
         pws = websocket.create_connection(page["webSocketDebuggerUrl"], timeout=30)

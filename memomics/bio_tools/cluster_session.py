@@ -587,7 +587,7 @@ def action_start(cfg: dict, args: dict) -> str:
             raw=probe.get("raw"),
             hint=("给一个绝对路径：action='session_start', rscript='/path/to/envs/R4.41/bin/Rscript'；"
                   "或在 config.yaml 的 remote.session 里写 rscript/roots/env；"
-                  "装新环境请到 ssh0（唯一有外网的节点）装进自己的 env 目录。"))
+                  "装新环境请到 node3（唯一有外网的节点）装进自己的 env 目录。"))
     rscript = probe["rscript"]
 
     # 2) 拉起 daemon（setsid 优先，-f 有的发行版不支持；nohup 兜底），等 state.txt 出现

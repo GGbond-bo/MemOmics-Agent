@@ -213,7 +213,7 @@
 | 8 | archr-atac-analysis | ArchR scATAC-seq 全流程:环境搭建 → Arrow 加载 → QC → LSI → 聚类 → Peak Calling → 差异可及性 → TF footprinting → motif 富集。支持跨物种 CRE 保守性评估。 Signac 作为备选方案… | archr-atac-analysis, archr atac analysis, archr | YEL 讨论触发 |
 | 9 | atac-paper-reproduction | ATAC-seq 论文对比/年龄相关流程复现。核心原则:官方路径优先——去论文官方代码仓库 （GitHub/Zenodo）、官方补充表（Table_S*）、GEO 找方法，不自行发明。 关键技巧:官方补充表含 cCRE/peak 全集时直接复用坐标做片段计数，跳过本地 peak calling（免装 MACS3/snapatac2）… | 论文复现, 对比流程, 官方路径, official code, ATAC 复现 | YEL 讨论触发 |
 | 10 | atac-seq-memomics | ArchR scATAC-seq 全流程: 环境搭建→Arrow文件→QC→降维→聚类→Peak calling→Motif→Footprinting→差异可及性→共可及性→导出 | atac-seq-memomics, atac seq memomics, seq, memomics | YEL 讨论触发 |
-| 11 | bio-db-benchmark-qa | 用户给出 E:\benchmarker\...\*_考试题.json 路径，要求"作答/测试/开始完成"，随后可能提供 *_密封答案.json 要求"对一下/评分"。这类考试的特点:每道题是一个事实型问题… | benchmarker, 密封答案, 考试题, TaskA, TaskB, TaskC, dbqa2, MESINESP | YEL 讨论触发 |
+| 11 | bio-db-benchmark-qa | 用户给出 <数据目录> 路径，要求"作答/测试/开始完成"，随后可能提供 *_密封答案.json 要求"对一下/评分"。这类考试的特点:每道题是一个事实型问题… | benchmarker, 密封答案, 考试题, TaskA, TaskB, TaskC, dbqa2, MESINESP | YEL 讨论触发 |
 | 12 | bioinformatics-html-report | 当需要生成生信分析HTML报告时触发 — 包含图表、辩论记录、参数来源、生物结论的完整报告 | html | RED 必触发 |
 | 13 | bioinformatics-patent-strategy | Bioinformatics method patent strategy and drafting. Covers A25 (intellectual activity rules) defense, claim structuring for bioinformatics workflows, dual-patent architectures… | 专利, patent, 权利要求, claims, A25, 智力活动, 交底书, 可专利性 | YEL 讨论触发 |
 | 14 | boltz | OpenAI4S 移植:Structure prediction for protein, nucleic-acid, and small-mo... | boltz | YEL 讨论触发 |
@@ -245,7 +245,7 @@
 | 40 | genui | 回答中需要结构化呈现（要点/对比/流程/状态/数据/操作）时输出 dsh-ui 围栏，webui 自动渲染。纯文字问答不需要。 | 结构化展示, 可视化呈现, UI组件, 要点卡片, dsh-ui, genui, 交互面板, 数据图表, 流程步骤展示, 状态一览, render ui, interactive ui | RED 必触发 |
 | 41 | go-enrichment-visualization | User has a curated enrichment table (Cluster / GO term / Log(q-value)) and wants a CNS-level enrichment heatmap or dotplot. e.g… | enrichment, visualization | YEL 讨论触发 |
 | 42 | grill-me | 方案打磨/设计审查:方案/设计/计划刚产出时、重大决策落地前 debate/rail_review 前的预检、多方案选型时。用户说"拷问一下""帮我挑毛病" "这个方案行不行"时必触发。 | 拷问, 挑毛病, grill, 方案打磨, 设计审查, 帮我审方案, 面试方案 | RED 必触发 |
-| 43 | gse278576-atac-aging-comparison | GSE278576 人海马衰老 ATAC 对比流程复现（Zemke/Lee/Mamde et al., Science 2026 bioRxiv 2024.10.14.618338）。官方代码仓库 nrzemke/aging_human_hippocampus… | GSE278576, 人海马ATAC, hippocampus aging ATAC, 对比流程复现 | YEL 讨论触发 |
+| 43 | GSE000000-atac-aging-comparison | GSE000000 人海马衰老 ATAC 对比流程复现（Zemke/Lee/Mamde et al., Science 2026 bioRxiv 2024.10.14.618338）。官方代码仓库 nrzemke/aging_human_hippocampus… | GSE000000, 人海马ATAC, hippocampus aging ATAC, 对比流程复现 | YEL 讨论触发 |
 | 44 | hdwgcna-official-workflow | [hdwgcna-official] 需要跑 hdWGCNA 官方完整 workflow、出官方标准图集、或遇到 hdWGCNA 加载失败/ModuleTraitCorrelation 报错/ModuleUMAPPlot future 超限/TOM 路径问题。 | hdwgcna, official, workflow | YEL 讨论触发 |
 | 45 | html-report | 当你需要 HTML报告 时触发 —— 生成精美的HTML分析报告，支持图表画廊、响应式布局、打印友好 | html-report, html report, html | YEL 讨论触发 |
 | 46 | human-skill | 用户要求对中文论文/报告做去 AI 味处理，或要求查重（重复率）、检查自我抄袭（如学位论文 vs 专利交底书同源）、投稿前 AI 痕迹自检。 | 去AI味, 去AI腔, human-skill, 查重, 重复率, 自我抄袭, AI痕迹, 像AI写的, AI腔, 降AI味 | RED 必触发 |
@@ -342,7 +342,7 @@
 | 20 | ml-classification | 适用于: disease, 有标签数据, 分类/预测 —— LASSO+RandomForest+SVM+SHAP解释, 支持bulk和scRNA | ml-classification, ml classification, classification | GRN 按需触发 |
 | 21 | phylo-create-skill | Create, test, package, and present reusable skills for Phylo's Biomni platform and bioinformatics workflows. | phylo-create-skill, phylo create skill, phylo | GRN 按需触发 |
 | 22 | reference-figure-replication | 按用户给的参考图（PDF/PNG/AI 导出件）反推精确规格，用自己的数据 1:1 复刻同款图。触发:按照这张图来画/照着这个风格出图/参考图/图里这些基因照着重画/按图中的顺序和配色重出/和 Figure SX 一样。 | reference, replication | RED 必触发 |
-| 23 | remote-cluster-execution | 远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收；含常驻 R 会话（kernel 式持久化，大 rds 读一次一直用:session_start/exec/save/restore/status/stop）。触发:集群/ssh3/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub/常驻会话/读一次一直用/不要每次重新读取。 | 集群, 远端集群, 集群环境, 集群有哪些环境, 帮我看看集群, ssh3, 用集群跑, 在集群上跑, 投递任务, qsub, slurm, sge, 常驻会话, 读一次一直用, 不要重复读取 rds, kernel 式持久化 | RED 必触发 |
+| 23 | remote-cluster-execution | 远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收；含常驻 R 会话（kernel 式持久化，大 rds 读一次一直用:session_start/exec/save/restore/status/stop）。触发:集群/node1/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub/常驻会话/读一次一直用/不要每次重新读取。 | 集群, 远端集群, 集群环境, 集群有哪些环境, 帮我看看集群, node1, 用集群跑, 在集群上跑, 投递任务, qsub, slurm, sge, 常驻会话, 读一次一直用, 不要重复读取 rds, kernel 式持久化 | RED 必触发 |
 | 24 | self-improving-agent | 自进化能力:分析成功后自动沉淀经验为新技能；分析失败后自动学习错误模式避免重复犯错；根据使用频率自动优化参数。包括技能沉淀、错误学习、参数进化三大子系统。 | self-improving-agent, self improving agent, self, improving, agent | GRN 按需触发 |
 | 25 | supplementary-table-assembly | 把策展基因集/打分表/注释表组装成可交付的补充表（xlsx/CSV）:按生物功能轴重排、统一英文标签、附加 legend 表、表↔图口径对账。触发:把表格分类排列/按分类重排/重命名导出/重出一张表/补充表/Supplementary Table/表格里不能有中文/表和图对不上/表格行序乱要排一下。 | supplementary, table, assembly | YEL 讨论触发 |
 

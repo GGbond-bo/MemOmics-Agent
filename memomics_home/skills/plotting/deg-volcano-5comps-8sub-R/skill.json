@@ -4,7 +4,7 @@
   "category": "user-skill",
   "language": "R",
   "source": "user",
-  "description": "骨骼肌 DEG 五比较组 × 8 亚群火山图（ggplot2 + ggrepel）：背景灰柱 + 全部基因抖动点 + top5 基因标注 + y=0 彩色亚群标签块 + p3 主题；14×7 inch @300dpi，8 亚群自定义色板 + 配套文字色，支持用户确认的单点补标补丁 EXTRA_LABELS",
+  "description": "示例组织 DEG 五比较组 × 8 亚群火山图（ggplot2 + ggrepel）：背景灰柱 + 全部基因抖动点 + top5 基因标注 + y=0 彩色亚群标签块 + p3 主题；14×7 inch @300dpi，8 亚群自定义色板 + 配套文字色，支持用户确认的单点补标补丁 EXTRA_LABELS",
   "when_to_use": "已有多个比较组的 DEG 表（每 sheet 一对比），要出「一对比一张、图内含 8 个亚群色块」的火山图；或需要给某基因补标",
   "parameters": {
     "SRC_FILE": "多对比 DEG 工作簿（每 sheet 一对比，含 celltype/regulation/coef/fdr）",

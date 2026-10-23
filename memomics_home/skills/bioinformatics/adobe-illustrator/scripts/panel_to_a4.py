@@ -28,7 +28,7 @@ from pathlib import Path
 A4_W, A4_H = 595.28, 841.89          # A4 纵向（pt）
 SKILL_DIR = Path(__file__).resolve().parent.parent
 BUNDLED = SKILL_DIR / "scripts" / "harness_bundle"
-REPO_EXE = Path(r"E:\MemOmics-Agent\.venv\Scripts\cli-anything-illustrator.exe")
+REPO_EXE = Path(r"<安装目录>")
 
 
 def resolve_exe() -> str:

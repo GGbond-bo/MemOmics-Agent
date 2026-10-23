@@ -1,6 +1,6 @@
 # 交集/逆转分析实录：覆盖率陷阱 + 韦恩版式三坑
 
-来源：骨骼肌 DEG 五对比（人，skeletal_muscle，exercise + aging + diabetes），
+来源：示例组织 DEG 五对比（人，skeletal_muscle，exercise + aging + diabetes），
 数据 = 新方法细胞级 bayesglm + RUV，按 `FDR<0.05 & |coef|≥0.25` 过滤后的 5 sheet 表；
 universe = 5 张未过滤 merged 全表基因交集 = **7,743**（全 10 个细胞群体）/ 7,485（仅 8 个 MF 亚群）。
 

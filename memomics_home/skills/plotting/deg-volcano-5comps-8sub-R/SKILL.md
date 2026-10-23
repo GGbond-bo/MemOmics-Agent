@@ -1,7 +1,7 @@
 ---
 name: deg-volcano-5comps-8sub-R
 description: >-
-  骨骼肌 DEG 五比较组 × 8 亚群火山图（R ggplot2 + ggrepel）：背景灰柱 + 全部基因抖动点 + top5 基因标注
+  示例组织 DEG 五比较组 × 8 亚群火山图（R ggplot2 + ggrepel）：背景灰柱 + 全部基因抖动点 + top5 基因标注
   + y=0 彩色亚群标签块 + p3 主题；14×7 inch @300dpi，8 亚群自定义色板 + 配套文字色，
   支持用户确认的补标补丁（EXTRA_LABELS）。触发词："火山图 R 版" / "5 比较组 8 亚群火山图" /
   "DEG 火山图带亚群标签块" / "volcano 8sub FINAL"
@@ -30,10 +30,10 @@ verified: 2026-10-01
 脚本头部路径常量：
 
 ```r
-F1 <- "D:/我的下载/DEG_fdr05_coef025_5contrasts.xlsx"   # 优先用户路径
-F2 <- "E:/MemOmics-Agent/results/<sid>/task2/results/DEG_fdr05_coef025_5contrasts.xlsx"  # 缺失则会话内同 md5 副本
+F1 <- "<数据目录>/DEG_fdr05_coef025_5contrasts.xlsx"   # 优先用户路径
+F2 <- "<安装目录>"  # 缺失则会话内同 md5 副本
 SRC_FILE <- if (file.exists(F1)) F1 else F2
-OUT <- "E:/MemOmics-Agent/results/<sid>/task3/figures"
+OUT <- "<安装目录>"
 ```
 
 ## 参数（用户原稿取值，勿擅改）

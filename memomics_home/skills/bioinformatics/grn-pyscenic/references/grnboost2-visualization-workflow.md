@@ -1,7 +1,7 @@
 # GRNBoost2-Only 综合可视化工作流
 
 > **创建日期**: 2026-07-09  
-> **来源**: 人类骨骼肌衰老 SMF 亚群 SCENIC 分析，双路线（去神经路线A + 应激路线B）  
+> **来源**: 示例研究场景 SMF 亚群 SCENIC 分析，双路线（去神经路线A + 应激路线B）  
 > **问题**: cisTarget 因基因名不匹配失败（regulons.csv 每个基因被拆成单个字符，AUCell 全 0），但 GRNBoost2 输出正常  
 > **解决方案**: 用 GRNBoost2 adjacencies 直接计算 TF 活性，生成 7 种以上可视化图
 

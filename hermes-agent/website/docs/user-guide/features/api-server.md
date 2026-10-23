@@ -36,7 +36,7 @@ hermes gateway
 You'll see:
 
 ```
-[API Server] API server listening on http://127.0.0.1:8642
+[API Server] API server listening on http://login-host:22
 ```
 
 ### 3. Connect a frontend
@@ -444,7 +444,7 @@ The API server does **not** enable browser CORS by default.
 For direct browser access, set an explicit allowlist:
 
 ```bash
-API_SERVER_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+API_SERVER_CORS_ORIGINS=http://localhost:3000,http://login-host:22
 ```
 
 When CORS is enabled:

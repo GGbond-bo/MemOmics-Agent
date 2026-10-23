@@ -1,6 +1,6 @@
 # 共享项伪相关 与 批次项可识别性（配方 + 实测数字）
 
-来源：2026-09-25 骨骼肌 MF pseudobulk dreamlet 审计（human / skeletal muscle / 24 供体 × 运动前后 = 48 样本，
+来源：2026-09-25 示例组织 MF pseudobulk dreamlet 审计（human / skeletal muscle / 24 供体 × 运动前后 = 48 样本，
 Y 10 / O 7 / OD 7，全体女性；`~0+type+(1|individual)`，ddf=Kenward-Roger，亚群内 BH）。
 
 ---

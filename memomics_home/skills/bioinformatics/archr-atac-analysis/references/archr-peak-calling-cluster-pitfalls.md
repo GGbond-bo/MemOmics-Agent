@@ -1,6 +1,6 @@
 # ArchR Peak Calling on Shared HPC Cluster — Pitfalls & Facts
 
-会话来源：memomics-cd677556（2026-08-29，猴脑/人脑海马 ATAC peak calling，张潇 NHPABC 流程复现）
+会话来源：memomics-cd677556（2026-08-29，猴脑/人脑海马 ATAC peak calling，张潇 example-cohort 流程复现）
 
 ## 1. HDF5 `File accessibility. Unable to open file` 根因（最高频）
 
@@ -8,7 +8,7 @@
 
 **第一个要查的不是参数，是写权限**：
 
-- 如果你 `loadArchRProject` 的是**别人的 Project**（如张潇的 `/hwfssz3/.../saveProj20250710`），它的 `outputDirectory` 指向对方目录；
+- 如果你 `loadArchRProject` 的是**别人的 Project**（如张潇的 `/cluster/.../saveProj20250710`），它的 `outputDirectory` 指向对方目录；
 - `addGroupCoverages` 要在 `outputDirectory/GroupCoverages/` 下创建 `.h5`，你没有那个目录写权限 → H5Fcreate 失败。
 - 日志特征：`Group Astro._.O2_Hip_3 (1 of 40)` 出现在错误前——正在遍历 sample×group 写覆盖文件。
 
@@ -66,7 +66,7 @@ proj <- addReproduciblePeakSet(proj, groupBy = "celltype",
 
 **时间估算（~20 万细胞 / 8 个大群）**：addGroupCoverages 15-40 min（IO 瓶颈），MACS2 callpeak 10-20 min（单核逐个跑，ArchR 并行），addPeakMatrix 15-30 min（全量细胞，IO 瓶颈，与线程无关）→ 合计约 1-2.5 h。别用 50 线程硬怼（共享 FS 写锁 + 内存翻倍），`addArchRThreads(8)` 稳妥。
 
-## 6. 张潇 NHPABC cCRE 官方参数（复现目标）
+## 6. 张潇 example-cohort cCRE 官方参数（复现目标）
 
 - **QC 线**：每个体 >10 nuclei、每 age group >100 nuclei 的细胞类型才做 cCRE
 - **addGroupCoverages**：`minCells=40, maxCells=5000, minReplicates=2, maxReplicates=10`

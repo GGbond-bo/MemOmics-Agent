@@ -411,7 +411,7 @@ Hermes 立即确认任务并将提示符还给你：
 │ Found 3 errors in syslog from today:                         │
 │ 1. OOM killer invoked at 03:22 — killed process nginx        │
 │ 2. Disk I/O error on /dev/sda1 at 07:15                      │
-│ 3. Failed SSH login attempts from 192.168.1.50 at 14:30      │
+│ 3. Failed SSH login attempts from 10.0.0.1 at 14:30      │
 ╰──────────────────────────────────────────────────────────────╯
 ```
 

@@ -2,7 +2,7 @@
 scTour 双路线 HTML 报告生成模板（可复用）
 =============================================
 基于 bioinformatics-html-report skill 的 ReportBuilder。
-适配 2026-07-08 人类骨骼肌衰老 SMF 双路线分析验证通过。
+适配 2026-07-08 示例研究场景 SMF 双路线分析验证通过。
 
 使用方式：
 1. 修改 BASE 路径为你的 scTour 结果目录
@@ -20,7 +20,7 @@ ROUTE_B = f"{BASE}/routeB/run1_balanced"
 SCRIPTS_DIR = f"{BASE}/scripts"
 
 # 加载 ReportBuilder
-builder_dir = "E:/MemOmics-Agent/memomics_home/skills/bioinformatics/bioinformatics-html-report"
+builder_dir = "<安装目录>"
 sys.path.insert(0, builder_dir)
 from html_report_builder import ReportBuilder
 

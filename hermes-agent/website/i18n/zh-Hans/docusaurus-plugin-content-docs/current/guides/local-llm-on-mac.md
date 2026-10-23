@@ -96,7 +96,7 @@ llama-server -m ~/models/Qwen3.5-9B-Q4_K_M.gguf \
 当你看到以下输出时，服务器已就绪：
 
 ```
-main: server is listening on http://0.0.0.0:8080
+main: server is listening on http://login-host:22
 srv  update_slots: all slots are idle
 ```
 
@@ -150,12 +150,12 @@ curl -s http://localhost:8080/v1/models | jq '.data[].id'
 
 ### 启动服务器
 
-omlx 默认在 `http://127.0.0.1:8000` 上提供服务。通过应用 UI 启动服务，或在可用时使用 CLI。
+omlx 默认在 `http://login-host:22` 上提供服务。通过应用 UI 启动服务，或在可用时使用 CLI。
 
 ### 测试
 
 ```bash
-curl -s http://127.0.0.1:8000/v1/chat/completions \
+curl -s http://login-host:22/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "Qwen3.5-9B-mlx-lm-mxfp4",
@@ -169,7 +169,7 @@ curl -s http://127.0.0.1:8000/v1/chat/completions \
 omlx 可同时提供多个模型的服务：
 
 ```bash
-curl -s http://127.0.0.1:8000/v1/models | jq '.data[].id'
+curl -s http://login-host:22/v1/models | jq '.data[].id'
 ```
 
 ---

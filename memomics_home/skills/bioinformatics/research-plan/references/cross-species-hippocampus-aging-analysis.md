@@ -73,7 +73,7 @@ D (不可替代): S_total < 0.25
 ### 已找到的人海马体衰老snRNA-seq数据集
 | GEO ID | 标题 | 供体数 | 特点 | 用途 |
 |--------|------|--------|------|------|
-| GSE278576 / GSE299139 | Epigenetic and 3D genome reprogramming during aging of human hippocampus | 40 | 全寿命周期，snRNA-seq+snATAC-seq+甲基化+3D基因组，多组学 | **主验证集** |
+| GSE000000 / GSE299139 | Epigenetic and 3D genome reprogramming during aging of human hippocampus | 40 | 全寿命周期，snRNA-seq+snATAC-seq+甲基化+3D基因组，多组学 | **主验证集** |
 | GSE268609 | Human hippocampal neurogenesis in adulthood, aging and AD | 78 | 神经发生焦点 | 补充验证 |
 | GSE199243 | Glia diversity in human hippocampus across lifespan and in AD | 13 | 胶质细胞焦点 | 补充验证 |
 | GSE185553 / GSE185277 | Human hippocampus across lifespan | 5 | 全寿命周期 | 补充验证 |

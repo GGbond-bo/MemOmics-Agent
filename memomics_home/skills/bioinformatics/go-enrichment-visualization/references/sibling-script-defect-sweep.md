@@ -11,7 +11,7 @@
 search_files "group_stripes|draw_cbar|axis\(2|xaxs" scripts/fig_*.R
 ```
 
-2026-09-25 实测（骨骼肌 MF 项目）：在 `fig_A2_5effects_v3.R` / `fig_A3_transposed_v3.R`
+2026-09-25 实测（示例组织 MF 项目）：在 `fig_A2_5effects_v3.R` / `fig_A3_transposed_v3.R`
 上修好「绘制顺序裁色块 + 标签锚底边」两坑后，一扫发现**母脚本 `scripts/fig_split_v10.R`
 两坑齐全**（L179/L272/L317 标签为底边约定；L239/L248/L290/L299 的 `draw_group_stripes()`
 调在 L184/L279/L324 的 `draw_cbar()` 之后），且**仍持旧分组 / 旧成员**（旧 5 组、18 程序、

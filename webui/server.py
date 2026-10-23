@@ -8299,7 +8299,7 @@ def _extract_and_store_requirements(session, text):
             if any(_m in _s for _m in _META_WORDS):
                 continue  # (用户纠错) 含"取消/改成/不用记"等元指令的句子是操作不是新要求
             # 2026-08-31 极端评测修复：系统命令输出/服务器命令回显不是要求
-            # （实测 "df -h /hwfssz3/… Filesystem Size Used Avail Use%" 被入库）。
+            # （实测 "df -h /cluster/… Filesystem Size Used Avail Use%" 被入库）。
             # 注意：命令必须"命令+参数"组合（df -/du /ls /cat …），
             # 裸"conda 环境在 E:/envs"是环境陈述必须放行（回归教训）。
             if re.search(r"^\s*(df\s+-|du\s+\S|ls\s+-|cat\s+\S|head\s+-|tail\s+-|free\s+-|nvidia-smi\b|pip\s+install)", _s) \
@@ -11040,10 +11040,10 @@ async def detect_local_models():
     import json as _json
     import urllib.request
     candidates = [
-        ("ollama", "http://127.0.0.1:11434/v1/models"),
-        ("lm-studio", "http://127.0.0.1:1234/v1/models"),
-        ("vllm", "http://127.0.0.1:8000/v1/models"),
-        ("llama.cpp", "http://127.0.0.1:8080/v1/models"),
+        ("ollama", "http://login-host:22/v1/models"),
+        ("lm-studio", "http://login-host:22/v1/models"),
+        ("vllm", "http://login-host:22/v1/models"),
+        ("llama.cpp", "http://login-host:22/v1/models"),
     ]
     found = []
     for name, url in candidates:
@@ -12902,7 +12902,7 @@ async def health():
 _GITHUB_REPO = "GGbond-bo/MemOmics-Agent"
 _GITHUB_API = f"https://api.github.com/repos/{_GITHUB_REPO}"
 _GITHUB_RAW = f"https://raw.githubusercontent.com/{_GITHUB_REPO}/main"
-_PROXY = "http://127.0.0.1:6478"
+_PROXY = "http://login-host:22"
 #: 检查更新这条自带功能的固定外部依赖（强制模式下需要显式自授权，见下）
 _UPDATE_HOST = "api.github.com"
 
@@ -13115,7 +13115,7 @@ def _url_opener(proxy):
        而随包 certifi 有 119 张；缺签发链时报
        "[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate"。
     2. 所谓"失败降级直连"其实没直连 —— build_opener() 会自动挂一个读系统代理的
-       ProxyHandler，而本机注册表 ProxyEnable=1 指向 127.0.0.1:6478，于是两轮尝试
+       ProxyHandler，而本机注册表 ProxyEnable=1 指向 login-host:22，于是两轮尝试
        走的是同一个代理、同一个失败原因，"双路兜底"形同虚设。
        现改为 proxy=None 时显式 ProxyHandler({})（空字典=禁用全部代理）才真正直连。
     """
@@ -13167,7 +13167,7 @@ def _net_error_hint(err) -> str:
     if "certificate" in low and ("verify failed" in low or "local issuer" in low):
         return ("TLS 证书校验失败：本机信任库缺少 GitHub 证书的签发链。"
                 "已改用 certifi 信任库并自动重试；若持续失败，请检查本机代理 "
-                "127.0.0.1:6478 是否在改写 HTTPS 流量，或到 GitHub Releases 手动下载安装包覆盖更新。"
+                "login-host:22 是否在改写 HTTPS 流量，或到 GitHub Releases 手动下载安装包覆盖更新。"
                 "原始错误：" + txt[:160])
     if "rate limit" in low or "403" in txt:
         return ("GitHub API 访问受限（匿名调用每小时 60 次配额用尽）。"
@@ -14753,50 +14753,94 @@ def _salvage_steer_text(raw) -> str:
     return "\n".join(kept).strip()
 
 
-# 2026-10-23：阶段小结缺失提醒（用户实测会话 memomics-fd497d3a：10 个中间回合 content=0、reasoning 662–3400 字 —— 模型把过程全写进思考通道，交互框里既没有小结也没有可折叠内容）。
-def _maybe_narration_nudge(session) -> bool:
-    """上一轮正文为空（内容都写进了思考/reasoning）→ 提醒把阶段小结写进正文。
-
-    经 _pending_steer 通道注入（下一轮 LLM 调用前生效）；非首轮才提醒、同一回合最多 2 次。
-    """
-    try:
-        if session is None:
-            return False
-        st = session.setdefault("_narration", {"round_chars": 0, "nudges": 0, "tools": 0})
-        _chars = st.get("round_chars", 0)
-        st["tools"] = st.get("tools", 0) + 1
-        st["round_chars"] = 0        # 新一轮开始，正文长度重新计
-        if _chars >= 25:              # 上一轮有正文 → 无需提醒
-            return False
-        if st["tools"] <= 1:         # 第一轮不给压力（模型可能直接开工）
-            return False
-        if st.get("nudges", 0) >= 2:
-            return False
-        agent = session.get("running_agent")
-        if agent is None:
-            return False
-        _steer = (
-            "【系统强制提示】上一轮正文为空——内容只写进了思考/thinking 通道，用户在交互框里看不到。\n"
-            "按回复规范：**阶段小结要写在正式回复的正文里**。\n"
-            "请在本轮调用工具之前，先用 2–4 句把这一阶段的【为什么 / 怎么做 / 结果 / 下一步】写进正文，再继续调工具。"
-        )
-        _lock = getattr(agent, "_pending_steer_lock", None)
-        if _lock is not None:
-            with _lock:
-                agent._pending_steer = (agent._pending_steer + "\n" + _steer) if agent._pending_steer else _steer
-        else:
-            _cur = getattr(agent, "_pending_steer", "") or ""
-            agent._pending_steer = (_cur + "\n" + _steer) if _cur else _steer
-        st["nudges"] = st.get("nudges", 0) + 1
-        try:
-            _session_emit(session, {"type": "info",
-                "content": "💬 上一轮正文为空（内容写进了思考）——已提醒把阶段小结写进正文，交互框不再空着。",
-                "session_id": session["id"]})
-        except Exception:
-            pass
-        return True
-    except Exception:
-        return False
+# 2026-10-23：阶段小结缺失提醒（用户实测会话 memomics-fd497d3a：10 个中间回合 content=0、reasoning 662–3400 字 —— 模型把过程全写进思考通道，交互框里既没有小结也没有可折叠内容）。
+
+def _maybe_narration_nudge(session) -> bool:
+
+    """上一轮正文为空（内容都写进了思考/reasoning）→ 提醒把阶段小结写进正文。
+
+
+
+    经 _pending_steer 通道注入（下一轮 LLM 调用前生效）；非首轮才提醒、同一回合最多 2 次。
+
+    """
+
+    try:
+
+        if session is None:
+
+            return False
+
+        st = session.setdefault("_narration", {"round_chars": 0, "nudges": 0, "tools": 0})
+
+        _chars = st.get("round_chars", 0)
+
+        st["tools"] = st.get("tools", 0) + 1
+
+        st["round_chars"] = 0        # 新一轮开始，正文长度重新计
+
+        if _chars >= 25:              # 上一轮有正文 → 无需提醒
+
+            return False
+
+        if st["tools"] <= 1:         # 第一轮不给压力（模型可能直接开工）
+
+            return False
+
+        if st.get("nudges", 0) >= 2:
+
+            return False
+
+        agent = session.get("running_agent")
+
+        if agent is None:
+
+            return False
+
+        _steer = (
+
+            "【系统强制提示】上一轮正文为空——内容只写进了思考/thinking 通道，用户在交互框里看不到。\n"
+
+            "按回复规范：**阶段小结要写在正式回复的正文里**。\n"
+
+            "请在本轮调用工具之前，先用 2–4 句把这一阶段的【为什么 / 怎么做 / 结果 / 下一步】写进正文，再继续调工具。"
+
+        )
+
+        _lock = getattr(agent, "_pending_steer_lock", None)
+
+        if _lock is not None:
+
+            with _lock:
+
+                agent._pending_steer = (agent._pending_steer + "\n" + _steer) if agent._pending_steer else _steer
+
+        else:
+
+            _cur = getattr(agent, "_pending_steer", "") or ""
+
+            agent._pending_steer = (_cur + "\n" + _steer) if _cur else _steer
+
+        st["nudges"] = st.get("nudges", 0) + 1
+
+        try:
+
+            _session_emit(session, {"type": "info",
+
+                "content": "💬 上一轮正文为空（内容写进了思考）——已提醒把阶段小结写进正文，交互框不再空着。",
+
+                "session_id": session["id"]})
+
+        except Exception:
+
+            pass
+
+        return True
+
+    except Exception:
+
+        return False
+
 
 
 def _loop_inject_steer(session, agent, reason: str, detail: str) -> bool:

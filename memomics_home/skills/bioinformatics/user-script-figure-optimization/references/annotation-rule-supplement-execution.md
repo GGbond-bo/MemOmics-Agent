@@ -3,7 +3,7 @@
 配套：`references/volcano-label-rule-audit.md`（那一份讲**审计**：为什么这个点没标）。
 本份讲**用户勾选「② 只补标该基因」之后怎么执行**，以及执行中撞到的两个 R 坑。
 
-实测背景：人骨骼肌 5 对比 × 8 MF 亚群火山图（用户 notebook 原稿样式，脚本 `42_volcano5_8sub_FINAL.R`）。
+实测背景：人示例组织 5 对比 × 8 MF 亚群火山图（用户 notebook 原稿样式，脚本 `42_volcano5_8sub_FINAL.R`）。
 用户先问「标记标准是什么 / 为什么 TMSB4X 没标」，审计完给他 A/B/C/D 勾选，**用户选 B = 只补标 TMSB4X 一处**。
 
 ---

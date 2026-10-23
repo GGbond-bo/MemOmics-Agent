@@ -1,6 +1,6 @@
 # Windows 全盘文件存在性验证（用户问"我电脑上有这个文件吗/是不是没下完"）
 
-> 2026-08-28 实测（E:/MemOmics-Agent，C/D/E/F 四盘）。适用于：大参考文件（GRCh38 fa.gz / gencode gtf.gz 等）
+> 2026-08-28 实测（<安装目录>，C/D/E/F 四盘）。适用于：大参考文件（GRCh38 fa.gz / gencode gtf.gz 等）
 > 下载前/分析前先确认用户本地是否已有完整文件，不要盲目让用户重新下载 1-2 GB 文件。
 
 ## 可靠流程（按顺序）
@@ -21,7 +21,7 @@ powershell -NoProfile -Command "Get-PSDrive -PSProvider FileSystem | ForEach-Obj
 ### 3. 区分"下载中/未完成" vs "完整文件"
 - 下载工具残留：`*.part` `*.crdownload` `*.td` `*.downloading`（找在 360Downloads / 123pan / Downloads 等）
 ```bash
-find /e/360Downloads /e/123pan /c/Users/23136/Downloads -maxdepth 2 \( -iname "*.part" -o -iname "*.crdownload" -o -iname "*.td" -o -iname "*.downloading" -o -iname "*.tmp" \) 2>/dev/null | grep -iE "gencode|GRCh38|genome|gtf|fa" | head
+find /e/360Downloads /e/123pan /c/Users/<用户>/Downloads -maxdepth 2 \( -iname "*.part" -o -iname "*.crdownload" -o -iname "*.td" -o -iname "*.downloading" -o -iname "*.tmp" \) 2>/dev/null | grep -iE "gencode|GRCh38|genome|gtf|fa" | head
 ```
 - 常见参考目录：`/e/ref* /e/refere* /e/genome* /e/gencode* /e/index* /e/data/ref* /e/reference*`
 

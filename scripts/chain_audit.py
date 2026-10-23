@@ -14,7 +14,7 @@ import os
 import sys
 import urllib.request
 
-ROOT = r"E:\MemOmics-Agent"
+ROOT = r"<安装目录>"
 os.environ.setdefault("MEMOMICS_HOME", os.path.join(ROOT, "memomics_home"))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "hermes-agent"))
@@ -117,7 +117,7 @@ except Exception as e:
     check("知识库: search_knowledge 可检索", False, e)
 
 # ── D. 会话卫生（活服务器）──
-BASE = "http://127.0.0.1:8899"
+BASE = "http://login-host:22"
 def get(p):
     return json.loads(urllib.request.urlopen(BASE + p, timeout=30).read())
 

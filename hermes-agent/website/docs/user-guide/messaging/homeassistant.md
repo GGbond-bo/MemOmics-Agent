@@ -31,7 +31,7 @@ Hermes Agent integrates with [Home Assistant](https://www.home-assistant.io/) in
 HASS_TOKEN=your-long-lived-access-token
 
 # Optional: HA URL (default: http://homeassistant.local:8123)
-HASS_URL=http://192.168.1.100:8123
+HASS_URL=http://login-host:22
 ```
 
 :::info

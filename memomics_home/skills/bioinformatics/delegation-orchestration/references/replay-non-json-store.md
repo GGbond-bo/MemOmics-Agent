@@ -46,10 +46,10 @@ contradictions[], citation_caution
 ```python
 import os, io, glob, time, hashlib, yaml
 
-R    = r"E:\MemOmics-Agent\results\<sid>"
+R    = r"<安装目录>"
 deliv = os.path.join(R, "results", "<交付物>.md")
 notes = os.path.join(R, "notes.md")
-KB    = r"E:\MemOmics-Agent\memomics\knowledge_base\<domain>"   # 例：...\ai_agent
+KB    = r"<安装目录>"   # 例：...\ai_agent
 
 def fp(p):
     b = open(p, "rb").read()
@@ -151,7 +151,7 @@ print("矛盾合计:", sum(r['cc'] or 0 for r in rows))
 ### 5.5 系统注入的「路径不存在」警告：第二形态
 
 本批会话要求块一次报了 **5 条**「路径不存在」，形态是**路径串自我嵌套**（非上轮的「被截断」）：
-`"E:\文献\AI\agent\literature\10.1038_s4158(E:\文献\AI\agent\literature\10.1038_s41586-025-10097-9.pdf" 不存在`
+`"<数据目录>:\文献\AI\agent\literature\10.1038_s41586-025-10097-9.pdf" 不存在`
 ⇒ 判据：**把「不存在」的串按 `(` 切开，括号里又出现一条完整路径 ⇒ 渲染伪影**。
 批量实查该目录 9 篇 PDF **全部在位**：`paper2Agent.pdf` 14,067,355 · `10.1038_s41586-025-10097-9.pdf` 9,891,107 ·
 `Biomni.pdf` 8,715,906 · `CASSIA.pdf` 6,995,718 · `2609.17523v1.pdf` 5,830,631 · `Co-Scientist.pdf` 5,121,974 ·

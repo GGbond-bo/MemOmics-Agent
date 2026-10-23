@@ -27,7 +27,7 @@ The SimpleX Chat project does not publish a prebuilt Docker image for the chat c
 simplex-chat -p 5225
 ```
 
-The daemon listens on WebSocket at `ws://127.0.0.1:5225` by default.
+The daemon listens on WebSocket at `ws://login-host:22` by default.
 
 ## Configure Hermes
 
@@ -44,7 +44,7 @@ Select **SimpleX Chat** and follow the prompts.
 Add these to `~/.hermes/.env`:
 
 ```
-SIMPLEX_WS_URL=ws://127.0.0.1:5225
+SIMPLEX_WS_URL=ws://login-host:22
 SIMPLEX_ALLOWED_USERS=<contact-id-1>,<contact-id-2>
 SIMPLEX_HOME_CHANNEL=<contact-id>
 ```
@@ -122,7 +122,7 @@ hermes send simplex:<contact-id> "Done!"
 ## Privacy notes
 
 - SimpleX never reveals phone numbers or email addresses — contacts use opaque IDs
-- The connection between Hermes and the daemon is local WebSocket (`ws://127.0.0.1:5225`) — no data leaves your machine
+- The connection between Hermes and the daemon is local WebSocket (`ws://login-host:22`) — no data leaves your machine
 - Messages are end-to-end encrypted by the SimpleX protocol before reaching the daemon
 
 ## Troubleshooting

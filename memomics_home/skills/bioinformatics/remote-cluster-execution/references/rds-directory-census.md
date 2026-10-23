@@ -1,7 +1,7 @@
 # 集群 rds 目录普查（铁规 12.1 / 12.2 的实测底稿）
 
-2026-10-18 实测：`/hwfssz3/PS_JLU/liuyuxuan3/Muscle/`（他人目录，`liuyuxuan3`）。
-用户口述：「骨骼肌 snRNA、60 万细胞、**23 个注释**、不是 ATAC」→ 要确认哪个文件是它。
+2026-10-18 实测：`/cluster/share/liuyuxuan3/Muscle/`（他人目录，`liuyuxuan3`）。
+用户口述：「示例组织 snRNA、60 万细胞、**23 个注释**、不是 ATAC」→ 要确认哪个文件是它。
 
 ## 1. 为什么不能逐个读
 
@@ -13,12 +13,12 @@
 
 ```bash
 # 本机
-remote_cluster push  local=<results/<sid>/scripts/census_rds_meta.R>  remote=/hwfssz3/PS_JLU/zhangbo/census_rds_meta.R
-remote_cluster submit command="Rscript --vanilla census_rds_meta.R /hwfssz3/PS_JLU/liuyuxuan3/Muscle 0326 Merge > census.log 2>&1" \
-                      cwd=/hwfssz3/PS_JLU/zhangbo job_name=census_rds_meta
+remote_cluster push  local=<results/<sid>/scripts/census_rds_meta.R>  remote=/cluster/share/user/census_rds_meta.R
+remote_cluster submit command="Rscript --vanilla census_rds_meta.R /cluster/share/liuyuxuan3/Muscle 0326 Merge > census.log 2>&1" \
+                      cwd=/cluster/share/user job_name=census_rds_meta
 # 完成核对（一次拿全，别每轮重复）
-remote_cluster run "tail -c 1500 /hwfssz3/PS_JLU/zhangbo/census.log; grep -n 'n=2[0-9]' /hwfssz3/PS_JLU/zhangbo/census.log | head -40"
-remote_cluster pull remote=/hwfssz3/PS_JLU/zhangbo/census.log local=<results/<sid>/results/>
+remote_cluster run "tail -c 1500 /cluster/share/user/census.log; grep -n 'n=2[0-9]' /cluster/share/user/census.log | head -40"
+remote_cluster pull remote=/cluster/share/user/census.log local=<results/<sid>/results/>
 ```
 
 - 56 KB 日志整份读进上下文很浪费 → **pull 回本机后 `execute_code` 解析**：按 `########` 切块，

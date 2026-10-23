@@ -762,7 +762,7 @@ Cron jobs run in a completely fresh agent session. The prompt must contain every
 
 **BAD:** `"Check on that server issue"`
 
-**GOOD:** `"SSH into server 192.168.1.100 as user 'deploy', check if nginx is running with 'systemctl status nginx', and verify https://example.com returns HTTP 200."`
+**GOOD:** `"SSH into server 10.0.0.1 as user 'deploy', check if nginx is running with 'systemctl status nginx', and verify https://example.com returns HTTP 200."`
 
 ## Security
 

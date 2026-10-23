@@ -1,6 +1,6 @@
 # SCENIC 产出 → R 样本级统计：五个静默坑
 
-> 2026-09-24 实测（人骨骼肌 2132 nuclei / 48 样本）。上游 `grn-pyscenic` 为**手工撰写 skill、curation 不可写**，
+> 2026-09-24 实测（人示例组织 2132 nuclei / 48 样本）。上游 `grn-pyscenic` 为**手工撰写 skill、curation 不可写**，
 > 故把这些下游坑记在此处（跑完 SCENIC 进 R 做统计/出图时先扫一眼）。
 
 ---

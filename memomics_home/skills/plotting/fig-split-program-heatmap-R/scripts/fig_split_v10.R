@@ -9,10 +9,10 @@
 #   输出 png/pdf/svg/tiff @300dpi（用户偏好：300dpi + SVG）
 # ============================================================
 
-OUT      <- "E:/MemOmics-Agent/results/memomics-2274ab75/figures/R_version"   # 独立目录，避免覆盖 Python 版
-META_CSV <- "E:/骨骼肌锻炼/MF_AUCell_meta.csv"
-EFF_CSV  <- "E:/MemOmics-Agent/results/memomics-2274ab75/effect5_d_v2.csv"
-DUMP_DIR <- "E:/MemOmics-Agent/results/memomics-2274ab75/results"   # 口径校验导出；NULL = 不导出
+OUT      <- "<安装目录>"   # 独立目录，避免覆盖 Python 版
+META_CSV <- "<数据目录>"
+EFF_CSV  <- "<安装目录>"
+DUMP_DIR <- "<安装目录>"   # 口径校验导出；NULL = 不导出
 dir.create(OUT, showWarnings = FALSE, recursive = TRUE)
 
 SUBS   <- c("LRP1B+(I)", "OTUD1+(I)", "OTUD1+(II)", "Pure Type I", "Pure Type IIA",

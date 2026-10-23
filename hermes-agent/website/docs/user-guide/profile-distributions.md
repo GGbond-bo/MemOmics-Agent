@@ -501,7 +501,7 @@ env_requires:
   - name: GRAPHITI_MCP_URL
     description: "URL for your Graphiti knowledge graph instance"
     required: false
-    default: "http://127.0.0.1:8000/sse"
+    default: "http://login-host:22/sse"
 ```
 
 Your customers install via a single command; the install preview tells them exactly which keys to have ready; updates roll out the moment you tag a new release; their compliance data (`memories/`, `sessions/`) never leaves their machine.

@@ -32,7 +32,7 @@ ENDPOINT = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
 
 # key 来源：项目内 image_gen_config.json（平台自带，与图像生成共用）→ env 兜底
 KEY_CANDIDATES = [
-    r"E:/MemOmics-Agent/memomics_home/image_gen_config.json",
+    r"<安装目录>",
     os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                  "memomics_home", "image_gen_config.json"),
 ]

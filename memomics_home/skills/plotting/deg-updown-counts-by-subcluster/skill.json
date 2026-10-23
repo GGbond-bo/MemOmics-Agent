@@ -4,7 +4,7 @@
   "category": "user-skill",
   "language": "Python",
   "source": "user-requested",
-  "description": "骨骼肌 DEG 各比较组 × 亚群的上调/下调基因数量柱状图（matplotlib 五联面板）：下调蓝在左、上调红在右，每柱标注自身基因数，五面板共享 symlog(linthresh=1) 统一 x 轴 + 十倍阶梯刻度，柱端进入最外侧 20% 自动改柱内白字防重合；导出 png@400/pdf/svg/tiff@600",
+  "description": "示例组织 DEG 各比较组 × 亚群的上调/下调基因数量柱状图（matplotlib 五联面板）：下调蓝在左、上调红在右，每柱标注自身基因数，五面板共享 symlog(linthresh=1) 统一 x 轴 + 十倍阶梯刻度，柱端进入最外侧 20% 自动改柱内白字防重合；导出 png@400/pdf/svg/tiff@600",
   "when_to_use": "已有算好的「比较组 × 亚群 × 方向」基因计数矩阵，要出各亚群上下调基因数量对比柱状图（如 5 个比较组并排展示）",
   "parameters": {
     "OUT": "输出目录（task2/figures）",

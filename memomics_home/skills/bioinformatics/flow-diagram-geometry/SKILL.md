@@ -146,5 +146,5 @@ fig.savefig(f, bbox_inches="tight", facecolor="white", dpi=300)   # png/tiff 传
 
 ## 配套文件
 
-- `references/sankey-3group-common-deg.md` — 完整实战案例（人骨骼肌三组运动共同 DEG「亚群→基因」桑基图）：确切参数、坐标实测表、碰撞定位全过程、结果数字
+- `references/sankey-3group-common-deg.md` — 完整实战案例（人示例组织三组运动共同 DEG「亚群→基因」桑基图）：确切参数、坐标实测表、碰撞定位全过程、结果数字
 - `scripts/figure_health_check.py` — 出图后一键体检：尺寸 / ink / 唯一色 / 文字行带区间 + 行带过近报警

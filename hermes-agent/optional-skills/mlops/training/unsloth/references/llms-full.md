@@ -7740,7 +7740,7 @@ Then use OpenAI's Python library after `pip install openai` :
 from openai import OpenAI
 import json
 openai_client = OpenAI(
-    base_url = "http://127.0.0.1:8001/v1",
+    base_url = "http://login-host:22/v1",
     api_key = "sk-no-key-required",
 )
 completion = openai_client.chat.completions.create(
@@ -8230,7 +8230,7 @@ Then use OpenAI's Python library after `pip install openai` :
 from openai import OpenAI
 import json
 openai_client = OpenAI(
-    base_url = "http://127.0.0.1:8001/v1",
+    base_url = "http://login-host:22/v1",
     api_key = "sk-no-key-required",
 )
 completion = openai_client.chat.completions.create(

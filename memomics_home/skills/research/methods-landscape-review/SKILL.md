@@ -71,6 +71,6 @@ Markdown 报告（必要时 HTML）：一句话结论 → 核心对比表 → �
 - `references/seurat-vs-scanpy-integration.md` — Seurat vs Scanpy 单细胞整合流程对比知识库（已核实的 13 篇文献 PMID/DOI、benchmark 结论、官方文档原文要点、2026-08 调研产出）
 - `references/cell-level-vs-pseudobulk-deg.md` — **单细胞 DEG 方法学 landscape**：核实的 22 篇 PMID/DOI
   （MAST / NEBULA / muscat / dreamlet / limma / propeller / camera / Squair 2021 / Lee & Han 2024 /
-  Gilis 2025 等 + 人骨骼肌运动×衰老×T2D 应用锚点）、**四条合法途径对照表**、
+  Gilis 2025 等 + 人示例组织运动×衰老×T2D 应用锚点）、**四条合法途径对照表**、
   猴脑图谱 Cell 2026 的细胞级 RUV-MAST 实证做法（含"它的 |log2FC|>0.25 判据不能搬到 pseudobulk"这一坑）、
   以及选型后的必做验证入口

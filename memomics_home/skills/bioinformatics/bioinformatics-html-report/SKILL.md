@@ -194,7 +194,7 @@ rb.add_param_source(
             "value": "0.5",              # 参数值
             "source": "debate",         # 来源: knowledge_base/literature/debate/skill/default
             "citation": "辩论第2轮裁决",  # 引用来源
-            "note": "细胞数3万,骨骼肌",    # 备注
+            "note": "细胞数3万,示例组织",    # 备注
         },
     ],
 )

@@ -1,7 +1,7 @@
 # Multi-Group × Subtype Deep Analysis Playbook
 
 > 当用户有 ≥4 组复杂比较 + 细胞亚型分解时使用此模板
-> 来源: 2026-07-14 会话 — 人类骨骼肌 6 组 (Young/Old/T2D × Pre/Post) × 肌纤维亚型 (Type I/IIA/IIX) 深度分析
+> 来源: 2026-07-14 会话 — 人类示例组织 6 组 (Young/Old/T2D × Pre/Post) × 肌纤维亚型 (Type I/IIA/IIX) 深度分析
 
 ## 核心诊断框架
 

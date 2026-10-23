@@ -164,7 +164,7 @@ Python 侧与 R 侧都把最终绘图矩阵写成 CSV（R 侧用脚本尾部 `DU
 
 ## 6. 完整实测模板
 
-`E:/MemOmics-Agent/results/memomics-2274ab75/scripts/fig_split_v10.R`（363 行，6 图 × 4 格式）
+`<安装目录> 行，6 图 × 4 格式）
 与 Python 原版 `fig_split_v10.py`（300 行）逐项对应，是本类任务的完整可抄模板：
 §2.2 边距 → `maiA`/`maiS`/`maiB` 三组常量；§2.6 色标 → `draw_cbar()`；
 §2.4/2.5 取色 → `LUT256` + `cmap_fn()`；§3 陷阱 → 头部 `#` 注释 + 零第三方依赖；

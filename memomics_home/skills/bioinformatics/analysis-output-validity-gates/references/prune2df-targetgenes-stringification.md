@@ -1,6 +1,6 @@
 # 案例：pySCENIC 静默产出无效 —— TargetGenes 字符串化 → regulon 变字符 → AUCell 全 0
 
-（2026-09-24 真机定位；人骨骼肌 snRNA-seq，2132 nuclei × 5277 模块 → 264 regulons）
+（2026-09-24 真机定位；人示例组织 snRNA-seq，2132 nuclei × 5277 模块 → 264 regulons）
 
 ## 症状（不报错、文件齐全、内容是垃圾）
 - 全流程 `exit 0`，日志正常：`264 regulons identified / 2132 cells scored / ✓ AUCell scoring completed`

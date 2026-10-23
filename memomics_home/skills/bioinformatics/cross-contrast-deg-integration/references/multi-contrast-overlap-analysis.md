@@ -190,7 +190,7 @@ for (x, y, txt) in [(-.9, .95, f'shared down {n1}'), (.9, .95, f'REVERSED {n2}')
 | Yang & Li 2026 Genes [PMID:42510843] | 老年配对活检；配对 DEG + GO/KEGG/GSEA，三种运动模式对比 | 不同干预模式分子响应不同；配对设计控个体差异 | **"交集 → 富集"这套顺序的方法模板** |
 | Voisin 2024 Aging Cell [PMID:37128843] | 甲基化组 + 转录组，运动者 vs 非运动者 | 长期运动者肌肉更"年轻"；部分年龄改变被干预抵消 | 逆转方向的外部预期 |
 | Barberio 2021 Front Endocrinol [PMID:34690929] | 术后肌肉基因表达按疾病状态分层 | **疾病状态会改变肌肉对干预的转录组反应** | 支撑"逆转疾病"这条线存在生物学前提 |
-| Scott 2016 Nat Commun [PMID:27353450] | 人骨骼肌 T2D 遗传调控图谱 | T2D 在肌肉有可重复的调控特征 | **疾病对比的参照真值集**（判新方法检出是真信号还是假阳性） |
+| Scott 2016 Nat Commun [PMID:27353450] | 人示例组织 T2D 遗传调控图谱 | T2D 在肌肉有可重复的调控特征 | **疾病对比的参照真值集**（判新方法检出是真信号还是假阳性） |
 | Crowell 2020 Nat Commun [PMID:33257685] | muscat：多条件多供体 pseudobulk 框架 | 原文写明 *"relying on thresholds alone is prone to bias"* | **直接支撑：不能拿阈值交集当结论** |
 | Wu 2025 Innovation in Aging DOI:10.1093/geroni/igaf122.235 | snRNA-seq，老年 vs 年轻男性 | 亚群比例与代谢/钙信号通路改变 | 亚群层面的文献预期值 |
 | Pino 2019 Physiol Genomics [PMID:31588872] | 疾病 + 耐力训练，肌肉磷脂组 + 线粒体呼吸 | 训练重塑疾病肌肉线粒体 | 干预+疾病线的机制落点 |

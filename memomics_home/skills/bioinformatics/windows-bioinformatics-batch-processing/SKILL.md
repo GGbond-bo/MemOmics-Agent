@@ -92,9 +92,9 @@ tasklist //FI "IMAGENAME eq Rscript.exe" //FO CSV 2>/dev/null | head -20
 ```
 Python `subprocess.run(["tasklist", "/FI", ...])` 不受影响（列表参数不经过 MSYS 转换）。skill 中所有 bash 一行的 tasklist 示例均按此双斜杠写法执行。
 
-**⚠️⚠️ `//FI` 过滤也可能静默返回空 — 禁止把空输出当"无进程"证据（2026-08-07 唤醒 #2 实测）**：GSE278576 ArchR 批处理中，6 个 Rscript.exe 在跑（3 个 1.3-1.8GB 活跃 + 3 个轻量），但 `tasklist //FI "IMAGENAME eq Rscript.exe" 2>/dev/null | head -20` 返回**空**、`grep -c` 返回 0 → 一度误判"进程已死"。实际进程健在。**判定铁律：`//FI` 过滤为空时，禁止直接下"没有进程"结论——必须先用裸 `tasklist | grep -iE "<name>"` 交叉验证**。若裸 grep 也空，再结合日志 mtime + 磁盘产出做四条件间接判定（铁规 0）。伪阴性（有进程却报无）比伪阳性（无进程却报有）更危险——它直接触发用户最愤怒的"凭什么说没在跑"模式。
+**⚠️⚠️ `//FI` 过滤也可能静默返回空 — 禁止把空输出当"无进程"证据（2026-08-07 唤醒 #2 实测）**：GSE000000 ArchR 批处理中，6 个 Rscript.exe 在跑（3 个 1.3-1.8GB 活跃 + 3 个轻量），但 `tasklist //FI "IMAGENAME eq Rscript.exe" 2>/dev/null | head -20` 返回**空**、`grep -c` 返回 0 → 一度误判"进程已死"。实际进程健在。**判定铁律：`//FI` 过滤为空时，禁止直接下"没有进程"结论——必须先用裸 `tasklist | grep -iE "<name>"` 交叉验证**。若裸 grep 也空，再结合日志 mtime + 磁盘产出做四条件间接判定（铁规 0）。伪阴性（有进程却报无）比伪阳性（无进程却报有）更危险——它直接触发用户最愤怒的"凭什么说没在跑"模式。
 
-**⚠️⚠️⚠️ `//FI` 也会响亮失败 + `2>/dev/null` 把报错吞成"空"（2026-08-07 唤醒 #3 复实证）**：同一 GSE278576 批处理，`tasklist //FI "IMAGENAME eq Rscript.exe" 2>/dev/null | tail -5` 返回空（一度疑"无 Rscript"），去掉 `2>/dev/null` 后 `tasklist //FI ... 2>&1` 露出真面目：`无效参数/选项 - '//FI'`——**MSYS 双斜杠写法在部分终端上下文仍被拒绝，且 stderr 重定向把响亮错误伪装成静默空输出**。**判定铁律升级：① 查进程时禁止 `2>/dev/null` 吞 stderr——先 `2>&1` 看是否有"无效参数"类真实报错，报错=探测失效≠无进程；② 任何 tasklist 开关写法（//FI //FO）在本环境都不保证可靠，唯一兜底 = 裸 `tasklist | iconv -f GBK -t UTF-8 | grep -iE "<name>"`；③ 进程存活的最终裁决 = 大内存 worker 进程 + 最新样本日志 mtime 增长（hc5579.log "Reading TabixFile 17%" 01:55 仍在写 = 活着），不要被 tasklist 探测失败带偏。**
+**⚠️⚠️⚠️ `//FI` 也会响亮失败 + `2>/dev/null` 把报错吞成"空"（2026-08-07 唤醒 #3 复实证）**：同一 GSE000000 批处理，`tasklist //FI "IMAGENAME eq Rscript.exe" 2>/dev/null | tail -5` 返回空（一度疑"无 Rscript"），去掉 `2>/dev/null` 后 `tasklist //FI ... 2>&1` 露出真面目：`无效参数/选项 - '//FI'`——**MSYS 双斜杠写法在部分终端上下文仍被拒绝，且 stderr 重定向把响亮错误伪装成静默空输出**。**判定铁律升级：① 查进程时禁止 `2>/dev/null` 吞 stderr——先 `2>&1` 看是否有"无效参数"类真实报错，报错=探测失效≠无进程；② 任何 tasklist 开关写法（//FI //FO）在本环境都不保证可靠，唯一兜底 = 裸 `tasklist | iconv -f GBK -t UTF-8 | grep -iE "<name>"`；③ 进程存活的最终裁决 = 大内存 worker 进程 + 最新样本日志 mtime 增长（hc5579.log "Reading TabixFile 17%" 01:55 仍在写 = 活着），不要被 tasklist 探测失败带偏。**
 
 **⚠️⚠️⚠️ 开关失败是全局的（//FI //FO 都空），可靠探测 = 裸 `tasklist | iconv | grep`（2026-08-07 唤醒 #2 二次实证）**：同一唤醒里 `//FI` 空之后，`tasklist //FO CSV` 也返回空、PowerShell `Get-Process | Where Name -match` 也返回空——三个方法全空才误判"死亡"。但裸 `tasklist 2>/dev/null | iconv -f GBK -t UTF-8 | grep -iE "Rscript|cmd\.exe|bash"` 一次性找到了 Rscript.exe + cmd + bash 全进程树（进程其实一直健在）。**判定铁律升级：① 任何带开关的 tasklist（//FI //FO //IM 等）在 git-bash 都可能静默失败 → 交叉验证一律用无开关裸 tasklist + `iconv -f GBK -t UTF-8` 转码 + grep；② PowerShell 进程查询（Get-Process / Get-CimInstance CommandLine）在本环境同样可能静默返回空，空结果不可作为"无进程"证据；③ 三源全空才判死，且汇报必须说明"哪几个方法查了都空"（如 //FI 空 + //FO 空 + PS 空 + 日志冻结）而不是笼统说"没进程"。**
 
@@ -109,7 +109,7 @@ ps -W 2>/dev/null | grep -iE "Rscript|python|ArchR" | grep -viE "NvContainer|cra
 **✅ PowerShell 内联可用 — 关键在 `\$` 转义（2026-08-07 memomics-1135ed52 唤醒 #2 实证）**：git-bash 双引号里 `powershell -Command "Get-Process | Where-Object {\$_.ProcessName -match 'Rscript|bash|sh'} | Select-Object ProcessName,Id,StartTime | Format-Table -AutoSize"` 一把成功，输出含 PID + 启动时间（Rscript.exe 38964 launcher 7.9MB + 64316 worker 1.86GB + bash 进程树）——worker 启动时间与样本日志 START 行交叉 = 铁证级活体。此前多次"PowerShell 内联崩掉"的根因是 **bash 双引号内未转义 `$_`**（被 bash 展开成上一条命令的最后一个参数 → 语法崩）。**规则：bash 双引号内 PowerShell 变量一律 `\$` 转义（`\$_.ProcessName` 而非 `$_`）；`-match 'A|B|C'` 联合进程名查询可用；Select ProcessName,Id,StartTime 三列足以做日志交叉验证；只有需要 CommandLine 深度细节时才退回 .ps1 CIM。** 与 `ps -W`/`ps -ef` 同为第一兜底级，优先于 tasklist 开关。
 > **✅ 零转义替代 = 单引号整段包裹 `-Command`（2026-08-07 memomics-1135ed52 唤醒 #4 实测）**：`powershell -Command 'Get-Process | Where-Object {$_.ProcessName -match "Rscript|bash|sh"} | Select-Object Id,ProcessName,CPU,StartTime | Format-Table -AutoSize'` 一把成功——bash 单引号内 `$_` 原样传给 PowerShell，**无需 `\\$` 转义**。⚠️ PowerShell 内部字符串改用双引号（`-match "..."`），避免单引号冲突。**双引号外+`\\$` 内转义 vs 单引号外+内双引号，两种都可行；单引号整段更省心（零转义失败点），推荐优先。** 唤醒 #4 首试用了双引号+裸 `$_`（被 bash 展开成 `/e/MemOmics-Agent.ProcessName` → cmdlet 找不到）——裸 `$_` 是唯一必崩写法。
 
-**✅ 普通 `ps -ef`（不带 -W）也列出 Windows 进程 + PID + 启动时间 + 完整路径 — 比 `ps -W` 更直接的活体证据（2026-08-07 memomics-1135ed52 唤醒 #15 实测）**：本唤醒 `tasklist //FI "IMAGENAME eq cmd.exe"` 又返回空（cmd.exe 实际健在），但 `ps -ef | grep -iE "Rscript|cmd"` 一次命中：`23136 8485 4723 ? 03:09:52 C:\WINDOWS\system32\cmd.exe /c E:\...\run_GSM8549621_hc5614.bat`——**PID + 启动时间 03:09:52 ↔ 样本日志 START 03:09:59 秒级吻合 = 铁证级活体**，零转义、零 PowerShell、零 iconv，还比 `ps -W` 多给启动时间（可直接对照样本日志 START 行）。**进程树三层（bash 调度 / cmd 包装 / Rscript worker）用普通 `ps -ef | grep -iE "bash|cmd|Rscript"` 一目了然，无需 CIM 联合查询。判定优先级：`ps -ef | grep 进程名` 与 `ps -W | grep 进程名` 同级第一兜底（前者给启动时间、后者给 Windows 路径），均优于 PowerShell。**
+**✅ 普通 `ps -ef`（不带 -W）也列出 Windows 进程 + PID + 启动时间 + 完整路径 — 比 `ps -W` 更直接的活体证据（2026-08-07 memomics-1135ed52 唤醒 #15 实测）**：本唤醒 `tasklist //FI "IMAGENAME eq cmd.exe"` 又返回空（cmd.exe 实际健在），但 `ps -ef | grep -iE "Rscript|cmd"` 一次命中：`<用户> 8485 4723 ? 03:09:52 C:\WINDOWS\system32\cmd.exe /c E:\...\run_GSM8549621_hc5614.bat`——**PID + 启动时间 03:09:52 ↔ 样本日志 START 03:09:59 秒级吻合 = 铁证级活体**，零转义、零 PowerShell、零 iconv，还比 `ps -W` 多给启动时间（可直接对照样本日志 START 行）。**进程树三层（bash 调度 / cmd 包装 / Rscript worker）用普通 `ps -ef | grep -iE "bash|cmd|Rscript"` 一目了然，无需 CIM 联合查询。判定优先级：`ps -ef | grep 进程名` 与 `ps -W | grep 进程名` 同级第一兜底（前者给启动时间、后者给 Windows 路径），均优于 PowerShell。**
 
 **✅ 最优简模式 = 精确进程名子串 `grep "Rscript"`（2026-08-07 唤醒 #13 实证，推荐优先）**：本轮用 `grep -c "Rscript"` 一次返回 2（launcher 7.7MB + worker 2GB），`grep "Rscript"` 两行精确输出 PID+内存，零噪音零转码（无需 iconv）。原理：`Rscript` 是**完整进程名 token**，没有任何噪音进程包含该子串；而 `R\.exe` 失败是因为 `r.exe` 是**通用后缀**，被子串匹配进 Container.exe/crashpad_handler.exe 等。**判定：进程名本身是唯一 token（Rscript/python/cellbender）→ 直接 `grep "进程名"`（大小写敏感、不带 .exe 也匹配到 .exe）最干净；只有通用名（如 bash/cmd）才需要 `grep -iE "^bash"` 锚定或 `grep -v` 排除噪音。**
 
@@ -126,7 +126,7 @@ ps -W 2>/dev/null | grep -iE "Rscript|python|ArchR" | grep -viE "NvContainer|cra
 **⚠️⚠️⚠️⚠️ 宽泛 grep 模式 + `head -N` 截断 = 伪阴性陷阱（2026-08-07 memomics-1135ed52 唤醒 #17 实测）**：首轮探测用 `tasklist | grep -iE "R\.exe|Rterm|Rscript|archr|cmd\.exe" | head -20`——grep 模式**确实包含** Rscript，但 tasklist 输出按名称/会话排序，`R\.exe` 后缀命中的一堆噪音（NVDisplay.Container.exe、crashpad_handler.exe、qmlauncher.exe 等）先占满前 20 行，`head -20` 把 Rscript 行**截出视野** → 一度疑"无 Rscript 进程"。实际 Rscript.exe PID 64624（1.37GB worker）健在。**陷阱本质：宽泛模式 + head 截断的组合 = 目标行被噪音顶出窗口，不是"进程不存在"。判定铁律：① 唯一 token 进程名（Rscript/python/cellbender）永远用精确 `grep "进程名"`，不要混进 `R\.exe` 类后缀模式再 head 截断；② 宽泛模式探测时**不要加 `head -N`**（或用 `grep -m` 只取首个匹配），宁可全量输出后人工扫；③ 唯一可靠兜底 = `tasklist | findstr /i "Rscript"`（Windows 原生 findstr 直连管道，零转义零转换，本唤醒实测一把命中，无需 cmd //c 包装）。**
 > 🔴 **变体：grep 模式含 `python` + head 截断 = 平台服务填满窗口，Rscript 被顶出（2026-08-07 memomics-1135ed52 唤醒 #15 实测）**：首轮探测 `tasklist | grep -i -E "Rscript|python|archr|cellbender" | head -20` 返回**全是 python.exe**（~20 个平台 webui/框架常驻服务，铁规 0 平台服务条目）——`python` 模式把平台服务全收进来填满 head -20 窗口，**Rscript 行在窗口之外被截掉** → 一度疑"无 Rscript 进程"；实际 Rscript 63748 (hc35) 健在（随后 `Get-CimInstance Win32_Process | Where-Object {\$_.Name -match 'Rscript|bash|...'}` 一把命中全进程树 + CommandLine 精确显示 `create_arrow_qc.R GSM8549653_hc35`）。**陷阱本质与 #17 相同（宽泛模式 + head 截断 = 目标行被噪音顶出窗口），但噪音来源不同：#17 是 `R\.exe` 后缀命中系统进程；本变体是 `python` 模式命中平台常驻服务（本机恒有 20+ 个 python.exe）**。判定口诀：① 探测模式里**不要包含 `python`**——它是平台服务高频噪音，直接污染 head 窗口；② 唯一 token 进程名（Rscript/python/cellbender）单独精确 grep 或走 CIM；③ 需要全树时用 `Get-CimInstance` 联合查询 + CommandLine（最终裁决器），不要靠宽泛 grep + head。
 
-**⚠️⚠️⚠️⚠️ 进程生死最终裁决器 = Get-CimInstance + CommandLine（2026-08-07 memomics-1135ed52 唤醒 #4 实测）**：GSE278576 串行批处理检查时，`process(action='list')` 空（脱离式任务预期行为）+ `tasklist //FI` 空 + `Get-Process Rscript` 返回 **13 个**进程（把 bash/cmd 包装也数进去了，数量严重误导）——三项线索全指向"批处理死了"，差点误判。**改用 `Get-CimInstance Win32_Process -Filter \"Name='Rscript.exe'\" | Select ProcessId,CreationDate,CommandLine` 一锤定音**：真实只有 **2 个** Rscript worker，CommandLine 精确显示 `create_arrow_qc.R GSM8549617_hc5579` + Age 27min → 任务健康推进中，之前所有"空/多"都是探测层失真。**判定铁律（最终版）：进程生死与批处理推进状态的唯一权威证据 = CIM 查询的 CommandLine**——能看到具体跑哪个脚本、哪个样本、启动多久。Get-Process 计数（13 vs 真实 2）、tasklist 各种开关（可能静默空）、process(list)（脱离式任务恒空）都只作线索不作裁决；三者与 CIM 矛盾时以 CIM 为准。可复用脚本见 `scripts/check_procs.ps1`。
+**⚠️⚠️⚠️⚠️ 进程生死最终裁决器 = Get-CimInstance + CommandLine（2026-08-07 memomics-1135ed52 唤醒 #4 实测）**：GSE000000 串行批处理检查时，`process(action='list')` 空（脱离式任务预期行为）+ `tasklist //FI` 空 + `Get-Process Rscript` 返回 **13 个**进程（把 bash/cmd 包装也数进去了，数量严重误导）——三项线索全指向"批处理死了"，差点误判。**改用 `Get-CimInstance Win32_Process -Filter \"Name='Rscript.exe'\" | Select ProcessId,CreationDate,CommandLine` 一锤定音**：真实只有 **2 个** Rscript worker，CommandLine 精确显示 `create_arrow_qc.R GSM8549617_hc5579` + Age 27min → 任务健康推进中，之前所有"空/多"都是探测层失真。**判定铁律（最终版）：进程生死与批处理推进状态的唯一权威证据 = CIM 查询的 CommandLine**——能看到具体跑哪个脚本、哪个样本、启动多久。Get-Process 计数（13 vs 真实 2）、tasklist 各种开关（可能静默空）、process(list)（脱离式任务恒空）都只作线索不作裁决；三者与 CIM 矛盾时以 CIM 为准。可复用脚本见 `scripts/check_procs.ps1`。
 
 **✅ 单 PID 的 CommandLine 查询 = 用 `-Filter "ProcessId=N"`，完全绕开 `$_` 转义（2026-08-07 memomics-1135ed52 唤醒 #10 实测）**：当已经知道 PID（如从 `ps -ef` / `Get-Process` 拿到 bash 主循环 PID 5580）时，`Get-CimInstance Win32_Process -Filter "ProcessId=5580" | Select-Object ProcessId,CommandLine` **零 `Where-Object`、零 `$_`、零转义失败点**，一把返回该 PID 的完整命令行（本唤醒实测：`"C:\Program Files\Git\usr\bin\bash.exe" batch/run_serial_v2.sh` → 确认 5580 就是 run_serial 主循环）。**规则：查"这个 PID 在跑什么"一律用 `-Filter "ProcessId=N"` 形式；只有"按进程名/命令行模式查一组"才需要 `-Filter "Name='X'"` 或 `Where-Object`（后者在 bash 双引号里必须 `\$` 转义或整段单引号包裹）。** 这是 CIM 三形式里最省心的：ProcessId= / Name='x' / Where-Object，按需选，转义风险递增。
 
@@ -137,7 +137,7 @@ ps -W 2>/dev/null | grep -iE "Rscript|python|ArchR" | grep -viE "NvContainer|cra
 ### ⚠️ python.exe ≠ 分析在跑 — 平台常驻服务区分（2026-08-03 唤醒 #21 实证）
 
 三连击查 tasklist 时，**看到 python.exe 不代表分析在跑**。MemOmics 平台自身以 python.exe 常驻：
-- `E:\MemOmics-Agent\.venv\Scripts\python.exe webui\server.py`（webui 服务）
+- `<安装目录> webui\server.py`（webui 服务）
 - 其它 MemOmics 框架运行时进程（`webui\..\cellbender` 等服务）
 
 **判定方法**：查 CommandLine 区分平台服务 vs 分析任务：
@@ -156,7 +156,7 @@ powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='py
 powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.Name -match 'bash|cmd|Rscript' } | Select-Object ProcessId,Name,CommandLine | Format-List" 2>/dev/null
 ```
 
-**批处理三层结构识别**（GSE278576 实测）：
+**批处理三层结构识别**（GSE000000 实测）：
 1. **调度器层**：`bash.exe -lic "set +m; bash run_batch.sh 3"`（bash → bash → bash 多层包装是 MSYS 嵌套启动的正常现象，不是僵尸）
 2. **cmd 包装层**：`cmd.exe /c .../run_GSMxxxx.bat`（R 必须走 cmd.exe /c 铁规 16）
 3. **worker 层**：`Rscript.exe ... create_arrow_qc.R <sample>` — **判断"是否还在跑"以 worker 层为准**（大内存 1.3-1.8GB 活跃 Rscript + 日志 mtime 增长 = 在跑；只剩轻量 Rscript 几 MB = 已挂）
@@ -221,8 +221,8 @@ PID   RAM        推测
 > - ⛔ `todos: none` + task_plan 终态 → 禁止因唤醒 prompt 里"继续执行下一个待办"字面化而自行发明工作；正确动作 = 读 task_plan + cron 检查（同批）+ 汇报 + 列选项
 
 1. **核对 session ID** — `search_files(results, task_plan.md)` 可能返回多个 task_plan。只读**当前 session 目录**（`results/{session_dir}/`）下的那份。其他 session 的 task_plan 是参考不是指令（跨 session 污染铁律）。
-   - **✅ 最快定位当前活跃任务 = `results/` 按 mtime 排序（2026-08-07 唤醒 #12 实证）**：根目录 `task_plan.md` 是 8 天前（7/30）的 Monkey CellBender 旧任务，但 `ls -lat results/ | head -15` 一眼看出最新修改的 session 目录 = `memomics-1135ed52`（8/7 20:31）→ 读该目录下的 `task_plan.md` 即当前主线（人海马 GSE278576 40 样本 ArchR QC）。**比对照 system_log.jsonl 快得多**——活跃任务必然有频繁写入的 session 目录（task_plan.md 每次唤醒都 patch），mtime 最新即活跃；多个候选时再叠加\"哪个目录有 run_serial/watchdog 脚本 + 活跃日志\"二次确认。判定顺序：`ls -lat results/` 找最新 session → 读其 task_plan 核对 Goal 与当前会话一致 → 不一致才回退 system_log.jsonl 深挖。
-   - **⚠️ 根目录 task_plan 可能是其他 session 残留（2026-08-03 唤醒 #7 实证）**：`E:/MemOmics-Agent/task_plan.md`（根目录）描述的是 Monkey CellBender 批处理任务，但当前 session（memomics-2f229850）的真实主线是 hdWGCNA/F2 分析。**判定方法**：① `search_files(results, task_plan*.md)` 列出所有 task_plan；② 对照当前 session 目录（system_log.jsonl 位置 + 产出文件）确定真正归属；③ session 的任务可能记录在 `task_plan_CLOSED.md.bak`（用户"停止，不需要task_plan了"后归档改名）——读到 CLOSED 标记 = 主线已结束，只汇报不续跑。
+   - **✅ 最快定位当前活跃任务 = `results/` 按 mtime 排序（2026-08-07 唤醒 #12 实证）**：根目录 `task_plan.md` 是 8 天前（7/30）的 Monkey CellBender 旧任务，但 `ls -lat results/ | head -15` 一眼看出最新修改的 session 目录 = `memomics-1135ed52`（8/7 20:31）→ 读该目录下的 `task_plan.md` 即当前主线（人海马 GSE000000 40 样本 ArchR QC）。**比对照 system_log.jsonl 快得多**——活跃任务必然有频繁写入的 session 目录（task_plan.md 每次唤醒都 patch），mtime 最新即活跃；多个候选时再叠加\"哪个目录有 run_serial/watchdog 脚本 + 活跃日志\"二次确认。判定顺序：`ls -lat results/` 找最新 session → 读其 task_plan 核对 Goal 与当前会话一致 → 不一致才回退 system_log.jsonl 深挖。
+   - **⚠️ 根目录 task_plan 可能是其他 session 残留（2026-08-03 唤醒 #7 实证）**：`<安装目录> Monkey CellBender 批处理任务，但当前 session（memomics-2f229850）的真实主线是 hdWGCNA/F2 分析。**判定方法**：① `search_files(results, task_plan*.md)` 列出所有 task_plan；② 对照当前 session 目录（system_log.jsonl 位置 + 产出文件）确定真正归属；③ session 的任务可能记录在 `task_plan_CLOSED.md.bak`（用户"停止，不需要task_plan了"后归档改名）——读到 CLOSED 标记 = 主线已结束，只汇报不续跑。
 2. **核对 Goal 字段** — task_plan 的 Goal 必须与当前会话用户实际要求一致。占位 Goal（"你是谁？"）或空模板 → 不自动执行（详见 `references/empty-template-taskplan-no-resume.md`）。
 3. **读 Current Phase + Phases 状态** — 完成/待办一目了然。
 4. **产物完整性复查** — `search_files` 每个已完成 Phase 的输出目录 + 读 verify 状态文件（如 `verify_xxx_status.txt`，注意是磁盘产出，不是 task_plan 自述）。
@@ -303,7 +303,7 @@ task_plan 中标注 **「待用户确认后执行」** 的 Phase，**任何唤�
 3. **顺手关心跳（终态唤醒每次必查，不只完成那一刻）**：若该任务还挂着 heartbeat cron（`cronjob(action="list")` 检查），全部 complete 后应 `cronjob(action="remove")` 关闭——否则每 15m/30m 空唤醒烧 token。这是心跳的**主 Agent 侧关闭路径**（正常完成路径，不是用户取消路径）。
    - ⚠️ **2026-08-02 唤醒 #11（memomics-1c1890da ArchR 会话）实证**：task_plan 显示 Phase 1-6 全部完成 + 停止标记已就位，但唤醒只做了产物复查+三源验证就汇报，**没有执行 `cronjob(action="list")`**。若该会话还挂着心跳，后续每 15m/30m 仍在空唤醒烧 token。**判别口诀：只要读到"全部 complete + 停止/等待标记"，本轮就必须执行 `cronjob(action="list")`**——有残留→remove；无→把"无残留 cron"写进汇报。跨唤醒漏关是常态（完成时刻没关、后续唤醒也没补查），所以每次终态唤醒都要重新确认，不能只在任务完成那一刻检查一次。
    - ⚠️ **2026-08-02 唤醒 #16（同一 memomics-1c1890da 会话）复犯实证**：再次读到"Phase 1-6 全部完成 + 停止命令"终态，根目录 task_plan 识别正确（根目录是 Monkey CellBender 别的 session 的任务，不是本 session）、三源验证正确、终态汇报正确——**但仍然漏掉 `cronjob(action="list")`**。skill 已明确记录 #11 的教训却再次跳过，说明"顺手关心跳"的措辞强度不够。**升级为硬顺序：终态唤醒的第 1 个工具调用就应该是 `cronjob(action="list")`（与"读本 session task_plan"并列，先于产物复查）**。汇报模板同步升级：终态汇报必须包含一行 `cron 检查：有残留→已 remove / 无残留`。
-   - 🔴 **2026-08-02 唤醒 #18（同一 memomics-1c1890da 会话）第三次复犯实证 — 规则在磁盘 ≠ 规则生效**：升级为"硬顺序"后 #18 仍只做"读 task_plan + search_files + tasklist/nvidia-smi"就汇报，**汇报里依然没有 `cron 检查` 字段**。根因：**唤醒时 Agent 未加载本 skill**——规则躺在 skill 文件里，而唤醒 prompt 只说"读 task_plan → 看产出 → 继续待办"，不会自动带出这条规则。三次漏查（#11/#16/#18）证明：**只写进 skill 不够，必须在记忆层有兜底**（本规则已同步写入 memory 的跨 session 污染铁律条目）。唤醒 Agent 强制自检：终态汇报发出前逐字段核对——`cron 检查` 字段缺失 = 汇报不完整 = 禁止发出。同理 `下载进度数字` 必须磁盘实测（#18 又引用了 task_plan 文本的"2/40"而未 search_files 实测 GSE278576 目录——#7 教训复犯）；实测失败时在汇报中明确写"未实测"而不是引用旧文本。
+   - 🔴 **2026-08-02 唤醒 #18（同一 memomics-1c1890da 会话）第三次复犯实证 — 规则在磁盘 ≠ 规则生效**：升级为"硬顺序"后 #18 仍只做"读 task_plan + search_files + tasklist/nvidia-smi"就汇报，**汇报里依然没有 `cron 检查` 字段**。根因：**唤醒时 Agent 未加载本 skill**——规则躺在 skill 文件里，而唤醒 prompt 只说"读 task_plan → 看产出 → 继续待办"，不会自动带出这条规则。三次漏查（#11/#16/#18）证明：**只写进 skill 不够，必须在记忆层有兜底**（本规则已同步写入 memory 的跨 session 污染铁律条目）。唤醒 Agent 强制自检：终态汇报发出前逐字段核对——`cron 检查` 字段缺失 = 汇报不完整 = 禁止发出。同理 `下载进度数字` 必须磁盘实测（#18 又引用了 task_plan 文本的"2/40"而未 search_files 实测 GSE000000 目录——#7 教训复犯）；实测失败时在汇报中明确写"未实测"而不是引用旧文本。
    - 🔴 **第四次复犯（2026-08-02 终态唤醒，同一 memomics-1c1890da 会话）— 结构性修复：`cronjob(action="list")` 必须与"读 task_plan"放进同一并行工具调用批次**：即使 skill 三处记录 + memory 兜底，本次终态唤醒（读到"Phase 1-6 全部完成 + 停止命令 + Phase 7 pending"）**依然只做"读 task_plan → search_files → tasklist"就汇报**，无 `cronjob(action="list")`、汇报无 `cron 检查` 字段。为什么前三次教训都记着还漏？因为"第 1 个工具调用"是**顺序性**指令——唤醒把"读 task_plan"当第 1 步后，后续步骤注意力就转到产物复查，cron 检查被挤掉。**本规则升级（替换"硬顺序"表述）**：终态判定信号（task_plan 显示全 complete + 停止/等待标记）出现在读 task_plan 结果的同时，`cronjob(action="list")` 必须和读 task_plan **放在同一个并行工具调用批次**（同一轮 `read_file(task_plan)` + `cronjob(action="list")` + `search_files` 一起发出），而不是作为下一步单独调用——同批 = 不可能被遗忘。汇报模板中 `cron 检查` 行是**硬字段**：有残留→已 remove；无→写"无残留 cron"；未查→禁止发出汇报。
 ### ⛔ cronjob 工具不在工具集时的 cron 检查兜底 — 读 ticker 文件（2026-08-07 memomics-1135ed52 唤醒 #1 实证）
 
@@ -324,8 +324,8 @@ ls -la /e/MemOmics-Agent/memomics_home/cron/output/
 - 汇报仍含 `cron 检查` 硬字段，写法示例：`cron 检查：ticker 心跳活着（02:03），output/ 空，无残留任务` 或 `cron 检查：无残留`
 - 不要因为 `cronjob` 工具缺失就跳过 cron 检查——文件兜底 30 秒完成，与读 task_plan 同一并行批次发出
 - 🔴 **唤醒 #6（同一 session，#1 已记录此兜底仍复犯）实证**：`cronjob(action="list")` 报"Tool does not exist"后，本轮只把"cronjob 不存在"当结论就继续三源验证，**没有去读 ticker 文件**——规则躺在 skill 里 ≠ 本轮已执行。**修复：cronjob 缺失时，`read_file(/e/MemOmics-Agent/memomics_home/cron/ticker_last_success)` 必须与"读 task_plan"同一并行批次发出**，汇报仍含 `cron 检查` 硬字段（如"ticker 心跳活着（02:03），output/ 空，无残留任务"）。同批次 = 不可能被遗忘；顺序指令（"下一步再查"）已多次证明失效。
-- ✅ **jobs.json 直接列 job 清单 — 比 ticker 文件更直接的残留判定（2026-08-07 memomics-1135ed52 唤醒 #0 实证）**：ticker 文件只能判断 cron 机制是否活着，**看不到有哪些 job**。直接 `read_file("C:/Users/23136/.memomics/cron/jobs.json")`（`~/.memomics/cron/jobs.json`）列出全部 job（含 `name` / `schedule` / `enabled` / `state` / `next_run_at` / `workdir`）——本唤醒实测：仅 4 个老任务（每日文献分析 / holographic-maintenance / memory-trim-check / daily-wiki-summary，next_run_at 全停 6 月），无本任务心跳 job → 直接判"无残留 cron"，且能引用具体 job 名单给用户看。⚠️ **路径注意：jobs.json 在 `~/.memomics/cron/`（C:/Users/23136/.memomics/cron/），ticker 文件在 `/e/MemOmics-Agent/memomics_home/cron/`——两个目录都查**。判定分工：jobs.json 给 job 清单（有没有残留），ticker 给机制活性（cron 是否在跑），互补。汇报示例：`cron 检查：jobs.json 仅 4 个老任务（文献/记忆维护/wiki），无本任务心跳，无残留`。
-- ⚠️ **`memomics_home/runtime/jobs.json` 是 MemOmics 运行时会话历史，不是 cron job 清单 — 读错文件 = 浪费轮次（2026-08-07 memomics-1135ed52 唤醒 #13 实测）**：唤醒做 cron 残留检查时先读到了 `E:/MemOmics-Agent/memomics_home/runtime/jobs.json`，其结构是 `job_id / session_id / label=agent_conversation / state / created_at`——这是**历史 Agent 会话的运行记录**（几十条 succeeded/interrupted，跨 08-03 全天的 session 列表），**不是 cron 任务**。cron 残留判定的正确文件是 `~/.memomics/cron/jobs.json`（字段 `name/schedule/enabled/next_run_at`，见上条）。**判定口诀：字段含 `session_id`/`label=agent_conversation` 的是 runtime 历史，不是 cron；字段含 `schedule`/`next_run_at` 的才是 cron job 清单**。同时注意 `search_files(pattern="cron*", path=memomics_home)` 命中的是 LSP node_modules 里的 crontab 类型定义（pyright typeshed），不是 MemOmics cron 目录——文件名 glob 不会下钻进 `cron/` 目录，找 ticker 文件要 `search_files(pattern="*", path=".../memomics_home/cron")`。
+- ✅ **jobs.json 直接列 job 清单 — 比 ticker 文件更直接的残留判定（2026-08-07 memomics-1135ed52 唤醒 #0 实证）**：ticker 文件只能判断 cron 机制是否活着，**看不到有哪些 job**。直接 `read_file("<用户目录>")`（`~/.memomics/cron/jobs.json`）列出全部 job（含 `name` / `schedule` / `enabled` / `state` / `next_run_at` / `workdir`）——本唤醒实测：仅 4 个老任务（每日文献分析 / holographic-maintenance / memory-trim-check / daily-wiki-summary，next_run_at 全停 6 月），无本任务心跳 job → 直接判"无残留 cron"，且能引用具体 job 名单给用户看。⚠️ **路径注意：jobs.json 在 `~/.memomics/cron/`（<用户目录>，ticker 文件在 `/e/MemOmics-Agent/memomics_home/cron/`——两个目录都查**。判定分工：jobs.json 给 job 清单（有没有残留），ticker 给机制活性（cron 是否在跑），互补。汇报示例：`cron 检查：jobs.json 仅 4 个老任务（文献/记忆维护/wiki），无本任务心跳，无残留`。
+- ⚠️ **`memomics_home/runtime/jobs.json` 是 MemOmics 运行时会话历史，不是 cron job 清单 — 读错文件 = 浪费轮次（2026-08-07 memomics-1135ed52 唤醒 #13 实测）**：唤醒做 cron 残留检查时先读到了 `<安装目录>，其结构是 `job_id / session_id / label=agent_conversation / state / created_at`——这是**历史 Agent 会话的运行记录**（几十条 succeeded/interrupted，跨 08-03 全天的 session 列表），**不是 cron 任务**。cron 残留判定的正确文件是 `~/.memomics/cron/jobs.json`（字段 `name/schedule/enabled/next_run_at`，见上条）。**判定口诀：字段含 `session_id`/`label=agent_conversation` 的是 runtime 历史，不是 cron；字段含 `schedule`/`next_run_at` 的才是 cron job 清单**。同时注意 `search_files(pattern="cron*", path=memomics_home)` 命中的是 LSP node_modules 里的 crontab 类型定义（pyright typeshed），不是 MemOmics cron 目录——文件名 glob 不会下钻进 `cron/` 目录，找 ticker 文件要 `search_files(pattern="*", path=".../memomics_home/cron")`。
 - ⚠️ **`memomics cron list` 空输出 + exit 0 ≠ 无 cron — 仍需文件兜底确认（2026-08-07 memomics-1135ed52 唤醒 #13 实测）**：`memomics cron list 2>&1 | head -60` 返回 `{"output": "", "exit_code": 0}`——既不是 skill 早前记录的"memomics: command not found"（exit 127），也不是 job 清单。空 + exit 0 的原因可能是 CLI 存在但子命令静默无输出、或 stderr 被吞。**规则：`memomics cron list` 的任何结果（not found / 空 / 报错）都不足以单独下"无残留 cron"结论——统一走文件兜底（`~/.memomics/cron/jobs.json` 清单 + `memomics_home/cron/ticker_*` 活性）**，与读 task_plan 同一并行批次。中程唤醒（任务仍 in_progress、心跳由 watchdog/guardian 独立进程承担）时 task_plan 已记录的"心跳非 cron"可以佐证，但终态唤醒必须实测文件。
 
 4. **不要因"全完成"跳过状态验证**：仍应快速核验产物（search_files）+ 确认无后台进程残留，汇报里给出证据，而不是只报"完成"。
@@ -354,7 +354,7 @@ debate_analysis（或依赖 LLM API 的裁决类工具）连续失败 ≥3-4 次
 1. **数文件** — `search_files(pattern="*", path="<数据下载目录>")` 统计已下载样本数（如实测 2/40）
    > ⛔ **进度数字必须磁盘实测，勿直接引用 task_plan 文本（唤醒 #7 复盘）**：task_plan 自述的"当前 2/40"是**上次更新时的快照**，用户可能已继续下载/续传。唤醒汇报里的下载进度数字必须以 `search_files` 实测目录为准；task_plan 文本只作线索不作证据。同一原则适用于任何 task_plan 自述的计数（产出文件数、已完成样本数）——磁盘证据优先于文本复述。
 2. **检查每样本完整性** — 配套文件是否齐全。ATAC 例：`fragments.tsv.gz` 主文件 + `.tbi.gz` 索引**必须成对**；主文件在但索引缺失 = 下载未完成/不完整 → 该样本暂不可直接喂 createArrowFiles
-   > ⚠️ **实测示例（memomics-1c1890da GSE278576，2026-08-02 终态唤醒）**：目录实测 hc77 ✅ 含 `GSM8549615_hc77_atac_fragments.tsv.gz` + `.tbi.gz`（成对完整）；hc78 ⚠️ 仅 `GSM8549616_hc78_atac_fragments.tsv.gz`，**缺 `.tbi.gz` 索引 = 样本不完整，不可直接喂 createArrowFiles**。汇报必须逐样本标记 ✅/⚠️，不能只写"2/40 就位"——用户要一眼看到"还差什么"（hc78 缺索引，需续传或重新下载）。
+   > ⚠️ **实测示例（memomics-1c1890da GSE000000，2026-08-02 终态唤醒）**：目录实测 hc77 ✅ 含 `GSM8549615_hc77_atac_fragments.tsv.gz` + `.tbi.gz`（成对完整）；hc78 ⚠️ 仅 `GSM8549616_hc78_atac_fragments.tsv.gz`，**缺 `.tbi.gz` 索引 = 样本不完整，不可直接喂 createArrowFiles**。汇报必须逐样本标记 ✅/⚠️，不能只写"2/40 就位"——用户要一眼看到"还差什么"（hc78 缺索引，需续传或重新下载）。
 3. **汇报格式** — 下载进度表 + 每样本完整/不完整标记（hc77 ✅含索引 / hc78 ⚠️缺索引），让用户一眼看出"还差什么"
 4. **选项给出** — 基于进度给可执行选项（如"继续下载剩余样本" vs "用已就位的 hc77/hc78 先做小规模试跑"），**由用户拍板，唤醒不代启动**
 
@@ -475,7 +475,7 @@ done
 | Checkpoint | 稳定 | 互相覆盖 → hash mismatch |
 | 输出 h5 | 正常写盘 | 无产出 |
 
-**⚠️ ArchR 场景（2026-08-07 实测，GSE278576 40 样本）**：并发 3 跑 `createArrowFiles` → 5/7 样本在 `.filterCellsFromArrow` 阶段失败，错误 `Cannot open file 'E:\...\tmp\tmp-<hash>.arrow' does not exist`。**根因不是内存，是 ArchR 1.0.3 所有实例共享同一 `outputDirectory/tmp/` 目录** —— 多进程竞争清理临时 Arrow 文件。60GB RAM 能撑并发 ≠ ArchR 能并发。**ArchR Windows 版唯一稳定模式 = 并发 1**。
+**⚠️ ArchR 场景（2026-08-07 实测，GSE000000 40 样本）**：并发 3 跑 `createArrowFiles` → 5/7 样本在 `.filterCellsFromArrow` 阶段失败，错误 `Cannot open file 'E:\...\tmp\tmp-<hash>.arrow' does not exist`。**根因不是内存，是 ArchR 1.0.3 所有实例共享同一 `outputDirectory/tmp/` 目录** —— 多进程竞争清理临时 Arrow 文件。60GB RAM 能撑并发 ≠ ArchR 能并发。**ArchR Windows 版唯一稳定模式 = 并发 1**。
 
 ```python
 # ✅ 正确：for 循环串行
@@ -527,7 +527,7 @@ for sample in samples:
 **⚠️ 裸 `*`（无尾斜杠）会把输出目录里的辅助脚本文件数进去 — 计数用 `GSM*/` 或 `*/`（2026-08-07 memomics-1135ed52 唤醒 #35 实测）**：本唤醒先 `ls -d .../ArchR_Arrow_QC_Filtered/* | wc -l` 返回 **38**，再用 `ls -d .../GSM* | wc -l` 实测 **37**——差 1 的元凶是 `check_procs.ps1`（监控脚本）被放进了输出目录，裸 `*` 同时匹配文件和目录把它数了进去。**规则：进度计数一律 `GSM*/`（前缀锚定，天然排除脚本）或 `*/`（尾斜杠限定目录）；裸 `*` 计数若比预期多 1-2，先查输出目录里是否有辅助脚本（check_procs.ps1 / cleanup.ps1 / verify 工具）混入再下"多了一个样本"结论。**
 > 🔴 **变体：连 glob 都不加，裸 `ls <dir> | wc -l` 同样把文件数进去（2026-08-07 memomics-1135ed52 唤醒 #18 实测）**：`ls E:/.../ArchR_Arrow_QC_Filtered/ 2>/dev/null | wc -l` 返回 **39**（把同目录的 check_procs.ps1 文件也数了），随后 `ls -d .../ArchR_Arrow_QC_Filtered/*/ | wc -l` = **38**。判定口诀：**任何不带尾斜杠 glob 的 `ls | wc -l` 都可能混入辅助脚本文件，进度计数铁律 = 带 `*/` 或 `GSM*/` 的 `ls -d`**；实测数字比预期多 1-2 先怀疑辅助脚本被数，不是"多了样本"。
 
-**⛔ 逐样本日志/输入路径按短名 glob 定位，禁止按顺序猜 GSM 前缀 — GSE278576 的 GSM 编号与 hc 短名非顺序对应（2026-08-07 memomics-1135ed52 唤醒 #16 实测）**：查 hc35 的 batch 日志时按"hc 短名顺序对应"猜成 `batch/logs/GSM8549651_hc35.log`（那是 **hc40** 的文件）→ tail 空 → 一度以为"hc35 日志为空/无输出"；实际正确文件是 `batch/logs/GSM8549653_hc35.log`（含完整 P1 进度：START 20:08:47 → TabixFile 8%-100% → Arrow → CellStats 8220 cells / TSS 9.504）。**GSM 与 hc 的映射：hc35=GSM8549653、hc40=GSM8549651（hc40 的 GSM 编号反而比 hc35 小）——不是顺序关系**。判定口诀：① 找某 hc 短名的日志/输入/输出一律 glob 定位（`ls batch/logs/*hc35*` / `find <dir> -name "*hc35*"`），不要手工拼 GSM 前缀；② 空 tail ≠ 日志无内容，先 `ls -la <path>` 验证路径存在（可能是文件名猜错）再下"无输出"结论；③ 从任务清单/下载清单查 hc↔GSM 映射表，不靠编号推断。
+**⛔ 逐样本日志/输入路径按短名 glob 定位，禁止按顺序猜 GSM 前缀 — GSE000000 的 GSM 编号与 hc 短名非顺序对应（2026-08-07 memomics-1135ed52 唤醒 #16 实测）**：查 hc35 的 batch 日志时按"hc 短名顺序对应"猜成 `batch/logs/GSM8549651_hc35.log`（那是 **hc40** 的文件）→ tail 空 → 一度以为"hc35 日志为空/无输出"；实际正确文件是 `batch/logs/GSM8549653_hc35.log`（含完整 P1 进度：START 20:08:47 → TabixFile 8%-100% → Arrow → CellStats 8220 cells / TSS 9.504）。**GSM 与 hc 的映射：hc35=GSM8549653、hc40=GSM8549651（hc40 的 GSM 编号反而比 hc35 小）——不是顺序关系**。判定口诀：① 找某 hc 短名的日志/输入/输出一律 glob 定位（`ls batch/logs/*hc35*` / `find <dir> -name "*hc35*"`），不要手工拼 GSM 前缀；② 空 tail ≠ 日志无内容，先 `ls -la <path>` 验证路径存在（可能是文件名猜错）再下"无输出"结论；③ 从任务清单/下载清单查 hc↔GSM 映射表，不靠编号推断。
 
 **⛔ DONE_MARK 路径以实际脚本为准，task_plan 文本可能滞后（2026-08-07 memomics-1135ed52 唤醒 #3 实证）**：task_plan 写"输出 `ArchR_Arrow_QC`"，但 run_serial.sh / monitor_serial.sh 的 DONE_MARK 与 create_arrow_qc.R 的 `out_filtered` 实际都写 `ArchR_Arrow_QC_Filtered`——文本与脚本矛盾时**以脚本源码为准**（读 R 脚本确认 out_root/out_filtered/DONE_MARK 三个变量一致），不要按 task_plan 字面去数目录，否则会把"正在正常产出"误判成"路径错误/停滞"。
 
@@ -561,7 +561,7 @@ done
 2. watchdog 的 REMAINING 数组是**硬编码清单**，若启动时没包含某失败样本 → watchdog 也永远不会启动它 → 双重漏网
 → **修复 = 补 watchdog 数组 + 重启 watchdog（见下）**；更稳的长效方案 = watchdog 用"全集 − done 目录"动态重建数组（如 run_serial_v2 的 SKIP 逻辑），不要硬编码 REMAINING。
 
-**⚠️ 补 watchdog 数组必须双副本同步（batch + guardian 权威）— 只改一处会被 guardian 覆盖回滚（2026-08-07 memomics-1135ed52 唤醒 #39 实测）**：watchdog_v3.sh 有两个副本——`batch/watchdog_v3.sh`（运行副本）+ `E:/release/guardian_authority/watchdog_v3.sh`（guardian 每轮 `cmp -s` 校验、发现不一致就用 AUTH 覆盖 batch）。**只改 batch 副本 = guardian 下一轮就把修复覆盖掉；必须两处同改**。改完用 `cmp -s <batch> <auth>` 验证一致（guardian 的 cmp 不触发覆盖 = 修复安全），再重启 watchdog 让新数组生效。
+**⚠️ 补 watchdog 数组必须双副本同步（batch + guardian 权威）— 只改一处会被 guardian 覆盖回滚（2026-08-07 memomics-1135ed52 唤醒 #39 实测）**：watchdog_v3.sh 有两个副本——`batch/watchdog_v3.sh`（运行副本）+ `<发布目录> 每轮 `cmp -s` 校验、发现不一致就用 AUTH 覆盖 batch）。**只改 batch 副本 = guardian 下一轮就把修复覆盖掉；必须两处同改**。改完用 `cmp -s <batch> <auth>` 验证一致（guardian 的 cmp 不触发覆盖 = 修复安全），再重启 watchdog 让新数组生效。
 
 **替换 watchdog 实例的正确姿势（worker 在跑不用杀）**：
 1. 新数组已双副本落盘 → `powershell Stop-Process -Id <旧 watchdog WINPID> -Force`（taskkill //F 在 MSYS 必失败，见铁规 10）
@@ -884,9 +884,9 @@ tail -3 F:/CellBender_v2/monitor.log          # 时间戳必须在最近 2 分�
 - **恢复清除**：下一次循环恢复正常 → `rm alerts.json`（alerts 是瞬态信号，恢复即清）
 - **完成 COMPLETE**：`done >= TOTAL` → 写 `alerts.json`（severity=info, ALL DONE）+ `break` 退出循环 → **MemOmics `notify_on_complete=true` 触发自动唤醒** → 汇报完成
 - **循环进度行**：每轮 `echo "[$TS] done=X/TOTAL procs=N log=NAME age=Ym" >> monitor.log`（Agent 或唤醒轮次直接 `cat monitor.log` 即可汇报，不必每次重查三源）
-- **📍 monitor.log 物理位置 = `results/{session_dir}/batch/monitor.log`，不在输出目录（2026-08-07 memomics-1135ed52 唤醒 #4 实测）**：唤醒时先到输出目录（`E:/专利/.../ArchR_Arrow_QC_Filtered/`）找 monitor.log 扑空，再 find 才定位到 `results/<session>/batch/`。**找日志一律先查 session 目录下 batch/（与 run_serial*.sh、watchdog*.sh、remaining.txt 同层），不要在输出目录浪费时间**。同理 `remaining_v2.txt`、`run_serial_auto.out` 也在同一 batch/ 目录。
+- **📍 monitor.log 物理位置 = `results/{session_dir}/batch/monitor.log`，不在输出目录（2026-08-07 memomics-1135ed52 唤醒 #4 实测）**：唤醒时先到输出目录（`<数据目录> monitor.log 扑空，再 find 才定位到 `results/<session>/batch/`。**找日志一律先查 session 目录下 batch/（与 run_serial*.sh、watchdog*.sh、remaining.txt 同层），不要在输出目录浪费时间**。同理 `remaining_v2.txt`、`run_serial_auto.out` 也在同一 batch/ 目录。
 - ⚠️ **`remaining_v2.txt` 是静态初始清单，不随进度收缩（2026-08-07 memomics-1135ed52 唤醒 #37 实测）**：hc11 已于 18:22 完成、hc73 已失败过一次，但 remaining_v2.txt 仍完整列出全部 8 个待跑样本（含已完成的 hc11）——它只是 run_serial_v2 启动时的输入列表快照，**永远不更新**。**判定口诀：① 看批处理进度一律以 run_serial_auto.out（START/END 时间线）+ DONE_MARK 目录计数（铁规 4）为准，`cat remaining_v2.txt` 列出 8 个 ≠ 还有 8 个要跑；② 已完成样本由 run_serial_v2 的 SKIP 逻辑（filtered_cells.csv 存在即跳过）去重，不以 remaining_v2.txt 内容判断；③ 若拿 remaining_v2.txt 报"还剩 X 个"会被用户当场揭穿（37/40 完成但清单显示 8 个）——进度数字必须磁盘实测（run_serial_auto.out + GSM*/ 目录计数）。**
-- **🔴 watchdog/guardian 脚本权威目录 = `E:/release/guardian_authority/`，且脚本本身是路径权威源（2026-08-07 memomics-1135ed52 唤醒 #36 实测）**：本唤醒先在 `E:/专利/Human_Hippocampus_ATAC/batch/`、`find /e/专利 -maxdepth 3 -name "*.sh"`、`find /e/ -maxdepth 4 -name "watchdog_v3.sh"` 反复找脚本/日志，扑空多轮才定位到 watchdog_v3.sh 在 `E:/release/guardian_authority/`（guardian 的权威副本目录，guardian 每轮校验恢复）。**⚠️ `find` 在 `专利/` 中文路径下也可能返回 0**（与 search_files 同病，铁规 16.5）。**判定口诀：① 找批处理脚本/日志前先直接 `ls E:/release/guardian_authority/`（watchdog*/guardian*.sh 的固定家），不要从输出目录反向搜；② `read_file watchdog_v3.sh` 顶部 CONFIG 段一次给出全部权威路径（OUTDIR / LOGDIR=results/{session}/batch/logs / MLOG=results/{session}/batch/monitor.log / CREATE_SCRIPT / WORKDIR）——**脚本即路径权威源**，读它比 find 全盘快得多；③ 汇报时把\"从 watchdog_v3.sh 读到的路径\"作为证据链一部分，避免后续唤醒重复摸索。
+- **🔴 watchdog/guardian 脚本权威目录 = `<发布目录>，且脚本本身是路径权威源（2026-08-07 memomics-1135ed52 唤醒 #36 实测）**：本唤醒先在 `<数据目录> /e/专利 -maxdepth 3 -name "*.sh"`、`find /e/ -maxdepth 4 -name "watchdog_v3.sh"` 反复找脚本/日志，扑空多轮才定位到 watchdog_v3.sh 在 `<发布目录> 的权威副本目录，guardian 每轮校验恢复）。**⚠️ `find` 在 `专利/` 中文路径下也可能返回 0**（与 search_files 同病，铁规 16.5）。**判定口诀：① 找批处理脚本/日志前先直接 `ls <发布目录> 的固定家），不要从输出目录反向搜；② `read_file watchdog_v3.sh` 顶部 CONFIG 段一次给出全部权威路径（OUTDIR / LOGDIR=results/{session}/batch/logs / MLOG=results/{session}/batch/monitor.log / CREATE_SCRIPT / WORKDIR）——**脚本即路径权威源**，读它比 find 全盘快得多；③ 汇报时把\"从 watchdog_v3.sh 读到的路径\"作为证据链一部分，避免后续唤醒重复摸索。
 
 ### 部署方式
 
@@ -968,7 +968,7 @@ def verify_one_sample(output_dir: str, sample_name: str) -> str:
 
 ## ⛔ 中文路径在 batch 脚本中的编码陷阱（2026-08-07 实测）【v2.0 新增】
 
-**症状**：write_file 写到 `E:\专利\...\batch\run_xxx.bat` 的 UTF-8 bat 文件，bash→cmd.exe 执行时 `cmd.exe /c "E:\专利\...\run_xxx.bat"` → `系统找不到指定的路径` (EXIT_CODE=3)。
+**症状**：write_file 写到 `<数据目录> 的 UTF-8 bat 文件，bash→cmd.exe 执行时 `cmd.exe /c "<数据目录>"` → `系统找不到指定的路径` (EXIT_CODE=3)。
 
 **根因**：write_file 写 UTF-8 编码，cmd.exe 按系统代码页（GBK）解析中文路径 → 编码不匹配 → 路径乱码 → 找不到文件。
 
@@ -976,17 +976,17 @@ def verify_one_sample(output_dir: str, sample_name: str) -> str:
 
 ```bash
 # ❌ 不对 — bat 文件含中文路径
-cmd.exe /c "E:\专利\Human_Hippocampus_ATAC\batch\run_hc8.bat"
+cmd.exe /c "<数据目录>"
 # → 系统找不到指定的路径（GBK 乱码）
 
 # ✅ 正确 — bat 只传 ASCII 参数，中文路径在 R 脚本内部处理
 # run_xxx.bat 内容：
 "C:\Program Files\R\R-4.5.3\bin\x64\Rscript.exe" --vanilla "batch/create_arrow_qc.R" "hc8"
-# R 脚本内部: setwd("E:/专利/Human_Hippocampus_ATAC") — R 内部 UTF-8 处理中文路径可行
+# R 脚本内部: setwd("<数据目录>") — R 内部 UTF-8 处理中文路径可行
 ```
 
-> 同一原理：bash 里直接用 `ls "E:/专利/..."` 也可能失败（MSYS 路径转换）。
-> **⚠️ search_files(target="files") 在中文路径下可能返回 0 匹配 — 交叉验证用 terminal find（2026-08-07 唤醒 #26 实测）**：`search_files(pattern="hc212191*", target="files", path="E:/专利/Human_Hippocampus_ATAC")` 返回 total_count=0，但同目录 `find . -name "*hc212191*"` 立即命中 4 个文件（fragments + arrow + QC 子目录）——中文路径（专利/）下 glob 命中不可靠。**规则：中文路径下 search_files(target="files") 返回 0 时，先用 `find <path> -name "*<pattern>*"` 交叉验证再下"文件不存在"结论；`read_file`/search_files(content 模式) 不受此影响（英文路径 results/ 下 task_plan 检索正常）。**
+> 同一原理：bash 里直接用 `ls "<数据目录>"` 也可能失败（MSYS 路径转换）。
+> **⚠️ search_files(target="files") 在中文路径下可能返回 0 匹配 — 交叉验证用 terminal find（2026-08-07 唤醒 #26 实测）**：`search_files(pattern="hc212191*", target="files", path="<数据目录>")` 返回 total_count=0，但同目录 `find . -name "*hc212191*"` 立即命中 4 个文件（fragments + arrow + QC 子目录）——中文路径（专利/）下 glob 命中不可靠。**规则：中文路径下 search_files(target="files") 返回 0 时，先用 `find <path> -name "*<pattern>*"` 交叉验证再下"文件不存在"结论；`read_file`/search_files(content 模式) 不受此影响（英文路径 results/ 下 task_plan 检索正常）。**
 
 ---
 
@@ -1024,7 +1024,7 @@ powershell -NoProfile -Command "Get-CimInstance Win32_ComputerSystem | Select Au
 
 ## ⚠️ write_file 写的 .ps1 必须加 UTF-8 BOM — 否则 PowerShell 5.1 中文路径乱码【v2.1 新增】
 
-**2026-08-07 memomics-1135ed52 实测**：write_file 写 `check_status.ps1`（UTF-8 无 BOM）→ `powershell -File check_status.ps1` 报 **exit 127** + 乱码（`/T�R C L R 1Y%` 类二进制噪音）。根因：**PowerShell 5.1 按系统 ANSI 代码页（GBK）解析无 BOM 的 .ps1 文件**，脚本里的中文路径 `E:/专利/...` UTF-8 字节被 GBK 解析成乱码 → 语法/路径错误。
+**2026-08-07 memomics-1135ed52 实测**：write_file 写 `check_status.ps1`（UTF-8 无 BOM）→ `powershell -File check_status.ps1` 报 **exit 127** + 乱码（`/T�R C L R 1Y%` 类二进制噪音）。根因：**PowerShell 5.1 按系统 ANSI 代码页（GBK）解析无 BOM 的 .ps1 文件**，脚本里的中文路径 `<数据目录> UTF-8 字节被 GBK 解析成乱码 → 语法/路径错误。
 
 **✅ 修复：write_file 后给 .ps1 补 UTF-8 BOM（utf-8-sig）**：
 
@@ -1039,7 +1039,7 @@ with open(ps1_path, 'w', encoding='utf-8-sig') as f:  # BOM 前缀
 
 **⚠️⚠️ 2026-08-07 二次实测 — 中文不止在路径里会炸，脚本内部任何中文字符（含 hashtable 键名）都会在 GBK 下乱码 → 首选纯 ASCII 脚本**：写验证 harness 时用了中文键名（`'RSCRIPT 段标记' = $text -match ...`）→ PowerShell 报 `== : 无法将"=="识别为 cmdlet` + ParserError（UTF-8 中文被 GBK 误读，引号/等号错位 → 语法崩）。**根因不是路径，是脚本体内的中文字符串/键名**。**处理分级：① 首选 = .ps1 脚本（尤其验证/诊断 harness）一律纯 ASCII**——英文键名/标记/注释，零编码风险、连 BOM 都不需要；② 只有非用中文不可（如脚本要输出中文汇报文本）才补 UTF-8 BOM；③ 验证 harness 若因中文键名解析失败，重写为 ASCII 版即可（实测：同一 harness 中文键名 ParserError → ASCII 键名 5/5 PASS + exit 0）。**口诀：脚本内容是英文、路径是中文 → 纯 ASCII 够用；脚本内容也要中文 → BOM。**
 
-**⚠️⚠️⚠️ 2026-08-07 三次实测（唤醒 #36）— 修正上一口诀：中文**路径**写在 .ps1 体内同样必炸，纯 ASCII 不够**：write_file `check_status.ps1`（UTF-8 无 BOM，脚本内容全 ASCII，但体内含 `Get-ChildItem 'E:\专利\...\ArchR_Arrow_QC_Filtered'`）→ `powershell -File` 报 **PathNotFound**（`专利` UTF-8 字节被 GBK 解析成乱码 → 路径不存在），磁盘计数拿不到。**上一口诀"脚本内容是英文、路径是中文 → 纯 ASCII 够用"是错的——PowerShell 5.1 按 GBK 读整个 .ps1 文件，路径字符串里的中文一样乱码。正确分工：① .ps1 内**任何中文**（路径或字符串）都要 BOM，否则走 PowerShell 只查 ASCII 对象（进程名/内存/PID）；② 中文路径的磁盘/文件计数（`ls -d /e/专利/.../GSM*/`）**交给 bash 做**，不要混进 .ps1；③ 本唤醒实测的可靠组合 = PowerShell .ps1 查进程（Id/StartTime/CPU，纯 ASCII）+ `ls -d` 查中文路径输出目录（bash 中文路径实测可靠）——两路各管各的，不要在 PowerShell 里碰中文路径。**
+**⚠️⚠️⚠️ 2026-08-07 三次实测（唤醒 #36）— 修正上一口诀：中文**路径**写在 .ps1 体内同样必炸，纯 ASCII 不够**：write_file `check_status.ps1`（UTF-8 无 BOM，脚本内容全 ASCII，但体内含 `Get-ChildItem '<数据目录>'`）→ `powershell -File` 报 **PathNotFound**（`专利` UTF-8 字节被 GBK 解析成乱码 → 路径不存在），磁盘计数拿不到。**上一口诀"脚本内容是英文、路径是中文 → 纯 ASCII 够用"是错的——PowerShell 5.1 按 GBK 读整个 .ps1 文件，路径字符串里的中文一样乱码。正确分工：① .ps1 内**任何中文**（路径或字符串）都要 BOM，否则走 PowerShell 只查 ASCII 对象（进程名/内存/PID）；② 中文路径的磁盘/文件计数（`ls -d /e/专利/.../GSM*/`）**交给 bash 做**，不要混进 .ps1；③ 本唤醒实测的可靠组合 = PowerShell .ps1 查进程（Id/StartTime/CPU，纯 ASCII）+ `ls -d` 查中文路径输出目录（bash 中文路径实测可靠）——两路各管各的，不要在 PowerShell 里碰中文路径。**
 
 ---
 

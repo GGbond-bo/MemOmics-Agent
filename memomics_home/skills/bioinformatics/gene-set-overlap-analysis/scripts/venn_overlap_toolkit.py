@@ -39,8 +39,8 @@ except Exception:                                            # pragma: no cover
 
 # ---------------------------------------------------------------- CONFIG
 CONFIG = dict(
-    xlsx=r"D:/我的下载/DEG_fdr05_coef025_5contrasts.xlsx",
-    outdir=r"E:/MemOmics-Agent/results/<sid>/task4",
+    xlsx=r"<数据目录>/DEG_fdr05_coef025_5contrasts.xlsx",
+    outdir=r"<安装目录>",
     full_tables=[r"D:/肌肉锻炼/DEG_file/merged_*.xlsx"],      # universe 来源（未过滤）
     subset=None,          # 例: ["Pure Type I","Pure Type IIA"] —— 只算这些细胞群体
     triple={"Ex_Young": "Y_Pre_vs_Y_Post", "Ex_Old": "O_Pre_vs_O_Post",

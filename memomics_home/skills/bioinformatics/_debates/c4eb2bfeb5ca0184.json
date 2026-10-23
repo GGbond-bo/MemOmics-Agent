@@ -1,10 +1,10 @@
 {
-  "topic": "人类骨骼肌衰老 DEG 结果验证：7种细胞类型的差异基因数量和方向是否合理？TypeII DEG最多(189)、Myeloid唯一Aged↑>Young↑(26vs20)、EC大量下调(11↑/68↓)是否符合生物学预期？",
-  "context": "人类骨骼肌衰老 scRNA-seq DEG 分析结果：\n\n数据: 10,000 cells (random subset from 324,434), Young(≤34)=3,771 vs Aged(≥77)=6,229\n方法: Pseudobulk DESeq2 per celltype (donor×celltype aggregation, design=~age_group)\n供体: 19 donors (4 Young + 15 Aged, 无重叠)\n\n各细胞类型 DEG 结果 (padj<0.05):\n- TypeI (慢肌): 148 DEG (41 Aged↑ + 107 Young↑) — 慢肌纤维在衰老中下调基因更多\n- TypeII (快肌): 189 DEG (74 Aged↑ + 115 Young↑) — 快肌纤维 DEG 最多，符合衰老优先萎缩\n- FAP: 102 DEG (54 Aged↑ + 48 Young↑) — 纤维化/脂肪祖细胞衰老激活\n- EC: 79 DEG (11 Aged↑ + 68 Young↑) — 内皮细胞大量衰老下调\n- MuSC: 39 DEG (5 Aged↑ + 34 Young↑) — 肌卫星细胞衰老下调\n- Pericyte: 18 DEG (1 Aged↑ + 17 Young↑) — 周细胞变化最小\n- Myeloid: 46 DEG (26 Aged↑ + 20 Young↑) — 唯一 Aged↑ > Young↑ 的免疫细胞\n\n知识库已知衰老骨骼肌发现:\n- Type II fiber selective atrophy (快肌选择性萎缩)\n- Denervation-reinnervation (MYOG/MYOD1/NCAM1)\n- FAP fibrosis (COL1A1/COL3A1/FN1)\n- Inflammaging (IL6/TNF/CCL2)\n- MuSC decline",
+  "topic": "示例研究场景 DEG 结果验证：7种细胞类型的差异基因数量和方向是否合理？TypeII DEG最多(189)、Myeloid唯一Aged↑>Young↑(26vs20)、EC大量下调(11↑/68↓)是否符合生物学预期？",
+  "context": "示例研究场景 scRNA-seq DEG 分析结果：\n\n数据: 10,000 cells (random subset from 324,434), Young(≤34)=3,771 vs Aged(≥77)=6,229\n方法: Pseudobulk DESeq2 per celltype (donor×celltype aggregation, design=~age_group)\n供体: 19 donors (4 Young + 15 Aged, 无重叠)\n\n各细胞类型 DEG 结果 (padj<0.05):\n- TypeI (慢肌): 148 DEG (41 Aged↑ + 107 Young↑) — 慢肌纤维在衰老中下调基因更多\n- TypeII (快肌): 189 DEG (74 Aged↑ + 115 Young↑) — 快肌纤维 DEG 最多，符合衰老优先萎缩\n- FAP: 102 DEG (54 Aged↑ + 48 Young↑) — 纤维化/脂肪祖细胞衰老激活\n- EC: 79 DEG (11 Aged↑ + 68 Young↑) — 内皮细胞大量衰老下调\n- MuSC: 39 DEG (5 Aged↑ + 34 Young↑) — 肌卫星细胞衰老下调\n- Pericyte: 18 DEG (1 Aged↑ + 17 Young↑) — 周细胞变化最小\n- Myeloid: 46 DEG (26 Aged↑ + 20 Young↑) — 唯一 Aged↑ > Young↑ 的免疫细胞\n\n知识库已知衰老示例组织发现:\n- Type II fiber selective atrophy (快肌选择性萎缩)\n- Denervation-reinnervation (MYOG/MYOD1/NCAM1)\n- FAP fibrosis (COL1A1/COL3A1/FN1)\n- Inflammaging (IL6/TNF/CCL2)\n- MuSC decline",
   "hash": "c4eb2bfeb5ca0184",
   "timestamp": "2026-07-17 17:11:11",
   "result": {
-    "topic": "人类骨骼肌衰老 DEG 结果验证：7种细胞类型的差异基因数量和方向是否合理？TypeII DEG最多(189)、Myeloid唯一Aged↑>Young↑(26vs20)、EC大量下调(11↑/68↓)是否符合生物学预期？",
+    "topic": "示例研究场景 DEG 结果验证：7种细胞类型的差异基因数量和方向是否合理？TypeII DEG最多(189)、Myeloid唯一Aged↑>Young↑(26vs20)、EC大量下调(11↑/68↓)是否符合生物学预期？",
     "debate_format": "多角色对抗（v3）",
     "pro_arguments": {
       "biology": {

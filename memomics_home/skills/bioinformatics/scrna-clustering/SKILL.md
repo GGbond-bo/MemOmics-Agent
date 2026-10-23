@@ -230,7 +230,7 @@ results/<模块>/<方法>/
 | KeyError: "['n_clusters_res0.8'] not in index"（03_ | 归一化/取前缀时用 split('_')[0] 对多下划线列名不安全（n_clu | ① 列名前缀 bug：原用 col.split('_')[0] 生成前缀，"n_clusters"  |
 | ValueError: Mix of label input types (string and n | annotation_L3 是字符串标签（10 个肌纤维亚型名），而 netwo | 把 confusion_matrix(labels, lab) 改为 confusion_matri |
 | RuntimeError: operator torchvision::nms does not e | scvi-tools 安装过程引入/保留了与 torch 2.11.0+cu12 | pip install scvi-tools 本身 exit=0 成功（附带装了 tensorboa |
-| ModuleNotFoundError: No module named 'scvi'（execut | check_env 探测的包清单来源与 execute_python 持久内核实 | ① 实测确认内核解释器 = C:/Users/23136/AppData/Local/Program |
+| ModuleNotFoundError: No module named 'scvi'（execut | check_env 探测的包清单来源与 execute_python 持久内核实 | ① 实测确认内核解释器 = <用户目录> |
 | 错误于RunLeiden(...): Package 'leidenbase' is require | R 4.5.3 库（E:/R-libs/R-4.5.3）未安装 leidenba | 改用 FindClusters(algorithm=1) = Louvain（igraph 实现，无 |
 | 即使删掉显式 conserve.memory=TRUE，execute_r 仍报 argument  | execute_r 的 SCTransform 铁轨注入与用户代码中的 SCTr | 绕过注入器匹配：用 do.call(SCTransform, list(object=..., vs |
 | formal argument "conserve.memory" matched by multi | execute_r 对 SCTransform 有铁轨自动注入（method=" | SCTransform 调用中删除显式 conserve.memory=TRUE（以及任何自动注入参 |

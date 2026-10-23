@@ -36,7 +36,7 @@ print(df.direction.unique())                     # 例: ['O_Pre > Y_Pre (coef>0)
 print(((df.regulation == "Up") == (df.coef > 0)).all())   # 必须为 True
 ```
 
-实测样例（骨骼肌 5 对比表）：
+实测样例（示例组织 5 对比表）：
 
 | sheet | `direction` 自证 | 于是 Up = |
 |---|---|---|
@@ -117,7 +117,7 @@ p = (hit + 1) / (5000 + 1)
 
 **当一个集合占了 universe 的绝大部分时，"大交集"是必然的、且可能是空集意义上的负结果。**
 
-实测（骨骼肌 5 对比，universe N=7,743）：
+实测（示例组织 5 对比，universe N=7,743）：
 
 | 交集 | 观测 | 期望 | fold | P | 判读 |
 |---|---|---|---|---|---|
@@ -246,7 +246,7 @@ def save(fig, stem):
 - `scripts/venn_overlap_toolkit.py` —— 本类分析的可复用引擎：读多对比 DEG 表 → `direction` 语义自证
   → 建集合（gene-level / 指定亚群 / same-celltype）→ 精确超几何（2 集）+ 置换检验（3 集）
   → 手绘 3 集合/2 集合韦恩（含内置版式自检）→ 输出计数表与明细表。
-- `references/overlap-vs-chance-and-venn-layout.md` —— 完整实录：骨骼肌 5 对比（universe 7,743）
+- `references/overlap-vs-chance-and-venn-layout.md` —— 完整实录：示例组织 5 对比（universe 7,743）
   的覆盖率陷阱定量证据、三处标签缺陷的 OCR 发现 → 包围盒修复全过程、几何推导与实测参数。
 - `references/tiny-intersection-list-enrichment.md` —— **交集很小（n=2~10）时下一步富集怎么做**：
   ① 为什么 tiny list 不能跑 ORA（实算功效上限：universe 7,743 下 n=7 需 3~6/7 基因同属一条通路才过 BH；

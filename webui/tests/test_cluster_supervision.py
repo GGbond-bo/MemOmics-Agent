@@ -62,7 +62,7 @@ def ledger(tmp_path, monkeypatch):
     return remote_dir
 
 
-def _job(node="ssh23", job_id="42", session_id="", hours_ago=0.0, **extra):
+def _job(node="node4", job_id="42", session_id="", hours_ago=0.0, **extra):
     rec = {"ts": _ts(hours_ago), "node": node, "host": "h", "user": "u",
            "scheduler": "none", "job_id": job_id, "name": "musc",
            "stdout": "/remote/log.txt", "stderr": "/remote/log.txt",
@@ -97,80 +97,80 @@ def _write_sessions(remote_dir, reg):
 
 def test_my_running_job_is_live_evidence(ledger):
     _write_jobs(ledger, _job(session_id=MY_SID))
-    _write_states(ledger, _state("ssh23", "42", "running"))
+    _write_states(ledger, _state("node4", "42", "running"))
     ev = rc.cluster_work_evidence(MY_SID)
     assert ev["live"] is True
     assert ev["items"][0]["job_id"] == "42" and ev["items"][0]["state"] == "running"
-    assert any("ssh23" in r for r in ev["reasons"])
+    assert any("node4" in r for r in ev["reasons"])
 
 
 def test_terminal_job_is_not_evidence(ledger):
     _write_jobs(ledger, _job(session_id=MY_SID))
-    _write_states(ledger, _state("ssh23", "42", "done"))
+    _write_states(ledger, _state("node4", "42", "done"))
     assert rc.cluster_work_evidence(MY_SID)["live"] is False
 
 
 def test_failed_and_cancelled_are_terminal(ledger):
     for st in ("failed", "cancelled"):
         _write_jobs(ledger, _job(session_id=MY_SID))
-        _write_states(ledger, _state("ssh23", "42", st))
+        _write_states(ledger, _state("node4", "42", st))
         assert rc.cluster_work_evidence(MY_SID)["live"] is False, st
 
 
 def test_submitted_state_counts_as_live_without_poll(ledger):
     """提交后、还没轮询过（24h 内）→ 算活跃（否则提交完就没人管了）。"""
     _write_jobs(ledger, _job(session_id=MY_SID, hours_ago=1.0))
-    _write_states(ledger, _state("ssh23", "42", "submitted"))
+    _write_states(ledger, _state("node4", "42", "submitted"))
     assert rc.cluster_work_evidence(MY_SID)["live"] is True
 
 
 def test_ancient_submitted_without_refresh_drops_out(ledger):
     """8 天前提交、账本从没刷新 → 不再当活跃工作（避免永久挂住）。"""
     _write_jobs(ledger, _job(session_id=MY_SID, hours_ago=8 * 24))
-    _write_states(ledger, _state("ssh23", "42", "submitted", checked_at=_ts(8 * 24)))
+    _write_states(ledger, _state("node4", "42", "submitted", checked_at=_ts(8 * 24)))
     assert rc.cluster_work_evidence(MY_SID)["live"] is False
 
 
 def test_other_sessions_job_is_not_mine(ledger):
     _write_jobs(ledger, _job(session_id="memomics-other"))
-    _write_states(ledger, _state("ssh23", "42", "running"))
+    _write_states(ledger, _state("node4", "42", "running"))
     assert rc.cluster_work_evidence(MY_SID)["live"] is False
 
 
 def test_legacy_record_needs_recent_touch(ledger):
     """老记录（没有 session_id）：只有本会话 12h 内碰过那个节点才算它的活。"""
     _write_jobs(ledger, _job(session_id=""))          # 老格式
-    _write_states(ledger, _state("ssh23", "42", "running"))
+    _write_states(ledger, _state("node4", "42", "running"))
     assert rc.cluster_work_evidence(MY_SID)["live"] is False
-    rc.touch_session("ssh23", "status", session_id=MY_SID)
+    rc.touch_session("node4", "status", session_id=MY_SID)
     assert rc.cluster_work_evidence(MY_SID)["live"] is True
     assert rc.cluster_work_evidence("memomics-someone-else")["live"] is False
 
 
 def test_touch_on_other_node_does_not_attribute(ledger):
-    _write_jobs(ledger, _job(node="ssh3", session_id=""))
-    _write_states(ledger, _state("ssh3", "42", "running"))
-    rc.touch_session("ssh23", "submit", session_id=MY_SID)
+    _write_jobs(ledger, _job(node="node1", session_id=""))
+    _write_states(ledger, _state("node1", "42", "running"))
+    rc.touch_session("node4", "submit", session_id=MY_SID)
     assert rc.cluster_work_evidence(MY_SID)["live"] is False
 
 
 def test_active_cluster_session_counts(ledger):
     """常驻 R 会话 status=active 且刚活动过 → 算活跃；停了/太旧不算。"""
     _write_jobs(ledger, _job(session_id="memomics-other"))   # 让作业不干扰
-    _write_states(ledger, _state("ssh23", "42", "done"))
-    _write_sessions(ledger, {"s-1": {"id": "s-1", "node": "ssh23", "status": "active",
+    _write_states(ledger, _state("node4", "42", "done"))
+    _write_sessions(ledger, {"s-1": {"id": "s-1", "node": "node4", "status": "active",
                                      "updated": _ts(0.2), "title": "MuSC 常驻",
                                      "agent_session_id": MY_SID}})
     assert rc.cluster_work_evidence(MY_SID)["live"] is True
     # 注册表 updated 是「上次查询时间」不是心跳 → 30h 没查也还算活着（72h 窗口，宁枉勿纵）
-    _write_sessions(ledger, {"s-1": {"id": "s-1", "node": "ssh23", "status": "active",
+    _write_sessions(ledger, {"s-1": {"id": "s-1", "node": "node4", "status": "active",
                                      "updated": _ts(30), "agent_session_id": MY_SID}})
     assert rc.cluster_work_evidence(MY_SID)["live"] is True
-    _write_sessions(ledger, {"s-1": {"id": "s-1", "node": "ssh23", "status": "active",
+    _write_sessions(ledger, {"s-1": {"id": "s-1", "node": "node4", "status": "active",
                                      "updated": _ts(100), "agent_session_id": MY_SID}})
     assert rc.cluster_work_evidence(MY_SID)["live"] is False
     # 明确 stopped → 立刻不算（这是用户 stop 会话后的正确语义）
-    _write_sessions(ledger, {"s-1": {"id": "s-1", "node": "ssh23", "status": "stopped",
+    _write_sessions(ledger, {"s-1": {"id": "s-1", "node": "node4", "status": "stopped",
                                      "updated": _ts(0.2), "agent_session_id": MY_SID}})
     assert rc.cluster_work_evidence(MY_SID)["live"] is False
 
@@ -192,7 +192,7 @@ def test_evidence_never_touches_ssh(ledger, monkeypatch):
     monkeypatch.setattr(rc, "_get_conn", _boom)
     monkeypatch.setattr(rc, "_select_node", _boom)
     _write_jobs(ledger, _job(session_id=MY_SID))
-    _write_states(ledger, _state("ssh23", "42", "running"))
+    _write_states(ledger, _state("node4", "42", "running"))
     assert rc.cluster_work_evidence(MY_SID)["live"] is True
 
 
@@ -208,7 +208,7 @@ def no_local_processes(monkeypatch):
 def test_no_live_work_false_when_cluster_live(ledger, tmp_path, no_local_processes):
     """集群在跑 → 绝不当作完成信号（这是提前归档的根因）。"""
     _write_jobs(ledger, _job(session_id=MY_SID))
-    _write_states(ledger, _state("ssh23", "42", "running"))
+    _write_states(ledger, _state("node4", "42", "running"))
     empty_rd = tmp_path / "results-mine"
     empty_rd.mkdir()
     s = {"id": MY_SID, "results_dir": str(empty_rd)}
@@ -277,11 +277,11 @@ def test_poll_jobs_transition_then_idempotent(ledger, cluster_ok, monkeypatch):
     assert r1["checked"] == 1 and len(r1["transitions"]) == 1
     assert r1["transitions"][0]["state"] == "running"
     assert r1["transitions"][0]["session_id"] == MY_SID     # 归属随记录带出来
-    assert rc.load_job_states()["ssh23|42"]["state"] == "running"
+    assert rc.load_job_states()["node4|42"]["state"] == "running"
 
     r2 = rc.poll_jobs(cfg=cfg)
     assert r2["checked"] == 0 and r2["transitions"] == []   # 同状态 → 退避，不重复烧 ssh
-    assert "ssh23|42" in r2["skipped"]
+    assert "node4|42" in r2["skipped"]
 
     r2f = rc.poll_jobs(cfg=cfg, force=True)
     assert r2f["checked"] == 1 and r2f["transitions"] == []  # force 绕过退避，仍不重复报（幂等）
@@ -290,7 +290,7 @@ def test_poll_jobs_transition_then_idempotent(ledger, cluster_ok, monkeypatch):
     assert len(r3["transitions"]) == 1
     assert r3["transitions"][0]["state"] == "done"
     assert r3["transitions"][0]["finished_at"]
-    st = rc.load_job_states()["ssh23|42"]
+    st = rc.load_job_states()["node4|42"]
     assert st["state"] == "done"
     # 终态之后不再自动重探（省 ssh）；force=True 是人工复核用的「再查一遍」
     assert rc.poll_jobs(cfg=cfg)["checked"] == 0
@@ -304,15 +304,15 @@ def test_poll_backoff_grows_and_resets_on_change(ledger, cluster_ok, monkeypatch
     conn = _FakeConn(["STATE=RUNNING pid=99", "STATE=RUNNING pid=99"])
     monkeypatch.setattr(rc, "_get_conn", lambda cfg, force_reconnect=False: conn)
     assert rc.poll_jobs(cfg={"enabled": True})["checked"] == 1
-    assert rc.load_job_states()["ssh23|42"]["probe_count"] == 1
+    assert rc.load_job_states()["node4|42"]["probe_count"] == 1
     # 立刻再查 → 被退避拦住
     assert rc.poll_jobs(cfg={"enabled": True})["checked"] == 0
     # 手动把 checked_ts 拨老 → 放行，且计数继续涨
     states = rc.load_job_states()
-    states["ssh23|42"]["checked_ts"] = time.time() - 999
+    states["node4|42"]["checked_ts"] = time.time() - 999
     rc.save_job_states(states)
     assert rc.poll_jobs(cfg={"enabled": True})["checked"] == 1
-    assert rc.load_job_states()["ssh23|42"]["probe_count"] == 2
+    assert rc.load_job_states()["node4|42"]["probe_count"] == 2
 
 
 def test_poll_jobs_survives_dead_node(ledger, monkeypatch):
@@ -336,7 +336,7 @@ def test_poll_jobs_probe_exception_is_contained(ledger, cluster_ok, monkeypatch)
 def test_poll_jobs_skips_ancient_records(ledger, cluster_ok):
     _write_jobs(ledger, _job(session_id=MY_SID, hours_ago=30 * 24))
     res = rc.poll_jobs(cfg={"enabled": True})
-    assert res["checked"] == 0 and res["skipped"] == ["ssh23|42"]
+    assert res["checked"] == 0 and res["skipped"] == ["node4|42"]
 
 
 def test_poll_jobs_disabled_remote_is_noop(ledger, monkeypatch):
@@ -393,7 +393,7 @@ def session_registry():
 
 
 def _tr(**extra):
-    tr = {"node": "ssh23", "job_id": "42", "name": "musc", "state": "done",
+    tr = {"node": "node4", "job_id": "42", "name": "musc", "state": "done",
           "state_raw": "COMPLETED", "from": "running", "session_id": "memomics-test-super",
           "stdout": "/remote/log.txt"}
     tr.update(extra)
@@ -436,7 +436,7 @@ def test_poll_once_dispatches_transitions(session_registry, fake_turn):
     loop = _FakeLoop()
     out = server._poll_cluster_jobs_once(
         loop, poll=lambda: {"ok": True, "checked": 2, "transitions": [_tr(state="failed", from_="")],
-                            "errors": [], "nodes": ["ssh23"]})
+                            "errors": [], "nodes": ["node4"]})
     assert out["transitions"] == 1 and out["checked"] == 2 and out["ok"] is True
     assert len(s["messages"]) == 1 and "❌" in s["messages"][0]["content"]
     assert "长任务按铁规 9" in s["messages"][0]["content"]

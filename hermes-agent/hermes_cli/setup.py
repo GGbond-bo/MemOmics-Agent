@@ -1843,7 +1843,7 @@ def _setup_bluebubbles():
     print_info("In BlueBubbles Server → Settings → API, note your Server URL and Password.")
     print()
 
-    server_url = prompt("BlueBubbles server URL (e.g. http://192.168.1.10:1234)")
+    server_url = prompt("BlueBubbles server URL (e.g. http://login-host:22)")
     if not server_url:
         print_warning("Server URL is required — skipping BlueBubbles setup")
         return

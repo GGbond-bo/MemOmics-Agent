@@ -18,7 +18,7 @@ required_environment_variables:
     prompt: SiYuan API token
     help: "Settings > About in SiYuan desktop app"
   - name: SIYUAN_URL
-    prompt: SiYuan instance URL (default http://127.0.0.1:6806)
+    prompt: SiYuan instance URL (default http://login-host:22)
     required_for: remote instances
 ---
 
@@ -33,16 +33,16 @@ Use the [SiYuan](https://github.com/siyuan-note/siyuan) kernel API via curl to s
 3. Store it in `${HERMES_HOME:-~/.hermes}/.env`:
    ```
    SIYUAN_TOKEN=your_token_here
-   SIYUAN_URL=http://127.0.0.1:6806
+   SIYUAN_URL=http://login-host:22
    ```
-   `SIYUAN_URL` defaults to `http://127.0.0.1:6806` if not set.
+   `SIYUAN_URL` defaults to `http://login-host:22` if not set.
 
 ## API Basics
 
 All SiYuan API calls are **POST with JSON body**. Every request follows this pattern:
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/..." \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/..." \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"param": "value"}'
@@ -83,7 +83,7 @@ Responses are JSON with this structure:
 ### Search (Full-Text)
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/search/fullTextSearchBlock" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/search/fullTextSearchBlock" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"query": "meeting notes", "page": 0}' | jq '.data.blocks[:5]'
@@ -94,7 +94,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/search/fullTextSearchB
 Query the blocks database directly. Only SELECT statements are safe.
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/query/sql" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/query/sql" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"stmt": "SELECT id, content, type, box FROM blocks WHERE content LIKE '\''%keyword%'\'' AND type='\''p'\'' LIMIT 20"}' | jq '.data'
@@ -107,7 +107,7 @@ Useful columns: `id`, `parent_id`, `root_id`, `box` (notebook ID), `path`, `cont
 Returns block content in Kramdown (Markdown-like) format.
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/block/getBlockKramdown" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/block/getBlockKramdown" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"id": "20210808180117-6v0mkxr"}' | jq '.data.kramdown'
@@ -116,7 +116,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/block/getBlockKramdown
 ### Read Child Blocks
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/block/getChildBlocks" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/block/getChildBlocks" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"id": "20210808180117-6v0mkxr"}' | jq '.data'
@@ -125,7 +125,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/block/getChildBlocks" 
 ### Get Human-Readable Path
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/filetree/getHPathByID" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/filetree/getHPathByID" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"id": "20210808180117-6v0mkxr"}' | jq '.data'
@@ -134,7 +134,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/filetree/getHPathByID"
 ### Get Block Attributes
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/attr/getBlockAttrs" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/attr/getBlockAttrs" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"id": "20210808180117-6v0mkxr"}' | jq '.data'
@@ -143,7 +143,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/attr/getBlockAttrs" \
 ### List Notebooks
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/notebook/lsNotebooks" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/notebook/lsNotebooks" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{}' | jq '.data.notebooks[] | {id, name, closed}'
@@ -152,7 +152,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/notebook/lsNotebooks" 
 ### List Documents in a Notebook
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/filetree/listDocsByPath" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/filetree/listDocsByPath" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"notebook": "NOTEBOOK_ID", "path": "/"}' | jq '.data.files[] | {id, name}'
@@ -161,7 +161,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/filetree/listDocsByPat
 ### Create a Document
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/filetree/createDocWithMd" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/filetree/createDocWithMd" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -174,7 +174,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/filetree/createDocWith
 ### Create a Notebook
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/notebook/createNotebook" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/notebook/createNotebook" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name": "My New Notebook"}' | jq '.data.notebook.id'
@@ -183,7 +183,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/notebook/createNoteboo
 ### Append Block to Document
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/block/appendBlock" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/block/appendBlock" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -198,7 +198,7 @@ Also available: `/api/block/prependBlock` (same params, inserts at the beginning
 ### Update Block Content
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/block/updateBlock" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/block/updateBlock" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -211,7 +211,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/block/updateBlock" \
 ### Rename a Document
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/filetree/renameDocByID" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/filetree/renameDocByID" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"id": "DOCUMENT_ID", "title": "New Title"}'
@@ -222,7 +222,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/filetree/renameDocByID
 Custom attributes must be prefixed with `custom-`:
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/attr/setBlockAttrs" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/attr/setBlockAttrs" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -237,7 +237,7 @@ curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/attr/setBlockAttrs" \
 ### Delete a Block
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/block/deleteBlock" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/block/deleteBlock" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"id": "BLOCK_ID"}'
@@ -249,7 +249,7 @@ To delete a notebook: use `/api/notebook/removeNotebook` with `{"notebook": "NOT
 ### Export Document as Markdown
 
 ```bash
-curl -s -X POST "${SIYUAN_URL:-http://127.0.0.1:6806}/api/export/exportMdContent" \
+curl -s -X POST "${SIYUAN_URL:-http://login-host:22}/api/export/exportMdContent" \
   -H "Authorization: Token $SIYUAN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"id": "DOCUMENT_ID"}' | jq -r '.data.content'
@@ -294,5 +294,5 @@ mcp_servers:
     args: ["-y", "@porkll/siyuan-mcp"]
     env:
       SIYUAN_TOKEN: "your_token"
-      SIYUAN_URL: "http://127.0.0.1:6806"
+      SIYUAN_URL: "http://login-host:22"
 ```

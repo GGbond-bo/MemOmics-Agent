@@ -84,7 +84,7 @@ def main():
     }
     # 注入真实实现：探针 + 复检 + 剪除
     import sys as _sys
-    _sys.path.insert(0, r"E:\MemOmics-Agent")
+    _sys.path.insert(0, r"<安装目录>")
     from memomics.coding_plans import probe_chat_model
     ns["probe_chat_model"] = probe_chat_model
     for fn in ("_prune_models_from_saved", "_run_model_recheck"):

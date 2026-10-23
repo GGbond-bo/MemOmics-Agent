@@ -18,12 +18,12 @@ description: "当 Hermes 运行在远程机器、容器或跳板机后面时，�
 
 ```bash
 # 在你的本地机器（笔记本）上，另开一个终端：
-ssh -N -L 43827:127.0.0.1:43827 user@remote-host
+ssh -N -L 43827:login-host:22 user@remote-host
 
 # 在远程机器的现有 SSH 会话中：
 hermes auth add spotify --no-browser
 # → Hermes 打印授权 URL，在笔记本的浏览器中打开。
-# → 浏览器重定向到 127.0.0.1:43827/callback，隧道转发到远程监听器，登录完成。
+# → 浏览器重定向到 login-host:22/callback，隧道转发到远程监听器，登录完成。
 ```
 
 Hermes 会在 `Waiting for callback on ...` 一行打印实际绑定的端口——从那里复制。Spotify 默认端口为 `43827`。
@@ -51,7 +51,7 @@ Spotify 和大多数 MCP OAuth 服务器会根据白名单验证 `redirect_uri` 
 
 ```bash
 # Spotify（端口 43827）
-ssh -N -L 43827:127.0.0.1:43827 user@remote-host
+ssh -N -L 43827:login-host:22 user@remote-host
 ```
 
 `-N` 表示「不打开远程 shell，仅保持隧道」。登录期间保持此终端运行。
@@ -76,7 +76,7 @@ Hermes 检测到 SSH 会话，跳过自动打开浏览器，并打印授权 URL 
 如果通过堡垒机 / 跳板机访问 Hermes，使用 SSH 内置的 `-J`（ProxyJump）：
 
 ```bash
-ssh -N -L 43827:127.0.0.1:43827 -J jump-user@jump-host user@final-host
+ssh -N -L 43827:login-host:22 -J jump-user@jump-host user@final-host
 ```
 
 ## 故障排除

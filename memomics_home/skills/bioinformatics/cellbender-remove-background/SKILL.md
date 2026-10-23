@@ -108,7 +108,7 @@ results/<模块>/<方法>/
 
 CellBender remove-background 基于深度生成模型(VAE)估计并去除环境RNA污染。内部架构：编码器(Encoder)将 UMI count 嵌入到潜在空间 → 解码器(Decoder)重建"去噪"表达矩阵 + 估计背景/空滴概率。训练时 90%数据用于训练，20%空滴注入每个batch。使用 OneCycle 学习率调度（`max_lr = 10 × learning_rate`）。
 
-适用于10x Chromium数据，特别是高污染组织(骨骼肌/脑)和衰老样本。
+适用于10x Chromium数据，特别是高污染组织(示例组织/脑)和衰老样本。
 
 ## When to Use
 

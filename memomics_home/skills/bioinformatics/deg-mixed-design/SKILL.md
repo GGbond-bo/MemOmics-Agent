@@ -668,7 +668,7 @@ genome-wide significant"）。⇒ 若用户坚持裸标：可以，但必须①�
   → `references/deg-methodology-benchmarks.md`（含细胞级/pseudobulk 两大阵营、决定选型的实证基准、
   组成层 propeller、本类项目应用先例、判据→方法速查表）
 - **细胞级推断单位与样本层校正（回答「为什么不能只用细胞数当 n」「别人怎么就能用 MAST」时直接引）**
-  → `references/cell-level-deg-mast-ruv.md`（四种合法校正途径对照表、猴脑 NHPABC 完整配方、
+  → `references/cell-level-deg-mast-ruv.md`（四种合法校正途径对照表、猴脑 example-cohort 完整配方、
   **ICC/设计效应/有效 n 的定量论证 + 零假设 FPR 模拟实测**（细胞级 25%→93.5% vs 供体级≈5%）、
   阈值不可跨尺度移植实测表、RUV 与 RE 分工、MAST glmer 坑表 7 条）
   ⚠️ 后 3 条实施坑与 `references/mast-glmer-donor-random-effects.md` 有重叠，两个文件可按需合并。

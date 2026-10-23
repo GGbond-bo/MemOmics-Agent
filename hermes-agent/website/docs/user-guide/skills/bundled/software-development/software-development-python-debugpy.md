@@ -190,13 +190,13 @@ Start the process; it blocks on `wait_for_client()`.
 ### Pattern B: No source edit — launch with `-m debugpy`
 
 ```bash
-python -m debugpy --listen 127.0.0.1:5678 --wait-for-client your_script.py arg1
+python -m debugpy --listen login-host:22 --wait-for-client your_script.py arg1
 ```
 
 Equivalent for module entry:
 
 ```bash
-python -m debugpy --listen 127.0.0.1:5678 --wait-for-client -m your.module
+python -m debugpy --listen login-host:22 --wait-for-client -m your.module
 ```
 
 ### Pattern C: Attach to an already-running process
@@ -204,7 +204,7 @@ python -m debugpy --listen 127.0.0.1:5678 --wait-for-client -m your.module
 Needs the PID and debugpy preinstalled in the target's environment:
 
 ```bash
-python -m debugpy --listen 127.0.0.1:5678 --pid <pid>
+python -m debugpy --listen login-host:22 --pid <pid>
 # debugpy injects itself into the process. Then attach a client as below.
 ```
 

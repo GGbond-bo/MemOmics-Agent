@@ -82,8 +82,8 @@ MemOmics 用 `agent/model_metadata.py::get_model_context_length()` 解析窗口�
 
 ```python
 import os, sys
-os.environ["MEMOMICS_HOME"] = r"E:/MemOmics-Agent/memomics_home"   # 必须在 import 之前设
-sys.path.insert(0, r"E:/MemOmics-Agent/hermes-agent")
+os.environ["MEMOMICS_HOME"] = r"<安装目录>"   # 必须在 import 之前设
+sys.path.insert(0, r"<安装目录>")
 from agent.model_metadata import save_context_length, get_cached_context_length
 save_context_length("deepseek-flash", "https://dcsapi.dcs.cloud/api/aigress/unified/v1", 1_000_000)
 print(get_cached_context_length("deepseek-flash", "https://dcsapi.dcs.cloud/api/aigress/unified/v1"))

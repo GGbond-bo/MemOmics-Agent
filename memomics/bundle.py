@@ -31,7 +31,7 @@ import time
 import zipfile
 
 SCHEMA = "memomics-bundle-v1"
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # E:\MemOmics-Agent
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # <安装目录>
 
 # 硬编码永不出包（即使用户手动指定）
 SECRET_NAMES = ("config.yaml", "provider_keys.json", "dcs_cloud.json", "credentials.json",
@@ -42,7 +42,7 @@ SECRET_PATTERNS = (r"\.pem$", r"\.key$", r"^id_[a-z]+$", r"\.db-journal$", r"\.e
 REDACTIONS = [
     (re.compile(r"[A-Za-z]:[\\/]MemOmics-Agent", re.I), "$MEMOMICS_HOME"),
     (re.compile(r"[A-Za-z]:[\\/]Users[\\/][^\\/\s\"']+"), "$HOME"),
-    (re.compile(r"/hwfssz3/PS_JLU/[^/\s\"']+"), "$CLUSTER_WORKDIR"),
+    (re.compile(r"/cluster/share/[^/\s\"']+"), "$CLUSTER_WORKDIR"),
     (re.compile(r"/home/[^/\s\"']+"), "$CLUSTER_HOME"),
     (re.compile(r"\\\\[^\\\s\"']+\\[^\\\s\"']+"), "$SHARE"),
 ]

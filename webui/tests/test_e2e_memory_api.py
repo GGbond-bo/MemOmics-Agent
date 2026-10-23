@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """P1-12(2026-08-13): 真实 server e2e 测试 — memory API 鉴权/限额链路。
 
-用法（在 E:/MemOmics-Agent 下运行）:
+用法（在 <安装目录> 下运行）:
     MEMOMICS_PORT=8897 python webui/tests/test_e2e_memory_api.py
 
 启动一个独立端口的真实 server 实例（uvicorn 子进程），验证:

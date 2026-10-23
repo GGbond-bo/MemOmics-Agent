@@ -1,7 +1,7 @@
 # GRNBoost2-Only 工作流（无需数据库下载）
 
 > **创建日期**: 2026-07-09  
-> **来源**: 人类骨骼肌衰老 SMF 亚群 SCENIC 分析前准备  
+> **来源**: 示例研究场景 SMF 亚群 SCENIC 分析前准备  
 > **问题**: SCENIC 数据库（1.18GB + 2-3GB）下载速度仅 ~20KB/s，需 17+ 小时  
 > **解决方案**: 跳过 cisTarget/AUCell，只跑 GRNBoost2（无需数据库）
 
@@ -119,7 +119,7 @@ def compute_tf_activity(adjacencies_path, ex_matrix_path, n_top=50, min_targets=
     return pd.DataFrame(tf_activities)
 ```
 
-**验证结果**（2026-07-09，人类骨骼肌衰老 SMF 数据，9,568 细胞，2000 HVG）：
+**验证结果**（2026-07-09，示例研究场景 SMF 数据，9,568 细胞，2000 HVG）：
 - 产出 **121 个 TF 活性**
 - RUNX1 排名 #5（验证通）
 - ATF3（应激）排名 #1

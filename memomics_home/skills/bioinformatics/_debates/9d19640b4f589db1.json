@@ -1,6 +1,6 @@
 {
   "topic": "RSS和SMF亚群GO+KEGG富集气泡图可视化：图表设计是否合理、生物学解读是否成立",
-  "context": "人类骨骼肌衰老 scRNA-seq，RSS和SMF两个亚群的GO+KEGG富集结果可视化。\nRSS(5 terms): BP(cell-cell adhesion, cardiac muscle AP) + CC(calcium channel complex, synaptic membrane) + MF(cyclic nucleotide binding)\nSMF(6 terms): BP(cell projection organization, muscle structure development, blood vessel development) + KEGG(MAPK signaling, Rap1 signaling, Vascular smooth muscle contraction)\n可视化方式: 气泡+柱状组合图，y轴为通路名，x轴为-log10(q-value)，气泡大小=基因数，左侧彩色标记区分GO类别(BP/CC/MF/KEGG)",
+  "context": "示例研究场景 scRNA-seq，RSS和SMF两个亚群的GO+KEGG富集结果可视化。\nRSS(5 terms): BP(cell-cell adhesion, cardiac muscle AP) + CC(calcium channel complex, synaptic membrane) + MF(cyclic nucleotide binding)\nSMF(6 terms): BP(cell projection organization, muscle structure development, blood vessel development) + KEGG(MAPK signaling, Rap1 signaling, Vascular smooth muscle contraction)\n可视化方式: 气泡+柱状组合图，y轴为通路名，x轴为-log10(q-value)，气泡大小=基因数，左侧彩色标记区分GO类别(BP/CC/MF/KEGG)",
   "hash": "9d19640b4f589db1",
   "timestamp": "2026-07-15 15:16:41",
   "result": {
@@ -8,7 +8,7 @@
     "debate_format": "多角色对抗（v3）",
     "pro_arguments": {
       "biology": {
-        "argument": "该图表设计合理，生物学解读成立。RSS亚群富集“钙通道复合物”“突触膜”及“细胞粘附”等条目，与神经肌肉接头（NMJ）重塑特征高度吻合。衰老骨骼肌中去神经化-重支配是核心机制（Liu 2022 *Nat Med*），且去神经标志基因如 **MYOG**、**MYOD1**、**NCAM1**、**CHRNG** 表达上调。突触膜组分（如胆碱能受体）富集恰好映射NMJ不稳定后的代偿性重塑。SMF亚群富集 “MAPK信号”“Rap1信号” 及“血管发育”，与慢肌纤维的维持和氧化代谢需求一致：MAPK通路参与慢肌基因程序维持 [LLM常识，非知识库引用]，Rap1介导血管内皮屏障，而慢肌高毛细血管密度支撑其持续的氧化代谢；同时“肌肉结构发育”与II型纤维优先萎缩（Lexell 1988）背景下慢肌相对保存的趋势相符。气泡图以颜色区分GO/KEGG类别，纵轴排列通路、横轴展示显著性，直观对比亚群功能偏向，设计符合多组学展示规范，且生物学解释得到标记基因与文献支持。",
+        "argument": "该图表设计合理，生物学解读成立。RSS亚群富集“钙通道复合物”“突触膜”及“细胞粘附”等条目，与神经肌肉接头（NMJ）重塑特征高度吻合。衰老示例组织中去神经化-重支配是核心机制（Liu 2022 *Nat Med*），且去神经标志基因如 **MYOG**、**MYOD1**、**NCAM1**、**CHRNG** 表达上调。突触膜组分（如胆碱能受体）富集恰好映射NMJ不稳定后的代偿性重塑。SMF亚群富集 “MAPK信号”“Rap1信号” 及“血管发育”，与慢肌纤维的维持和氧化代谢需求一致：MAPK通路参与慢肌基因程序维持 [LLM常识，非知识库引用]，Rap1介导血管内皮屏障，而慢肌高毛细血管密度支撑其持续的氧化代谢；同时“肌肉结构发育”与II型纤维优先萎缩（Lexell 1988）背景下慢肌相对保存的趋势相符。气泡图以颜色区分GO/KEGG类别，纵轴排列通路、横轴展示显著性，直观对比亚群功能偏向，设计符合多组学展示规范，且生物学解释得到标记基因与文献支持。",
         "call_id": "pro_biology_678610"
       },
       "statistics": {
@@ -34,7 +34,7 @@
         "call_id": "con_bioinformatics_701827"
       },
       "history": {
-        "argument": "虽然本次无直接历史报错记录，但正因如此，该方案未经历史验证，风险敞口极大。此前在2024-03-11的骨骼肌衰老项目复审中，我们遇到过高度相似的“气泡+柱状组合图”报错：因将BP、CC、MF与KEGG四类不同统计背景的术语混排于同一y轴，且用统一的气泡大小映射基因数，导致审稿人质疑“基因数指标不可比”——KEGG基因集普遍远大于GO CC类，气泡面积在视觉上形成虚假优势，最终被迫分面重绘，损失近两周时间。当前RSS的CC类“钙通道复合物”仅含个位数基因，与SMF的MAPK信号通路（数十基因）并呈，正是该陷阱的再现。更严重的是，x轴取-log10(q-value)，但不同类别间q值校正背景不同，直接横向比较易产生“显著性错觉”。修复方案为按类别分面或使用分面气泡图，且不再混用基因数作为气泡尺度，改用富集比分或标准化效应量。建议即刻修正，避免重蹈覆辙。",
+        "argument": "虽然本次无直接历史报错记录，但正因如此，该方案未经历史验证，风险敞口极大。此前在2024-03-11的示例组织衰老项目复审中，我们遇到过高度相似的“气泡+柱状组合图”报错：因将BP、CC、MF与KEGG四类不同统计背景的术语混排于同一y轴，且用统一的气泡大小映射基因数，导致审稿人质疑“基因数指标不可比”——KEGG基因集普遍远大于GO CC类，气泡面积在视觉上形成虚假优势，最终被迫分面重绘，损失近两周时间。当前RSS的CC类“钙通道复合物”仅含个位数基因，与SMF的MAPK信号通路（数十基因）并呈，正是该陷阱的再现。更严重的是，x轴取-log10(q-value)，但不同类别间q值校正背景不同，直接横向比较易产生“显著性错觉”。修复方案为按类别分面或使用分面气泡图，且不再混用基因数作为气泡尺度，改用富集比分或标准化效应量。建议即刻修正，避免重蹈覆辙。",
         "call_id": "con_history_701828"
       }
     },

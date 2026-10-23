@@ -37,7 +37,7 @@ hermes proxy start
 
 ```
 Starting Hermes proxy for Nous Portal
-  Listening on:  http://127.0.0.1:8645/v1
+  Listening on:  http://login-host:22/v1
   Forwarding to: (resolved per-request from your subscription)
   Use any bearer token in the client — the proxy attaches your real credential.
 ```
@@ -49,7 +49,7 @@ Starting Hermes proxy for Nous Portal
 任何 OpenAI 兼容应用的配置都使用相同的三元组：
 
 ```
-Base URL:   http://127.0.0.1:8645/v1
+Base URL:   http://login-host:22/v1
 API key:    任意值（例如 "sk-unused"）
 Model:      Hermes-4-70B    # 或 Hermes-4.3-36B、Hermes-4-405B
 ```
@@ -102,7 +102,7 @@ Hermes proxy upstream adapters
   "vlm": {
     "provider": "openai",
     "model": "Hermes-4-70B",
-    "api_base": "http://127.0.0.1:8645/v1",
+    "api_base": "http://login-host:22/v1",
     "api_key": "unused-proxy-attaches-real-creds"
   }
 }
@@ -126,7 +126,7 @@ OpenViking 的 VLM 调用现在将通过你的 Portal 订阅进行。Embedding �
 
 ```bash
 # Karakeep .env
-OPENAI_API_BASE_URL=http://127.0.0.1:8645/v1
+OPENAI_API_BASE_URL=http://login-host:22/v1
 OPENAI_API_KEY=any-non-empty-string
 INFERENCE_TEXT_MODEL=Hermes-4-70B
 ```

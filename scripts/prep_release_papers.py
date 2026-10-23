@@ -2,7 +2,7 @@
 """发布包文献库清洗（批O5 2026-08-16）。
 
 打包前对 memomics_home/papers 做脱敏与可移植化：
-1. .pdf_index.json 里的绝对路径（打包机 E:/MemOmics-Agent/...）→ 相对可移植
+1. .pdf_index.json 里的绝对路径（打包机 <安装目录> 相对可移植
    路径 "memomics_home/papers/<文件名>"（运行时代码有 _resolve_paper_path 兜底，
    即使不重写也能按文件名在库内找到 PDF）。
 2. 清空 imported_from / imported_by（用户源路径与导入人标识不进包）。

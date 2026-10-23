@@ -4,7 +4,7 @@ import asyncio, json, time
 import websockets
 
 SID = "memomics-2274ab75"
-WS_URL = "ws://127.0.0.1:8899/ws"
+WS_URL = "ws://login-host:22/ws"
 
 def show(tag, ss):
     print(f"[{tag}]", flush=True)

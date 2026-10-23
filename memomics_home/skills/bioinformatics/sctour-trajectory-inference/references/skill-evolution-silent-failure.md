@@ -28,7 +28,7 @@
 
 同一 skill/会话内，前 N 次 `record_run` **成功落盘**到 `results/.../log/`，后续 M 次同样返回 Success 但**不写文件**。
 
-**示例（scTour 分析，人类骨骼肌/衰老，2026-07-08）：**
+**示例（scTour 分析，人类示例组织/衰老，2026-07-08）：**
 ```
 调用1: 01_preprocess.py       → ✅ 落盘 (run_record_020000)
 调用2: 02_run_sctour.py run1 → ✅ 落盘 (run_record_020001)

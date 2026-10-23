@@ -3,7 +3,7 @@
 适用范围：手里有一份「基因集定义表」（signature / gene set / pathway score table，通常来自论文
 Supplementary Table），需要 (a) 修好它、(b) 核对它、(c) 为图注给出**有依据的功能分类**。
 
-实测标本：`E:/骨骼肌锻炼/pathway_score.xlsx`（Supplementary Table 3, 22 signature / 1902 基因）
+实测标本：`<数据目录> Table 3, 22 signature / 1902 基因）
 → 修复版 `pathway_score_CLEAN_v3.xlsx`。
 
 ---

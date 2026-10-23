@@ -31,12 +31,12 @@ def _mk_session(tmp_path):
 class TestRequirementPersistence:
     def test_extract_path_and_requirement(self, tmp_path):
         s = _mk_session(tmp_path)
-        server._extract_and_store_requirements(s, "以后做图必须带 P 值，数据路径 E:/骨骼肌锻炼/MF_AUCell_meta.csv。配色也统一一点。")
+        server._extract_and_store_requirements(s, "以后做图必须带 P 值，数据路径 <数据目录>")
         p = os.path.join(str(tmp_path), "REQUIREMENTS.md")
         assert os.path.isfile(p)
         txt = open(p, encoding="utf-8").read()
         assert "必须带 P 值" in txt
-        assert "E:/骨骼肌锻炼/MF_AUCell_meta.csv" in txt
+        assert "<数据目录>" in txt
         assert "统一" in txt
 
     def test_dedupe(self, tmp_path):

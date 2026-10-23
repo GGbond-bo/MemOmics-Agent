@@ -18,10 +18,10 @@ Usage:
 import json, os, time, sys, traceback
 import httpx
 
-RESULTS_DIR = "E:/MemOmics-Agent/results/memomics-2f229850/log"  # EDIT: session log dir
+RESULTS_DIR = "<安装目录>"  # EDIT: session log dir
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
-with open("E:/MemOmics-Agent/memomics_home/model_config.json", "r", encoding="utf-8") as f:
+with open("<安装目录>", "r", encoding="utf-8") as f:
     mc = json.load(f)
 API_KEY = mc["api_key"]
 BASE_URL = mc["base_url"].rstrip("/")

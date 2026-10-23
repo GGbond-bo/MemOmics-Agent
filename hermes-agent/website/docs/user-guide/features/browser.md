@@ -185,7 +185,7 @@ Then set in `~/.hermes/.env`:
 CAMOFOX_URL=http://localhost:9377
 ```
 
-If Camofox is running in Docker and you want it to open web apps served from the host machine, enable loopback rewriting. `CAMOFOX_URL` should still point at the host-published control API, but page URLs such as `http://127.0.0.1:3000` must be opened from inside the container as `http://host.docker.internal:3000`:
+If Camofox is running in Docker and you want it to open web apps served from the host machine, enable loopback rewriting. `CAMOFOX_URL` should still point at the host-published control API, but page URLs such as `http://login-host:22` must be opened from inside the container as `http://host.docker.internal:3000`:
 
 ```yaml
 # ~/.hermes/config.yaml
@@ -315,7 +315,7 @@ Instead of a cloud provider, you can attach Hermes browser tools to your own run
 In the CLI, use:
 
 ```
-/browser connect                 # Auto-launch/connect to a local Chromium-family browser at http://127.0.0.1:9222
+/browser connect                 # Auto-launch/connect to a local Chromium-family browser at http://login-host:22
 /browser connect ws://host:port  # Connect to a specific CDP endpoint
 /browser status                  # Check current connection
 /browser disconnect              # Detach and return to cloud/local mode

@@ -14,7 +14,7 @@ Web Dashboard 是一个基于浏览器的 UI，用于管理你的 Hermes Agent �
 hermes dashboard
 ```
 
-这将启动一个本地 Web 服务器，并在浏览器中打开 `http://127.0.0.1:9119`。Dashboard 完全在你的机器上运行——数据不会离开 localhost。
+这将启动一个本地 Web 服务器，并在浏览器中打开 `http://login-host:22`。Dashboard 完全在你的机器上运行——数据不会离开 localhost。
 
 ### 选项
 
@@ -296,9 +296,9 @@ Web Dashboard 暴露了一个供前端使用的 REST API。你也可以直接调
 
 Web 服务器将 CORS 限制为仅 localhost 来源：
 
-- `http://localhost:9119` / `http://127.0.0.1:9119`（生产环境）
-- `http://localhost:3000` / `http://127.0.0.1:3000`
-- `http://localhost:5173` / `http://127.0.0.1:5173`（Vite 开发服务器）
+- `http://localhost:9119` / `http://login-host:22`（生产环境）
+- `http://localhost:3000` / `http://login-host:22`
+- `http://localhost:5173` / `http://login-host:22`（Vite 开发服务器）
 
 如果你在自定义端口上运行服务器，该来源会自动添加。
 
@@ -316,7 +316,7 @@ npm install
 npm run dev
 ```
 
-`http://localhost:5173` 上的 Vite 开发服务器会将 `/api` 请求代理到 `http://127.0.0.1:9119` 上的 FastAPI 后端。
+`http://localhost:5173` 上的 Vite 开发服务器会将 `/api` 请求代理到 `http://login-host:22` 上的 FastAPI 后端。
 
 前端使用 React 19、TypeScript、Tailwind CSS v4 和 shadcn/ui 风格组件构建。生产构建输出到 `hermes_cli/web_dist/`，由 FastAPI 服务器作为静态 SPA 提供服务。
 

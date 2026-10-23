@@ -25,7 +25,7 @@ sample 维（samples × tiles 小矩阵），再做下游（样本级 DA tiles /
 
 ### 覆盖比例 vs 覆盖计数（跨物种比对必须同口径）
 
-`rowMeans(binarize=TRUE 的矩阵)` 产出的是**覆盖比例 0-1**（每个 tile 被该样本多少比例的细胞覆盖，min≈1/n_cells）。`rowsum`/`colSums` 产出的是**覆盖计数**（整数）。人猴 L2 可及性比对时，两侧必须同一口径——猴侧基准矩阵（`E:/专利/file/monkey_tile_matrix_samples_x_tiles.rds` 20×6,085,841）实测值是 0-1 比例（max 0.9988，min≈1/16161），所以**人侧必须也用 `rowMeans`**，别混 `rowsum` 计数进来，否则跨物种对比直接错位。
+`rowMeans(binarize=TRUE 的矩阵)` 产出的是**覆盖比例 0-1**（每个 tile 被该样本多少比例的细胞覆盖，min≈1/n_cells）。`rowsum`/`colSums` 产出的是**覆盖计数**（整数）。人猴 L2 可及性比对时，两侧必须同一口径——猴侧基准矩阵（`<数据目录> 20×6,085,841）实测值是 0-1 比例（max 0.9988，min≈1/16161），所以**人侧必须也用 `rowMeans`**，别混 `rowsum` 计数进来，否则跨物种对比直接错位。
 
 ### 产出真伪自检（拿到 .rds 先验三样，别信文件名）
 

@@ -93,7 +93,7 @@ ExYoung ×0.95 / ExOld ×0.88 / ExT2D **×0.71**。⇒ **引用前先实测本�
 
 ## 4. 本类数据实测记录
 
-**2026-09-25，骨骼肌 MF AUCell 打分（`MF_AUCell_meta.csv` → `effect5_d_v2.csv`）**
+**2026-09-25，示例组织 MF AUCell 打分（`示例评分方法_meta.csv` → `effect5_d_v2.csv`）**
 
 - 缺陷：5 个效应（Aging / T2D / ExYoung / ExOld / ExT2D）**全部**用
   个体级 pooled-SD `d_s` + **Welch 独立 t**；3 个运动效应是同一受试者 Pre/Post，配对信息完全没进模型

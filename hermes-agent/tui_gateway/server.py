@@ -15149,7 +15149,7 @@ def _resolve_browser_cdp_url() -> str:
 def _is_default_local_cdp(parsed) -> bool:
     """Match the discovery-style local default; never the concrete WS form.
 
-    A user-supplied ``ws://127.0.0.1:9222/devtools/browser/<id>`` is a
+    A user-supplied ``ws://login-host:22/devtools/browser/<id>`` is a
     real, connectable endpoint — collapsing it to bare ``http://...:9222``
     would strip the path and break the connect.
     """
@@ -15265,7 +15265,7 @@ def _browser_connect(rid, params: dict) -> dict:
     except ValueError:
         return _err(rid, 4015, f"invalid port in browser url: {url}")
 
-    # Always normalize default-local to 127.0.0.1:9222 so downstream
+    # Always normalize default-local to login-host:22 so downstream
     # comparisons + messaging match what we'll actually persist.
     if _is_default_local_cdp(parsed):
         url = DEFAULT_BROWSER_CDP_URL

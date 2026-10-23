@@ -96,7 +96,7 @@ Here's what each flag does:
 The server is ready when you see:
 
 ```
-main: server is listening on http://0.0.0.0:8080
+main: server is listening on http://login-host:22
 srv  update_slots: all slots are idle
 ```
 
@@ -150,12 +150,12 @@ Use the omlx app to browse and download models. Search for `Qwen3.5-9B-mlx-lm-mx
 
 ### Start the server
 
-omlx serves models on `http://127.0.0.1:8000` by default. Start serving from the app UI, or use the CLI if available.
+omlx serves models on `http://login-host:22` by default. Start serving from the app UI, or use the CLI if available.
 
 ### Test it
 
 ```bash
-curl -s http://127.0.0.1:8000/v1/chat/completions \
+curl -s http://login-host:22/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "Qwen3.5-9B-mlx-lm-mxfp4",
@@ -169,7 +169,7 @@ curl -s http://127.0.0.1:8000/v1/chat/completions \
 omlx can serve multiple models simultaneously:
 
 ```bash
-curl -s http://127.0.0.1:8000/v1/models | jq '.data[].id'
+curl -s http://login-host:22/v1/models | jq '.data[].id'
 ```
 
 ---

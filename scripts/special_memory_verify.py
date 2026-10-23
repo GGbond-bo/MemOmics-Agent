@@ -4,7 +4,7 @@ import asyncio, json, time
 import websockets
 
 SID = "memomics-2274ab75"
-WS_URL = "ws://127.0.0.1:8899/ws"
+WS_URL = "ws://login-host:22/ws"
 
 async def main():
     async with websockets.connect(WS_URL, max_size=64 * 1024 * 1024) as ws:
@@ -24,7 +24,7 @@ async def main():
                 got = True
         await asyncio.sleep(3)
         # 2) REQUIREMENTS 检查
-        p = r"E:\MemOmics-Agent\results\memomics-2274ab75\REQUIREMENTS.md"
+        p = r"<安装目录>"
         txt = open(p, encoding="utf-8").read()
         print("=== REQUIREMENTS ===")
         for ln in txt.splitlines():
@@ -32,7 +32,7 @@ async def main():
                 print(" -", ln[:90])
         print("(特别指定) 置顶:", txt.splitlines()[0].startswith("特别") or "(特别指定)" in (txt.splitlines()[0] if txt.splitlines() else ""))
         # 3) 回合 token 数据
-        path = r"E:\MemOmics-Agent\results\memomics-2274ab75\token_usage.jsonl"
+        path = r"<安装目录>"
         last = None
         for line in open(path, encoding="utf-8"):
             line = line.strip()
@@ -44,7 +44,7 @@ async def main():
         print(f"回合: 总输入={billed:,} 未缓存={d['input_tokens']:,} 命中={hit:.0f}% (重启后首轮)")
         # 4) 跨会话 facts 检查
         import sqlite3
-        db = sqlite3.connect(r"E:\MemOmics-Agent\memomics_home\memory_store.db")
+        db = sqlite3.connect(r"<安装目录>")
         rows = db.execute(
             "SELECT content, trust_score FROM facts WHERE category='user_pref' AND content LIKE '%300dpi%'"
         ).fetchall()

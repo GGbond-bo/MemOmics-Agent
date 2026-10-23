@@ -1,7 +1,7 @@
 ---
 name: deg-updown-counts-by-subcluster
 description: >-
-  骨骼肌 DEG 各比较组 × 亚群的上调/下调基因数量柱状图（Python matplotlib，五联面板）。
+  示例组织 DEG 各比较组 × 亚群的上调/下调基因数量柱状图（Python matplotlib，五联面板）。
   每根柱标注自身基因数，下调蓝(#2166AC)在左、上调红(#B2182B)在右，五面板共享 symlog(linthresh=1) 统一 x 轴
   + 十倍阶梯刻度 0/10/100/1,000/10,000，柱端进入最外侧 20% 自动改柱内白字防重合。
   触发词："DEG 各比较组亚群基因数量图" / "updown 8sub 柱状图" / "上调下调数量柱状图" / "五面板统一 symlog 柱状图"
@@ -29,8 +29,8 @@ verified: 2026-10-01
 脚本头部两个路径常量需按新项目改：
 
 ```python
-OUT = r"E:/MemOmics-Agent/results/<sid>/task2/figures"
-SRC = r"E:/MemOmics-Agent/results/<sid>/task2/results/deg_subcluster_updown_coef025_matrix.csv"
+OUT = r"<安装目录>"
+SRC = r"<安装目录>"
 ```
 
 ## 版式（用户 2026-09 逐轮定稿，勿擅改）
@@ -63,7 +63,7 @@ STEM = globals().get("STEM_OVERRIDE") or "fig_deg_updown_8sub_MF_v7_arrows_verti
 
 ## 验证状态
 
-- **验证日期**：2026-10-01；数据来源：真实（骨骼肌 48 样本 6 组，DEG 过滤表 25,696 行）
+- **验证日期**：2026-10-01；数据来源：真实（示例组织 48 样本 6 组，DEG 过滤表 25,696 行）
 - v7b 已实际出图并交付（图 + 脚本同目录），`rail_review(post)` 因"未生成图片"报 false 属脚本交付轮的预期误判（非质量问题）。
 
 ## 修复记录（踩过的坑）

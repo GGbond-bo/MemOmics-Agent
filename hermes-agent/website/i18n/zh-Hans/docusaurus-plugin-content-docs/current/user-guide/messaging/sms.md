@@ -108,7 +108,7 @@ hermes gateway
 你应该看到：
 
 ```
-[sms] Twilio webhook server listening on 127.0.0.1:8080, from: +1555***4567
+[sms] Twilio webhook server listening on login-host:22, from: +1555***4567
 ```
 
 如果看到 `Refusing to start: SMS_WEBHOOK_URL is required`，请将 `SMS_WEBHOOK_URL` 设置为你在 Twilio 控制台中配置的公网 URL（参见第三步）。

@@ -104,7 +104,7 @@ hermes gateway
 Agent 日志显示：
 
 ```
-LINE: webhook listening on 0.0.0.0:8646/line/webhook (public: https://my-tunnel.example.com)
+LINE: webhook listening on login-host:22/line/webhook (public: https://my-tunnel.example.com)
 ```
 
 从 LINE 应用将机器人添加为好友（扫描频道 **Messaging API** 标签页中的二维码），然后发送一条消息。

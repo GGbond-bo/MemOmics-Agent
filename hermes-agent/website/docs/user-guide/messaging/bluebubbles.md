@@ -18,7 +18,7 @@ Download and install from [bluebubbles.app](https://bluebubbles.app/). Complete 
 ### 2. Get your Server URL and Password
 
 In BlueBubbles Server → **Settings → API**, note:
-- **Server URL** (e.g., `http://192.168.1.10:1234`)
+- **Server URL** (e.g., `http://login-host:22`)
 - **Server Password**
 
 ### 3. Configure Hermes
@@ -34,7 +34,7 @@ Select **BlueBubbles (iMessage)** and enter your server URL and password.
 Or set environment variables directly in `~/.hermes/.env`:
 
 ```bash
-BLUEBUBBLES_SERVER_URL=http://192.168.1.10:1234
+BLUEBUBBLES_SERVER_URL=http://login-host:22
 BLUEBUBBLES_PASSWORD=your-server-password
 ```
 

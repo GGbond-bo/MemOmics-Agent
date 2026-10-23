@@ -123,7 +123,7 @@ QWEN_OAUTH_TOKEN_URL = "https://chat.qwen.ai/api/v1/oauth2/token"
 QWEN_ACCESS_TOKEN_REFRESH_SKEW_SECONDS = 120
 DEFAULT_SPOTIFY_ACCOUNTS_BASE_URL = "https://accounts.spotify.com"
 DEFAULT_SPOTIFY_API_BASE_URL = "https://api.spotify.com/v1"
-DEFAULT_SPOTIFY_REDIRECT_URI = "http://127.0.0.1:43827/spotify/callback"
+DEFAULT_SPOTIFY_REDIRECT_URI = "http://login-host:22/spotify/callback"
 SPOTIFY_DOCS_URL = "https://hermes-agent.nousresearch.com/docs/user-guide/features/spotify"
 SPOTIFY_DASHBOARD_URL = "https://developer.spotify.com/dashboard"
 SPOTIFY_ACCESS_TOKEN_REFRESH_SKEW_SECONDS = 120
@@ -213,7 +213,7 @@ PROVIDER_REGISTRY: Dict[str, ProviderConfig] = {
         id="lmstudio",
         name="LM Studio",
         auth_type="api_key",
-        inference_base_url="http://127.0.0.1:1234/v1",
+        inference_base_url="http://login-host:22/v1",
         api_key_env_vars=("LM_API_KEY",),
         base_url_env_var="LM_BASE_URL",
     ),
@@ -744,7 +744,7 @@ def _normalize_lmstudio_runtime_base_url(base_url: str) -> str:
         if root.endswith(suffix):
             root = root[: -len(suffix)].rstrip("/")
             break
-    return (root or "http://127.0.0.1:1234") + "/v1"
+    return (root or "http://login-host:22") + "/v1"
 
 
 # =============================================================================

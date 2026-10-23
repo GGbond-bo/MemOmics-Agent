@@ -62,7 +62,7 @@ signal-cli link -n "HermesAgent"
 
 ```bash
 # Replace +1234567890 with your Signal phone number (E.164 format)
-signal-cli --account +1234567890 daemon --http 127.0.0.1:8080
+signal-cli --account +1234567890 daemon --http login-host:22
 ```
 
 :::tip
@@ -72,7 +72,7 @@ Keep this running in the background. You can use `systemd`, `tmux`, `screen`, or
 Verify it's running:
 
 ```bash
-curl http://127.0.0.1:8080/api/v1/check
+curl http://login-host:22/api/v1/check
 # Should return: {"versions":{"signal-cli":...}}
 ```
 
@@ -89,7 +89,7 @@ hermes gateway setup
 Select **Signal** from the platform menu. The wizard will:
 
 1. Check if signal-cli is installed
-2. Prompt for the HTTP URL (default: `http://127.0.0.1:8080`)
+2. Prompt for the HTTP URL (default: `http://login-host:22`)
 3. Test connectivity to the daemon
 4. Ask for your account phone number
 5. Configure allowed users and access policies
@@ -100,7 +100,7 @@ Add to `~/.hermes/.env`:
 
 ```bash
 # Required
-SIGNAL_HTTP_URL=http://127.0.0.1:8080
+SIGNAL_HTTP_URL=http://login-host:22
 SIGNAL_ACCOUNT=+1234567890
 
 # Security (recommended)
@@ -222,7 +222,7 @@ The adapter monitors the SSE connection and automatically reconnects if:
 
 | Problem | Solution |
 |---------|----------|
-| **"Cannot reach signal-cli"** during setup | Ensure signal-cli daemon is running: `signal-cli --account +YOUR_NUMBER daemon --http 127.0.0.1:8080` |
+| **"Cannot reach signal-cli"** during setup | Ensure signal-cli daemon is running: `signal-cli --account +YOUR_NUMBER daemon --http login-host:22` |
 | **Messages not received** | Check that `SIGNAL_ALLOWED_USERS` includes the sender's number in E.164 format (with `+` prefix) |
 | **"signal-cli not found on PATH"** | Install signal-cli and ensure it's in your PATH, or use Docker |
 | **Connection keeps dropping** | Check signal-cli logs for errors. Ensure Java 17+ is installed. |

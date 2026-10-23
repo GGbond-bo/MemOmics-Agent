@@ -40,7 +40,7 @@ ArchR 内存最省，且 footprinting/共可及性（Co-accessibility）是独�
 ## 对跨物种 CRE 专利项目的影响
 
 - 猴海马侧 ArchR 管线已跑通（Arrow + TileMatrix + GroupCoverages + Motif），专利实施例（L2 可及性 Spearman、L3 footprinting、CRECS 打分）**全部建立在 ArchR 输出上** → 换管线=实施例重跑+重新验证，方法论变更而非工具偏好。
-- 人海马侧 GSE278576 官方流程是 SnapATAC2（fragments → import → filter_cells → tile matrix → scrublet → spectral → leiden → MACS3）。Windows 装不上 SnapATAC2（无 wheel）→ 官方 cCRE 复用路径可跳过；Linux 集群跑 40 样本应优先官方原生路径。
+- 人海马侧 GSE000000 官方流程是 SnapATAC2（fragments → import → filter_cells → tile matrix → scrublet → spectral → leiden → MACS3）。Windows 装不上 SnapATAC2（无 wheel）→ 官方 cCRE 复用路径可跳过；Linux 集群跑 40 样本应优先官方原生路径。
 - **方法学混杂风险**：人侧 SnapATAC2 vs 猴侧 ArchR，两侧聚类/特征定义逻辑不同 → L2/L3 跨物种对比被工具差异污染。严格做法：两侧统一特征定义（如都按 500bp tile 矩阵对比，而非一侧 tile 一侧 peaks）。
 
 ## 抓摘要/全文的可用路径（本次实测有效）
@@ -71,7 +71,7 @@ pdftotext '<pdf>' '<out>.txt' && grep -n -i '<keyword>' '<out>.txt'
 
 ### SnapATAC2 官方管线细节（scverse 文档 2.10.0 实测；文档域名 kzhang.org → 301 到 https://scverse.org/SnapATAC2/）
 - 标准流程：import_fragments（backed h5ad，自动算 n_fragment/frac_dup/frac_mito）→ metrics.tsse/frip/frag_size_distr → filter_cells(min_counts, min_tsse, max_counts) → add_tile_matrix（500bp 默认，bin_size 可调）→ select_features(n_features=250000，支持 blacklist) → scrublet+filter_doublets（定制 Scrublet）→ tl.spectral → tl.umap → pp.knn + tl.leiden → 注释。
-- Peak calling：**tl.macs3(groupby=, replicate= 参数支持可重复 peak)** → tl.merge_peaks（统一非重叠固定宽）→ pp.make_peak_matrix。GSE278576 官方同款：`macs3 --ext 150 --shift -75 --nomodel -g hs -q 0.1 --call-summits`。
+- Peak calling：**tl.macs3(groupby=, replicate= 参数支持可重复 peak)** → tl.merge_peaks（统一非重叠固定宽）→ pp.make_peak_matrix。GSE000000 官方同款：`macs3 --ext 150 --shift -75 --nomodel -g hs -q 0.1 --call-summits`。
 - 差异可及性：tl.marker_regions（z-score 快筛）vs **tl.diff_test（单细胞级回归检验，min_log_fc=0.25/min_pct=0.05 预过滤，比 ArchR 伪 bulk wilcoxon 粒度更细）**。
 - 批次校正：pp.mnc_correct(batch=, groupby= 保留组间生物学差异)；另有 harmony / scanorama_integrate。
 - Atlas 规模参考：92 样本 645,353 细胞（AnnDataSet）谱嵌入 ~15min、knn+leiden ~5min（普通服务器）。

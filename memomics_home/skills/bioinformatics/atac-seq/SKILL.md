@@ -150,7 +150,7 @@ res_results <- compare_resolutions_atac(proj, resolutions=c(0.4, 0.6, 0.8, 1.0, 
 # 辩论后选择最优
 proj <- add_clusters_atac(proj, resolution=0.8, reduced_dims="Harmony")
 ```
-- 知识库: 骨骼肌 resolution 0.8-1.2
+- 知识库: 示例组织 resolution 0.8-1.2
 - 辩论点: res=0.4(大类) vs 0.8(亚型) vs 1.2(精细)
 
 ### Step 6: Peak Calling (MACS2)
@@ -171,7 +171,7 @@ proj <- add_motif_annotations(proj, motif_db="JASPAR2022")
 proj <- run_chromvar(proj)
 plot_motif_heatmap(proj, output_dir, top_n=20)
 ```
-- 关键 TF (骨骼肌衰老): MAF, MYOD1, MYOG, RUNX1, FOXO, HSF1, YY1
+- 关键 TF (示例组织衰老): MAF, MYOD1, MYOG, RUNX1, FOXO, HSF1, YY1
 
 ### Step 8: TF Footprinting
 ```r

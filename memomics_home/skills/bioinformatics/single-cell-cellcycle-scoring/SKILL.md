@@ -1,7 +1,7 @@
 ---
 name: single-cell-cellcycle-scoring
 description: "单细胞/单核细胞周期打分的判读与验证（Seurat CellCycleScoring / cc.genes.updated.2019）：先做真实增殖 marker 阴性对照，再决定能否解读相位标签；含推断单位（ICC/设计效应）、供体级置换、n 核重抽样 bootstrap、BH 校正与结论口径。触发：细胞周期打分 / CellCycleScoring / cc.genes / S.Score / G2M.Score / Phase / 相位比例 / cycling 比例 / 细胞增殖打分 / 各组细胞周期有没有差别。"
-when_to_use: "用户要求给细胞做细胞周期打分、比较不同组/亚群之间的相位分布或 S/G2M 打分差异，或在 QC 流程里用相位去除分裂期细胞时，先加载本 skill。终末分化组织（骨骼肌肌核、心肌、神经元、肝细胞）尤其必读：那里打出来的相位标签极可能是噪声。"
+when_to_use: "用户要求给细胞做细胞周期打分、比较不同组/亚群之间的相位分布或 S/G2M 打分差异，或在 QC 流程里用相位去除分裂期细胞时，先加载本 skill。终末分化组织（示例组织肌核、心肌、神经元、肝细胞）尤其必读：那里打出来的相位标签极可能是噪声。"
 version: 1.0.0
 author: MemOmics
 license: MIT
@@ -31,7 +31,7 @@ metadata:
 | MKI67/PCNA/TOP2A 与相位一致升高，S+G2M 为个位数 | 可能有真实增殖群 | 可做组间比较，并按细胞类型分层（增殖信号常来自特定亚群，如 PAX7+/MYF5+ MuSC） |
 | 报告写"X% 的细胞正在增殖" | 措辞错误 | 只能写"被打分判为 S 相的比例" |
 
-**终末分化组织**（骨骼肌 / 心肌 / 神经元 / 肝细胞）默认按"不可解读"起步，除非阴性对照给出阳性证据。
+**终末分化组织**（示例组织 / 心肌 / 神经元 / 肝细胞）默认按"不可解读"起步，除非阴性对照给出阳性证据。
 
 ## 1. 打分（正确姿势）
 ```r
@@ -96,7 +96,7 @@ ICC <- (MSB - MSW)/(MSB + (m0-1)*MSW); DEFF <- 1 + (m0-1)*ICC      # 有效 n = 
 - 汇总表（比例类）要给全 6 组或声明子集口径；效应列注明计算口径（同族规范见平台铁律 29）
 
 ## 实测案例（可复现基准）
-**MF_2000**（人骨骼肌 snRNA-seq，2132 肌核 / 48 样本 × 45 核 / 6 组 Y·O·OD × Pre·Post）
+**示例数据**（人示例组织 snRNA-seq，2132 肌核 / 48 样本 × 45 核 / 6 组 Y·O·OD × Pre·Post）
 - 相位：G1 43.8% / S 31.0% / G2M 25.2%（S+G2M = 56.2%，与终末分化矛盾）
 - 阴性对照：**MKI67 = 0.00%（全部核/组/供体）**；PCNA 1.07/5.45/1.30% (G1/S/G2M)；TOP2A ≤2.23%；CCNB1 ≤0.44%；CDK1 ≤0.37%
 - 基线表达：S 集 0.0623 vs G2M 集 0.0427 → 朴素均值比较 %S = 64.5%
@@ -108,4 +108,4 @@ ICC <- (MSB - MSW)/(MSB + (m0-1)*MSW); DEFF <- 1 + (m0-1)*ICC      # 有效 n = 
 ## 支持文件
 - `scripts/cellcycle_validity_controls.R` — 一键跑阴性对照（marker 检出率 by 相位/组/供体）+ ICC/设计效应 +
   供体级置换 + n 核 bootstrap，输出 CSV 与控制台判定行（可直接改路径复用）
-- `references/mf2000-cellcycle-case.md` — 上述 MF_2000 案例的完整数值、命令与产物路径
+- `references/mf2000-cellcycle-case.md` — 上述 示例数据 案例的完整数值、命令与产物路径

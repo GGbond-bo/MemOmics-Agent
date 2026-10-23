@@ -3,9 +3,9 @@
 # Source: User's actual production run
 # =============================================================================
 $ErrorActionPreference = "Continue"
-$ptrepack = "C:\Users\23136\AppData\Local\Programs\Python\Python312\Scripts\ptrepack.exe"
-$cbDir    = "E:\monkey\cellbender"
-$outDir   = "E:\monkey\cellbender_seurat"
+$ptrepack = "<用户目录>"
+$cbDir    = "<数据目录>"
+$outDir   = "<数据目录>"
 
 $samples = @(
     "CRR278961", "CRR278962", "CRR278963", "CRR278964",

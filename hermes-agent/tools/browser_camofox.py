@@ -19,7 +19,7 @@ Setup::
 
 Then set ``CAMOFOX_URL=http://localhost:9377`` in ``~/.hermes/.env``.
 For Docker Camofox, optionally set ``CAMOFOX_REWRITE_LOOPBACK_URLS=true``
-so page URLs like ``http://127.0.0.1:3000`` are opened inside the
+so page URLs like ``http://login-host:22`` are opened inside the
 container as ``http://host.docker.internal:3000``.
 """
 
@@ -227,8 +227,8 @@ def _loopback_rewrite_enabled(camofox_cfg: Dict[str, Any]) -> bool:
     """Return whether loopback navigation URLs should be rewritten for Docker.
 
     ``CAMOFOX_URL`` itself often points at a host-published Docker port such as
-    ``http://127.0.0.1:9377``.  That is correct for Hermes talking to the
-    Camofox control API, but a page URL like ``http://127.0.0.1:3000`` is opened
+    ``http://login-host:22``.  That is correct for Hermes talking to the
+    Camofox control API, but a page URL like ``http://login-host:22`` is opened
     by the browser *inside* the Docker container.  In that context loopback
     points at the container, not the host running the web app.
 

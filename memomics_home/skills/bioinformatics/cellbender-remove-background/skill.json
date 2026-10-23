@@ -5,7 +5,7 @@
   "language": "Python",
   "source": "Biomni-style (custom)",
   "description": "CellBender去除环境RNA: raw h5 → CellBender → clean h5",
-  "detailed_description": "CellBender remove-background 基于深度生成模型(VAE)估计并去除环境RNA污染。适用于10x Chromium数据，特别是高污染组织(骨骼肌/脑)和衰老样本。参数自适应: 衰老→fpr=0.02/epochs=200; 大数据>50K→epochs=250; 稀缺细胞→fpr=0.005",
+  "detailed_description": "CellBender remove-background 基于深度生成模型(VAE)估计并去除环境RNA污染。适用于10x Chromium数据，特别是高污染组织(示例组织/脑)和衰老样本。参数自适应: 衰老→fpr=0.02/epochs=200; 大数据>50K→epochs=250; 稀缺细胞→fpr=0.005",
   "when_to_use": "10x scRNA-seq数据有环境RNA污染(高线粒体、跨类型标记共表达、组织解离样本)",
   "triggers": [
     "CellBender",

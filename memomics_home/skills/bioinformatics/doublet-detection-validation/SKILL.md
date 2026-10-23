@@ -108,7 +108,7 @@ is_syn = np.r_[np.zeros(n_obs, bool), np.ones(X_syn.shape[0], bool)]   # ← 真
 | 非本谱系标记（间质/内皮/免疫） | **多谱系同时升高** | 不变 |
 | ambient 分层（按 nCount 四分位） | 各深度层稳定升高，**高深度层仍显著** | 仅低 nCount 层升高（可被稀释） |
 
-⚠️ **组织特异性陷阱：多核组织**（骨骼肌肌纤维、心肌是合胞体）——hybrid fiber 会同时高表达
+⚠️ **组织特异性陷阱：多核组织**（示例组织肌纤维、心肌是合胞体）——hybrid fiber 会同时高表达
 `MYH7` + `MYH2`，**但通常不会同时高表达 `COL1A1` / `PECAM1` 这类非肌源谱系标记**。
 **判据：同谱系双高可能是生物学 hybrid，跨谱系双高才指向双细胞。**
 
@@ -181,5 +181,5 @@ is_syn = np.r_[np.zeros(n_obs, bool), np.ones(X_syn.shape[0], bool)]   # ← 真
 - **版本漂移与语言互操作细节**（DoubletFinder 2.0.6 API 改名、skimage ABI → monkey-patch、
   Python bool 落 CSV 在 R 端报错、R 合成矩阵列名重复、pooled vs 分样本的样本量判据）
   → `references/doublet-toolchain-pitfalls.md`
-- **完整实测案例与逐档数字**（人骨骼肌 2132 细胞 / 48 样本 / 弱信号，四档 F1 全 ≤0.344）
+- **完整实测案例与逐档数字**（人示例组织 2132 细胞 / 48 样本 / 弱信号，四档 F1 全 ≤0.344）
   → `references/worked-example-weak-signal-muscle.md`

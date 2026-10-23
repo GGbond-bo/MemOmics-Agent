@@ -85,7 +85,7 @@ python <skill>/scripts/lit_track.py status
 
 1. `must_match_any` 骨架词硬门槛：标题+摘要必须命中 `skeletal muscle` / `satellite cell` / `sarcopenia` …
    —— 只靠 include/exclude 词表挡不住跨领域串味（实测：巨噬细胞社论、重症肌无力综述、高原鱼类 small RNA
-   都会因为出现 `muscle` / `骨骼肌无力` 被召回）。
+   都会因为出现 `muscle` / `示例组织无力` 被召回）。
 2. `exclude` 排除词（cardiac / smooth muscle / drosophila / zebrafish …）+ `strong_keep` 白名单豁免。
 3. `index.json` 跨运行去重（doi → pmid → 归一化标题 三键）。
 

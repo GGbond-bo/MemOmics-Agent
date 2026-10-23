@@ -55,12 +55,12 @@ MemOmics-Agent 是一个以 [Hermes](https://github.com/NousResearch/hermes-agen
 
 1. 下载最新版 `MemOmics-Windows.zip`，解压（路径不含中文为佳）
 2. 双击 `启动.bat` —— 首次自动装依赖（Python 缺失时自动装内置 Miniconda）
-3. 浏览器打开 `http://127.0.0.1:8899`
+3. 浏览器打开 `http://login-host:22`
 4. 左侧「⚙️ 设置」填入 API Key（DeepSeek / GPT / Claude 等 **任意 OpenAI 兼容网关**）
 5. 开始提问，例如：
 
 ```
-"E:\数据\MF_AUCell_meta.csv 里面有我的 AUCell 打分，
+"E:\数据\示例评分方法_meta.csv 里面有我的 AUCell 打分，
  样本名是 samplename，组别是 type，帮我可视化一下这些分数"
 ```
 

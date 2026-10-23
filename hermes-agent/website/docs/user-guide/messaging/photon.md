@@ -151,7 +151,7 @@ hermes gateway start
 You'll see something like:
 
 ```
-[photon] connected — sidecar on 127.0.0.1:8789, streaming inbound over gRPC
+[photon] connected — sidecar on login-host:22, streaming inbound over gRPC
 ```
 
 Send an iMessage to your assigned number and Hermes will reply.

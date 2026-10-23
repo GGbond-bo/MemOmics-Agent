@@ -9,9 +9,9 @@
 # =============================================================================
 
 $ErrorActionPreference = "Continue"
-$cellbender = "C:\Users\23136\AppData\Local\Programs\Python\Python312\Scripts\cellbender.exe"
-$h5adDir = "E:\monkey\h5ad"
-$cbDir   = "E:\monkey\cellbender"
+$cellbender = "<用户目录>"
+$h5adDir = "<数据目录>"
+$cbDir   = "<数据目录>"
 
 # Samples to process
 $samples = @(

@@ -1,11 +1,11 @@
 {
   "schema": "memomics.kb-retrieval-golden.v1",
   "top_k": 5,
-  "note": "黄金检索集：26 条真实意图查询，命中判据是「top_k 内至少一条结果落在期望目录/文件名上」。期望值写的是意图（问人骨骼肌衰老就该回到 Homo_sapiens/skeletal_muscle/aging/），不是把当前输出抄下来——所以它是回归护栏，不是快照。known_gap 的用例只统计不断言（覆盖缺口要留痕，不要靠删用例粉饰）。forbid_top1（2026-10-07 加）：方法类查询里论文卡（paper_ 前缀、_empirical.yaml 后缀）不得排第一——新写入一批论文卡后它们靠 BM25 量级霸榜，把 deg.yaml 等真正的方法卡挤出了前五（见 kb_search._intent_factor）。",
+  "note": "黄金检索集：26 条真实意图查询，命中判据是「top_k 内至少一条结果落在期望目录/文件名上」。期望值写的是意图（问人示例组织衰老就该回到 Homo_sapiens/skeletal_muscle/aging/），不是把当前输出抄下来——所以它是回归护栏，不是快照。known_gap 的用例只统计不断言（覆盖缺口要留痕，不要靠删用例粉饰）。forbid_top1（2026-10-07 加）：方法类查询里论文卡（paper_ 前缀、_empirical.yaml 后缀）不得排第一——新写入一批论文卡后它们靠 BM25 量级霸榜，把 deg.yaml 等真正的方法卡挤出了前五（见 kb_search._intent_factor）。",
   "cases": [
     {
       "id": "kb-01",
-      "query": "骨骼肌衰老 标记基因",
+      "query": "示例组织衰老 标记基因",
       "species": "human",
       "tissue": "skeletal_muscle",
       "direction": "aging",
@@ -15,7 +15,7 @@
     },
     {
       "id": "kb-02",
-      "query": "小鼠骨骼肌衰老",
+      "query": "小鼠示例组织衰老",
       "species": "mouse",
       "tissue": "skeletal_muscle",
       "direction": "aging",
@@ -95,7 +95,7 @@
     },
     {
       "id": "kb-10",
-      "query": "骨骼肌 运动 急性信号",
+      "query": "示例组织 运动 急性信号",
       "species": "human",
       "tissue": "skeletal_muscle",
       "direction": "exercise",
@@ -235,7 +235,7 @@
     },
     {
       "id": "kb-22",
-      "query": "ATAC 染色质可及性 骨骼肌",
+      "query": "ATAC 染色质可及性 示例组织",
       "species": "human",
       "tissue": "skeletal_muscle",
       "direction": "aging",
@@ -264,7 +264,7 @@
     },
     {
       "id": "kb-25",
-      "query": "骨骼肌 纤维类型",
+      "query": "示例组织 纤维类型",
       "species": "human",
       "tissue": "skeletal_muscle",
       "direction": "muscle_fiber_type",

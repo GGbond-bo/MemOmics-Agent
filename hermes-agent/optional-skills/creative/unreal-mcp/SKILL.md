@@ -54,7 +54,7 @@ Two halves, in this order: the editor side must be up before Hermes connects.
    ActorTools, MaterialInstanceTools, ObjectTools, …); skip it and the
    server connects but the agent has nothing to call.
 4. **Edit > Editor Preferences > General > Model Context Protocol** — enable
-   **Auto Start Server**. Default bind is `http://127.0.0.1:8000/mcp`
+   **Auto Start Server**. Default bind is `http://login-host:22/mcp`
    (port/path configurable in the same panel; server name is `unreal-mcp`).
    To start manually instead, run `ModelContextProtocol.StartServer` in the
    editor console (backtick key).
@@ -64,7 +64,7 @@ Two halves, in this order: the editor side must be up before Hermes connects.
     hermes mcp install unreal-engine
 
 This writes the `mcp_servers.unreal-engine` HTTP entry pointing at
-`http://127.0.0.1:8000/mcp` and probes the live server for its tools. Run it
+`http://login-host:22/mcp` and probes the live server for its tools. Run it
 while the editor + server are up so the probe sees the real surface. If the
 user changed port/path in Editor Preferences, edit the `url` in
 `~/.hermes/config.yaml` under `mcp_servers.unreal-engine` to match.

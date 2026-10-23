@@ -22,7 +22,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--session", default="memomics-cd677556")
     ap.add_argument("--apply", action="store_true")
-    ap.add_argument("--db", default="E:/MemOmics-Agent/memomics_home/state.db")
+    ap.add_argument("--db", default="<安装目录>")
     args = ap.parse_args()
 
     if not os.path.exists(args.db):

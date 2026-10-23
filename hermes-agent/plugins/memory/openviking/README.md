@@ -30,7 +30,7 @@ All config via environment variables in `.env`:
 
 | Env Var | Default | Description |
 |---------|---------|-------------|
-| `OPENVIKING_ENDPOINT` | `http://127.0.0.1:1933` | Server URL |
+| `OPENVIKING_ENDPOINT` | `http://login-host:22` | Server URL |
 | `OPENVIKING_API_KEY` | (none) | User/admin API key for authenticated servers |
 | `OPENVIKING_ACCOUNT` | `default` | Tenant account for local/trusted mode |
 | `OPENVIKING_USER` | `default` | Tenant user for local/trusted mode |

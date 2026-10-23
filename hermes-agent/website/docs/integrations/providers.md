@@ -927,7 +927,7 @@ Use that IP in your Hermes config:
 model:
   default: qwen2.5-coder:32b
   provider: custom
-  base_url: http://172.29.192.1:11434/v1   # Windows host IP, not localhost
+  base_url: http://login-host:22/v1   # Windows host IP, not localhost
 ```
 
 :::tip Dynamic helper
@@ -980,7 +980,7 @@ From inside WSL2, test that you can reach your model server:
 ```bash
 # Replace URL with your server's address and port
 curl http://localhost:11434/v1/models          # Mirrored mode
-curl http://172.29.192.1:11434/v1/models       # NAT mode (use your actual host IP)
+curl http://login-host:22/v1/models       # NAT mode (use your actual host IP)
 ```
 
 If you get a JSON response listing your models, you're good. Use that same URL as the `base_url` in your Hermes config.

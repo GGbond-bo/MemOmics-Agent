@@ -2,7 +2,7 @@
 
 > 本文是 `user-script-figure-optimization` 的详细支撑文档。
 > 触发：用户贴出已能跑的绘图脚本 + 要求「按 Nature 优化 / CNS 级 / 出期刊图 / 检查脚本」。
-> 全部内容来自真实事故复盘（2026-09-22，人骨骼肌 specialized MF 亚群 UMAP，11,630 核 × 7 亚群 × 6 组，48 样本）。
+> 全部内容来自真实事故复盘（2026-09-22，人示例组织 specialized MF 亚群 UMAP，11,630 核 × 7 亚群 × 6 组，48 样本）。
 
 ---
 
@@ -234,4 +234,4 @@ dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 ## 参考来源
 
 - ggplot2 官方 `theme()` 参考页（ggplot2 4.0.3）— https://ggplot2.tidyverse.org/reference/theme.html （strip 段落原文；`legend.title` / `legend.title.position` / `strip.placement` 定义）
-- 事故会话：2026-09-22 · 人骨骼肌 specialized MF 亚群 UMAP
+- 事故会话：2026-09-22 · 人示例组织 specialized MF 亚群 UMAP

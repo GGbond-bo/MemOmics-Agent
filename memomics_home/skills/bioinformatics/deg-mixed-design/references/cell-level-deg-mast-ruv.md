@@ -1,6 +1,6 @@
 # 细胞级 DEG：MAST / NEBULA / RUV 协变量 —— 合法用法与实现坑表
 
-> 来源：2026-09-26/28 人骨骼肌运动项目（24 供体 / 48 样本 / 6 组 / Pre-Post 配对 / 508,661 细胞）
+> 来源：2026-09-26/28 人示例组织运动项目（24 供体 / 48 样本 / 6 组 / Pre-Post 配对 / 508,661 细胞）
 > 触发背景：用户问"为什么细胞级不可以，非要供体数"，并指出"26 年张潇的猴脑怎么就能用 MAST"
 > —— 实证结论：**当时"细胞级不能当主分析"的绝对化表述是错的**，本文件是修正后的口径。
 
@@ -14,7 +14,7 @@
 |---|---|---|
 | 样本级 pseudobulk | 样本 | dreamlet / muscat / DESeq2 |
 | 混合模型 `(1\|donor)` | 细胞（带随机效应） | MAST `method="glmer"`、NEBULA |
-| **RUV/SVA 因子作固定协变量** | 细胞 | 猴脑 NHPABC（Cell 2026） |
+| **RUV/SVA 因子作固定协变量** | 细胞 | 猴脑 example-cohort（Cell 2026） |
 | pseudobulk 残差/PC 作协变量 | 细胞 | 同上篇引用 method 30,32 |
 
 ⛔ **禁止的是"朴素细胞级检验"**：把细胞当独立观测、模型里无任何样本层结构（Wilcoxon / FindMarkers / 无校正 MAST）。Squair 2021 (PMID 34584091) 批评的是这个设定，**不是 MAST 本身**。
@@ -26,7 +26,7 @@
 ## 二、已发表范式：猴脑图谱（Cell 2026, PMID 42612631）
 
 Zhang X et al., *Multimodal brain cell atlas across the adult macaque lifespan*, Cell 2026, DOI `10.1016/j.cell.2026.07.045`
-官方代码 `github.com/3DC-STAR-Anthony/NHPABC` → `snRNA/04.Identification_of_differentially_expressed_genes(DEGs)/RUV_MAST_pDEG_MBA.R`、`RUV-seq_sDEGs.R`
+官方代码 `github.com/3DC-STAR-Anthony/example-cohort` → `snRNA/04.Identification_of_differentially_expressed_genes(DEGs)/RUV_MAST_pDEG_MBA.R`、`RUV-seq_sDEGs.R`
 规模：2,955,873 核 / 23 只食蟹猴 / 8 脑区
 
 ```

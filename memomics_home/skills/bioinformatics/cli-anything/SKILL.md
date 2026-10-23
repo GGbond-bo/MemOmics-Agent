@@ -172,7 +172,7 @@ Tool: terminal + write_file
 | 参数 | 说明 | 实测取值 |
 |------|------|---------|
 | CLI-Hub 版本 | pip 包 | v0.4.1（2026-10-04 装） |
-| 安装位置 | 项目 venv（铁律 29：禁止 --user / 系统 Python） | `E:/MemOmics-Agent/.venv` |
+| 安装位置 | 项目 venv（铁律 29：禁止 --user / 系统 Python） | `<安装目录> |
 | harness 命名空间 | `cli_anything.<software>` | 顶层 `cli_anything/` 无 `__init__.py` |
 | 入口点 | `console_scripts` | `cli-anything-<software>` |
 | registry 规模 | 仓库内 canonical SKILL.md | 71 个（`skills/` 目录） |
@@ -202,7 +202,7 @@ Tool: terminal + write_file
 
 **已验证命令与真实返回**
 ```bash
-AI=E:/MemOmics-Agent/.venv/Scripts/cli-anything-illustrator.exe
+AI=<安装目录>
 $AI --json doctor      # {"bridge":true,"cscript":"C:\\WINDOWS\\system32\\cscript.EXE","illustrator":{"doc_count":0,"active_doc":null}}
 $AI --json info        # {"doc_count":0,"active_doc":null}   ← 无文档时的诚实返回，不报错
 $AI artboards          # active_doc: None  artboards: 0
@@ -312,7 +312,7 @@ $AI --json close-untitled [--dry-run]              # 关闭 harness 留下的未
 - CLI-Hub 包：`pip install cli-anything-hub`（v0.4.1）／网页 https://hkuds.github.io/CLI-Anything/
 - canonical 技能集：仓库 `skills/` 目录 71 个 `cli-anything-*` SKILL.md
 - Tech Report：arXiv:2606.03854
-- 本机克隆：`E:/MemOmics-Agent/results/<sid>/data/cli_anything_repo`
+- 本机克隆：`<安装目录>
 
 **本机已装**
 - `memomics_home/skills/cli-anything-memomics/`（官方 MemOmics skill，`install.sh` 装）

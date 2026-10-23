@@ -6,11 +6,11 @@ D: HolographicMemoryProvider.on_session_end 在 484 条干净 user 消息上的�
 E: server._extract_and_store_requirements 在真实消息上的误报率（临时目录）。
 """
 import sys, os, json, re, tempfile
-sys.path.insert(0, r'E:\MemOmics-Agent\webui')
-sys.path.insert(0, r'E:\MemOmics-Agent\hermes-agent')
-os.environ.setdefault('MEMOMICS_HOME', r'E:\MemOmics-Agent\memomics_home')
+sys.path.insert(0, r'<安装目录>')
+sys.path.insert(0, r'<安装目录>')
+os.environ.setdefault('MEMOMICS_HOME', r'<安装目录>')
 
-clean = json.load(open(r'E:\MemOmics-Agent\scripts\bench_clean_msgs.json', encoding='utf-8'))
+clean = json.load(open(r'<安装目录>', encoding='utf-8'))
 msgs = [{"role": "user", "content": m["text"]} for m in clean]
 print(f"clean msgs: {len(msgs)}")
 

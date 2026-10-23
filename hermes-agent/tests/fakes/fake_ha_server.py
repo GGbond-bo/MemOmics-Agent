@@ -12,7 +12,7 @@ Home Assistant API surface used by hermes-agent:
 Usage::
 
     async with FakeHAServer(token="test-token") as server:
-        url = server.url            # e.g. "http://127.0.0.1:54321"
+        url = server.url            # e.g. "http://login-host:22"
         await server.push_event(event_data)
         assert server.received_notifications  # verify what arrived
 """
@@ -108,7 +108,7 @@ class FakeHAServer:
 
     @property
     def url(self) -> str:
-        """Base URL of the running server, e.g. ``http://127.0.0.1:12345``."""
+        """Base URL of the running server, e.g. ``http://login-host:22``."""
         assert self._server is not None, "Server not started"
         host = self._server.host
         port = self._server.port

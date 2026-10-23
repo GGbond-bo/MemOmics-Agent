@@ -17,7 +17,7 @@
 # =============================================================================
 
 suppressMessages({library(pheatmap); library(grid); library(gtable)})
-setwd("E:/MemOmics-Agent/results/<session_dir>")           # <-- edit
+setwd("<安装目录>")           # <-- edit
 
 m <- as.matrix(read.csv("data/<matrix>.csv", row.names = 1, check.names = FALSE))
 cat("dim:", dim(m), "\n")                                  # sanity: rows x cols

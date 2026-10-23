@@ -34,7 +34,7 @@ Harmony 用 soft-clustering + maximum diversity clustering，在 PCA 空间迭�
 
 ### 实验证据
 
-在 26 样本骨骼肌衰老数据集上：
+在 26 样本示例组织衰老数据集上：
 - Seurat Harmony UMAP：青年/老年样本充分混合，纤维类型分离清晰
 - Monocle3 UMAP：样本按批次分离，青年/老年混在批次 cluster 里
 

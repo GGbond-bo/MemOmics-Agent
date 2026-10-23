@@ -6,7 +6,7 @@ PID 复用防护、服务重启后的 interrupted 收敛、路径穿越、tail �
 wrapper 真跑命令（成功/失败/取消）、CLI --list/--show。
 
 真机极端场景（8MB 日志、5 并发 wrapper、脏字节、杀子树）在
-E:/release/_t1_probe.py 里另跑一遍（38 项全过），这里只留确定性的快速守卫。
+<发布目录> 里另跑一遍（38 项全过），这里只留确定性的快速守卫。
 """
 import importlib.util
 import json

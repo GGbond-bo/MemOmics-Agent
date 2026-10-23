@@ -61,7 +61,7 @@
       "auto_score": 0.0,
       "approved": false,
       "custom_script": false,
-      "result": "15字段结构化解读Rubenstein2025骨骼肌运动多组学论文。全文提取(1288行)→结构化总结(标题/作者/期刊/DOI/关键词/背景/假设/实验设计/方法/发现/图表/讨论/局限/意义/关联)→HTML报告(18KB)。提取39张图表。核心发现：37K nuclei 14 cell types, 328TFs→2025靶基因, PPARδ快肌特异性回路, circadian排除1210基"
+      "result": "15字段结构化解读Rubenstein2025示例组织运动多组学论文。全文提取(1288行)→结构化总结(标题/作者/期刊/DOI/关键词/背景/假设/实验设计/方法/发现/图表/讨论/局限/意义/关联)→HTML报告(18KB)。提取39张图表。核心发现：37K nuclei 14 cell types, 328TFs→2025靶基因, PPARδ快肌特异性回路, circadian排除1210基"
     }
   ],
   "proven_script": "",

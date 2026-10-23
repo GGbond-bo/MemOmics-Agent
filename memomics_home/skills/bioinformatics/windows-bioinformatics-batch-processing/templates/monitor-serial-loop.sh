@@ -3,7 +3,7 @@
 # 用途: 监控脱离式串行批处理（run_serial.sh / cmd.exe /c 启动的 R/Python worker）
 # 每 N 秒三源检查: ①PowerShell进程数 ②DONE_MARK计数 ③最新日志mtime
 # 异常(进程0 + 日志停更超阈值) → 写 alerts.json; 全部完成 → 写 COMPLETE 退出(触发 notify_on_complete)
-# 2026-08-07 memomics-1135ed52 实测: GSE278576 40样本 ArchR 串行, 5/5 逻辑判定 + 3/3 循环行为验证通过
+# 2026-08-07 memomics-1135ed52 实测: GSE000000 40样本 ArchR 串行, 5/5 逻辑判定 + 3/3 循环行为验证通过
 
 # ============ 每项目必改 ============
 DONE_DIR="/e/专利/Human_Hippocampus_ATAC/ArchR_Arrow_QC_Filtered"   # DONE_MARK 根目录(含 {s}/{s}_filtered_cells.csv 的样本=完成)

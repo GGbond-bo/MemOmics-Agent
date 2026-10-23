@@ -114,9 +114,9 @@ fasterq-dump SRR_ACCESSION
 ## 参考资料
 
 - `references/human-hippocampus-atac-search-case.md` — 人海马 ATAC 候选数据集搜索案例
-- `references/gse278576-human-hippocampus-atac-case.md` — GSE278576 实战：GEO suppl 文件类型地图、海马亚区命名(CA1/DG/SUB)、fragments vs bw 决策、下载清单模板
-- `references/gse278576-gsm-fragments-map.md` — GSE278576 的 40 个 ATAC 样本 GSM 映射表（已验证）+ GSM 级 fragments URL 模板 + curl -sI 验证协议
-- `references/gse278576-analysis-pipeline.md` — GSE278576 论文官方分析管线：cellranger-arc→SnapATAC2 QC→MACS2(SPM≥4)→pseudobulk 连续年龄 Pearson(FDR<0.1)→HOMER/chromVAR→ABC。用户问"这篇论文用什么方法/对比流程"时直接查此文件；注意 bioRxiv 详细 M&M 在补充材料 DC1/DC2（不在主 PDF），需从 supplementary-material 页面解析 embed 链接
+- `references/GSE000000-human-hippocampus-atac-case.md` — GSE000000 实战：GEO suppl 文件类型地图、海马亚区命名(CA1/DG/SUB)、fragments vs bw 决策、下载清单模板
+- `references/GSE000000-gsm-fragments-map.md` — GSE000000 的 40 个 ATAC 样本 GSM 映射表（已验证）+ GSM 级 fragments URL 模板 + curl -sI 验证协议
+- `references/GSE000000-analysis-pipeline.md` — GSE000000 论文官方分析管线：cellranger-arc→SnapATAC2 QC→MACS2(SPM≥4)→pseudobulk 连续年龄 Pearson(FDR<0.1)→HOMER/chromVAR→ABC。用户问"这篇论文用什么方法/对比流程"时直接查此文件；注意 bioRxiv 详细 M&M 在补充材料 DC1/DC2（不在主 PDF），需从 supplementary-material 页面解析 embed 链接
 
 ## Pitfalls
 
@@ -125,11 +125,11 @@ fasterq-dump SRR_ACCESSION
 3. **GEO 搜索结果含多物种**：GEO 摘要可能混入小鼠数据 → 必须用 `get_geo_details()` 验证物种
 4. **下载后放在 C 盘**：用户明确拒绝 — 数据全部放 E:/Data/ 或 E:/ 其他目录
 5. **网络不通时装死**：报网络超时后给替代方案（URL 清单 + 手动下载指令），不要静默失败
-6. **🔴 fragments 在 GSM 级，不在 GSE 级（2026-08-02 GSE278576 实战教训）**：10x Multiome 数据集（如 GSE278576）的原始 `fragments.tsv.gz` **按样本存放在每个 GSM 页面**，GSE 主 supplementary 页只有聚合文件（bigWig/h5/tar）。用户按 GSE 页面找 fragments 必然"官网找不到"。URL 规律：
+6. **🔴 fragments 在 GSM 级，不在 GSE 级（2026-08-02 GSE000000 实战教训）**：10x Multiome 数据集（如 GSE000000）的原始 `fragments.tsv.gz` **按样本存放在每个 GSM 页面**，GSE 主 supplementary 页只有聚合文件（bigWig/h5/tar）。用户按 GSE 页面找 fragments 必然"官网找不到"。URL 规律：
    ```
    https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8549nnn/GSM8549615/suppl/GSM8549615_hc77_atac_fragments.tsv.gz
    ```
-   每个样本要配套 `.tbi.gz` 索引（ArchR 必需）。给下载清单前必须先 `query_ncbi(db="gds", query="GSE278576[ACCN] AND ATAC")` 拉全 40 个 GSM。
+   每个样本要配套 `.tbi.gz` 索引（ArchR 必需）。给下载清单前必须先 `query_ncbi(db="gds", query="GSE000000[ACCN] AND ATAC")` 拉全 40 个 GSM。
 7. **🔴 下载清单必须先 curl -sI 验证（用户会审计）**：给用户下载清单前，对每个 URL 跑 `curl -k -sI <url>` 确认 `200 OK` + `Content-Length` 合理（几百 MB-几 GB）。不验证就交付清单 = 用户一打开就发现文件不存在，信任崩塌。验证通过后还要说明"每个样本 2 个文件（.tsv.gz + .tbi.gz）"。
 8. **bw vs fragments 用途不同，先问清分析目标**：bigWig = 聚合信号轨道（按细胞类型/年龄组），能做 peak 比较/差异可及性，**不能做 TF footprinting**；fragments = 单细胞原始数据，才能做 L3 footprinting。方法验证 → bw 够；专利实施例完整（含 footprinting）→ 必须补 fragments。
 9. **🔴 论文"用什么方法/对比流程"必须下 bioRxiv 补充材料（2026-08-04 实战）**：bioRxiv 主 PDF 通常**不含详细 M&M**（只有正文+图注+参考文献），详细参数（cellranger 版本、MACS2 命令、QC 阈值、Pearson FDR 阈值）在补充材料 DC1/DC2：

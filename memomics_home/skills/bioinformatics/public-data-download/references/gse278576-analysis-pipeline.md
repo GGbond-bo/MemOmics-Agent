@@ -1,10 +1,10 @@
-# GSE278576 论文官方分析管线（人海马衰老 ATAC 对比流程）
+# GSE000000 论文官方分析管线（人海马衰老 ATAC 对比流程）
 
 > 来源：2026-08-04 用户要求"找这篇论文的对比流程/方法"实战提取。
 > Zemke NR, Lee S, Mamde S, et al. "Epigenetic and 3D genome reprogramming during
 > the aging of human hippocampus". Science 2026-07-23, PMID 42490474,
 > DOI 10.1126/science.adt8307; bioRxiv 2024-10-17, PMID 39463924.
-> 通讯：Bing Ren (UCSD) + Xiangmin Xu (UCI)。数据 = GSE278576（用户已下载 fragments）。
+> 通讯：Bing Ren (UCSD) + Xiangmin Xu (UCI)。数据 = GSE000000（用户已下载 fragments）。
 
 ## 数据概况
 
@@ -63,7 +63,7 @@
 
 ## 论文文件位置
 
-- 预印本全文: E:/专利/Human_Hippocampus_ATAC/papers/10.1101_2024.10.14.618338.pdf
-- 补充材料 M&M+FigS1-S18: E:/专利/Human_Hippocampus_ATAC/papers/suppl_media1.pdf
-- 补充表 S1-S24: E:/专利/Human_Hippocampus_ATAC/papers/suppl_media2.zip
+- 预印本全文: <数据目录>
+- 补充材料 M&M+FigS1-S18: <数据目录>
+- 补充表 S1-S24: <数据目录>
 - 提取文本: paper_fulltext.txt / suppl_fulltext.txt

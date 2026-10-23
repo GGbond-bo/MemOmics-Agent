@@ -190,13 +190,13 @@ debugpy.breakpoint()       # 可选：附加后立即暂停
 ### 模式 B：无需修改源码——使用 `-m debugpy` 启动
 
 ```bash
-python -m debugpy --listen 127.0.0.1:5678 --wait-for-client your_script.py arg1
+python -m debugpy --listen login-host:22 --wait-for-client your_script.py arg1
 ```
 
 模块入口的等效写法：
 
 ```bash
-python -m debugpy --listen 127.0.0.1:5678 --wait-for-client -m your.module
+python -m debugpy --listen login-host:22 --wait-for-client -m your.module
 ```
 
 ### 模式 C：附加到已运行的进程
@@ -204,7 +204,7 @@ python -m debugpy --listen 127.0.0.1:5678 --wait-for-client -m your.module
 需要 PID 以及在目标环境中预装 debugpy：
 
 ```bash
-python -m debugpy --listen 127.0.0.1:5678 --pid <pid>
+python -m debugpy --listen login-host:22 --pid <pid>
 # debugpy 注入到目标进程中，然后按以下方式连接客户端。
 ```
 

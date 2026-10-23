@@ -151,7 +151,7 @@ proj <- addReproduciblePeakSet(ArchRProj = proj, groupBy = "celltype", pathToMac
 
 ```r
 # 方式 A（推荐）：手动指定绝对路径（bin/macs2 是带 shebang 的 Python 脚本，conda env 的 python 没坏就能跑）
-pathToMacs2 <- "/hwfssz3/.../miniconda3/envs/MACS2/bin/macs2"   # which macs2 或 conda env 路径
+pathToMacs2 <- "/cluster/.../miniconda3/envs/MACS2/bin/macs2"   # which macs2 或 conda env 路径
 system(paste(pathToMacs2, "--version"))   # 先验证能打印版本号，避免白跑 5-10 分钟
 proj <- addReproduciblePeakSet(proj, groupBy="celltype", pathToMacs2=pathToMacs2)
 
@@ -235,7 +235,7 @@ for (name in names(sigs)) {
 | ✅ `groupBy="individual"` | 40/20 列（每个体 1 列） | n=40（猴 n=20）真实重复 → dispersion 可靠 |
 
 - **年龄组是 DESeq2 的 design 因子**，不是聚合单元：`DESeqDataSet(se, design=~age_group)` + `test="LRT", reduced=~1`
-- **⚠️ 方法选型（2026-09-01 用户拍板）**：对齐 Zemke Science 2026（GSE278576）→ 该文官方方法**不是 DESeq2**，而是**连续年龄 Pearson + shuffle ×5000 + FDR<0.1**。用户被问"你确定人家文章使用的是这个吗?"启发后明确选择 **Pearson + shuffle 版**：每个 tile `cor(log2CPM, Age)`（Age=供体连续年龄），FDR<0.1 且 r>0=Up / r<0=Down；shuffle 置换供体年龄标签×5000 得经验 p；四年龄组只作**下游展示层**（Up/Down tiles 按组画趋势）。50 万 tiles 用向量化 `apply(lcpm,1,cor)` + `pt()` 替代逐行 cor.test（快 1000 倍）。完整脚本 → `references/archr-da-tiles-4age.md`
+- **⚠️ 方法选型（2026-09-01 用户拍板）**：对齐 Zemke Science 2026（GSE000000）→ 该文官方方法**不是 DESeq2**，而是**连续年龄 Pearson + shuffle ×5000 + FDR<0.1**。用户被问"你确定人家文章使用的是这个吗?"启发后明确选择 **Pearson + shuffle 版**：每个 tile `cor(log2CPM, Age)`（Age=供体连续年龄），FDR<0.1 且 r>0=Up / r<0=Down；shuffle 置换供体年龄标签×5000 得经验 p；四年龄组只作**下游展示层**（Up/Down tiles 按组画趋势）。50 万 tiles 用向量化 `apply(lcpm,1,cor)` + `pt()` 替代逐行 cor.test（快 1000 倍）。完整脚本 → `references/archr-da-tiles-4age.md`
 - **剔除个体（如猴 M4）必须在 `getGroupSE` 之前**过滤 project 细胞（`proj <- proj[keep, ]`），否则被剔除个体成为 NA-age 列 → stopifnot 报错或污染数据底（与 L2 数据底 meta60=40人+20猴不一致）
 - **PeakMatrix ≠ TileMatrix**：L2 已有的个体级 PeakMatrix SE 不能用于 DA tiles；DA 需在同一 project 上 `getGroupSE(useMatrix="TileMatrix", groupBy="individual")` 重新聚合（分钟级，不贵）
 - **colData 贴分组用 `match()` 按个体名对齐**，不用行号（SE 列顺序与 meta 行顺序不一定一致）
@@ -286,8 +286,8 @@ seFoot <- getFootprints(proj, positions=motifPositions, groupBy="AgeGroup")
 
 ## 跨物种 CRE 保守性评估（专利方向）
 > 详见 `references/hippocampus-annotation-markers.md`（人+猴海马 marker 列表 + 对齐表 + 亚群命名规则）
-> 详见 `references/table-s1-donor-age-mapping.md`（GSE278576 样本→年龄映射铁律：只准代码匹配 Table_S1，禁止手写占位——曾因手排 age_map 被用户当场抓错）
-> 详见 `references/archr-peak-calling-cluster-pitfalls.md`（HDF5 写权限根因 / 官方参数实测 / 张潇 NHPABC cCRE 参数 / BSgenome 澄清 / CPU 现象 / 20万细胞时间估算 / 样本名→individual 提取）
+> 详见 `references/table-s1-donor-age-mapping.md`（GSE000000 样本→年龄映射铁律：只准代码匹配 Table_S1，禁止手写占位——曾因手排 age_map 被用户当场抓错）
+> 详见 `references/archr-peak-calling-cluster-pitfalls.md`（HDF5 写权限根因 / 官方参数实测 / 张潇 example-cohort cCRE 参数 / BSgenome 澄清 / CPU 现象 / 20万细胞时间估算 / 样本名→individual 提取）
 
 ### 需要的数据
 | 数据 | 用途 |
@@ -479,7 +479,7 @@ wrap_plots(p, ncol=4) |>
 
 ## ⚠️ 远程服务器数据分析工作流
 
-当用户提供远程服务器路径（如 `/data/input/...`、`/hwfssz3/...`）时：
+当用户提供远程服务器路径（如 `/data/input/...`、`/cluster/...`）时：
 - **禁止** 在本地 `terminal` 中 `cd` 到该路径（必然失败）
 - **正确做法**：生成完整的自包含 R/Python 脚本，让用户复制到服务器上运行
 - 脚本开头用 `af <- list.files(".", pattern="xxx.arrow", full.names=TRUE)` 自动发现，或接受用户指定的绝对路径
@@ -513,7 +513,7 @@ tasklist | grep -i "Rscript\|python"
 nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader
 
 # 3. 检查 RDS checkpoint 进度（ArchR pipeline 特有）
-ls -lt E:/专利/ArchR_Output/project_*.rds
+ls -lt <数据目录>
 # project_raw.rds → Phase 1 完成
 # project_qc.rds → Phase 2 完成
 # project_lsi.rds → Phase 3 完成
@@ -521,7 +521,7 @@ ls -lt E:/专利/ArchR_Output/project_*.rds
 # project_final.rds → Phase 5-6 完成
 
 # 4. 检查 coverage 进度（如果 Phase 4 在跑）
-ls E:/专利/ArchR_Output/GroupCoverages/Clusters/ | wc -l
+ls <数据目录> | wc -l
 # 每组 ~2-3 个 .coverage.h5 文件，57 组 = 114-171 文件
 # 文件按 C1→C57 顺序生成 → 最大编号 = 当前进度
 ```

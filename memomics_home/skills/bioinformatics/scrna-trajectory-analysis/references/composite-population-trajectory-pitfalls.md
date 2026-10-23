@@ -1,6 +1,6 @@
 # Composite Population Trajectory Pitfalls — 混合群体轨迹分析陷阱
 
-> 来源：2026-07-30 骨骼肌 MF 肌纤维 10 群轨迹分析讨论
+> 来源：2026-07-30 示例组织 MF 肌纤维 10 群轨迹分析讨论
 
 ## 核心问题
 
@@ -15,7 +15,7 @@
 | 功能打分在 cluster 内方差很大（如再生打分和去神经打分都高但互斥） | 内部异质性远超其他 cluster |
 | UMAP 上 cluster 位于两个经典群体之间的"桥"位置 | 可能是双起源汇聚点 |
 
-## 案例：骨骼肌 Specialized MF
+## 案例：示例组织 Specialized MF
 
 ```
 Specialized MF = 去神经慢肌浸润 (CHRNA1+MYH7+) + 正常发育快肌 (CHRNA1+MYH2+)

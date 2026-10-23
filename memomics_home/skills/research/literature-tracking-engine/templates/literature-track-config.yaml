@@ -6,9 +6,9 @@ updated: 2026-09-25
 
 profile:
   field: "skeletal muscle aging single-cell"        # 英文主题词（用于元数据与子代理提示）
-  field_zh: "骨骼肌衰老单细胞组学"                   # 日报标题里显示
+  field_zh: "示例组织衰老单细胞组学"                   # 日报标题里显示
   subtopics:                                        # 打分时 topic 维的判据，写清"什么算切题"
-    - 骨骼肌肌纤维类型与衰老
+    - 示例组织肌纤维类型与衰老
     - 肌卫星细胞 / 肌干细胞衰老与再生
     - 肌少症（sarcopenia）分子与细胞机制
     - 单细胞 / 单核转录组图谱（scRNA / snRNA）
@@ -99,7 +99,7 @@ delivery:
   language: zh
 
 archive:
-  root: "E:/MemOmics-Agent/results/<session_dir>/literature"
+  root: "<安装目录>"
   raw: "raw"
   notes: "notes"
   index: "index.json"

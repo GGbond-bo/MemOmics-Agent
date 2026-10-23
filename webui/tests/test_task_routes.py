@@ -730,10 +730,10 @@ def _card_by_id(client, task_id):
 def test_k1_card_carries_session_title(client, tr, tasks_dir, monkeypatch):
     """每条卡片都要带"属于哪个会话的名字" —— 只给一串 memomics-xxxx 等于没标。"""
     t = _make(tr, tasks_dir, title="标会话", session_id="memomics-aaa")
-    monkeypatch.setattr(server, "_session_title", lambda sid: "骨骼肌 QC 跑通")
+    monkeypatch.setattr(server, "_session_title", lambda sid: "示例组织 QC 跑通")
     card = _card_by_id(client, t.task_id)
     assert card["session_id"] == "memomics-aaa"
-    assert card["session_title"] == "骨骼肌 QC 跑通", card
+    assert card["session_title"] == "示例组织 QC 跑通", card
 
 
 def test_k2_session_title_helper_never_raises_and_is_cached(monkeypatch):
@@ -744,14 +744,14 @@ def test_k2_session_title_helper_never_raises_and_is_cached(monkeypatch):
     class _DB:
         def get_session_title(self, sid):
             calls["n"] += 1
-            return "骨骼肌 QC 跑通" if sid == "memomics-known" else None
+            return "示例组织 QC 跑通" if sid == "memomics-known" else None
 
         def get_session(self, sid):
             return None
 
     monkeypatch.setattr(server, "_get_session_db", lambda: _DB())
-    assert server._session_title("memomics-known") == "骨骼肌 QC 跑通"
-    assert server._session_title("memomics-known") == "骨骼肌 QC 跑通"
+    assert server._session_title("memomics-known") == "示例组织 QC 跑通"
+    assert server._session_title("memomics-known") == "示例组织 QC 跑通"
     assert calls["n"] == 1, "同一会话重复查库了 —— 面板 2 秒拉一次列表，会打爆 DB"
     assert server._session_title("memomics-none") == ""
     for bad in ("", None, "memomics-\u0000", "x" * 500):
@@ -1105,7 +1105,7 @@ def test_m10_deleted_task_is_not_resurrected_by_pending_retry(client, tr, tasks_
 # 面板只认 task_run 契约，agent 没用契约时用户就一片空白。所以载荷必须补一份
 # 只读的"活会话"快照（在跑什么、跑了多久、计划第几步、占多少内存），且不许和任务行重复。
 def _live_session(**kw):
-    s = {"id": "memomics-live01", "title": "骨骼肌 QC", "created": "2026-09-24 16:00:00",
+    s = {"id": "memomics-live01", "title": "示例组织 QC", "created": "2026-09-24 16:00:00",
          "last_active": "2026-09-24 16:20:00",
          "messages": [{"role": "user", "content": "帮我看下这批数据的质控"}],
          "running_agent": object(), "bg_running": False,
@@ -1140,7 +1140,7 @@ def test_n2_running_session_shows_what_it_is_doing(client, tr, tasks_dir, monkey
     d = client.get("/api/tasks?limit=50&refresh=0").json()
     assert d["live_count"] == 1, d
     one = d["live_sessions"][0]
-    assert one["sid"] == "memomics-live01" and one["title"] == "骨骼肌 QC"
+    assert one["sid"] == "memomics-live01" and one["title"] == "示例组织 QC"
     assert one["last_tool"] == "execute_r" and one["tool_age_sec"] >= 10
     assert one["todos_total"] == 3 and one["todos_done"] == 1, one
     assert one["doing"] == "按样本汇总 QC" and one["next"] == "聚类"
@@ -1206,7 +1206,7 @@ def test_n5_live_session_detail_exposes_params_env_and_artifacts(client, tr, tas
         {"ts": "2026-09-24T16:20:00", "tool": "skill_view",
          "args": "{'name': 'scrna-qc'}", "result_preview": "ok"},
         {"ts": "2026-09-24T16:20:01", "tool": "execute_r",
-         "args": "{'code': 'obj <- readRDS(\"E:/release/_memtest/data/MF_2000.rds\")'}",
+         "args": "{'code': 'obj <- readRDS(\"DEMO_DATA/data/示例数据.rds\")'}",
          "result_preview": "51227 x 2132"},
     ]
     with open(os.path.join(d, "log", "system_log.jsonl"), "w", encoding="utf-8") as f:
@@ -1225,7 +1225,7 @@ def test_n5_live_session_detail_exposes_params_env_and_artifacts(client, tr, tas
     assert det["is_running"] is True and det["current"]["last_tool"] == "execute_r"
     # 参数：最近的工具调用倒序，且带原始入参（用户要的"参数"就是这些）
     assert [t["tool"] for t in det["tools"]] == ["execute_r", "skill_view"], det["tools"]
-    assert "readRDS" in det["tools"][0]["args"] and "MF_2000.rds" in det["tools"][0]["args"]
+    assert "readRDS" in det["tools"][0]["args"] and "示例数据.rds" in det["tools"][0]["args"]
     st = det["stats"]
     assert st["tool_calls"] == 2 and st["skills"] == ["scrna-qc"], st
     # 产物：相对会话目录 + 大小

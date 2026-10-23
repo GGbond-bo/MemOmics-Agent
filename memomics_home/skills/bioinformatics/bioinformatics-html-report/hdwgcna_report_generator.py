@@ -157,7 +157,7 @@ with rb.section("network", "2. Network Construction", "共表达网络构建",
         title_zh="基因共表达树状图",
         method_zh="基于拓扑重叠矩阵 (TOM) 计算基因间相似性，层次聚类后用动态树切割 (Dynamic Tree Cut) 识别模块，mergeCutHeight=0.25 合并高度相似的模块。",
         result_zh="共识别 <strong>10 个模块 (M1–M10)</strong>，大小从 30 (M10) 到 1,260 (M2) 个基因不等。7,083 个基因 (72%) 被分配到灰色模块（未归入任何模块）。",
-        bio_zh="树状图中聚集在同一分支的基因具有高度相似的表达模式，意味着它们可能受相同的转录因子调控，或参与相同的生物学过程。10 个模块代表了骨骼肌中 10 种不同的基因共表达程序。",
+        bio_zh="树状图中聚集在同一分支的基因具有高度相似的表达模式，意味着它们可能受相同的转录因子调控，或参与相同的生物学过程。10 个模块代表了示例组织中 10 种不同的基因共表达程序。",
     )
 
     rb.add_figure(
@@ -213,7 +213,7 @@ with rb.section("modules", "3. Module Characterization", "模块特征分析",
         title_zh="模块特征基因在细胞 UMAP 上的活性",
         method_zh="将每个模块的特征基因 (ME) 值投影到原始单细胞 UMAP 上，颜色深浅代表该细胞中模块的活性强弱。ME 是模块内所有基因表达的第一主成分。",
         result_zh="不同模块在细胞 UMAP 上呈现出不同的空间分布模式：M2 在所有细胞亚群中均有活性；M9 在 zone4–zone6 中活性更强；M5 和 M10 等小模块的活性分布更局限。",
-        bio_zh="模块在细胞 UMAP 上的分布模式揭示了模块与细胞类型的对应关系。活性集中在特定区域的模块可能代表该细胞亚群的特征基因程序；活性分布广泛的模块代表骨骼肌的普遍功能程序。",
+        bio_zh="模块在细胞 UMAP 上的分布模式揭示了模块与细胞类型的对应关系。活性集中在特定区域的模块可能代表该细胞亚群的特征基因程序；活性分布广泛的模块代表示例组织的普遍功能程序。",
         full_width=True,
     )
 
@@ -372,7 +372,7 @@ with rb.section("enrichment", "7. TF & GO Enrichment Analysis",
         title_zh="转录因子调控富集",
         method_zh="对每个模块的 top 25 hub gene，使用 enrichR 在 ChEA_2022 (TF ChIP-seq 靶基因数据库) 和 ENCODE_TF_ChIP-seq_2015 中进行富集分析。点的大小和颜色均代表 -log10(FDR)，越大/越红表示富集越显著。",
         result_zh="共 105 个显著 TF-模块关联 (FDR<0.05)。主要发现：TBX20→M1 (FDR=3.4e-5)；MYOD1→M8 (FDR=5.2e-4)；SMAD2/3→M6 (FDR=0.015)；LEF1→M10 (FDR=4.9e-4)；NELFE→M9 (FDR=3.1e-6)；LXR→M4。",
-        bio_zh="MYOD1→M8：MYOD1 是骨骼肌分化的主调控因子，M8 的高保守性与 MYOD1 的核心调控地位一致；SMAD2/3→M6：TGF-β/SMAD 信号驱动的纤维化模块在衰老中上调，为抗纤维化干预提供了分子靶点；LEF1→M10：Wnt/LEF1 信号在运动后激活，提示 Wnt 激动剂可能模拟运动对老年肌肉的保护效应。",
+        bio_zh="MYOD1→M8：MYOD1 是示例组织分化的主调控因子，M8 的高保守性与 MYOD1 的核心调控地位一致；SMAD2/3→M6：TGF-β/SMAD 信号驱动的纤维化模块在衰老中上调，为抗纤维化干预提供了分子靶点；LEF1→M10：Wnt/LEF1 信号在运动后激活，提示 Wnt 激动剂可能模拟运动对老年肌肉的保护效应。",
     )
 
     rb.add_figure(

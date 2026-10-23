@@ -91,7 +91,7 @@
       "tissue": "skeletal_muscle",
       "direction": "aging",
       "script": "fig_subcluster_top1_violin.py",
-      "params": "MF_AUCell_meta.csv usecols 只读5列, 每亚群抽样3000, violinplot+散点+中位线, raw AUCell y轴, nature-figure 规范(Arial/pdf.fonttype42)",
+      "params": "示例评分方法_meta.csv usecols 只读5列, 每亚群抽样3000, violinplot+散点+中位线, raw AUCell y轴, nature-figure 规范(Arial/pdf.fonttype42)",
       "date": "2026-08-20",
       "score": 8,
       "auto_score": 0.0,

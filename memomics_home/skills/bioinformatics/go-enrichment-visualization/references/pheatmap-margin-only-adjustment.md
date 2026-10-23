@@ -82,7 +82,7 @@ Wi <- (tot_w + 0.20)/2.54; Hi <- (tot_h + 0.20)/2.54
 本会话 `execute_python` 的一次测量调用被平台守卫误判（回显"你刚才尝试执行删除操作 / 未被直接执行"），代码未运行。稳定的替代路径：
 
 1. 把测量代码 `write_file` 成 `scripts/measure_*.py`；
-2. `terminal` 里跑 `"E:/MemOmics-Agent/.venv/Scripts/python.exe" scripts/measure_x.py`（venv 不存在时回退 `python`）。
+2. `terminal` 里跑 `"<安装目录>" scripts/measure_x.py`（venv 不存在时回退 `python`）。
 
 只读测量脚本这样跑一次即可，不要在同一轮反复重试同一调用。
 

@@ -56,7 +56,7 @@
       "script": "probe_python_docx_interpreters",
       "params": {
         "cmd": "for P in .venv/Scripts/python.exe python python3; do $P -c import docx",
-        "finding": ".venv 无 python-docx；系统级 python(3.12.10, C:/Users/23136/.../Python312) 已有 docx"
+        "finding": ".venv 无 python-docx；系统级 python(3.12.10, <用户目录>) 已有 docx"
       },
       "date": "2026-09-29",
       "score": 7,
@@ -71,7 +71,7 @@
       "direction": "aging",
       "script": "plan_md_to_docx.py",
       "params": {
-        "interpreter": "C:/Users/23136/AppData/Local/Programs/Python/Python312/python.exe",
+        "interpreter": "<用户目录>",
         "input": "DEG_research_plan_v1.md (16718 B)",
         "output": "DEG_research_plan_v1.docx (46933 B)",
         "cmd": "python results/memomics-afd2d418/scripts/plan_md_to_docx.py"

@@ -38,7 +38,7 @@ Santacatterina 2026）显示：没有单一方法在所有情形最优，**结�
   → p.adjust(p,'fdr')；判据 Q<0.05 且 |log2FC|>0.25
 ```
 
-官方代码：`github.com/3DC-STAR-Anthony/NHPABC` →
+官方代码：`github.com/3DC-STAR-Anthony/example-cohort` →
 `snRNA/04.Identification_of_differentially_expressed_genes(DEGs)/RUV_MAST_pDEG_MBA.R`、`RUV-seq_sDEGs.R`
 
 **⚠️ 它的判据不能直接搬**：`|log2FC|>0.25` 是在**细胞级 coef** 上设的
@@ -88,13 +88,13 @@ Santacatterina 2026）显示：没有单一方法在所有情形最优，**结�
 | Santacatterina *Nat Commun* | 2026 | 多患者百万细胞可扩展新法 | 42321172 |
 | Dos Santos *PLoS Comput Biol* | 2026 | **尺度建模决定 FDR** | 42709908 |
 
-## 6. 组织/方向应用锚点（人骨骼肌运动 × 衰老 × T2D）
+## 6. 组织/方向应用锚点（人示例组织运动 × 衰老 × T2D）
 
 | 文献 | 年 | 为什么有用 | PMID |
 |---|---|---|---|
 | **Hansen *J Physiol*** | 2025 | **单核 RNA-seq + 训练干预 + 2型糖尿病**；"T2D 个体肌核转录响应被削弱" | 40413649 |
 | Lixandrao *J Appl Physiol* | 2025 | 老年男女抗阻训练高/低响应者，within-subject 设计 | 40839394 |
-| Yang *Genes* | 2026 | 老年骨骼肌不同运动模式的转录特征 | 42510843 |
+| Yang *Genes* | 2026 | 老年示例组织不同运动模式的转录特征 | 42510843 |
 | Koopmans *Adv Sci* | 2026 | 年龄依赖的肌核多组学对肥大刺激的响应 | 41704039 |
 | Dilbaz *bioRxiv* | 2025 | 肌纤维类型特异的训练适应（小鼠） | `10.1101/2025.11.04.686534` |
 

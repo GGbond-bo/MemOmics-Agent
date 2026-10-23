@@ -1157,7 +1157,7 @@ hermes dashboard [options]
 | `--status` | — | 列出正在运行的 `hermes dashboard` 进程并退出。 |
 
 ```bash
-# 默认——在浏览器中打开 http://127.0.0.1:9119
+# 默认——在浏览器中打开 http://login-host:22
 hermes dashboard
 
 # 自定义端口，不打开浏览器

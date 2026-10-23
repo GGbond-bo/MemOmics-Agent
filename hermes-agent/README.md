@@ -1,6 +1,6 @@
 > ## ⚠️ MemOmics 内嵌副本（Vendored Copy）
 >
-> 本目录是 **MemOmics（`E:\MemOmics-Agent`）内嵌的 Hermes 源码副本**，由 MemOmics
+> 本目录是 **MemOmics（`<安装目录> Hermes 源码副本**，由 MemOmics
 > 通过 `sys.path.insert(0, ...)` 直接引用（`webui/server.py` L48-52），**不是**独立安装的
 > Hermes，也不与独立 Hermes（如 Hermes Agent CN 桌面版 / pip 版）共享任何代码或数据。
 >

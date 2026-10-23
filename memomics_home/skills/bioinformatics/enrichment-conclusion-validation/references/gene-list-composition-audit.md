@@ -93,11 +93,11 @@ HSP = Heat Shock Protein（热休克蛋白）= 分子伴侣。
 
 | 用途 | 引用 |
 |---|---|
-| ISR + 线粒体 UPR 在骨骼肌稳态 | [PMID:42201142] Sanfrancesco et al. *Muscles* (2026) |
+| ISR + 线粒体 UPR 在示例组织稳态 | [PMID:42201142] Sanfrancesco et al. *Muscles* (2026) |
 | 运动介导的线粒体质量控制重塑（衰老） | [PMID:41988385] Cai et al. *Front Cell Dev Biol* (2026) |
 | 线粒体 hsp60 失衡 → 肌病/早死 | [PMID:41507123] Chen et al. *Cell Death Dis* (2026) |
 | 伴侣蛋白在肌萎缩中的角色 | [PMID:39707668] Acquarone et al. *J Cachexia Sarcopenia Muscle* (2025) |
-| **反例（方向相反）** | [PMID:16524679] Murlasits et al. *Exp Gerontol* (2006) —— 抗阻训练**提高**年轻/老年大鼠骨骼肌 HSP |
+| **反例（方向相反）** | [PMID:16524679] Murlasits et al. *Exp Gerontol* (2006) —— 抗阻训练**提高**年轻/老年大鼠示例组织 HSP |
 | mortalin 同源物过表达延长寿命 | [PMID:11959102] Yokoyama et al. *FEBS Lett* (2002) |
 
 ### 报告里必须写的两条限制

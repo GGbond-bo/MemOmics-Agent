@@ -5,7 +5,7 @@
 - **Tissue**: Brain (脑)
 - **Direction**: Aging (衰老)
 - **Platform**: DNB (BGI/MGI)
-- **Data path**: `E:\monkey\h5ad\` (15 h5ad files from prior conversion)
+- **Data path**: `<数据目录> (15 h5ad files from prior conversion)
 
 ## Samples Tested
 
@@ -66,7 +66,7 @@ This skill lives under `bioinformatics/cellbender-remove-background/` and is the
 - `cellbender_output_posterior.h5` — posterior probabilities
 
 ## Results Directory
-- `E:\monkey\cellbender\CRR278961\`
-- `E:\monkey\cellbender\CRR278962\`
+- `<数据目录>
+- `<数据目录>
 
-Note: User specified `E:\monkey\cellbender\` for this run. Default MemOmics convention is `E:\MemOmics-Agent\results/`.
+Note: User specified `<数据目录> for this run. Default MemOmics convention is `<安装目录>

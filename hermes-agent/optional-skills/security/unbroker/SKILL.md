@@ -82,7 +82,7 @@ verifying re-scan.
       gates (e.g. PeopleConnect guided-mode). Drive the operator's real Chrome over CDP - launch
       `chrome --remote-debugging-port=9222 --user-data-dir="$HOME/.hermes/chrome-debug"` (a dedicated
       debug profile signed into the webmail once, not the Default profile) and connect the browser
-      tools to `127.0.0.1:9222`. **`$PDD cdp` launches this for you** (finds Chrome/Chromium/Brave/Edge,
+      tools to `login-host:22`. **`$PDD cdp` launches this for you** (finds Chrome/Chromium/Brave/Edge,
       starts it detached on the dedicated profile, prints the CDP endpoint; `--check` to test, `--print`
       for the command). See `references/methods.md` -> "Browser backends: scan vs execute".
       Falls back to drafts for an email if the inbox isn't reachable.

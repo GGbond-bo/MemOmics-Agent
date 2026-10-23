@@ -7,7 +7,7 @@ Outbound messages and actions use JSON-RPC 2.0 over HTTP.
 Based on PR #268 by ibhagwan, rebuilt with bug fixes.
 
 Requires:
-  - signal-cli installed and running: signal-cli daemon --http 127.0.0.1:8080
+  - signal-cli installed and running: signal-cli daemon --http login-host:22
   - SIGNAL_HTTP_URL and SIGNAL_ACCOUNT environment variables set
 """
 
@@ -265,7 +265,7 @@ class SignalAdapter(BasePlatformAdapter):
         super().__init__(config, Platform.SIGNAL)
 
         extra = config.extra or {}
-        self.http_url = extra.get("http_url", "http://127.0.0.1:8080").rstrip("/")
+        self.http_url = extra.get("http_url", "http://login-host:22").rstrip("/")
         self.account = extra.get("account", "")
         self.ignore_stories = extra.get("ignore_stories", True)
 

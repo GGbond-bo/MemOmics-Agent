@@ -25,7 +25,7 @@ The CLI auto-discovers the port. Use `--port <N>` to override.
 ### Universal Command Tunnel
 ```bash
 # POST / — accepts any command as JSON
-curl -s -X POST http://127.0.0.1:8375/ \
+curl -s -X POST http://login-host:22/ \
   -H "Content-Type: application/json" \
   -d '{"command":"status"}'
 ```
@@ -55,7 +55,7 @@ curl -s -X POST http://127.0.0.1:8375/ \
 
 ## WebSocket Events (Broadcast)
 
-Connect to `ws://127.0.0.1:8375/` to receive real-time events:
+Connect to `ws://login-host:22/` to receive real-time events:
 
 ### EXG (Raw EEG Samples)
 ```json

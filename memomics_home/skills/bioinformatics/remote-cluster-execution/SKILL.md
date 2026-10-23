@@ -1,6 +1,6 @@
 ---
 name: remote-cluster-execution
-description: 远端 SSH 集群（SGE/Slurm/PBS）执行规程：环境清点、作业脚本、投递与产物回收。触发：集群/ssh3/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub。
+description: 远端 SSH 集群（SGE/Slurm/PBS）执行规程：环境清点、作业脚本、投递与产物回收。触发：集群/node1/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub。
 when_to_use: 任何要在远端集群上跑分析（remote_cluster 工具）之前的环境准备与执行。用户提到"集群/ssh 节点/云上算力/他把数据放集群上"时先加载本 skill。
 version: 1.0.0
 author: MemOmics
@@ -38,37 +38,37 @@ metadata:
 
 | 看什么 | 集群侧怎么看 | 可见？ | 原因（实测） |
 |---|---|---|---|
-| 产物（图/表/日志） | `ls /hwfssz3/PS_JLU/zhangbo/...` | ✅ | 工作盘 NFS **三节点共享** |
+| 产物（图/表/日志） | `ls /cluster/share/user/...` | ✅ | 工作盘 NFS **三节点共享** |
 | R/python 进程 | `ps -ef \| grep Rscript` | ⚠️ **仅运行期间** | 作业结束进程即消失；同账号进程全局可见（无需 sudo） |
 | SGE 队列 | `qstat` | ⚠️ 取决于 qmaster 可解析 | qstat 失败 → 工具判 `scheduler=none` → 走 **setsid 后台进程** → **队列里根本没有它**，只能靠 `ps` 看 |
-| 工具账本 | `~/memomics_jobs/` | ❌ **跨节点看不到** | `/home` **不跨节点共享**（ssh3=`10.53.22.9:/vol_1t_sas_3`；ssh23=`10.53.20.27:/export/home`，独立卷）→ 账本只在本节点可见 |
+| 工具账本 | `~/memomics_jobs/` | ❌ **跨节点看不到** | `/home` **不跨节点共享**（node1=`10.53.22.9:/vol_1t_sas_3`；node4=`10.53.20.27:/export/home`，独立卷）→ 账本只在本节点可见 |
 | Agent 思考/会话/审查 | — | ❌ | 全在 MemOmics 本机侧，集群上没有任何痕迹 |
 
 **由此定下的两条操作要求**：
 1. **作业日志必须落工作盘**（`$WORKDIR/log/`；`scripts/run_cluster_job.sh` 已如此），**不要只落 `~/memomics_jobs`（HOME）**——否则作业跑完/换个节点就查不到。
 2. 用户要现场核对 → 告诉他**登录提交时用的那个节点** + `ps -ef | grep Rscript`（或直接看工作盘产物目录），**别让他依赖 `qstat`**。
 
-⚠️ 登录账号是 **`zhangbo11`**（uid 1003064），**不是**目录名 `zhangbo`——用户 MobaXterm 里也多半是这个账号；
+⚠️ 登录账号是 **`user`**（uid 1003064），**不是**目录名 `user`——用户 MobaXterm 里也多半是这个账号；
 跨节点"看不看得到"最终取决于**是否同一账号 + 是否同一个 NFS 卷**。
 
 实测证据 / 排查方向 → `references/observability-from-cluster-side.md`。
 
 **2026-10-08 二轮实测补充（htop 可见性实弹取证 + SGE 实况）**
 
-- `ssh23` **已装 htop**（`/usr/bin/htop`）；htop 默认只列**当前用户**进程 → 用 `zhangbo11` 登录即可看到 MemOmics 作业。
-- **实弹证据**：`submit` 一个 300 秒占位作业 → `ps -u zhangbo11` 看到完整链路
+- `node4` **已装 htop**（`/usr/bin/htop`）；htop 默认只列**当前用户**进程 → 用 `user` 登录即可看到 MemOmics 作业。
+- **实弹证据**：`submit` 一个 300 秒占位作业 → `ps -u user` 看到完整链路
   `bash …/memomics_jobs/scripts/<job>.sh`（PPID=**1**，已脱离 SSH → 断连不死）→ 子进程本体；
   同期同表还看到**用户自己的两个 `htop`**（`pts/0` 子进程）→ 直接证明"同用户、同机、运行期间"三条件齐备即可见。
 - ⚠️ **`submit` 会返回 `exit=124 / Command timed out after 20s` 的 error，但作业其实已经起来了**
   （工具 20s 等待窗口太短）。见到这个 error **不要判失败**，先 `ps` / `action="status"` 核实。
-- 🔴 **SGE 在本集群不可用，且不是 DNS 小毛病**：qmaster `10.54.31.75:536` 从 ssh23 **TCP 不可达**
-  （`/dev/tcp` 探测 `TCP536_FAIL`）+ `/etc/hosts` 缺 `cngb-ps-jlu` 条目（ssh3 有）；
+- 🔴 **SGE 在本集群不可用，且不是 DNS 小毛病**：qmaster `login-host:22` 从 node4 **TCP 不可达**
+  （`/dev/tcp` 探测 `TCP536_FAIL`）+ `/etc/hosts` 缺 `cluster-login` 条目（node1 有）；
   **`HOSTALIASES` 免 root 补解析实测无效**。→ 无 root/网络开通修不了；
   因此 `scheduler=none` + **setsid 是被迫的正确路径，不是降级**，且正好满足"htop 可见"的诉求。
 
 ## 🔴 铁规 0：先清点环境，再写作业 — **环境名不可信，必须实测**
 
-**这是本 skill 最重要的一条，来自 2026-10-08 ssh3 实测。**
+**这是本 skill 最重要的一条，来自 2026-10-08 node1 实测。**
 
 - **conda env 目录名与实际包可以完全不符**：实测 `envs/cellchat` 里 `find.package("CellChat")` 为空（根本没装）；`envs/monocle3` 只有 14 个包、**没有 monocle3**；真正有 monocle3 的是 `R4.41`。按名字用 = 当场翻车。
 - **用户口述的名字也会有偏差**：中文口述 "R441 / R443" → 磁盘上实际是 `R4.41` / `R4.3.3`（还有一个 `R4.2.2`）。**永远以 `ls envs/` 的真实输出为准**。
@@ -91,7 +91,7 @@ metadata:
 
 ## 🔴 铁规 2：作业脚本必须显式定义解释器
 
-集群系统级 `Rscript` / `python3` 常不在 PATH，裸跑直接 `command not found`（实测 ssh3 就是）。作业开头固定写：
+集群系统级 `Rscript` / `python3` 常不在 PATH，裸跑直接 `command not found`（实测 node1 就是）。作业开头固定写：
 ```bash
 source <conda_root>/bin/activate <env>      # 推荐
 # 或 export PATH=<conda_root>/envs/<env>/bin:$PATH
@@ -102,7 +102,7 @@ source <conda_root>/bin/activate <env>      # 推荐
 
 用户说 **"先调查 / 帮我看看集群 / 集群有哪些环境"** 时：
 - 直接跑只读探测（`remote_cluster action="run"` + `ls` / `--version` / `find.package`）—— 都是轻量命令，登录节点跑没问题，**不要**先弹确认表单；
-- 交付**清单 + 按任务推荐**，但**不替用户锁定环境**。用户原话（2026-10-08）："你把 ssh3 能用的环境整理好，到时候固定使用哪个环境，**我会提前说明白**，先调查" → 调查类请求的交付物就是清单本身，锁定由用户拍板；
+- 交付**清单 + 按任务推荐**，但**不替用户锁定环境**。用户原话（2026-10-08）："你把 node1 能用的环境整理好，到时候固定使用哪个环境，**我会提前说明白**，先调查" → 调查类请求的交付物就是清单本身，锁定由用户拍板；
 - 探测**不需要** rail_review(post) 的分析级口径（无图表产出，会被判 failed）——如实说明"口径不匹配、非分析任务"即可，不要补假产物。
 - 反之，`submit` / `push` / `pull` / 真实分析属于高代价写操作 → 走铁律 35 意图确认。
 
@@ -126,7 +126,7 @@ source <conda_root>/bin/activate <env>      # 推荐
 
 ```
 rail_review(phase="pre", module_id=..., method_name=..., skill_name=...,
-            location="cluster", node="ssh23", env="R4.41",
+            location="cluster", node="node4", env="R4.41",
             required_packages=[...])
 ```
 
@@ -135,11 +135,11 @@ rail_review(phase="pre", module_id=..., method_name=..., skill_name=...,
 | 写法 | 回执 | 结果 |
 |---|---|---|
 | 不传 `location` | 查本机包 → `missing_packages:["RUVSeq"]` | ❌ 被拦 → 被迫装本地包（用户会质问「集群不是有自己的环境吗」） |
-| `location="cluster", node="ssh23", env="R4.41"` | `location_line: 集群 ssh23/R4.41 —— 显式指定（节点上的 R 包清单，694 个包，缓存命中）` | ✅ `should_proceed:true`，**零本地安装** |
+| `location="cluster", node="node4", env="R4.41"` | `location_line: 集群 node4/R4.41 —— 显式指定（节点上的 R 包清单，694 个包，缓存命中）` | ✅ `should_proceed:true`，**零本地安装** |
 
 要点：
 - **显式传 `location` 才有硬拦效力**；`location_source:"inferred"`（自动推断）报出的问题**只警告、不拦执行**。
-- **本地缺 ≠ 集群缺**，反之亦然（`ssh23/R4.41` 里 `RUVSeq`/`MAST`/`lme4`/`edgeR` 都在）。
+- **本地缺 ≠ 集群缺**，反之亦然（`node4/R4.41` 里 `RUVSeq`/`MAST`/`lme4`/`edgeR` 都在）。
 - 因此正确顺序是：**先带 location 试一次 pre-review → 只有它仍报缺包，才走上面三步补包。**
   巡例先把本地包装上属于白装。
 - 同理 **`rail_review(post)` 的 `output_dir` 必须是「本机可读路径」**：喂集群绝对路径会报
@@ -161,7 +161,7 @@ rail_review(phase="pre", module_id=..., method_name=..., skill_name=...,
 
 ## 🔴 铁规 4：路径与节点语义
 
-- 本地路径（`E:/...`、`results/...`）与远端绝对路径（`/hwfssz3/...`）是**两套**，不能当同一个字符串混用。用户没说数据在哪 → 先 `remote_cluster action="locate"`，按 verdict（local/cluster/ambiguous/missing）决定在哪儿算；ambiguous/missing → 停手问用户，**不许自己挑、不许编路径**。
+- 本地路径（`E:/...`、`results/...`）与远端绝对路径（`/cluster/...`）是**两套**，不能当同一个字符串混用。用户没说数据在哪 → 先 `remote_cluster action="locate"`，按 verdict（local/cluster/ambiguous/missing）决定在哪儿算；ambiguous/missing → 停手问用户，**不许自己挑、不许编路径**。
 - 只配一个节点 → 直接用，不要多嘴问；配了多个且没给 node → 先问（或看 `action="nodes"` 的负载），除非配了 `default_node`。
 - **产物分工**：大文件（BAM/FASTQ/中间矩阵/模型权重）留集群；表格/图/脚本/日志必须 `pull` 回 `results/<sid>/`，否则 WebUI 里看不到（WebUI 只浏览 work/ 和 results/）。
 
@@ -182,7 +182,7 @@ rail_review(phase="pre", module_id=..., method_name=..., skill_name=...,
 
 ### ⛔ 铁规 6.1：`submit` 回执 + 首次 `ps` 存活 ≠ 任务会跑完 —— 投递后做**一次**早期失败核对，然后停手（2026-10-09 实测）
 
-- 事故原样：MuSC RUVr+MAST 全量作业 **15:08:54 投递、15:13 我按 `ps` 汇报"在跑"**，**实际 15:10:37 就 `Execution halted` 退出了**（只跑了 1 分 43 秒，死在第一个亚群第一个迭代单元的 `cpm` dispatch 错误）；用户 15:13 来问「**我在这个节点 ssh23 上没看到任务**」才发现。顺带暴露：wrapper 打 `rc=0`（**不接 Rscript 真退出码**）→ 日志尾部看着像正常结束。
+- 事故原样：MuSC RUVr+MAST 全量作业 **15:08:54 投递、15:13 我按 `ps` 汇报"在跑"**，**实际 15:10:37 就 `Execution halted` 退出了**（只跑了 1 分 43 秒，死在第一个亚群第一个迭代单元的 `cpm` dispatch 错误）；用户 15:13 来问「**我在这个节点 node4 上没看到任务**」才发现。顺带暴露：wrapper 打 `rc=0`（**不接 Rscript 真退出码**）→ 日志尾部看着像正常结束。
 - 根因：**R/Python 脚本常在第一个迭代单元内就崩**（首行报错 → 整脚本退出），"进程还活着"只在最初几十秒成立。所以 `ps` 有 pid 只证明"起过"，不证明"跑得完"。
 - 做法：投递后**第一次**核对要**一次拿全三样并读日志尾部**（不能只看 `ps`）：
   ```bash
@@ -218,7 +218,7 @@ rail_review(phase="pre", module_id=..., method_name=..., skill_name=...,
 ## 🔴 铁规 7：**用户锁定的环境映射是"持久声明"，不是探针缓存**（2026-10-08）
 
 用户说"把环境信息补充到环境管理，以后新会话都能调用/补充/更新"时，落点**只有一个**：
-`E:/MemOmics-Agent/environment.json` 的 `cluster` 段（可选再加 `env_notes`）。
+`<安装目录> 的 `cluster` 段（可选再加 `env_notes`）。
 
 - **为什么不能写进 `env_inventory` 缓存**：那是**探针自动生成**的（集群 10 分钟重扫、本机 1 小时），写进去会被下次重扫覆盖。分工是——探针答"**现在有什么**"，`environment.json` 答"**该用哪个、别碰哪些**"；后者是用户意图，必须持久。把声明塞进缓存 = 假装落库，下次会话就丢了。
 - **新会话调用链**：读 `environment.json.cluster` → 拿节点 + 固定环境 + activate 命令 → `action="submit"`。实时负载/队列仍走 `env_inventory` 探针。
@@ -226,19 +226,19 @@ rail_review(phase="pre", module_id=..., method_name=..., skill_name=...,
 - 改这份声明**只改指定项**，别顺手重排/润色别段（它是本机环境真源，`scripts/validate_env.py` 读它）。
 - 机制细节（段 schema、`declared_env()`/`save_declared()`、WebUI 填写入口）见 `references/environment-declaration.md`。
 
-## 🔴 铁规 8：三个登录口 ≠ 三个算力池；装包只有 `ssh0` 能上网（2026-10-08 实测）
+## 🔴 铁规 8：三个登录口 ≠ 三个算力池；装包只有 `node3` 能上网（2026-10-08 实测）
 
 | 节点 | 角色 | 规格 | 外网 |
 |---|---|---|---|
-| `ssh3` | **default_node** / 大内存 | 144 核 / 3.0 TB | ❌ |
-| `ssh23` | 计算节点（常空，重活首选） | 112 核 / 503 GB（本地 `/tmp` **仅 24G**） | ❌ |
-| `ssh0` | **安装节点** | 8 核 / 15.5 GB | ✅（唯一） |
+| `node1` | **default_node** / 大内存 | 144 核 / 3.0 TB | ❌ |
+| `node4` | 计算节点（常空，重活首选） | 112 核 / 503 GB（本地 `/tmp` **仅 24G**） | ❌ |
+| `node3` | **安装节点** | 8 核 / 15.5 GB | ✅（唯一） |
 
-- 三节点挂**同一份 NFS**（`hwfssz3.cngb.sz.hpc:/PS_JLU → /hwfssz3/PS_JLU`，120T / 余 24T / 81% 已用）+ **同一套 SGE 8.1.9**，工作路径 realpath 均 `/hwfssz3/PS_JLU/zhangbo`，可见环境一字不差 → **真决定跑在哪台的是调度器，不是登录口**：别按登录口分配任务、别跨节点搬文件。
-- 🔴 装包 / 下数据 / 下参考基因组**只能在 `ssh0`**（其余节点无外网，`pip install`、下载会卡死超时）；装到共享盘后 `ssh3`/`ssh23` 立即可读。
-- 中间文件写工作盘 `/hwfssz3/...`，**别用 `/tmp`**。
-- 全表（含主机名、选点行为 `default_node=ssh3` / `node_policy=ask`）、工作/装包环境分工、改 `environment.json` 后的验证三件套 → `references/three-node-cluster-facts.md`。
-- ⚠️ **节点上的 `python` 是 Python 2.7.5（ssh23 没有 python3）**：远端任何 `python -c "..."` 一句话都要 **py2/py3 双兼容** —— 不许用 `print(...)` 当表达式（`[print(x) for x in xs]` 在 py2 直接 SyntaxError）、不许 f-string。实测事故（2026-10-09）：`pull`/`locate` 带通配符时远端 glob 助手写成了 `[print(...)]`，整条路报「远端没找到」，看着像路径错，其实是脚本没跑起来。修法：`sys.stdout.write("\n".join([...]))`，先试 `python3` 再退 `python`。
+- 三节点挂**同一份 NFS**（`login-host:/share → /cluster/share`，120T / 余 24T / 81% 已用）+ **同一套 SGE 8.1.9**，工作路径 realpath 均 `/cluster/share/user`，可见环境一字不差 → **真决定跑在哪台的是调度器，不是登录口**：别按登录口分配任务、别跨节点搬文件。
+- 🔴 装包 / 下数据 / 下参考基因组**只能在 `node3`**（其余节点无外网，`pip install`、下载会卡死超时）；装到共享盘后 `node1`/`node4` 立即可读。
+- 中间文件写工作盘 `/cluster/...`，**别用 `/tmp`**。
+- 全表（含主机名、选点行为 `default_node=node1` / `node_policy=ask`）、工作/装包环境分工、改 `environment.json` 后的验证三件套 → `references/three-node-cluster-facts.md`。
+- ⚠️ **节点上的 `python` 是 Python 2.7.5（node4 没有 python3）**：远端任何 `python -c "..."` 一句话都要 **py2/py3 双兼容** —— 不许用 `print(...)` 当表达式（`[print(x) for x in xs]` 在 py2 直接 SyntaxError）、不许 f-string。实测事故（2026-10-09）：`pull`/`locate` 带通配符时远端 glob 助手写成了 `[print(...)]`，整条路报「远端没找到」，看着像路径错，其实是脚本没跑起来。修法：`sys.stdout.write("\n".join([...]))`，先试 `python3` 再退 `python`。
 
 ## 🔴 铁规 9：长任务 = **一个作业跑完整链 + 检查点**，不要拆成一堆小作业（2026-10-08 用户拍板方案 A）
 
@@ -286,7 +286,7 @@ rail_review(phase="pre", module_id=..., method_name=..., skill_name=...,
    - **本机输入** → `python -m memomics.bio_tools.large_cache scan <路径...> --json` → 看 `recommend`。
    - **集群输入** → `python -m memomics.bio_tools.large_cache scan --remote --node <节点> <路径...> --json`
      （2026-10-08 起 `scan` 支持 `--remote`：经 remote_cluster 批量 stat/du，按 size+mtime 判，
-     不取指纹）。⚠️ 不带 `--remote` 喂 `/hwfssz3/...` 只会得到 `exists:false` —— **别据此判"没有大文件"**。
+     不取指纹）。⚠️ 不带 `--remote` 喂 `/cluster/...` 只会得到 `exists:false` —— **别据此判"没有大文件"**。
      想顺带摸同目录一批：`action="run"` + `ls -la --time-style=long-iso <目录> | head -20`。
      判定 ≥100MB → 直接进第 2 步。
 2. **弹窗**：≥100MB → **`ask_user(kind="intent", multi_select=true)`** 问要不要持久化
@@ -296,12 +296,12 @@ rail_review(phase="pre", module_id=..., method_name=..., skill_name=...,
    ⚠️ 集群产物**必须带 `--remote`**：本机看不见远端文件系统，不带就会被 `os.path.exists=False`
    误导，且 `clean` 走不到"只打印 `rm -rf` 命令"的正确分支。
    2026-10-08 起 `--remote` 时输入/产物/cache_root **原样记账**（不再被 `os.path.abspath` 拼成
-   `E:\...\/hwfssz3` 怪胎）；**用户拒绝持久化也要落标记**（`--note 用户选择不持久化`）——
+   `E:\...\/cluster` 怪胎）；**用户拒绝持久化也要落标记**（`--note 用户选择不持久化`）——
    账本记的是"已问过"，不是"已持久化"，不落则硬闸每次都拦。
 
 ### 顺手做：给项目建「大输入清单」（避免换个文件名就重新漏）
 
-发现某目录是**成批的大文件**时（实例：`/hwfssz3/PS_JLU/zhangbo/Muscle_96_38/Umap/` 下 6 个 RDS，
+发现某目录是**成批的大文件**时（实例：`/cluster/share/user/Muscle_96_38/Umap/` 下 6 个 RDS，
 0.48–1.76 GB：FAP 1.76G / EC_pericyte 861M / Immune 832M / MuSC 662M / ANKRD1 581M / GALNTL6 483M），
 **一次把同目录 ≥100MB 的项全部 `mark`**，形成该项目的清单 —— 而不是每换一个文件名重漏一次。
 
@@ -346,7 +346,7 @@ cell 输入框。实现要点：
 - 边界（如实说）：秒级轮询、不是字节流；正在跑的 cell **不能中断**（打断=丢内存对象，要停就
   `session_stop`）；本地 `execute_r`/`execute_python` 的变量与图不在这张面板里（它看的是集群常驻会话）。
 
-**实测验收（2026-10-09，ssh23，`MuSC_exercise_clean_dele_cluster_umap.rds` 661.8MB）**：
+**实测验收（2026-10-09，node4，`MuSC_exercise_clean_dele_cluster_umap.rds` 661.8MB）**：
 `readRDS` 16.3s 灌进内存（01:41:06）→ `RunUMAP(harmony 1:30)` 38.9s、对象 2GB、进程 RSS 2.5→3.0GB
 → **约 7 分钟后**（01:54:10）跑 `FindMarkers(lpMuSC vs dMuSC)`：3.6s、20,266 行、1,323 个显著
 （上调 874）、CSV 1.25MB 落 `out/`；**全程同一个 pid=109595、`readrds_calls` 始终 = 1**（没有回读文件）。
@@ -368,7 +368,7 @@ cell 输入框。实现要点：
 - 进程被清场/节点重启 → 内存对象没了：`session_start(session_id=<旧 id>, restore='latest')` 从检查点
   拉回来（不必重读原文件）；没存检查点就只能重读（600MB ≈ 20 秒，先跟用户讲清代价）。
 - 工作环境/装包环境的分工不变：会话默认用 zhangxiao6 的 `R4.41`（只读，⛔ 不装包）；缺包在
-  `zhangbo/envs/R4.4.1_zb` 装好后从会话里 `.libPaths()` / `PATH` 引用。
+  `user/envs/R4.4.1_zb` 装好后从会话里 `.libPaths()` / `PATH` 引用。
 
 ## 探查/执行速查
 
@@ -380,7 +380,7 @@ cell 输入框。实现要点：
 | 看会话里跑过的 cell / 图 | `action="session_cells"`（代码+输出+图清单）→ 逐张 `action="session_plot" path="plots/<请求号>_01.png"`（WebUI 里就是输入框上方「📓 总端」那张面板） |
 | 长任务投递（读一次+检查点） | `scripts/run_cluster_job.sh <INPUT> <WORKDIR>` → `action="submit"` |
 | 标记管账/清理 | `large_cache list|verify|clean [--yes]` |
-| 盯 `submit` 起的长作业进度 | `action="run"` 一条命令拿全：`ps -ef \| grep <脚本名> \| grep -v grep`（数进程）+ `tail -40 <工作盘>/<out>.log` + `ls <产物目录> \| wc -l`；**日志必须落 `/hwfssz3/...` 工作盘**（`~/memomics_jobs/logs` 跨节点不可见 → 用户 MobaXterm 里看不到） |
+| 盯 `submit` 起的长作业进度 | `action="run"` 一条命令拿全：`ps -ef \| grep <脚本名> \| grep -v grep`（数进程）+ `tail -40 <工作盘>/<out>.log` + `ls <产物目录> \| wc -l`；**日志必须落 `/cluster/...` 工作盘**（`~/memomics_jobs/logs` 跨节点不可见 → 用户 MobaXterm 里看不到） |
 | 数据在哪儿 | `action="locate" path="<用户原话路径>"` |
 | 节点连通/负载 | `action="nodes"` |
 | 跑重活 | `action="submit"`（先 `action="check"` 摸调度器/资源） |
@@ -389,15 +389,15 @@ cell 输入框。实现要点：
 
 ## 已知集群清单（实测记录）
 
-- `references/ssh3-zhangbo-inventory.md` — ssh3（CNGB 深圳超算，SGE 8.1.9）环境实测清单：R4.41 / R4.3.3 / ARCHR / sc-analysis / scenic 等，含每个环境的真实包内容与推荐映射。
+- `references/node1-user-inventory.md` — node1（CNGB 深圳超算，SGE 8.1.9）环境实测清单：R4.41 / R4.3.3 / ARCHR / sc-analysis / scenic 等，含每个环境的真实包内容与推荐映射。
 - `references/environment-declaration.md` — 环境声明的机制：`environment.json` 的 `cluster` 段 schema、`declared_env()` / `save_declared()`、WebUI「🧩 环境管理」填写入口与 `POST /api/env/declared`。
-- `references/three-node-cluster-facts.md` — 三节点（`ssh3`/`ssh0`/`ssh23`）规格与外网矩阵、共享 NFS + 同一套 SGE 队列、**工作环境 vs 装包环境分工**、推荐安装链、以及改 `environment.json` 后的**验证三件套**（JSON 断言 / `validate_env.py` / 全量 offline pytest）。
-- `references/observability-from-cluster-side.md` — **用户在 MobaXterm 里能核对到什么**（铁规 11 的实测底稿）：账号 `zhangbo11`、工作盘共享 vs `/home` 不共享、`ps`/`qstat`/账本三层可见性、`qstat` 失败 → 退化为 setsid 的因果链、以及回答这类问题的固定骨架。
+- `references/three-node-cluster-facts.md` — 三节点（`node1`/`node3`/`node4`）规格与外网矩阵、共享 NFS + 同一套 SGE 队列、**工作环境 vs 装包环境分工**、推荐安装链、以及改 `environment.json` 后的**验证三件套**（JSON 断言 / `validate_env.py` / 全量 offline pytest）。
+- `references/observability-from-cluster-side.md` — **用户在 MobaXterm 里能核对到什么**（铁规 11 的实测底稿）：账号 `user`、工作盘共享 vs `/home` 不共享、`ps`/`qstat`/账本三层可见性、`qstat` 失败 → 退化为 setsid 的因果链、以及回答这类问题的固定骨架。
 - `references/rail-gate-and-meta-preflight.md` — **铁规 3.1 的实测底稿**：`rail_review(pre)` 本地口径拦截集群 `submit` 的死锁，**首选解 `location="cluster"`+`node`+`env`（实测零本地安装）**、旧的三步补包解绑、以及两者的对照回执；分组列 levels 不一致导致「整批静默跳过、退出码 0」的前置核查；`dplyr::recode` 未命中值**原样保留不产生 NA** 所以 `anyNA()` 守卫抓不到漏映射（守卫要写 `%in%` 集合判定）；**第 4 节：`rail_review(post)` 在集群产物上的两连误判（`Output directory not found` / `figure_count=0`）与「先 pull 再复审」的正确顺序**；以及可复用的集群投递命令骨架。
 - `references/big-input-inventory.md` — **大输入清单 + `large_cache` 的真实边界**（铁规 10 的底稿）：`scan` 只认本机路径（无 `--remote`，喂集群路径返回 `exists:false` 不报错）、`mark --remote` 的必要性、`Muscle_96_38/Umap/` 实测 6 个 0.48–1.76 GB RDS 清单、以及复查用的三条只读命令。
 - `references/persistent-r-session.md` — **常驻 R 会话的协议与实测**（2026-10-09 落地）：文件队列（`staging`→`queue` 原子 mv）为什么必须有、`state.txt`/`done/*.res.txt`/`ckpt/` 格式、`setsid -f` 不可用与 busybox `ps` 的兼容处理、MuSC 验收全过程（16.3s 读入 → 38.9s UMAP → 6 分钟后 FindMarkers 仍 `readrds_calls=1`）、4 个实测踩坑，以及**第二批的抓图/Notebook 总端**（`plots/` + `---PLOTS---` 分段 + 逐表达式 `dev.off()` 的原因 + `session_cells`/`session_plot` 读侧 + bounded_capture 截断陷阱）。
 
-**ssh3 已锁定映射（用户 2026-10-08 拍板，声明在 `environment.json.cluster.policy`）**：
+**node1 已锁定映射（用户 2026-10-08 拍板，声明在 `environment.json.cluster.policy`）**：
 
 | 方向 | R 环境 | Python 环境 | 负责对象 |
 |---|---|---|---|
@@ -405,19 +405,19 @@ cell 输入框。实现要点：
 | ATAC | `R4.3.3`（R 4.3.3；ArchR 1.0.3 / Signac 1.14.0） | — | ArchR 分析 |
 
 `R4.41` 同时带 SeuratDisk + sceasy → **Seurat ↔ AnnData 互转不用另找环境**。
-激活：`source /hwfssz3/PS_JLU/zhangxiao6/software/miniconda3/bin/activate <env>`（R4.41 / sc-analysis / R4.3.3）。
+激活：`source /cluster/share/zhangxiao6/software/miniconda3/bin/activate <env>`（R4.41 / sc-analysis / R4.3.3）。
 
 ### 🔴 工作环境 vs 装包环境 —— 两套并存，不是二选一（2026-10-08 用户澄清）
 
 | 角色 | 环境 | 规则 |
 |---|---|---|
 | **工作环境** | zhangxiao6 的 `R4.41`(RNA) / `R4.3.3`(ATAC) / `sc-analysis` | **正常分析就用它**；属主他人 → **只读，⛔ 禁止在其中装任何包** |
-| **装包环境** | 自有可写 `zhangbo/envs/R4.4.1_zb`（R 4.4.1 + Python 3.14.0） | **只用来补装**：映射环境缺的分析包装这里 → 作业里 `export PATH=/hwfssz3/PS_JLU/zhangbo/envs/R4.4.1_zb/bin:$PATH` 引用它 |
+| **装包环境** | 自有可写 `user/envs/R4.4.1_zb`（R 4.4.1 + Python 3.14.0） | **只用来补装**：映射环境缺的分析包装这里 → 作业里 `export PATH=/cluster/share/user/envs/R4.4.1_zb/bin:$PATH` 引用它 |
 
 用户原话：「真正工作的是 RNA→R4.41 / ATAC→R4.3.3；`R4.4.1_zb` 这个只是用来装一些包的，**以后装包可以在这里装，然后调用**。因为真正工作的环境是 zhangxiao6 的，**我不能随便在他这里安装包**。正常工作在 zhangxiao 这里，缺少了一些分析包，**在我自己这里安装**。」
 
-⚠️ 本 skill 旧版把 `R4.4.1_zb` 记成「不在映射内，默认不用」——**该说法已作废**：它是**装包落点**，缺包时的指定去处（config.yaml 的 ssh3 note 指向它，不是与 policy 冲突，是分工）。
-装包链：**必须走 `ssh0`（三节点唯一有外网）** → 落到自有 env/库 → 共享 NFS，`ssh3`/`ssh23` 立即可用。
+⚠️ 本 skill 旧版把 `R4.4.1_zb` 记成「不在映射内，默认不用」——**该说法已作废**：它是**装包落点**，缺包时的指定去处（config.yaml 的 node1 note 指向它，不是与 policy 冲突，是分工）。
+装包链：**必须走 `node3`（三节点唯一有外网）** → 落到自有 env/库 → 共享 NFS，`node1`/`node4` 立即可用。
 
 ## Proven Scripts
 
@@ -453,7 +453,7 @@ cell 输入框。实现要点：
 | human | skeletal_muscle | exercise | 2026-10-08 | musc_umap_prop_ssh3.R | - | - |  |
 | human | skeletal_muscle | exercise | 2026-10-09 | r_session_daemon.R（常驻会话：MuSC 读一次 → RunUMAP 38.9s → 6 分钟后 FindMarkers，readrds_calls=1） | - | - |  |
 | - | - | - | 2026-10-09 | test_cluster_session.py（19 用例） | - | - |  |
-| human | skeletal_muscle | exercise+aging | 2026-10-09 | large_cache list + ssh23 env probe | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-09 | large_cache list + node4 env probe | - | - |  |
 | human | skeletal_muscle | exercise+aging | 2026-10-09 | probe_musc_meta.R | - | - |  |
 | human | skeletal_muscle | exercise+aging | 2026-10-09 | large_cache list（开工前查大输入标记） | - | - |  |
 | human | skeletal_muscle | exercise+aging | 2026-10-09 | muscle_RUV_MAST_MuSC.R | - | - |  |

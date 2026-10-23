@@ -323,7 +323,7 @@ def test_frontend_answer_does_not_release_lock(client, new_session):
     """
     sid = new_session
     e = enf.get_enforcement(sid)
-    enf.arm_code_edit(e, "用户要求改代码", data=["E:/release/_ce_demo/expr.csv"])
+    enf.arm_code_edit(e, "用户要求改代码", data=["<发布目录>"])
     r = client.post("/api/ask_form/answer", json={
         "session_id": sid, "selected": ["只给我改好的代码，先别跑"], "other": "",
         "question": "要不要用你的数据跑一遍验证？"})

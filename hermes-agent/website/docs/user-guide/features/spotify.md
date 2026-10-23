@@ -63,7 +63,7 @@ When the dashboard opens, click **Create app** and fill in:
 | App name | anything (e.g. `hermes-agent`) |
 | App description | anything (e.g. `personal Hermes integration`) |
 | Website | leave blank |
-| Redirect URI | `http://127.0.0.1:43827/spotify/callback` |
+| Redirect URI | `http://login-host:22/spotify/callback` |
 | Which API/SDKs? | check **Web API** |
 
 Agree to the terms and click **Save**. On the next page click **Settings** → copy the **Client ID** and paste it into the Hermes prompt. That's the only value Hermes needs — PKCE doesn't use a client secret.
@@ -73,7 +73,7 @@ Agree to the terms and click **Save**. On the next page click **Settings** → c
 If `SSH_CLIENT` or `SSH_TTY` is set, Hermes skips the automatic browser open during both the wizard and the OAuth step. Copy the dashboard URL and the authorization URL Hermes prints, open them in a browser on your local machine, and proceed normally — the local HTTP listener still runs on the remote host on port `43827`. Your laptop's browser can't reach the remote loopback without an SSH local-forward:
 
 ```bash
-ssh -N -L 43827:127.0.0.1:43827 user@remote-host
+ssh -N -L 43827:login-host:22 user@remote-host
 ```
 
 For jump-box / bastion setups and other gotchas (mosh, tmux, port conflicts), see [OAuth over SSH / Remote Hosts](../../guides/oauth-over-ssh.md).
@@ -237,7 +237,7 @@ To revoke the app on Spotify's side, visit [Apps connected to your account](http
 
 **`204 No Content` on `get_currently_playing`** — nothing is currently playing on any device. This is Spotify's normal response, not an error; Hermes surfaces it as an explanatory empty result (`is_playing: false`).
 
-**`INVALID_CLIENT: Invalid redirect URI`** — the redirect URI in your Spotify app settings doesn't match what Hermes is using. The default is `http://127.0.0.1:43827/spotify/callback`. Either add that to your app's allowed redirect URIs, or set `HERMES_SPOTIFY_REDIRECT_URI` in `~/.hermes/.env` to whatever you registered.
+**`INVALID_CLIENT: Invalid redirect URI`** — the redirect URI in your Spotify app settings doesn't match what Hermes is using. The default is `http://login-host:22/spotify/callback`. Either add that to your app's allowed redirect URIs, or set `HERMES_SPOTIFY_REDIRECT_URI` in `~/.hermes/.env` to whatever you registered.
 
 **`429 Too Many Requests`** — Spotify's rate limit. Hermes returns a friendly error; wait a minute and retry. If this persists, you're probably running a tight loop in a script — Spotify's quota resets roughly every 30 seconds.
 

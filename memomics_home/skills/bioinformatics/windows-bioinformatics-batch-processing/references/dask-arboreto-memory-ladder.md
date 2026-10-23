@@ -1,6 +1,6 @@
 # Windows 重内存 Python 生信任务：dask / arboreto 内存阶梯
 
-> 来源：2026-09-24 pySCENIC GRNBoost2（人骨骼肌 MF_2000，2,132 nuclei × 27,090 genes）实测。
+> 来源：2026-09-24 pySCENIC GRNBoost2（人示例组织 示例数据，2,132 nuclei × 27,090 genes）实测。
 > 症状在**任何**用 `dask.distributed` 或 `arboreto` 的 Windows 任务里都同形（GRNBoost2 / scvi-tools / 自建 dask pipeline），
 > 不限于 pySCENIC。本文只讲**执行层**（内存预算、进程归属、判活），SCENIC 方法学本体见 `grn-pyscenic`。
 

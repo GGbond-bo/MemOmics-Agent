@@ -17,7 +17,7 @@ import os, csv
 import pandas as pd
 
 # ===== 配置区 =====
-F     = r"D:/我的下载/DEG_fdr05_coef025_5contrasts_formatted.xlsx"   # 输入工作簿
+F     = r"<数据目录>/DEG_fdr05_coef025_5contrasts_formatted.xlsx"   # 输入工作簿
 OUT   = r"D:/肌肉锻炼/DEG_metascape"                                  # 输出目录（用户指定）
 TOP_N = 100                                                           # 每列取前 N（不足全取）
 PREFIX = "Metascape"                                                  # 文件名前缀

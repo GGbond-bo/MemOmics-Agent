@@ -1,6 +1,6 @@
 # KEGG/GO 富集：四项门禁的可复用配方（含实测数字）
 
-来源：2026-09-24 会话（人骨骼肌肌纤维 `MF_2000.rds`，2,132 cells / 48 样本 / 6 组，Y_Post vs O_Post）。
+来源：2026-09-24 会话（人示例组织肌纤维 `示例数据.rds`，2,132 cells / 48 样本 / 6 组，Y_Post vs O_Post）。
 脚本：`results/memomics-d53bc866/scripts/12_kegg_YPost_vs_OPost.R` + `12b_kegg_validation.R`
 + `12c_kegg_collapse_plot.R` + `12d_sample_level_and_module.R`。
 

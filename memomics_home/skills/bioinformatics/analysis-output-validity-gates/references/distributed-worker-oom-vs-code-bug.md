@@ -11,7 +11,7 @@ worker 侧：
   pyscenic.transform - ERROR - Unable to process "PRDM5" on database "..." because ran out of memory.
 
 scheduler 侧：
-  distributed.scheduler - ERROR - Removing worker 'tcp://127.0.0.1:63936' caused the cluster to lose
+  distributed.scheduler - ERROR - Removing worker 'tcp://login-host:22' caused the cluster to lose
     scattered data, which can't be recovered: {'FeatherRankingDatabase-...', 'DataFrame-...'}
 
 client 侧：

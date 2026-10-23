@@ -2,7 +2,7 @@
 """rail_review 按执行位置审查（本地 / 集群 / 云）—— 2026-10-09。
 
 背景（用户实测事故）：rail_review(pre) 只查**本机** R 包清单，本地缺 RUVSeq 就把
-**集群投递**硬拦了（"Missing packages: RUVSeq"），而 ssh23 的 R4.41 里其实装着。
+**集群投递**硬拦了（"Missing packages: RUVSeq"），而 node4 的 R4.41 里其实装着。
 本文件锁死修复后的口径：
 
   * 本地任务查本机包、集群任务查**集群节点**的包、云平台单独标 unverified；
@@ -110,9 +110,9 @@ def fake_local_r(monkeypatch):
 
 @pytest.fixture
 def cluster_ok(patch_rc):
-    """伪造集群包清单：ssh23/R4.41 上 RUVSeq 有、CellChat 没有。"""
-    inv = {"status": "ok", "node": "ssh23", "env": "R4.41",
-           "rscript": "/hwfssz3/.../envs/R4.41/bin/Rscript", "r_version": "R version 4.4.1",
+    """伪造集群包清单：node4/R4.41 上 RUVSeq 有、CellChat 没有。"""
+    inv = {"status": "ok", "node": "node4", "env": "R4.41",
+           "rscript": "/cluster/.../envs/R4.41/bin/Rscript", "r_version": "R version 4.4.1",
            "count": 412, "checked_at": "2026-10-09 12:00:00", "cached": False,
            "installed": ["RUVSeq"], "missing": ["CellChat"], "unverified": []}
 
@@ -130,7 +130,7 @@ def cluster_ok(patch_rc):
 @pytest.fixture
 def cluster_down(patch_rc):
     def fake(**kw):
-        return {"status": "error", "node": "ssh23", "env": "R4.41",
+        return {"status": "error", "node": "node4", "env": "R4.41",
                 "error": "连不上节点或探测 Rscript 失败：timed out",
                 "hint": "先用 action='nodes' 看节点连通性", "packages": [],
                 "installed": [], "missing": [], "unverified": [], "count": None}
@@ -144,16 +144,16 @@ def cluster_down(patch_rc):
 class TestEnvCheckScope:
     def test_cluster_scope_uses_cluster_inventory(self, no_local_probe, cluster_ok):
         res = ec.check_env(["RUVSeq", "CellChat"], language="R", auto_install=False,
-                           scope="cluster", node="ssh23", env="R4.41")
+                           scope="cluster", node="node4", env="R4.41")
         assert res["scope"] == "cluster" and res["source"] == "cluster"
         assert list(res["installed"]) == ["RUVSeq"]
         assert list(res["missing"]) == ["CellChat"]
-        assert res["node"] == "ssh23" and res["env"] == "R4.41"
+        assert res["node"] == "node4" and res["env"] == "R4.41"
         assert res["reachable"] is True and res["checked_at"]
 
     def test_cluster_scope_unreachable_is_unverified_not_missing(self, no_local_probe, cluster_down):
         res = ec.check_env(["RUVSeq"], language="R", auto_install=False,
-                           scope="cluster", node="ssh23", env="R4.41")
+                           scope="cluster", node="node4", env="R4.41")
         assert res["missing"] == {}, "连不上集群 ≠ 缺包（不许报 missing）"
         assert res["unverified"] == ["RUVSeq"]
         assert res["reachable"] is False and "timed out" in res["error"]
@@ -162,7 +162,7 @@ class TestEnvCheckScope:
         calls = []
         monkeypatch.setattr(ec, "_install_r_package", lambda p, *a, **kw: calls.append(p) or True)
         res = ec.check_env(["RUVSeq"], language="R", auto_install=True,
-                           scope="cluster", node="ssh23", env="R4.41")
+                           scope="cluster", node="node4", env="R4.41")
         assert calls == [], "集群侧只读：不许装包"
         assert list(res["installed"]) == ["RUVSeq"]
 
@@ -185,11 +185,11 @@ class TestEnvCheckScope:
 
     def test_cluster_scope_python_names_unverified(self, no_local_probe, patch_rc):
         patch_rc("r_packages_check", lambda **kw: {
-            "status": "ok", "node": "ssh23", "env": "R4.41", "count": 400,
+            "status": "ok", "node": "node4", "env": "R4.41", "count": 400,
             "installed": [], "missing": [], "unverified": ["scanpy"],
             "checked_at": "2026-10-09 12:00:00", "cached": False, "r_version": ""})
         res = ec.check_env(["scanpy"], language="R", auto_install=False,
-                           scope="cluster", node="ssh23", env="R4.41")
+                           scope="cluster", node="node4", env="R4.41")
         assert res["missing"] == {} and res["unverified"] == ["scanpy"]
 
 
@@ -209,23 +209,23 @@ class TestRailReviewLocation:
 
     def test_pre_cluster_missing_blocks_with_location(self, no_local_probe, cluster_ok):
         r = self._pre(required_packages=["CellChat"], location="cluster",
-                      node="ssh23", env="R4.41")
+                      node="node4", env="R4.41")
         assert r["should_proceed"] is False
-        assert any("Missing packages (集群 ssh23/R4.41): CellChat" == i for i in r["issues"])
+        assert any("Missing packages (集群 node4/R4.41): CellChat" == i for i in r["issues"])
         assert r["location"] == "cluster" and r["env_source"] == "cluster"
-        assert r["node"] == "ssh23" and r["env"] == "R4.41"
+        assert r["node"] == "node4" and r["env"] == "R4.41"
 
     def test_pre_cluster_passes_even_when_local_missing(self, fake_local_r, cluster_ok):
         """用户场景：本地缺 RUVSeq，但集群有 → 不许拦集群任务。"""
         r = self._pre(required_packages=["RUVSeq"], location="cluster",
-                      node="ssh23", env="R4.41")
+                      node="node4", env="R4.41")
         assert r["should_proceed"] is True, r
         assert r["issues"] == []
-        assert any("✅ 包齐（集群 ssh23/R4.41）" in w for w in r["warnings"])
+        assert any("✅ 包齐（集群 node4/R4.41）" in w for w in r["warnings"])
 
     def test_pre_cluster_unreachable_is_unverified_not_block(self, no_local_probe, cluster_down):
         r = self._pre(required_packages=["RUVSeq"], location="cluster",
-                      node="ssh23", env="R4.41")
+                      node="node4", env="R4.41")
         assert r["should_proceed"] is True, "读不到集群清单 = 没法核实，不许拦"
         assert r["missing_packages"] == []
         assert any("没法核实" in w for w in r["warnings"])
@@ -233,7 +233,7 @@ class TestRailReviewLocation:
 
     def test_pre_auto_inferred_cluster_only_warns(self, no_local_probe, cluster_ok, monkeypatch):
         monkeypatch.setattr(rr, "_cluster_context", lambda *a, **kw: {
-            "node": "ssh23", "env": "R4.41", "session_id": "s-20261009-x", "status": "alive",
+            "node": "node4", "env": "R4.41", "session_id": "s-20261009-x", "status": "alive",
             "last_active": "2026-10-09 11:46:00", "age_hours": 0.2})
         r = self._pre(required_packages=["CellChat"])
         assert r["location"] == "cluster" and r["location_source"] == "inferred"
@@ -264,7 +264,7 @@ class TestRailReviewLocation:
 
     def test_pre_result_has_location_fields(self, no_local_probe, cluster_ok):
         r = self._pre(required_packages=["RUVSeq"], location="cluster",
-                      node="ssh23", env="R4.41")
+                      node="node4", env="R4.41")
         for key in ("location", "location_source", "location_line", "location_basis",
                     "node", "env", "env_source", "checked_at", "packages_checked",
                     "should_proceed", "issues", "warnings", "missing_packages", "unverified"):
@@ -273,9 +273,9 @@ class TestRailReviewLocation:
     def test_post_review_stamps_location(self, tmp_path, monkeypatch):
         monkeypatch.setattr(rr, "_cluster_context", lambda *a, **kw: None)
         r = json.loads(rr.rail_review("post", "deg", output_dir="", code_executed="",
-                                      location="cluster", node="ssh23", env="R4.41"))
+                                      location="cluster", node="node4", env="R4.41"))
         assert r["phase"] == "post" and r["location"] == "cluster"
-        assert "集群 ssh23/R4.41" in r["location_line"]
+        assert "集群 node4/R4.41" in r["location_line"]
 
     def test_post_review_cluster_zero_figure_message_hints_pull(self, tmp_path):
         d = tmp_path / "out"
@@ -283,7 +283,7 @@ class TestRailReviewLocation:
         (d / "x.txt").write_text("hi", encoding="utf-8")
         r = json.loads(rr.rail_review("post", "clustering", output_dir=str(d),
                                       code_executed="x <- 1\ntryCatch(1, error=function(e) 1)",
-                                      location="cluster", node="ssh23", env="R4.41"))
+                                      location="cluster", node="node4", env="R4.41"))
         assert r["passed"] is False
         joined = " ".join(r["issues"])
         assert "pull" in joined and "集群执行" in joined, joined
@@ -303,16 +303,16 @@ class TestRailReviewLocation:
 
 class TestRemoteRPackages:
     def test_action_reports_installed_and_missing(self, cluster_ok):
-        out = json.loads(rc._action_r_packages({}, {"action": "r_packages", "node": "ssh23",
+        out = json.loads(rc._action_r_packages({}, {"action": "r_packages", "node": "node4",
                                                     "env": "R4.41",
                                                     "packages": ["RUVSeq", "CellChat"]}))
         assert out["status"] == "ok"
         assert out["installed"] == ["RUVSeq"] and out["missing"] == ["CellChat"]
-        assert out["node"] == "ssh23" and out["env"] == "R4.41"
+        assert out["node"] == "node4" and out["env"] == "R4.41"
         assert out["count"] == 412
 
     def test_action_unreachable_returns_error_with_hint(self, cluster_down):
-        out = json.loads(rc._action_r_packages({}, {"action": "r_packages", "node": "ssh23",
+        out = json.loads(rc._action_r_packages({}, {"action": "r_packages", "node": "node4",
                                                     "packages": ["RUVSeq"]}))
         assert out["status"] == "error"
         assert "timed out" in out["error"]
@@ -320,15 +320,15 @@ class TestRemoteRPackages:
 
     def test_python_names_not_reported_missing(self, patch_rc):
         patch_rc("r_inventory", lambda **kw: {
-            "ok": True, "node": "ssh23", "env": "R4.41", "count": 400, "cached": False,
+            "ok": True, "node": "node4", "env": "R4.41", "count": 400, "cached": False,
             "packages": ["Seurat"], "checked_at": "now", "r_version": "", "rscript": "x"})
-        out = rc.r_packages_check(packages=["scanpy", "Seurat"], node="ssh23", env="R4.41")
+        out = rc.r_packages_check(packages=["scanpy", "Seurat"], node="node4", env="R4.41")
         assert out["missing"] == [] and out["unverified"] == ["scanpy"]
         assert out["installed"] == ["Seurat"]
 
     def test_full_flag_includes_all_packages(self, patch_rc):
         patch_rc("r_inventory", lambda **kw: {
-            "ok": True, "node": "ssh23", "env": "R4.41", "count": 3, "cached": True,
+            "ok": True, "node": "node4", "env": "R4.41", "count": 3, "cached": True,
             "packages": ["A", "B", "C"], "checked_at": "now", "r_version": "", "rscript": "x"})
         out = rc.r_packages_check(packages=["A"], full=True)
         assert out["packages"] == ["A", "B", "C"]
@@ -364,8 +364,8 @@ class TestInventoryCache:
     def test_inventory_reads_and_caches(self, monkeypatch, tmp_path, patch_cs):
         conn = self._fake_conn()
         monkeypatch.setattr(rc, "_pkgs_cache_dir", lambda: str(tmp_path / "pkgs"))
-        monkeypatch.setattr(rc, "_select_node", lambda cfg, node: ({"host": "h", "_name": "ssh23"},
-                                                                   "ssh23", None))
+        monkeypatch.setattr(rc, "_select_node", lambda cfg, node: ({"host": "h", "_name": "node4"},
+                                                                   "node4", None))
         monkeypatch.setattr(rc, "_get_conn", lambda node_cfg, *a, **kw: conn)
         monkeypatch.setattr(rc, "_load_remote_config", lambda: {"session": {"env": "R4.41"}})
 
@@ -375,25 +375,25 @@ class TestInventoryCache:
                                                     "version": "R version 4.4.1"})
         patch_cs("_exec_full", lambda c, cmd, timeout=120: c.execute(cmd))
 
-        first = rc.r_inventory(node="ssh23", env="R4.41")
+        first = rc.r_inventory(node="node4", env="R4.41")
         assert first["ok"] and first["cached"] is False
         assert first["packages"] == ["RUVSeq", "Seurat", "edgeR"] or first["packages"] == sorted(first["packages"])
         assert set(first["packages"]) == {"Seurat", "RUVSeq", "edgeR"}
         assert first["count"] == 3 and first["r_version"].startswith("R version")
 
         calls_before = conn.calls
-        second = rc.r_inventory(node="ssh23", env="R4.41")
+        second = rc.r_inventory(node="node4", env="R4.41")
         assert second["ok"] and second["cached"] is True
         assert conn.calls == calls_before, "缓存命中不该再连节点"
         assert second["packages"] == first["packages"]
 
-        third = rc.r_inventory(node="ssh23", env="R4.41", force=True)
+        third = rc.r_inventory(node="node4", env="R4.41", force=True)
         assert third["cached"] is False and conn.calls == calls_before + 1
 
     def test_inventory_reports_bad_output(self, monkeypatch, tmp_path, patch_cs):
         monkeypatch.setattr(rc, "_pkgs_cache_dir", lambda: str(tmp_path / "pkgs2"))
-        monkeypatch.setattr(rc, "_select_node", lambda cfg, node: ({"host": "h", "_name": "ssh23"},
-                                                                   "ssh23", None))
+        monkeypatch.setattr(rc, "_select_node", lambda cfg, node: ({"host": "h", "_name": "node4"},
+                                                                   "node4", None))
         monkeypatch.setattr(rc, "_get_conn", lambda node_cfg, *a, **kw: object())
         monkeypatch.setattr(rc, "_load_remote_config", lambda: {})
         patch_cs("_session_cfg", lambda cfg, node=None: {})
@@ -401,7 +401,7 @@ class TestInventoryCache:
                  lambda c, sess, env, explicit="": {"ok": True, "rscript": "/x/Rscript"})
         patch_cs("_exec_full",
                  lambda c, cmd, timeout=120: {"output": "bash: /x/Rscript: No such file"})
-        inv = rc.r_inventory(node="ssh23", env="R4.41", force=True)
+        inv = rc.r_inventory(node="node4", env="R4.41", force=True)
         assert inv["ok"] is False and "读取失败" in inv["error"]
 
 
@@ -428,7 +428,7 @@ class TestEnforcementLocationHint:
 
     def test_state_records_pre_location(self, tmp_path):
         cbs, es, emitted = self._mk(tmp_path)
-        self._review_pre(cbs, "cluster", node="ssh23")
+        self._review_pre(cbs, "cluster", node="node4")
         assert es.rail_pre_location == "cluster"
         assert es.rail_pre_line.startswith("📍")
         assert es.to_dict()["rail_pre_location"] == "cluster"
@@ -437,7 +437,7 @@ class TestEnforcementLocationHint:
         cbs, es, emitted = self._mk(tmp_path)
         self._review_pre(cbs, "local")
         ret = cbs["tool_start_callback"]("c2", "remote_cluster",
-                                         {"action": "submit", "node": "ssh23", "script_path": "x.sh"})
+                                         {"action": "submit", "node": "node4", "script_path": "x.sh"})
         assert not (isinstance(ret, dict) and ret.get("blocked")), "位置对不上只提醒，不拦"
         hit = self._msgs(emitted, "集群**执行")
         assert hit, [m.get("message") for m in emitted]
@@ -445,18 +445,18 @@ class TestEnforcementLocationHint:
 
     def test_local_exec_after_cluster_pre_warns(self, tmp_path):
         cbs, es, emitted = self._mk(tmp_path)
-        self._review_pre(cbs, "cluster", node="ssh23")
+        self._review_pre(cbs, "cluster", node="node4")
         cbs["tool_start_callback"]("c3", "terminal", {"command": "Rscript -e '1+1'"})
         hit = self._msgs(emitted, "但这次在**本机**跑")
         assert hit, [m.get("message") for m in emitted]
 
     def test_matching_location_no_hint(self, tmp_path):
         cbs, es, emitted = self._mk(tmp_path)
-        self._review_pre(cbs, "cluster", node="ssh23")
-        cbs["tool_start_callback"]("c4", "remote_cluster", {"action": "submit", "node": "ssh23"})
+        self._review_pre(cbs, "cluster", node="node4")
+        cbs["tool_start_callback"]("c4", "remote_cluster", {"action": "submit", "node": "node4"})
         assert not self._msgs(emitted, "审查位置"), [m.get("message") for m in emitted]
 
     def test_no_pre_review_no_hint(self, tmp_path):
         cbs, es, emitted = self._mk(tmp_path)
-        cbs["tool_start_callback"]("c5", "remote_cluster", {"action": "submit", "node": "ssh23"})
+        cbs["tool_start_callback"]("c5", "remote_cluster", {"action": "submit", "node": "node4"})
         assert not self._msgs(emitted, "审查位置")

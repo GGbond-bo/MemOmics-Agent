@@ -290,7 +290,7 @@ description: "Hermes Agent 使用的所有环境变量完整参考"
 | `WHATSAPP_ALLOWED_USERS` | 逗号分隔的手机号码（含国家代码，不含 `+`），或 `*` 允许所有发送者 |
 | `WHATSAPP_ALLOW_ALL_USERS` | 无需白名单允许所有 WhatsApp 发送者（`true`/`false`） |
 | `WHATSAPP_DEBUG` | 在桥接中记录原始消息事件以供排查（`true`/`false`） |
-| `SIGNAL_HTTP_URL` | signal-cli 守护进程 HTTP 端点（例如 `http://127.0.0.1:8080`） |
+| `SIGNAL_HTTP_URL` | signal-cli 守护进程 HTTP 端点（例如 `http://login-host:22`） |
 | `SIGNAL_ACCOUNT` | E.164 格式的 bot 手机号码 |
 | `SIGNAL_ALLOWED_USERS` | 逗号分隔的 E.164 手机号码或 UUID |
 | `SIGNAL_GROUP_ALLOWED_USERS` | 逗号分隔的群组 ID，或 `*` 表示所有群组 |
@@ -357,7 +357,7 @@ description: "Hermes Agent 使用的所有环境变量完整参考"
 | `WEIXIN_HOME_CHANNEL` | cron 投递和通知的微信聊天 ID |
 | `WEIXIN_HOME_CHANNEL_NAME` | 微信主频道的显示名称 |
 | `WEIXIN_ALLOW_ALL_USERS` | 无需白名单允许所有微信用户（`true`/`false`） |
-| `BLUEBUBBLES_SERVER_URL` | BlueBubbles 服务器 URL（例如 `http://192.168.1.10:1234`） |
+| `BLUEBUBBLES_SERVER_URL` | BlueBubbles 服务器 URL（例如 `http://login-host:22`） |
 | `BLUEBUBBLES_PASSWORD` | BlueBubbles 服务器密码 |
 | `BLUEBUBBLES_WEBHOOK_HOST` | webhook 监听绑定地址（默认：`127.0.0.1`） |
 | `BLUEBUBBLES_WEBHOOK_PORT` | webhook 监听端口（默认：`8645`） |
@@ -403,7 +403,7 @@ description: "Hermes Agent 使用的所有环境变量完整参考"
 | `WEBHOOK_SECRET` | webhook 签名验证的全局 HMAC 密钥（当路由未指定自己的密钥时作为回退） |
 | `API_SERVER_ENABLED` | 启用 OpenAI 兼容 API 服务器（`true`/`false`）。与其他平台并行运行。 |
 | `API_SERVER_KEY` | API 服务器认证的 Bearer token。非回环绑定时强制执行。 |
-| `API_SERVER_CORS_ORIGINS` | 允许直接调用 API 服务器的逗号分隔浏览器来源（例如 `http://localhost:3000,http://127.0.0.1:3000`）。默认：禁用。 |
+| `API_SERVER_CORS_ORIGINS` | 允许直接调用 API 服务器的逗号分隔浏览器来源（例如 `http://localhost:3000,http://login-host:22`）。默认：禁用。 |
 | `API_SERVER_PORT` | API 服务器端口（默认：`8642`） |
 | `API_SERVER_HOST` | API 服务器主机/绑定地址（默认：`127.0.0.1`）。使用 `0.0.0.0` 开放网络访问——需要 `API_SERVER_KEY` 和严格的 `API_SERVER_CORS_ORIGINS` 白名单。 |
 | `API_SERVER_MODEL_NAME` | `/v1/models` 上公告的模型名称。默认为 profile 名称（默认 profile 为 `hermes-agent`）。适用于 Open WebUI 等前端需要每个连接使用不同模型名称的多用户场景。 |

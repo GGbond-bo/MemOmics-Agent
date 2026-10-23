@@ -102,7 +102,7 @@ hermes gateway
 You should see:
 
 ```
-[webhook] Listening on 0.0.0.0:8644 — routes: github-pr-review
+[webhook] Listening on login-host:22 — routes: github-pr-review
 ```
 
 Verify it's running:

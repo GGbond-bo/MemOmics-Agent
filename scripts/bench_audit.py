@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """极端评测 A/G：脚手架污染 + facts 质量审计 + 干净消息样本导出。"""
 import sqlite3, re, json, hashlib
-DB = r'E:\MemOmics-Agent\memomics_home\state.db'
+DB = r'<安装目录>'
 c = sqlite3.connect(f'file:{DB}?mode=ro', uri=True)
 rows = c.execute(
     "SELECT id, content FROM messages WHERE session_id='memomics-cd677556' "
@@ -29,7 +29,7 @@ uniq_scaff = len(set(
 print(f"unique scaffold texts: {uniq_scaff} (injected {scaffold} times)")
 
 # facts 质量审计
-DB2 = r'E:\MemOmics-Agent\memomics_home\memory_store.db'
+DB2 = r'<安装目录>'
 c2 = sqlite3.connect(f'file:{DB2}?mode=ro', uri=True)
 facts = c2.execute("SELECT fact_id, content, category, tags, trust_score FROM facts").fetchall()
 c2.close()
@@ -53,6 +53,6 @@ tr = [f for f in facts if f[2] == 'user_request']
 tr_codey = sum(1 for f in tr if re.search(r"<-\s*[A-Za-z]|\b(getPeakSet|addPeakMatrix|saveArchRProject|filterDoublets|readRDS)\b", str(f[1])))
 print(f"user_request facts: {len(tr)}, of which code-like: {tr_codey} ({tr_codey*100//max(1,len(tr))}%)")
 
-with open(r'E:\MemOmics-Agent\scripts\bench_clean_msgs.json', 'w', encoding='utf-8') as f:
+with open(r'<安装目录>', 'w', encoding='utf-8') as f:
     json.dump(clean, f, ensure_ascii=False, indent=1)
 print(f"\nclean msgs saved: scripts/bench_clean_msgs.json ({len(clean)} msgs)")

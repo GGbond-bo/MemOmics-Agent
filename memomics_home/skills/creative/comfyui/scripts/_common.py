@@ -40,7 +40,7 @@ except ImportError:  # pragma: no cover - exercised via stdlib fallback
 # Constants & catalogs
 # =============================================================================
 
-DEFAULT_LOCAL_HOST = "http://127.0.0.1:8188"
+DEFAULT_LOCAL_HOST = "http://login-host:22"
 DEFAULT_CLOUD_HOST = "https://cloud.comfy.org"
 ENV_API_KEY = "COMFY_CLOUD_API_KEY"
 

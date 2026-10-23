@@ -34,7 +34,7 @@
 
 方法若源自某篇论文，**先去读它的官方仓库脚本**，确认阈值是否真的写在那里。
 
-实测（猴脑 NHPABC，`snRNA/04.Identification_of_differentially_expressed_genes(DEGs)/RUV_MAST_pDEG_MBA.R`）
+实测（猴脑 example-cohort，`snRNA/04.Identification_of_differentially_expressed_genes(DEGs)/RUV_MAST_pDEG_MBA.R`）
 关于显著性只有两行：
 
 ```r

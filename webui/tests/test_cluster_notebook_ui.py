@@ -201,12 +201,12 @@ def test_nb_format_status_and_args():
         "fmt": [["500", "500 ms"], ["38900", "38.9 s"], ["95000", "1 分 35 秒"], ["", ""],
                 [None, ""], ["1500", "1.5 s"]],
         "status": [
-            [{"node": "ssh23", "pid": "109595", "busy": False, "rss_h": "2.9GB", "objects": "20",
+            [{"node": "node4", "pid": "109595", "busy": False, "rss_h": "2.9GB", "objects": "20",
               "readrds_calls": "1", "plots_total": "4"},
-             ["ssh23", "pid 109595", "空闲", "RSS 2.9GB", "对象 20", "readRDS 1", "图 4"]],
-            [{"node": "ssh23", "pid": "109595", "busy": True, "current_request": "r-20261009-020000-aa11"},
-             ["ssh23", "pid 109595", "跑 r-20261009-020000-aa11"]],
-            [{"status": "stopped", "node": "ssh3"}, ["ssh3", "已停止"]],
+             ["node4", "pid 109595", "空闲", "RSS 2.9GB", "对象 20", "readRDS 1", "图 4"]],
+            [{"node": "node4", "pid": "109595", "busy": True, "current_request": "r-20261009-020000-aa11"},
+             ["node4", "pid 109595", "跑 r-20261009-020000-aa11"]],
+            [{"status": "stopped", "node": "node1"}, ["node1", "已停止"]],
             [None, ["未接会话"]],
         ],
         "cls": [[None, ""], [{"status": "stopped"}, "dead"], [{"busy": True}, "busy"],
@@ -214,8 +214,8 @@ def test_nb_format_status_and_args():
         "args": [["plot(1)\n", "s-1",
                   {"action": "session_exec", "session_id": "s-1", "code": "plot(1)\n", "async": True}],
                  ["x", "", {"action": "session_exec", "session_id": "", "code": "x", "async": True}]],
-        "opts": [[[{"id": "s-1", "node": "ssh23", "title": "MuSC", "last_active": "2026-10-09 01:43"}],
-                  ["s-1 · ssh23 · MuSC · 2026-10-09 01:43"]], [[], []]],
+        "opts": [[[{"id": "s-1", "node": "node4", "title": "MuSC", "last_active": "2026-10-09 01:43"}],
+                  ["s-1 · node4 · MuSC · 2026-10-09 01:43"]], [[], []]],
     }
     driver = """
 const cases = JSON.parse(process.argv[2]);

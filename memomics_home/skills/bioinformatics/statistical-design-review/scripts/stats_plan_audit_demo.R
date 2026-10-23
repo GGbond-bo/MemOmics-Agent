@@ -12,7 +12,7 @@
 # 依赖：base R + lme4/lmerTest（仅 ICC 一节需要；未装会自动跳过并提示）
 
 ## ---- PARAMS ------------------------------------------------------------
-OUT_DIR   <- "E:/MemOmics-Agent/results"      # 图输出目录（自动拼 /stats_plan_audit/）
+OUT_DIR   <- "<安装目录>"      # 图输出目录（自动拼 /stats_plan_audit/）
 N_GROUP   <- 3                                # 组数
 N_IND     <- 6                                # 每组个体数（= 统计 n）
 N_SUB     <- 16                               # 每个体子样本数（纤维/细胞/视野…）

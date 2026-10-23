@@ -1,12 +1,12 @@
 # 环境声明机制（用户点名"补充到环境管理"时的落点）
 
-> 来自 2026-10-08 ssh3 会话。用户原话："把这些信息默认补充到环境管理去，以后新会话，都能及时调用、补充、更新对应的环境和安装包信息"。
+> 来自 2026-10-08 node1 会话。用户原话："把这些信息默认补充到环境管理去，以后新会话，都能及时调用、补充、更新对应的环境和安装包信息"。
 
 ## 1. 两层结构 —— 别写错层
 
 | 层 | 文件 / 模块 | 谁生成 | 刷新 | 答什么问题 |
 |---|---|---|---|---|
-| **持久声明** | `E:/MemOmics-Agent/environment.json` 的 `cluster` / `env_notes` 段 | **人/用户**（或 agent 代写） | 永不自动覆盖 | **该用哪个环境、别碰哪些**（用户意图） |
+| **持久声明** | `<安装目录> 的 `cluster` / `env_notes` 段 | **人/用户**（或 agent 代写） | 永不自动覆盖 | **该用哪个环境、别碰哪些**（用户意图） |
 | **实时清点** | `memomics/bio_tools/env_inventory.py` 缓存（`memomics_home/env_inventory.json`） | 探针自动 | 本机 1h / 集群 10min | 现在有什么、版本、负载 |
 
 **判据**：写进缓存 = 下次重扫被覆盖 = 没落库。凡是"用户指定的固定映射 / 别用某环境"这类**意图**，一律进 `environment.json`。
@@ -22,7 +22,7 @@
 "cluster": {
   "_rule": "只用声明的环境；要换先问用户",
   "nodes": {
-    "ssh3": {"host": "...", "user": "zhangbo11", "workdir": "/hwfssz3/PS_JLU/zhangbo",
+    "node1": {"host": "...", "user": "user", "workdir": "/cluster/share/user",
               "scheduler": "SGE 8.1.9", "conda_activate": "source <conda_root>/bin/activate <env>"}
   },
   "policy": {

@@ -362,7 +362,7 @@ def new_marker(task_id: str, title: str, inputs, cache_root: str = "",
                         ("path", "size", "size_h", "kind", "fingerprint", "mtime")
                         if it.get(k) is not None})
         else:
-            # 远端路径不能 os.path.abspath（Windows 上会拼出 E:\...\/hwfssz3 这种怪胎）——原样保留
+            # 远端路径不能 os.path.abspath（Windows 上会拼出 E:\...\/cluster 这种怪胎）——原样保留
             ins.append({"path": str(it) if remote else os.path.abspath(str(it))})
     exp = None
     if ttl_days and int(ttl_days) > 0:

@@ -1,6 +1,6 @@
 {
   "topic": "SMF亚群结构路线分析：SMF亚聚类有NMJ/zone1/zone2/zone3/zone4/zone5/zone6，形成两条可能的转换路线",
-  "context": "人类骨骼肌衰老scRNA-seq数据。SMF（特殊混合纤维）亚聚类分7个群：\n- NMJ: 神经肌肉接头区\n- Zone1: 老年后↑，老年糖尿病运动后显著↑↑，老年运动后不↑。高表达MYH1(快肌2x)、RUNX1(去神经TF)、去神经基因。存在转换但方向未知。\n- Zone2: 高表达神经离子通道类基因，与zone1接壤，两者交界处高表达COL19A1（突触基底层胶原），旁边就是NMJ\n- Zone3: RUNX1高表达，KCP, ATP6V1F, CD44, ACTC1, MAP3K8\n- Zone4: ANKRD1高表达\n- Zone5: 正常快肌\n- Zone6: 正常慢肌\n\n两条路线推测：\n路线A（快肌→去神经）：Zone5→Zone3→Zone1\n路线B（慢肌→转换）：Zone6→Zone4→Zone1\nZone1→Zone2→NMJ（再神经支配/修复路线）",
+  "context": "示例研究场景scRNA-seq数据。SMF（特殊混合纤维）亚聚类分7个群：\n- NMJ: 神经肌肉接头区\n- Zone1: 老年后↑，老年糖尿病运动后显著↑↑，老年运动后不↑。高表达MYH1(快肌2x)、RUNX1(去神经TF)、去神经基因。存在转换但方向未知。\n- Zone2: 高表达神经离子通道类基因，与zone1接壤，两者交界处高表达COL19A1（突触基底层胶原），旁边就是NMJ\n- Zone3: RUNX1高表达，KCP, ATP6V1F, CD44, ACTC1, MAP3K8\n- Zone4: ANKRD1高表达\n- Zone5: 正常快肌\n- Zone6: 正常慢肌\n\n两条路线推测：\n路线A（快肌→去神经）：Zone5→Zone3→Zone1\n路线B（慢肌→转换）：Zone6→Zone4→Zone1\nZone1→Zone2→NMJ（再神经支配/修复路线）",
   "hash": "e506a98f92c5ed7c",
   "timestamp": "2026-07-08 21:26:19",
   "result": {

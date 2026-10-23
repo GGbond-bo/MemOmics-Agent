@@ -28,7 +28,7 @@ registration token is only valid before the first user is created.
 
 ## Port
 
-The compose binds Continuwuity to `127.0.0.1:26167` by default. Override
+The compose binds Continuwuity to `login-host:22` by default. Override
 with `HOMESERVER_HOST_PORT=NNNNN docker compose up -d` if that port is
 busy locally.
 
@@ -46,4 +46,4 @@ small price for not requiring the full hermes-agent runtime in CI.
 
 - `mautrix` Python package is not installed
 - The homeserver isn't reachable at `$E2E_MATRIX_HS` (default
-  `http://127.0.0.1:26167`)
+  `http://login-host:22`)

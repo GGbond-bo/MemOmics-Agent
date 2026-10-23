@@ -4,7 +4,7 @@
 （Young / Middle / Old / Exceptionally old）差异可及 tiles，供 motif 富集 /
 跨物种保守性打分（L3/CRECS 专利管线）。2026-09-01 本会话生成并现场纠正统计单元错误。
 
-> ⚠️ **方法选型 v2（2026-09-01 用户拍板）**：对齐 Zemke Science 2026（GSE278576）官方方法 →
+> ⚠️ **方法选型 v2（2026-09-01 用户拍板）**：对齐 Zemke Science 2026（GSE000000）官方方法 →
 > **不用 DESeq2 LRT**（下方 DESeq2 版保留为"分组比较替代方案"），改用
 > **连续年龄 Pearson + shuffle ×5000 + FDR<0.1**（含完整脚本见下文「✅ v2 终版：Pearson + shuffle」）。
 > 用户原话语境：agent 提议 DESeq2 → 用户问"你确定人家文章使用的是这个吗?" → 查证文章官方代码
@@ -27,7 +27,7 @@
 suppressMessages({library(ArchR); library(DESeq2)})
 setArchRThreads(16)
 
-proj1 <- loadArchRProject("/hwfssz3/PS_JLU/zhangbo/patent/Save-ArchR", force=FALSE)
+proj1 <- loadArchRProject("/cluster/share/user/patent/Save-ArchR", force=FALSE)
 cd <- as.data.frame(getCellColData(proj1))
 stopifnot(all(c("individual","age_group") %in% colnames(cd)))
 cat("unique individuals:", length(unique(cd$individual)), "\n")
@@ -69,7 +69,7 @@ loose  <- out[!is.na(out$LRT_q) & out$LRT_q<0.05, ]
 strict <- loose[abs(loose$log2FC)>=0.5, ]
 cat("loose:", nrow(loose), " strict:", nrow(strict), "\n")
 
-OUT <- "/hwfssz3/PS_JLU/zhangbo/patent"
+OUT <- "/cluster/share/user/patent"
 saveRDS(list(strict=strict, loose=loose, all=out),
         file.path(OUT,"da_tiles_4age_ind.rds"))
 for (th in c("strict","loose")) {
@@ -88,7 +88,7 @@ for (th in c("strict","loose")) {
 ```r
 # ===== 四年龄组 DA tiles（猴侧 · M4 剔除）=====
 suppressMessages(library(ArchR)); setArchRThreads(16)
-proj <- loadArchRProject("/hwfssz3/PS_JLU/zhangbo/patent/Monkey-ArchR")  # 按实际改
+proj <- loadArchRProject("/cluster/share/user/patent/Monkey-ArchR")  # 按实际改
 
 cd <- as.data.frame(getCellColData(proj))
 print(colnames(cd)); print(table(cd$Age_group))   # 先看列名再走
@@ -109,7 +109,7 @@ se_tile$age_group <- factor(meta[[AGE_COL]][match(se_tile[[IND_COL]], meta[[IND_
                             levels=c("Young","Middle","Old","Exceptionally old"))
 print(table(se_tile$age_group))
 stopifnot(!any(is.na(se_tile$age_group)))
-saveRDS(se_tile, "/hwfssz3/PS_JLU/zhangbo/patent/monkey_da_tiles_byindividual.rds")
+saveRDS(se_tile, "/cluster/share/user/patent/monkey_da_tiles_byindividual.rds")
 
 # ... 之后 DESeq2 LRT 段落与人侧完全一致（dds/out/strict/loose/保存），
 #     输出前缀 monkey_da_tiles_4age_*
@@ -138,7 +138,7 @@ saveRDS(se_tile, "/hwfssz3/PS_JLU/zhangbo/patent/monkey_da_tiles_byindividual.rd
 ```r
 # ===== L3 v2: DA tiles — 连续年龄 Pearson + shuffle（对齐 Zemke Science 2026）=====
 suppressMessages(library(ArchR)); setArchRThreads(16)
-proj1 <- loadArchRProject("/hwfssz3/PS_JLU/zhangbo/patent/Save-ArchR", force=FALSE)
+proj1 <- loadArchRProject("/cluster/share/user/patent/Save-ArchR", force=FALSE)
 cd <- as.data.frame(getCellColData(proj1))
 cat("cellColData columns:", paste(colnames(cd), collapse=", "), "\n")  # 确认有 individual + Age
 
@@ -187,7 +187,7 @@ for (b in 1:B) { r_perm <- apply(lcpm, 1, function(x) cor(x, sample(age))); n_si
 perm_p <- mean(n_sig_perm >= sum(resTbl$FDR<0.1))
 cat("shuffle: median=", median(n_sig_perm), " 真实显著=", sum(resTbl$FDR<0.1), " 经验p=", perm_p, "\n")
 
-OUT <- "/hwfssz3/PS_JLU/zhangbo/patent"
+OUT <- "/cluster/share/user/patent"
 saveRDS(list(all=resTbl, age=age, perm_nsig=n_sig_perm, perm_p=perm_p),
         file.path(OUT, "da_tiles_pearson_human.rds"))
 for (d in c("Up","Down")) {
@@ -203,7 +203,7 @@ for (d in c("Up","Down")) {
 
 1. project 路径 → 猴 project；2. 聚合前 M4 剔除 + 列名自适应：
 ```r
-proj <- loadArchRProject("/hwfssz3/PS_JLU/zhangbo/patent/Monkey-ArchR")
+proj <- loadArchRProject("/cluster/share/user/patent/Monkey-ArchR")
 cd <- as.data.frame(getCellColData(proj))
 IND <- ifelse("Individual" %in% colnames(cd), "Individual", "individual")  # 猴列名双写自动适配
 proj <- proj[!is.na(cd[[IND]]) & cd[[IND]] != "M4", ]                     # ⚠️ M4 剔除必须在此（21→20 个体）

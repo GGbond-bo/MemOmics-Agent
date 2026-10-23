@@ -123,7 +123,7 @@
       "auto_score": 0.0,
       "approved": false,
       "custom_script": false,
-      "result": "生成《从读懂到可信：五个科研 Agent 的范式分野》6 页 PPTX 构建脚本。6 页=封面/四系统对比表/MemOmics 四痛点/执行链+辩论门控三级/知识库闭环+铁轨/边界与结论。踩坑：①脚本字符串内用 ASCII 双引号导致 SyntaxError（已改中文引号「」）；②check_env 装的 python-pptx 不在持久内核解释器(E:/MemOmics-Agent/.venv/"
+      "result": "生成《从读懂到可信：五个科研 Agent 的范式分野》6 页 PPTX 构建脚本。6 页=封面/四系统对比表/MemOmics 四痛点/执行链+辩论门控三级/知识库闭环+铁轨/边界与结论。踩坑：①脚本字符串内用 ASCII 双引号导致 SyntaxError（已改中文引号「」）；②check_env 装的 python-pptx 不在持久内核解释器(<安装目录>"
     }
   ],
   "proven_script": "build_agent_paradigms_ppt.py",

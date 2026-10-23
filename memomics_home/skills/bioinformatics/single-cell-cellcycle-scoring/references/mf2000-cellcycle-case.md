@@ -1,10 +1,10 @@
-# 案例：MF_2000（人骨骼肌 snRNA-seq）细胞周期打分 —— 为什么结论是「无可靠差异 + 标签不可解读」
+# 案例：示例数据（人示例组织 snRNA-seq）细胞周期打分 —— 为什么结论是「无可靠差异 + 标签不可解读」
 
-> 会话 `memomics-9d3f3791`，2026-09-24。产物：`E:/MemOmics-Agent/results/memomics-9d3f3791/`
+> 会话 `memomics-9d3f3791`，2026-09-24。产物：`<安装目录>
 > （`scripts/01–07*.R`、`figures/fig1–7`（PNG+PDF）、`results/13 个 CSV`、`data/cellcycle_metadata.rds`）。
 
 ## 1. 数据事实（实测）
-- `E:/release/_memtest/data/MF_2000.rds`：Seurat，RNA 51227 × 2132 核（counts+data，data 已 log-norm，max 7.87），
+- `<发布目录>，RNA 51227 × 2132 核（counts+data，data 已 log-norm，max 7.87），
   另有 SCT assay；已存在 pca / harmony / umap
 - 设计：48 样本 × **每样本 45 核平衡抽样**（Old_2C_Post = 17）；6 组 = Y/O/OD × Pre/Post
   （Y 10 供体、O 7、OD 7，每供体 Pre/Post 配对；全 Female）；样本名列 `samplename`，组列 `type`

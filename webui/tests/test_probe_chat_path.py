@@ -10,7 +10,7 @@ import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-sys.path.insert(0, r"E:\MemOmics-Agent")
+sys.path.insert(0, r"<安装目录>")
 
 from memomics.coding_plans import _candidate_chat_urls, probe_chat_model  # noqa: E402
 

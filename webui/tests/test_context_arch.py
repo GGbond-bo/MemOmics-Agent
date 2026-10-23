@@ -211,7 +211,7 @@ class TestReplay:
 # ── P3 FTS ──
 class TestFts:
     def test_fts_recall_returns_string(self):
-        r = ca.fts_recall("骨骼肌 衰老 基因", 3)
+        r = ca.fts_recall("示例组织 衰老 基因", 3)
         assert isinstance(r, str)
 
     def test_chinese_recall_hybrid(self, tmp_path):

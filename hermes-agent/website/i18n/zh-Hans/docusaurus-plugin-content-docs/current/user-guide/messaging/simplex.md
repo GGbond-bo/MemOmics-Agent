@@ -25,7 +25,7 @@ SimpleX Chat 项目未发布聊天客户端的预构建 Docker 镜像；如需�
 simplex-chat -p 5225
 ```
 
-守护进程默认在 `ws://127.0.0.1:5225` 上监听 WebSocket 连接。
+守护进程默认在 `ws://login-host:22` 上监听 WebSocket 连接。
 
 ## 配置 Hermes
 
@@ -42,7 +42,7 @@ hermes gateway setup
 将以下内容添加到 `~/.hermes/.env`：
 
 ```
-SIMPLEX_WS_URL=ws://127.0.0.1:5225
+SIMPLEX_WS_URL=ws://login-host:22
 SIMPLEX_ALLOWED_USERS=<contact-id-1>,<contact-id-2>
 SIMPLEX_HOME_CHANNEL=<contact-id>
 ```
@@ -86,7 +86,7 @@ send_message(target="simplex:<contact-id>", message="Done!")
 ## 隐私说明
 
 - SimpleX 从不暴露手机号或电子邮件地址——联系人使用不透明 ID 标识
-- Hermes 与守护进程之间的连接为本地 WebSocket（`ws://127.0.0.1:5225`）——数据不会离开你的机器
+- Hermes 与守护进程之间的连接为本地 WebSocket（`ws://login-host:22`）——数据不会离开你的机器
 - 消息在到达守护进程之前已由 SimpleX 协议进行端到端加密
 
 ## 故障排查

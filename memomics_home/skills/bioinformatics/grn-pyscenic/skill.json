@@ -64,46 +64,46 @@
       "tissue": "skeletal_muscle",
       "direction": "aging",
       "script": "env_probe_scenic.py",
-      "params": "环境探测: pyscenic 0.12.1 + arboreto 已就绪; 数据 E:/release/_memtest/data/MF_2000.rds (106MB, 2132细胞x51227基因)",
+      "params": "环境探测: pyscenic 0.12.1 + arboreto 已就绪; 数据 <发布目录> (106MB, 2132细胞x51227基因)",
       "date": "2026-09-24",
       "score": 9.0,
       "auto_score": 0.0,
       "approved": false,
       "custom_script": false,
-      "result": "SCENIC 前置环境探测完成：pySCENIC 0.12.1 可用、arboreto 可用；R 侧 SCENIC/RcisTarget 未安装（走 Python pySCENIC 路线）。数据文件 MF_2000.rds 106.6MB 存在。集群未配置→本机执行。"
+      "result": "SCENIC 前置环境探测完成：pySCENIC 0.12.1 可用、arboreto 可用；R 侧 SCENIC/RcisTarget 未安装（走 Python pySCENIC 路线）。数据文件 示例数据.rds 106.6MB 存在。集群未配置→本机执行。"
     },
     {
       "species": "human",
       "tissue": "skeletal_muscle",
       "direction": "aging",
       "script": "env_probe_scenic_db.py",
-      "params": "解释器探测: pyscenic 0.12.1 在 .venv 与 System Python312 双可用; cisTarget 数据库 C:/Users/23136/pyscenic_databases/{hg38_10kbp_...rankings.feather, motifs-v10nr_clust-nr.hgnc-m0.001-o0.0.tbl, allTFs_hg38.txt}",
+      "params": "解释器探测: pyscenic 0.12.1 在 .venv 与 System Python312 双可用; cisTarget 数据库 <用户目录>, motifs-v10nr_clust-nr.hgnc-m0.001-o0.0.tbl, allTFs_hg38.txt}",
       "date": "2026-09-24",
       "score": 9.0,
       "auto_score": 0.0,
       "approved": false,
       "custom_script": false,
-      "result": "pySCENIC 依赖链确认：.venv/Scripts/python.exe 可 import pyscenic 0.12.1（execute_python 直接可用）；cisTarget hg38 全套参考库已在 C:/Users/23136/pyscenic_databases/（feather+tbl+TF list 三件套齐全，无需下载）。"
+      "result": "pySCENIC 依赖链确认：.venv/Scripts/python.exe 可 import pyscenic 0.12.1（execute_python 直接可用）；cisTarget hg38 全套参考库已在 <用户目录> list 三件套齐全，无需下载）。"
     },
     {
       "species": "human",
       "tissue": "skeletal_muscle",
       "direction": "aging",
       "script": "inspect_MF2000_meta.R",
-      "params": "readRDS MF_2000.rds; assay=RNA(layers: counts,data) + SCT; reductions=pca/harmony/umap; 49 meta 列",
+      "params": "readRDS 示例数据.rds; assay=RNA(layers: counts,data) + SCT; reductions=pca/harmony/umap; 49 meta 列",
       "date": "2026-09-24",
       "score": 9.0,
       "auto_score": 0.0,
       "approved": false,
       "custom_script": false,
-      "result": "MF_2000 结构确认：51227 基因 × 2132 细胞；DefaultAssay=RNA(counts,data)，另含 SCT；分组列 type=6组(O_Post/O_Pre/OD_Post/OD_Pre/Y_Post/Y_Pre)、samplename=48、age=15 个值(18-83)；celltype=3(RSS/TypeI/TypeII)、annotation_L3=10 "
+      "result": "示例数据 结构确认：51227 基因 × 2132 细胞；DefaultAssay=RNA(counts,data)，另含 SCT；分组列 type=6组(O_Post/O_Pre/OD_Post/OD_Pre/Y_Post/Y_Pre)、samplename=48、age=15 个值(18-83)；celltype=3(RSS/TypeI/TypeII)、annotation_L3=10 "
     },
     {
       "species": "human",
       "tissue": "skeletal_muscle",
       "direction": "aging",
       "script": "check_scenic_deps.py",
-      "params": "数据库: C:/Users/23136/pyscenic_databases/ hg38_10kbp...feather 311MB + motifs tbl 98MB + allTFs_hg38.txt; CPU 20核; .venv: numpy 2.4.6/pandas 2.3.3/dask 2026.7.0/numba 0.66.0/loompy 3.0.8",
+      "params": "数据库: <用户目录> hg38_10kbp...feather 311MB + motifs tbl 98MB + allTFs_hg38.txt; CPU 20核; .venv: numpy 2.4.6/pandas 2.3.3/dask 2026.7.0/numba 0.66.0/loompy 3.0.8",
       "date": "2026-09-24",
       "score": 7.0,
       "auto_score": 0.0,
@@ -116,7 +116,7 @@
       "tissue": "skeletal_muscle",
       "direction": "aging",
       "script": "select_scenic_interpreter.py",
-      "params": "解释器选型: C:/Users/23136/AppData/Local/Programs/Python/Python312/python.exe (SYS); 函数名 arboreto.algo.grnboost2 (非 run_grnboost2)",
+      "params": "解释器选型: <用户目录> (SYS); 函数名 arboreto.algo.grnboost2 (非 run_grnboost2)",
       "date": "2026-09-24",
       "score": 9.0,
       "auto_score": 0.0,
@@ -135,7 +135,7 @@
       "auto_score": 0.0,
       "approved": false,
       "custom_script": false,
-      "result": "MF_2000 SCENIC 输入导出完成：原始 51227 基因 → 过滤后 29393 基因 × 2132 细胞（log-normalized data 层，表达范围 0.345–7.871）。产出 4 个文件于 results/memomics-f813a19a/data/scenic/，MTX 158.7MB。"
+      "result": "示例数据 SCENIC 输入导出完成：原始 51227 基因 → 过滤后 29393 基因 × 2132 细胞（log-normalized data 层，表达范围 0.345–7.871）。产出 4 个文件于 results/memomics-f813a19a/data/scenic/，MTX 158.7MB。"
     },
     {
       "species": "human",

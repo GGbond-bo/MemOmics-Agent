@@ -1,16 +1,16 @@
 # MemOmics Agent — 项目上下文
 
 ## 项目路径
-- 项目根目录：E:/MemOmics-Agent/
-- MemOmics 框架：E:/MemOmics-Agent/hermes-agent/
-- 知识库：E:/MemOmics-Agent/memomics/knowledge_base/ (90个YAML)
+- 项目根目录：<安装目录>
+- MemOmics 框架：<安装目录>
+- 知识库：<安装目录> (90个YAML)
 - 技能库：~/.memomics/skills/bioinformatics/ (241个SKILL.md)
-- 分析结果：E:/MemOmics-Agent/hermes-agent/results/
+- 分析结果：<安装目录>
 
 ## 数据库
-- 用户数据：D:/我的下载/Migule_lai_24 _new.h5ad (人类骨骼肌 scRNA-seq, 324,434 cells, 已注释)
+- 用户数据：<数据目录>/示例数据.h5ad (人类示例组织 scRNA-seq, 324,434 cells, 已注释)
 - 物种：Homo sapiens
-- 组织：骨骼肌 (skeletal muscle)
+- 组织：示例组织 (skeletal muscle)
 - 方向：衰老 (aging) — 年轻 vs 老年
 
 ## 环境

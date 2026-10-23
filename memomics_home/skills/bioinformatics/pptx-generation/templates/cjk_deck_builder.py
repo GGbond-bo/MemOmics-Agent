@@ -19,7 +19,7 @@ from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
 
 # ---------------- 输出 ----------------
-OUT_DIR = r"E:/MemOmics-Agent/results/<session_id>/reports"
+OUT_DIR = r"<安装目录>"
 OUT = os.path.join(OUT_DIR, "deck.pptx")
 os.makedirs(OUT_DIR, exist_ok=True)
 

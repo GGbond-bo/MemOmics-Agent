@@ -236,7 +236,7 @@ For talking to non-HTTP servers (game servers, custom protocols, legacy systems)
 
 ```python
 tcp = root.create(tcpipDAT, 'show_control')
-tcp.par.netaddress = '192.168.1.50'
+tcp.par.netaddress = '10.0.0.1'
 tcp.par.port = 7000
 tcp.par.protocol = 'tcp'        # 'tcp' | 'udp'
 tcp.par.active = True

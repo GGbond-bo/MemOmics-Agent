@@ -241,7 +241,7 @@
       "auto_score": 0.0,
       "approved": false,
       "custom_script": false,
-      "result": "规避 rm -rf 安全门禁：改为写安装脚本（独立目录 CRL_gh/CRL_gitee/CRL_tar，成功后 mv 到 CRL），三级回退 GitHub(openssl)→Gitee→tarball，克隆到 E:/MemOmics-Agent/third_party/CRL。"
+      "result": "规避 rm -rf 安全门禁：改为写安装脚本（独立目录 CRL_gh/CRL_gitee/CRL_tar，成功后 mv 到 CRL），三级回退 GitHub(openssl)→Gitee→tarball，克隆到 <安装目录>"
     }
   ],
   "proven_script": "install_chinese_research_latex.sh",

@@ -36,7 +36,7 @@ hermes gateway
 你将看到：
 
 ```
-[API Server] API server listening on http://127.0.0.1:8642
+[API Server] API server listening on http://login-host:22
 ```
 
 ### 3. 连接前端
@@ -370,7 +370,7 @@ API 服务器默认**不**启用浏览器 CORS。
 如需直接浏览器访问，请设置明确的允许列表：
 
 ```bash
-API_SERVER_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+API_SERVER_CORS_ORIGINS=http://localhost:3000,http://login-host:22
 ```
 
 启用 CORS 后：

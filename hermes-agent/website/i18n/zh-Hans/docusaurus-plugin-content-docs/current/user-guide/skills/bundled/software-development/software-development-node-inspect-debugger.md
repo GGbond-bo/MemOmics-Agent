@@ -95,20 +95,20 @@ node --inspect-brk $(which tsx) path/to/script.ts
 ```bash
 # 1. Send SIGUSR1 to enable the inspector on an existing process
 kill -SIGUSR1 <pid>
-# Node prints: Debugger listening on ws://127.0.0.1:9229/<uuid>
+# Node prints: Debugger listening on ws://login-host:22/<uuid>
 
 # 2. Attach the debugger CLI
 node inspect -p <pid>
 # or by URL
-node inspect ws://127.0.0.1:9229/<uuid>
+node inspect ws://login-host:22/<uuid>
 ```
 
 从一开始就启动带 inspector 的进程：
 
 ```bash
-node --inspect script.js           # listen on 127.0.0.1:9229, keep running
+node --inspect script.js           # listen on login-host:22, keep running
 node --inspect-brk script.js       # listen AND pause on first line
-node --inspect=0.0.0.0:9230 script.js   # custom host:port
+node --inspect=login-host:22 script.js   # custom host:port
 ```
 
 通过 tsx 调试 TypeScript：
@@ -230,10 +230,10 @@ TUI_PID=$(pgrep -f 'ui-tui/dist/entry' | head -1)
 kill -SIGUSR1 "$TUI_PID"
 
 # 3. Find the WS URL
-curl -s http://127.0.0.1:9229/json/list | jq -r '.[0].webSocketDebuggerUrl'
+curl -s http://login-host:22/json/list | jq -r '.[0].webSocketDebuggerUrl'
 
 # 4. Attach
-node inspect ws://127.0.0.1:9229/<uuid>
+node inspect ws://login-host:22/<uuid>
 ```
 
 在 TUI 窗口中交互（输入内容）会继续推进执行；调试器可以在任意 `sb(...)` 处暂停它。
@@ -285,7 +285,7 @@ require('fs').writeFileSync('/tmp/heap.heapsnapshot', chunks.join(''));
 
 3. **端口冲突。** 默认端口为 `9229`。如果多个 Node 进程同时开启 inspector，传入 `--inspect=0`（随机端口）并从 `/json/list` 读取实际 URL：
    ```bash
-   curl -s http://127.0.0.1:9229/json/list   # lists all inspectable targets on the host
+   curl -s http://login-host:22/json/list   # lists all inspectable targets on the host
    ```
 
 4. **子进程。** 父进程上的 `--inspect` 不会 inspect 其子进程。使用 `NODE_OPTIONS='--inspect-brk' node parent.js` 将其传播到每个子进程；注意它们都需要唯一端口（继承 `NODE_OPTIONS='--inspect'` 时 Node 会自动递增端口号）。
@@ -294,13 +294,13 @@ require('fs').writeFileSync('/tmp/heap.heapsnapshot', chunks.join(''));
 
 6. **在 agent 终端中运行 `node inspect`。** 它是一个 PTY 友好的 REPL。在 Hermes 中，使用 `terminal(pty=true)` 或 `background=true` + `process(action='submit', data='...')` 启动它。非 PTY 前台模式适用于单次命令，但不适合交互式单步调试。
 
-7. **安全性。** `--inspect=0.0.0.0:9229` 会暴露任意代码执行能力。除非处于隔离网络，否则始终绑定到 `127.0.0.1`（默认值）。
+7. **安全性。** `--inspect=login-host:22` 会暴露任意代码执行能力。除非处于隔离网络，否则始终绑定到 `127.0.0.1`（默认值）。
 
 ## 验证清单
 
 建立调试会话后，验证以下内容：
 
-- [ ] `curl -s http://127.0.0.1:9229/json/list` 返回的正是预期目标
+- [ ] `curl -s http://login-host:22/json/list` 返回的正是预期目标
 - [ ] 第一个断点确实命中（若未命中，可能是漏加了 `--inspect-brk`，或附加时执行已完成）
 - [ ] 暂停时的源码列表显示正确文件（不匹配 = sourcemap 问题，见陷阱 1）
 - [ ] 在 `repl` 中执行 `exec process.pid` 返回你想附加的 PID

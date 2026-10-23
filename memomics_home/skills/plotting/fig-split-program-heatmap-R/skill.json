@@ -4,7 +4,7 @@
   "category": "user-skill",
   "language": "R",
   "source": "user",
-  "description": "骨骼肌肌纤维 AUCell 程序打分矩阵热图（base graphics 零依赖 R 版）：18 程序 × 6 组 / 5 效应(Cohen's d) / 10 亚群三型版式，RdBu_r 双色带 + 行分组色条 + 亚群 45° 标签，一次出 6 图 × PNG/PDF/SVG/TIFF @300dpi",
+  "description": "示例组织肌纤维 AUCell 程序打分矩阵热图（base graphics 零依赖 R 版）：18 程序 × 6 组 / 5 效应(Cohen's d) / 10 亚群三型版式，RdBu_r 双色带 + 行分组色条 + 亚群 45° 标签，一次出 6 图 × PNG/PDF/SVG/TIFF @300dpi",
   "when_to_use": "用户要求把 fig_split_v10.py 式矩阵热图（18 程序打分 × 6组/5效应/亚群）转成 R，或直接用 R 出这套图",
   "parameters": {
     "OUT": "输出目录（务必独立子目录，避免覆盖 Python 版）",

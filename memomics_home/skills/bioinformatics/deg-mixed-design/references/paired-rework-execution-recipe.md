@@ -1,6 +1,6 @@
 # 配对化返工执行记录（2026-09-25 实测）
 
-场景：人骨骼肌单核 RNA-seq，AUCell 程序打分，24 donors（Young 10 / Old 对照 7 / Old+T2D 7），
+场景：人示例组织单核 RNA-seq，AUCell 程序打分，24 donors（Young 10 / Old 对照 7 / Old+T2D 7），
 每人 Pre/Post，22 score × 10 亚群 × 5 效应 = 1100 格。效应量热图 5 面板共用 `TwoSlopeNorm(−3,0,3)`。
 
 原表（`effect5_d_v2.csv`）经审计确认：**5 个效应全用个体级 pooled-SD Cohen's d + Welch 独立 t**，

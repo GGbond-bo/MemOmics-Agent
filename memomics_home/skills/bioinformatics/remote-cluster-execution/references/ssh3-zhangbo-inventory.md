@@ -1,14 +1,14 @@
-# ssh3 环境实测清单（2026-10-08）
+# node1 环境实测清单（2026-10-08）
 
 > 全部结论来自登录节点**只读实测**（`ls` / `--version` / `find.package` / `find_spec`），非推断。
-> 节点 `cngb-supermem-a15-3.cngb.sz.hpc`（CNGB 深圳超算）｜账号 `zhangbo11`｜SGE 8.1.9｜工作目录 `/hwfssz3/PS_JLU/zhangbo`
+> 节点 `login-host`（CNGB 深圳超算）｜账号 `user`｜SGE 8.1.9｜工作目录 `/cluster/share/user`
 
 ## 两个来源，都已验证可访问 ✅
 
 | 来源 | 路径 | 权限 | 调用方式 |
 |---|---|---|---|
-| 别人的 conda（zhangxiao6） | `/hwfssz3/PS_JLU/zhangxiao6/software/miniconda3` | `drwxr-xr-x`、属主他人 → **只读可用、装不了包** | `source .../bin/activate <env>`；或绝对路径 `.../envs/<env>/bin/Rscript` |
-| 自己的 envs（zhangbo） | `/hwfssz3/PS_JLU/zhangbo/envs/R4.4.1_zb` | 自己的 → 可写 | `/hwfssz3/PS_JLU/zhangbo/envs/R4.4.1_zb/bin/Rscript` |
+| 别人的 conda（zhangxiao6） | `/cluster/share/zhangxiao6/software/miniconda3` | `drwxr-xr-x`、属主他人 → **只读可用、装不了包** | `source .../bin/activate <env>`；或绝对路径 `.../envs/<env>/bin/Rscript` |
+| 自己的 envs（user） | `/cluster/share/user/envs/R4.4.1_zb` | 自己的 → 可写 | `/cluster/share/user/envs/R4.4.1_zb/bin/Rscript` |
 
 `source <conda_root>/bin/activate sc-analysis` 实测成功（activate 不需要写权限）。
 

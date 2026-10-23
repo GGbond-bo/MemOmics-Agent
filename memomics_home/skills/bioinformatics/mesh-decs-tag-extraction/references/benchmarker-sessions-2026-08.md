@@ -1,7 +1,7 @@
 # Benchmarker 三轮试卷实测记录（2026-08-02）
 
 三张试卷：TaskA（语义索引，5篇→MeSH主要标签）、TaskB（问答8题）、TaskC（MESINESP 多语言检索，4篇西班牙语文献→DeCS编码）。
-原始文件位于 E:\benchmarker\exams\。
+原始文件位于 <数据目录>
 
 ## TaskA（语义索引）— F1 = 69.0%
 - 预测 44 标签，命中 40，错误 4；gold 72 标签

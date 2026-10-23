@@ -141,7 +141,7 @@ def test_build_args_for_session_modes():
              "want": {"action": "session_stop", "session_id": "s-20261009-014300-vq48"}},
             {"mode": "session_list", "text": "", "want": {"action": "session_list"}},
         ],
-        "render": {"result": {"status": "ok", "session_id": "s-20261009-014300-vq48", "node": "ssh23",
+        "render": {"result": {"status": "ok", "session_id": "s-20261009-014300-vq48", "node": "node4",
                               "alive": True, "daemon_status": "idle", "pid": "109595", "rss_h": "3.0GB",
                               "objects": "20", "jobs_done": "10", "readrds_calls": "1",
                               "r_version": "R version 4.4.1 (2024-06-14)",

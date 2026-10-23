@@ -6,8 +6,8 @@ import urllib.request
 
 import websocket
 
-BASE = "http://127.0.0.1:8899"
-WS = "ws://127.0.0.1:8899/ws"
+BASE = "http://login-host:22"
+WS = "ws://login-host:22/ws"
 
 TURNS = [
     ("方向2·入库意图", "帮我把文献库里的 10.1016_j.freeradbiomed.2024.07.026.pdf 提炼进知识库（调用 kb_extract_from_paper）。", "kb_extract_from_paper"),

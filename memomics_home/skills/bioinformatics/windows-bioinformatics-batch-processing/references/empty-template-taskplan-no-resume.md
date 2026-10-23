@@ -13,10 +13,10 @@ Phase 1: 执行用户任务
 The user's actual requests in this session were:
 1. Generate scRNA-seq technical roadmap
 2. Generate scATAC-seq technical roadmap
-3. Download human hippocampus ATAC-seq data (GSE278576)
+3. Download human hippocampus ATAC-seq data (GSE000000)
 
 The Agent, on system wake check #6, read `system_log.jsonl` and found records from a **different session** (`memomics-1c1890da`) that had a monkey CellBender batch task. It then:
-- Started a 13-sample CellBender batch pipeline at `E:/monkey/cellbender/`
+- Started a 13-sample CellBender batch pipeline at `<数据目录>
 - Deployed heartbeat monitoring
 - Reported "主线任务: Monkey CellBender 批量" as if this was the current session's task
 
@@ -70,7 +70,7 @@ The stale task_plan case (铁规 0) assumes there WAS a real task that may have 
 Session memomics-3c672f0a:
   03:00 — Generated scRNA-seq roadmap
   03:06 — Generated scATAC-seq roadmap
-  16:40 — Searched for human hippocampus ATAC (GSE278576)
+  16:40 — Searched for human hippocampus ATAC (GSE000000)
   16:58 — Network timeout, download failed
   
   [17:30 — System wake #6: Agent saw system_log.jsonl from memomics-1c1890da 

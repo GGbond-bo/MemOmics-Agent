@@ -28,7 +28,7 @@ _state = {"last_tick": 0.0, "last_polled": None, "quiet_ticks": 0, "notified": 0
 
 
 def _notify_path(sid: str) -> str:
-    base = os.path.join(os.environ.get("MEMOMICS_RESULTS_ROOT", r"E:\MemOmics-Agent\results"), sid or "_unknown")
+    base = os.path.join(os.environ.get("MEMOMICS_RESULTS_ROOT", r"<安装目录>"), sid or "_unknown")
     return os.path.join(base, "log", "job_notifications.jsonl")
 
 

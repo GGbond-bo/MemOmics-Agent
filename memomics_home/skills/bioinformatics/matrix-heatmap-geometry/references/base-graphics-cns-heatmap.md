@@ -1,6 +1,6 @@
 # 零第三方包手绘 CNS 级矩阵热图 —— 完整配方与实测数字
 
-来源：2026-09-15 人骨骼肌 10 个肌纤维亚群 × 17–18 个基因集 AUCell 行内 z-score 热图
+来源：2026-09-15 人示例组织 10 个肌纤维亚群 × 17–18 个基因集 AUCell 行内 z-score 热图
 （`scripts/fig_A3_CNS.R`，base graphics + grDevices，零第三方包；ComplexHeatmap 在本机不可加载）。
 本文件是 `matrix-heatmap-geometry` 的实证附录：**每条结论都带当时的实测数字**。
 

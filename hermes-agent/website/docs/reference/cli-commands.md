@@ -1479,7 +1479,7 @@ Register this install as a self-hosted dashboard with your Nous Portal account. 
 | `--portal-url` | Override the Nous Portal base URL for registration (default: the portal you logged into). Also settable via `HERMES_DASHBOARD_PORTAL_URL`. |
 
 ```bash
-# Default — opens browser to http://127.0.0.1:9119
+# Default — opens browser to http://login-host:22
 hermes dashboard
 
 # Custom port, no browser

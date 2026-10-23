@@ -2,13 +2,13 @@
 
 ## 场景
 
-GSE278576 人海马 ATAC 40 样本 ArchR QC 批处理（create_arrow_qc.R，串行 run_serial_v2.sh + watchdog_v2.sh）。
+GSE000000 人海马 ATAC 40 样本 ArchR QC 批处理（create_arrow_qc.R，串行 run_serial_v2.sh + watchdog_v2.sh）。
 hc73 是最大样本（fragments 5.42GB，其余 1.6-2.4GB），读取 fragments 到 42% 时崩溃。
 
 ## 崩溃日志（hc73.log 尾部关键行）
 
 ```
-[E::hts_idx_load3] Could not load local index file 'E:/专利/Human_Hippocampus_ATAC/fragments/GSM8549648_hc73_atac_fragments.tsv.gz.tbi' : Not enough space
+[E::hts_idx_load3] Could not load local index file '<数据目录>' : Not enough space
 2026-08-07 18:43:08 : (GSM8549648_hc73 : 1 of 1) Reading TabixFile 42 Percent, 20.148 mins elapsed.
 ERROR Found in .tabixToTmp for (GSM8549648_hc73 : 1 of 1)
 <simpleError in forderv(data, seq_along(data), retGrp = FALSE, ...): 内部错误 range_str: failed to grow the 'marks' hash table. 请将此问题汇报给 data.table 问题追踪器。>

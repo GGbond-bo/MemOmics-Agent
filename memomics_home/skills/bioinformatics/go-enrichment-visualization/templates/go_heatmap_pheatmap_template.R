@@ -13,7 +13,7 @@
 # ============================================================
 suppressMessages({library(pheatmap); library(RColorBrewer); library(openxlsx)})
 
-setwd("E:/MemOmics-Agent/results/<SESSION_DIR>")   # ← 改
+setwd("<安装目录>")   # ← 改
 
 d <- read.xlsx("输入路径.xlsx", sheet = "Sheet1")  # ← 改
 d$logq_abs  <- abs(d$`Log(q-value)`)

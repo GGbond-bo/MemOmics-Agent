@@ -62,7 +62,7 @@ signal-cli link -n "HermesAgent"
 
 ```bash
 # 将 +1234567890 替换为你的 Signal 手机号（E.164 格式）
-signal-cli --account +1234567890 daemon --http 127.0.0.1:8080
+signal-cli --account +1234567890 daemon --http login-host:22
 ```
 
 :::tip
@@ -72,7 +72,7 @@ signal-cli --account +1234567890 daemon --http 127.0.0.1:8080
 验证是否正在运行：
 
 ```bash
-curl http://127.0.0.1:8080/api/v1/check
+curl http://login-host:22/api/v1/check
 # 应返回：{"versions":{"signal-cli":...}}
 ```
 
@@ -89,7 +89,7 @@ hermes gateway setup
 从平台菜单中选择 **Signal**。向导将：
 
 1. 检查 signal-cli 是否已安装
-2. 提示输入 HTTP URL（默认：`http://127.0.0.1:8080`）
+2. 提示输入 HTTP URL（默认：`http://login-host:22`）
 3. 测试与守护进程的连通性
 4. 询问你的账号手机号
 5. 配置允许的用户和访问策略
@@ -100,7 +100,7 @@ hermes gateway setup
 
 ```bash
 # 必填
-SIGNAL_HTTP_URL=http://127.0.0.1:8080
+SIGNAL_HTTP_URL=http://login-host:22
 SIGNAL_ACCOUNT=+1234567890
 
 # 安全设置（推荐）
@@ -217,7 +217,7 @@ Signal 消息以**原生格式**渲染，而非显示原始 markdown 字符。�
 
 | 问题 | 解决方案 |
 |------|----------|
-| 配置时提示 **"Cannot reach signal-cli"** | 确保 signal-cli 守护进程正在运行：`signal-cli --account +YOUR_NUMBER daemon --http 127.0.0.1:8080` |
+| 配置时提示 **"Cannot reach signal-cli"** | 确保 signal-cli 守护进程正在运行：`signal-cli --account +YOUR_NUMBER daemon --http login-host:22` |
 | **消息未收到** | 检查 `SIGNAL_ALLOWED_USERS` 是否包含发送方号码（E.164 格式，带 `+` 前缀） |
 | **"signal-cli not found on PATH"** | 安装 signal-cli 并确保其在 PATH 中，或使用 Docker |
 | **连接持续断开** | 检查 signal-cli 日志中的错误信息，确保已安装 Java 17+。 |

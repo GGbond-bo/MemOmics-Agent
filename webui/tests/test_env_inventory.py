@@ -47,8 +47,8 @@ def _canned_local():
         "scanned_at": "2026-09-22 10:00:00",
         "duration_s": 4.2,
         "pending": False,
-        "environment_json": "E:/MemOmics-Agent/environment.json",
-        "memomics_home": "E:/MemOmics-Agent/memomics_home",
+        "environment_json": "<安装目录>",
+        "memomics_home": "<安装目录>",
         "platform": "Windows 11",
         "system": {
             "hostname": "BOX", "os": "Windows", "os_release": "11", "machine": "AMD64",
@@ -59,10 +59,10 @@ def _canned_local():
             "wsl": {"available": True, "distros": [{"name": "Ubuntu", "state": "Running", "version": "2"}]},
         },
         "python": {
-            "default": "E:/MemOmics-Agent/.venv/Scripts/python.exe",
+            "default": "<安装目录>",
             "candidates": [
                 {"label": "memomics_venv", "ok": True, "declared": True,
-                 "path": "E:/MemOmics-Agent/.venv/Scripts/python.exe", "version": "3.12.10",
+                 "path": "<安装目录>", "version": "3.12.10",
                  "packages": {"scanpy": "1.11.0", "anndata": "0.11.3"}, "note": ""},
                 {"label": "python312", "ok": True, "declared": True,
                  "path": "C:/Python312/python.exe", "version": "3.12.10",
@@ -98,7 +98,7 @@ def _canned_local():
                   "envs": [{"name": "base", "path": "E:/miniconda3", "python": "3.12.9"}],
                   "broken": False, "canonical_note": "已损坏（zstandard.backend_c 缺失）"},
         "capabilities": {
-            "execute_python": {"uses": "E:/MemOmics-Agent/.venv/Scripts/python.exe",
+            "execute_python": {"uses": "<安装目录>",
                                "version": "3.12.10", "missing_key": ["pysam", "harmonypy"]},
             "execute_r": {"uses": "C:/Program Files/R/R-4.5.3/bin/x64/Rscript.exe",
                           "version": "4.5.3", "libs": ["C:/Users/x/R/R-4.5.3-library"],
@@ -137,8 +137,8 @@ def _node(name, reachable=True, nproc=64, load1=0.5, **extra):
 
 def _configured(**extra):
     state = {"configured": True, "enabled": True, "config_path": "X:/memomics_home/config.yaml",
-             "scheduler": "slurm", "node_policy": "ask", "default_node": "ssh3",
-             "nodes": ["ssh3"], "error": ""}
+             "scheduler": "slurm", "node_policy": "ask", "default_node": "node1",
+             "nodes": ["node1"], "error": ""}
     state.update(extra)
     return state
 
@@ -285,10 +285,10 @@ def test_cluster_unconfigured_recomputes_even_when_cache_is_fresh(home, monkeypa
 
 def test_cluster_configured_fresh_uses_cache(home, monkeypatch):
     monkeypatch.setattr(ei, "scan_cluster", _boom)
-    ei._write_cache(cluster={"configured": True, "config_path": "X", "nodes": [{"name": "ssh3"}]},
+    ei._write_cache(cluster={"configured": True, "config_path": "X", "nodes": [{"name": "node1"}]},
                     cluster_at=ei._now())
     got = ei.cached_cluster()
-    assert got["cached"] is True and got["nodes"][0]["name"] == "ssh3"
+    assert got["cached"] is True and got["nodes"][0]["name"] == "node1"
     assert isinstance(got["age_s"], (int, float))
 
 
@@ -299,21 +299,21 @@ def test_cluster_configured_stale_returns_pending_when_no_data(home, monkeypatch
     got = ei.cached_cluster()
     assert got["pending"] is True and got["configured"] is True
     assert got["config_path"] == "X:/memomics_home/config.yaml"
-    assert got["nodes_configured"] == ["ssh3"]
+    assert got["nodes_configured"] == ["node1"]
 
 
 def test_cluster_configured_stale_serves_last_nodes(home, monkeypatch):
     """2026-09-23：过期但上次探到的节点清单要留着（stale），别丢成 pending。"""
     monkeypatch.setattr(ei, "scan_cluster", _boom)
     monkeypatch.setattr(ei, "cluster_configured", lambda: _configured())
-    ei._write_cache(cluster={"configured": True, "nodes": [{"name": "ssh3", "reachable": True}],
+    ei._write_cache(cluster={"configured": True, "nodes": [{"name": "node1", "reachable": True}],
                              "resources": {"total_cores": 64}},
                     cluster_at=ei._now() - (ei._CLUSTER_TTL + 60))
     got = ei.cached_cluster()
     assert got.get("pending") is not True
     assert got["stale"] is True and got["needs_refresh"] is True
     # 上次探到的节点与资源必须还在
-    assert got["nodes"][0]["name"] == "ssh3"
+    assert got["nodes"][0]["name"] == "node1"
     assert got["resources"]["total_cores"] == 64
     # 配置态仍然以现算为准（这条不变量不能被污染）
     assert got["config_path"] == "X:/memomics_home/config.yaml"
@@ -360,27 +360,27 @@ def test_scan_cluster_unconfigured_hint_and_cache(home, monkeypatch):
 def test_scan_cluster_aggregates_nodes_and_resources(home, monkeypatch):
     nodes_payload = {
         "status": "ok", "summary": "1/2 可达",
-        "nodes": [_node("ssh3", nproc=64), _node("ssh5", reachable=False, nproc=None,
+        "nodes": [_node("node1", nproc=64), _node("node2", reachable=False, nproc=None,
                                                  error="connection timed out")],
-        "reachable": ["ssh3"], "idle_now": ["ssh3"],
+        "reachable": ["node1"], "idle_now": ["node1"],
     }
-    checks = {"ssh3": {"status": "ok", "scheduler": "slurm", "workdir": "/home/bio/work",
+    checks = {"node1": {"status": "ok", "scheduler": "slurm", "workdir": "/home/bio/work",
                        "remote_home": "/home/bio",
                        "bins": {"Rscript": "/usr/bin/Rscript", "python3": "/usr/bin/python3"},
                        "output": "== versions ==\npython 3.11.2\n"}}
     fake = _FakeRC(nodes_payload, checks)
-    monkeypatch.setattr(ei, "cluster_configured", lambda: _configured(nodes=["ssh3", "ssh5"]))
+    monkeypatch.setattr(ei, "cluster_configured", lambda: _configured(nodes=["node1", "node2"]))
     monkeypatch.setattr(ei, "_cluster_module", lambda: fake)
     got = ei.scan_cluster(force=True)
     res = got["resources"]
     assert got["configured"] is True and got["cached"] is False
     assert res["total_cores"] == 64
     assert res["reachable_nodes"] == 1 and res["configured_nodes"] == 2
-    assert res["idle_now"] == ["ssh3"] and res["schedulers"] == ["slurm"]
+    assert res["idle_now"] == ["node1"] and res["schedulers"] == ["slurm"]
     assert res["workdirs"] == ["/home/bio/work"]
-    assert got["per_node"]["ssh3"]["bins"]["Rscript"] == "/usr/bin/Rscript"
-    assert isinstance(got["per_node"]["ssh3"]["versions"], dict)
-    assert any("ssh5" in w and "连不上" in w for w in got["warnings"])
+    assert got["per_node"]["node1"]["bins"]["Rscript"] == "/usr/bin/Rscript"
+    assert isinstance(got["per_node"]["node1"]["versions"], dict)
+    assert any("node2" in w and "连不上" in w for w in got["warnings"])
     assert [c["action"] for c in fake.calls] == ["nodes", "check"]
     assert ei._read_cache(reload=True)["cluster"]["resources"]["total_cores"] == 64
 
@@ -465,8 +465,8 @@ def test_handler_actions_dispatch(home, monkeypatch):
     local = json.loads(ei.env_inventory_handler("local"))
     assert local["action"] == "local" and local["local"]["fake"] == "local"
 
-    cluster = json.loads(ei.env_inventory_handler("cluster", "ssh3"))
-    assert cluster["cluster"]["node"] == "ssh3"
+    cluster = json.loads(ei.env_inventory_handler("cluster", "node1"))
+    assert cluster["cluster"]["node"] == "node1"
 
     refresh = json.loads(ei.env_inventory_handler("refresh"))
     assert refresh["action"] == "refresh" and refresh["force"] is True
@@ -686,7 +686,7 @@ def test_frontend_env_i18n_keys_are_identical():
 _DECL = {
     "cluster": {
         "_rule": "只用声明的环境",
-        "nodes": {"ssh3": {"host": "hpc.example.edu", "user": "me", "workdir": "/data/proj",
+        "nodes": {"node1": {"host": "hpc.example.edu", "user": "me", "workdir": "/data/proj",
                            "conda_activate": "source /x/bin/activate <env>"}},
         "policy": {"RNA": {"r_env": "R4.41", "r_version": "4.4.1", "py_env": "sc-analysis",
                            "scope": "Seurat .rds + AnnData .h5ad"},
@@ -756,7 +756,7 @@ def test_declared_flows_into_report_digest_and_markdown(env_json, home):
     report = ei.build_report(cache_only=True, cluster=True)
     dec = report["cluster"]["declared"]["cluster"]
     assert dec["policy"]["RNA"]["r_env"] == "R4.41"
-    assert dec["nodes"]["ssh3"]["conda_activate"].startswith("source ")
+    assert dec["nodes"]["node1"]["conda_activate"].startswith("source ")
     assert "R4.41" in report["agent_digest"] and "R4.3.3" in report["agent_digest"]
     assert "sc-analysis" in report["agent_digest"]
     assert len(report["agent_digest"]) < 2600        # 声明别把卡片撑爆
@@ -816,15 +816,15 @@ def test_api_declared_endpoint_and_route_registered():
 # ---------------------------------------------------------------------------
 _CHECK_PAYLOAD = {
     "status": "ok",
-    "host": "cngb-supermem-a15-3",
-    "user": "zhangbo11",
+    "host": "login-host",
+    "user": "user",
     "scheduler": "gridengine",
-    "workdir": "/hwfssz3/PS_JLU/zhangbo/",
+    "workdir": "/cluster/share/user/",
     "workdir_missing": False,
-    "remote_home": "/home/zhangbo11",
+    "remote_home": "/home/user",
     "bins": {"qsub": "/opt/gridengine/bin/lx-amd64/qsub", "git": "/usr/bin/git"},
     "output": (
-        "== host ==\ncngb-supermem-a15-3\nzhangbo11\n"
+        "== host ==\nlogin-host\nuser\n"
         "== cpu_mem ==\n144\n              total        used        free\n"
         "Mem:           3023        1967        1045\n"
         "== versions ==\nRscript (R) version 4.4.1 (2024-06-14)\n"
@@ -833,11 +833,11 @@ _CHECK_PAYLOAD = {
 
 
 def test_record_cluster_node_merges_without_clobbering(env_json):
-    _write_decl(env_json, _DECL)  # ssh3 已有用户手填声明（host/conda_activate）
-    r = ei.record_cluster_node("ssh3", dict(_CHECK_PAYLOAD))
+    _write_decl(env_json, _DECL)  # node1 已有用户手填声明（host/conda_activate）
+    r = ei.record_cluster_node("node1", dict(_CHECK_PAYLOAD))
     assert r["ok"], r
     env = json.loads(env_json.read_text(encoding="utf-8"))
-    node = env["cluster"]["nodes"]["ssh3"]
+    node = env["cluster"]["nodes"]["node1"]
     # 用户声明字段不被覆盖
     assert node["host"] == "hpc.example.edu"
     assert node["conda_activate"] == "source /x/bin/activate <env>"
@@ -851,33 +851,33 @@ def test_record_cluster_node_merges_without_clobbering(env_json):
     # 再记一次：probed 刷新、声明依旧
     p2 = dict(_CHECK_PAYLOAD)
     p2["output"] = _CHECK_PAYLOAD["output"].replace("144", "128", 1)
-    assert ei.record_cluster_node("ssh3", p2)["ok"]
-    node2 = json.loads(env_json.read_text(encoding="utf-8"))["cluster"]["nodes"]["ssh3"]
+    assert ei.record_cluster_node("node1", p2)["ok"]
+    node2 = json.loads(env_json.read_text(encoding="utf-8"))["cluster"]["nodes"]["node1"]
     assert node2["probed"]["cpus"] == 128
     assert node2["host"] == "hpc.example.edu"
 
 
 def test_record_cluster_node_new_node_fills_declared_fields(env_json):
     _write_decl(env_json, _DECL)
-    r = ei.record_cluster_node("ssh23", dict(_CHECK_PAYLOAD))
+    r = ei.record_cluster_node("node4", dict(_CHECK_PAYLOAD))
     assert r["ok"], r
     env = json.loads(env_json.read_text(encoding="utf-8"))
-    node = env["cluster"]["nodes"]["ssh23"]
+    node = env["cluster"]["nodes"]["node4"]
     # 新节点：声明字段缺失 → 由实测补齐
-    assert node["host"] == "cngb-supermem-a15-3"
-    assert node["workdir"] == "/hwfssz3/PS_JLU/zhangbo/"
+    assert node["host"] == "login-host"
+    assert node["workdir"] == "/cluster/share/user/"
     assert node["scheduler"] == "gridengine"
     assert node["probed"]["cpus"] == 144
     # digest / markdown 都带实测行
     digest = "\n".join(ei._declared_digest_lines())
-    assert "ssh23" in digest and "144核" in digest
+    assert "node4" in digest and "144核" in digest
     md = "\n".join(ei._declared_md_lines())
     assert "实测" in md and "3023 GB" in md
 
 
 def test_record_cluster_node_never_raises(env_json):
     assert not ei.record_cluster_node("", {})["ok"]
-    assert not ei.record_cluster_node("ssh3", {"status": "error"})["ok"]
+    assert not ei.record_cluster_node("node1", {"status": "error"})["ok"]
 
 
 def test_frontend_and_backend_auto_record_wired():

@@ -1,6 +1,6 @@
 # 分层亚群注释打回主对象（L2 → L1）—— 打回前核查协议
 
-来源：2026-10-18 人骨骼肌 snRNA（主对象 604,244 细胞 + 6 个亚群对象），集群 ssh3 / R4.4.1_zb。
+来源：2026-10-18 人示例组织 snRNA（主对象 604,244 细胞 + 6 个亚群对象），集群 node1 / R4.4.1_zb。
 本地产物：`results/<sid>/task2/L2_annotation_check_report.md`、`scripts/check_annotation_levels_v2.R`。
 
 ## 场景
@@ -65,7 +65,7 @@ l2_col <- list(MF="annotation_L2", MuSC="annotation_L2", EC="annotation",
 ## 关键坑
 
 1. **同一批细胞两套注释 → 必须让用户择一，禁止自己挑。**
-   本次 FAP 有两个文件（zhangbo 版 6 类 / liuyuxuan3 版 4 类），细胞数完全相同（39,727）、标签不同。
+   本次 FAP 有两个文件（user 版 6 类 / liuyuxuan3 版 4 类），细胞数完全相同（39,727）、标签不同。
    用 `ask_user(kind="intent")` 勾选弹窗定；把两套清单（各自类数 + 各类细胞数）并列摆出来再问。
    口径选择是科学决定，不是技术细节。
 2. **无 L2 来源的小群**处理方式同样问用户：填自身群名（不丢细胞、不污染其他亚群 = 推荐默认）

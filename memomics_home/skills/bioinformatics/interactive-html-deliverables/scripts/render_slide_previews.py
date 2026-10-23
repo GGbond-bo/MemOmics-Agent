@@ -22,8 +22,8 @@
 示例
 ----
     python render_slide_previews.py \
-        E:/MemOmics-Agent/results/<sid>/reports/deck.html \
-        E:/MemOmics-Agent/results/<sid>/figures
+        <安装目录> \
+        <安装目录>
 
 约定
 ----

@@ -61,7 +61,7 @@ test('detectRemoteDisplay flags SSH sessions on any platform', () => {
 
 test('detectRemoteDisplay flags forwarded X11 displays but not local ones', () => {
   assert.match(String(detectRemoteDisplay({ env: { DISPLAY: 'localhost:10.0' }, platform: 'linux' })), /x11-forwarding/)
-  assert.match(String(detectRemoteDisplay({ env: { DISPLAY: '192.168.1.5:0' }, platform: 'linux' })), /x11-forwarding/)
+  assert.match(String(detectRemoteDisplay({ env: { DISPLAY: '10.0.0.1:0' }, platform: 'linux' })), /x11-forwarding/)
   assert.equal(detectRemoteDisplay({ env: { DISPLAY: ':1' }, platform: 'linux' }), null)
 })
 

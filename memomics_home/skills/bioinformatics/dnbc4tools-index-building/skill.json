@@ -80,7 +80,7 @@
       "auto_score": 0.0,
       "approved": false,
       "custom_script": false,
-      "result": "检查 C:\\Users\\23136\\.wslconfig 不存在（NO_CONFIG_FILE），需新建。配置 WSL 内存 48GB 的方法：创建 ~/.wslconfig 写入 [wsl2] memory=48GB，然后 wsl --shutdown 重启生效。"
+      "result": "检查 <用户目录> 不存在（NO_CONFIG_FILE），需新建。配置 WSL 内存 48GB 的方法：创建 ~/.wslconfig 写入 [wsl2] memory=48GB，然后 wsl --shutdown 重启生效。"
     },
     {
       "species": "",
@@ -93,7 +93,7 @@
       "auto_score": 0.0,
       "approved": false,
       "custom_script": false,
-      "result": "已创建 C:\\Users\\23136\\.wslconfig：[wsl2] memory=48GB, processors=16, swap=8GB。下一步 wsl --shutdown 重启 WSL 生效，然后验证 free -g 内存显示 48GB。"
+      "result": "已创建 <用户目录> memory=48GB, processors=16, swap=8GB。下一步 wsl --shutdown 重启 WSL 生效，然后验证 free -g 内存显示 48GB。"
     },
     {
       "species": "",

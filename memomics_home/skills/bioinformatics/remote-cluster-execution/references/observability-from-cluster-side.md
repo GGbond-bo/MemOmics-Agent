@@ -3,29 +3,29 @@
 > 配套 SKILL.md 铁规 11。用户问的是**行为**（"我能在 mobaX 对应节点看到吗"），
 > 所以答案必须是**实测的可见性矩阵**，不是推断；并且要给出"登哪个节点 + 敲什么命令"。
 
-## 1. 实测原始证据（ssh23 = cngb-compute-f23-2 / ssh3 = cngb-supermem-a15-3）
+## 1. 实测原始证据（node4 = compute-node / node1 = login-host）
 
-| 探针 | ssh23 结果 | ssh3 结果 |
+| 探针 | node4 结果 | node1 结果 |
 |---|---|---|
-| `whoami; id` | `zhangbo11` `uid=1003064` gid=2906(ST_PRECISION) | `zhangbo11`（同账号） |
-| `hostname` | `cngb-compute-f23-2.cngb.sz.hpc` | `cngb-supermem-a15-3.cngb.sz.hpc` |
-| `pwd`（默认 cwd） | `/hwfssz3/PS_JLU/zhangbo` | 同 |
+| `whoami; id` | `user` `uid=1003064` gid=2906(ST_PRECISION) | `user`（同账号） |
+| `hostname` | `login-host` | `login-host` |
+| `pwd`（默认 cwd） | `/cluster/share/user` | 同 |
 | `df -h $HOME` | `10.53.20.27:/export/home` 1.0T 用 667G (66%) | `10.53.22.9:/vol_1t_sas_3` 1.0T 用 3.3G (1%) |
-| `df -h /hwfssz3/PS_JLU/zhangbo` | `hwfssz3.cngb.sz.hpc:/PS_JLU` 120T 用 97T 余 24T (81%) | 同（同一份） |
+| `df -h /cluster/share/user` | `login-host:/share` 120T 用 97T 余 24T (81%) | 同（同一份） |
 | `ls ~/memomics_jobs` | 存在，mtime Oct 8 16:07（**本次工具创建**） | 也存在，但是 Oct 8 02:57 的旧账本（`memomics_direct.log/.pid`） |
 | `ps -ef \| grep -E "Rscript\|python\|qsub"` | **0 个** R/python 分析进程（仅 root 的 fail2ban/tuned python2 系统服务） | — |
-| `qstat` | `error: unable to send message to qmaster using port 536 on host "cngb-ps-jlu": can't resolve host name` | 返回**空**（不报错、也无内容） |
-| `getent hosts cngb-ps-jlu` | 失败（rc=2）→ 域名解析不了 | — |
+| `qstat` | `error: unable to send message to qmaster using port 536 on host "cluster-login": can't resolve host name` | 返回**空**（不报错、也无内容） |
+| `getent hosts cluster-login` | 失败（rc=2）→ 域名解析不了 | — |
 | `SGE_ROOT` | `/opt/gridengine` | — |
 | `ls /opt/gridengine/bin/lx-amd64/qsub` | ✅ 存在（但**不在默认 PATH**） | — |
 
 ## 2. 结论：三层可见性
 
-1. **工作盘 = 共享**（`/hwfssz3/PS_JLU`，NFS）→ 产物/日志/脚本，**任一节点都看得见**。
+1. **工作盘 = 共享**（`/cluster/share`，NFS）→ 产物/日志/脚本，**任一节点都看得见**。
 2. **`/home` = 不共享**（两节点挂的是不同 NFS 卷，IP 与用量都不同）→ 工具账本 `~/memomics_jobs/`
    **只在本节点可见**；换个节点就看不到。
    ⚠️ 注意两个节点上都有 `memomics_jobs` 目录，**别误以为共享**——它们是各自节点独立的目录。
-3. **进程**：Linux 默认 `ps -ef` 对同机所有用户可见 → MobaXterm 登录**同一节点**即可看到 `zhangbo11` 的 `Rscript`，
+3. **进程**：Linux 默认 `ps -ef` 对同机所有用户可见 → MobaXterm 登录**同一节点**即可看到 `user` 的 `Rscript`，
    但**只在作业运行期间**（作业结束 → 进程消失，本轮实测就是 0 个）。
 
 ## 3. `qstat` 失败会改变作业的"形态"（重要因果链）
@@ -40,7 +40,7 @@ qstat 报 qmaster 解析失败
 
 要恢复"正式队列作业"（qstat 可见、可 `qdel`），需要先让 qmaster 主机名可解析——
 排查方向（症状是 `can't resolve host name`，不是"工具坏了"）：
-`/etc/hosts` 是否漏了 `cngb-ps-jlu`、DNS/`/etc/resolv.conf`、`$SGE_ROOT/$SGE_CELL/common/act_qmaster` 里的主机名、
+`/etc/hosts` 是否漏了 `cluster-login`、DNS/`/etc/resolv.conf`、`$SGE_ROOT/$SGE_CELL/common/act_qmaster` 里的主机名、
 以及是否需要 `module load` 或走特定登录节点。**这类是网络/环境侧配置，交用户或管理员确认**。
 
 ## 4. 回答这类问题时的固定骨架（照抄即可）

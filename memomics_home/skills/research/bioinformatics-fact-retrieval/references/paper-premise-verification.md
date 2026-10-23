@@ -18,7 +18,7 @@
    **命中次数本身就是证据**。本例：`skill` 在 88 页全文里**只 1 次**，且落在 Discussion 的
    "coding **skills**"（编程技能），⇒ 它压根不是架构概念。
    ```bash
-   python scripts/pdf_probe.py "E:/文献/AI/agent/literature/Biomni.pdf" \
+   python scripts/pdf_probe.py "<数据目录>" \
      --out results/<sid>/data/Biomni_fulltext.txt \
      --kw "2,500" "knowledge base" "skill" "retrieval" "action space" --w 1200
    ```

@@ -1,6 +1,6 @@
 # rail_review(pre) 本地口径拦截集群作业 + 元数据 levels 前置核查（2026-10-09 实测）
 
-两条都在同一次 ssh23 DEG 投递里踩到，都是「不报错但会毁掉整批结果」的类型。
+两条都在同一次 node4 DEG 投递里踩到，都是「不报错但会毁掉整批结果」的类型。
 
 ---
 
@@ -33,7 +33,7 @@
 
 ```
 rail_review(phase="pre", module_id="deg", method_name="...", skill_name="...",
-            location="cluster", node="ssh23", env="R4.41",
+            location="cluster", node="node4", env="R4.41",
             required_packages=["Seurat","edgeR","RUVSeq","MAST","lme4"])
 ```
 
@@ -42,10 +42,10 @@ rail_review(phase="pre", module_id="deg", method_name="...", skill_name="...",
 | 写法 | 回执关键字段 | 结果 |
 |---|---|---|
 | 不传 `location` | `missing_packages:["RUVSeq"]` | ❌ 被拦 → 被迫装本地包 |
-| `location="cluster", node="ssh23", env="R4.41"` | `location_line: 集群 ssh23/R4.41 —— 显式指定（节点上的 R 包清单，694 个包，缓存命中）`；`should_proceed:true` | ✅ **零本地安装** |
+| `location="cluster", node="node4", env="R4.41"` | `location_line: 集群 node4/R4.41 —— 显式指定（节点上的 R 包清单，694 个包，缓存命中）`；`should_proceed:true` | ✅ **零本地安装** |
 
 - **显式传 `location` 才有硬拦效力**；`location_source:"inferred"`（自动推断出来的位置）报出的问题**只警告、不拦执行**。
-- **本地缺 ≠ 集群缺**，反之亦然（`ssh23/R4.41` 里 RUVSeq / MAST / lme4 / edgeR 都在）。
+- **本地缺 ≠ 集群缺**，反之亦然（`node4/R4.41` 里 RUVSeq / MAST / lme4 / edgeR 都在）。
 - 正确顺序：**先带 location 试 pre-review → 只有它仍报缺包，才走下面的补包三步。**
 - ⛔ 仍不要少报 `required_packages` —— 只是把审查口径从「本机」换到「执行位置」，不是取消审查。
 
@@ -140,7 +140,7 @@ echo "=== done=$(date '+%F %T') rc=$? ===" >> <out>.log
 ```
 
 - 首段包自检 = 集群侧环境自证的证据（也是向用户交代「跑的是集群 env」的凭据）。
-- 日志**落共享工作盘**（`/hwfssz3/...`），不要只落 `~/memomics_jobs/logs`（`/home` 不跨节点）。
+- 日志**落共享工作盘**（`/cluster/...`），不要只落 `~/memomics_jobs/logs`（`/home` 不跨节点）。
 - `submit` 返回 `exit=124 / Command timed out after 20s` 是**已知误报**，作业其实已起；
   用 `ps -ef | grep <脚本名>` + `tail` 日志核实，**不要重投**（重投会因脚本自身
   `if (file.exists(fn)) next` 断点续跑，但白占一次投递）。
@@ -152,7 +152,7 @@ echo "=== done=$(date '+%F %T') rc=$? ===" >> <out>.log
 集群作业跑完，按流程调 `rail_review(phase="post", output_dir="<集群绝对路径>")` →
 **两次都是假失败**，且提示的方向会把人带偏：
 
-### 误判 A：`Output directory not found: /hwfssz3/.../MuSC_RUV_result`
+### 误判 A：`Output directory not found: /cluster/.../MuSC_RUV_result`
 
 post 审查是**在 Agent 本机磁盘上**找 `output_dir`，**看不见远端文件系统**。
 拿集群路径喂它 → 必然 not found，看着像「产物没生成」。

@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """超长上下文改造（2026-08-21 b/c）离线单测：
 - (b) _strip_scaffold_text / _build_memory_digest：脚手架剥离与收紧
 - (c) _maybe_rollup_history / _build_rollup_checkpoint：超预算折叠 + 尾窗保留
@@ -28,7 +28,7 @@ class TestStripScaffold:
             "- task_plan 设计原则：只放任务特有内容\n"
             "\n"
             "[会话锚点 · 跨压缩持久 · 重要文件/路径/脚本以这里为准]\n"
-            "📁 E:/MemOmics-Agent/results/x/figures/Fig1.png\n"
+            "📁 <安装目录>"
             "\n"
             "不错，图呢？"
         )
@@ -43,7 +43,7 @@ class TestStripScaffold:
         assert server._strip_scaffold_text("怎么没有结果呢？") == "怎么没有结果呢？"
 
     def test_memory_digest_is_bounded(self):
-        d = _digest(_fake_session(), "骨骼肌 衰老 运动")
+        d = _digest(_fake_session(), "示例组织 衰老 运动")
         assert isinstance(d, str)
         assert len(d) <= 3000
         assert d == "" or d.startswith(("[相关历史记忆", "[会话锚点"))

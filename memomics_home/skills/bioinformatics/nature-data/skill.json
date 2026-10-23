@@ -36,7 +36,7 @@
       "auto_score": 0.0,
       "approved": false,
       "custom_script": false,
-      "result": "依据 nature-data skill 的 8 步工作流与 FAIR 清单，产出人骨骼肌 scRNA-seq（12老+12年轻，10x）的 DataCite 元数据字段、24 样本样本级元数据表、CELLxGENE obs schema 字段、README 模板、Data/Code Availability 中英文声明草案与缺失字段清单；ontology 实测核验 UBERON:0001134 "
+      "result": "依据 nature-data skill 的 8 步工作流与 FAIR 清单，产出人示例组织 scRNA-seq（12老+12年轻，10x）的 DataCite 元数据字段、24 样本样本级元数据表、CELLxGENE obs schema 字段、README 模板、Data/Code Availability 中英文声明草案与缺失字段清单；ontology 实测核验 UBERON:0001134 "
     }
   ],
   "user_prefs": {

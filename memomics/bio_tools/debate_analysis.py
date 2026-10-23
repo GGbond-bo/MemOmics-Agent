@@ -1790,7 +1790,7 @@ def _get_config_path() -> Path:
         from hermes_constants import get_hermes_home
         base = Path(get_hermes_home())
     except Exception:
-        base = Path(os.environ.get("MEMOMICS_HOME", "E:/MemOmics-Agent/memomics_home"))
+        base = Path(os.environ.get("MEMOMICS_HOME", "<安装目录>"))
     return base / "config.yaml"
 
 
@@ -2318,7 +2318,7 @@ def _get_debates_dir() -> Path:
         base = Path(get_hermes_home())
     except Exception:
         # fallback: 环境变量或硬编码
-        base = Path(os.environ.get("MEMOMICS_HOME", "E:/MemOmics-Agent/memomics_home"))
+        base = Path(os.environ.get("MEMOMICS_HOME", "<安装目录>"))
     debates_dir = base / "skills" / "bioinformatics" / "_debates"
     debates_dir.mkdir(parents=True, exist_ok=True)
     return debates_dir
@@ -3626,7 +3626,7 @@ def _auto_load_kb(context: str, topic: str) -> str:
     }
     tissue_map = {
         "liver": ["肝脏", "liver", "肝", "hepatocyte"],
-        "skeletal_muscle": ["骨骼肌", "skeletal muscle", "肌肉", "myofiber"],
+        "skeletal_muscle": ["示例组织", "skeletal muscle", "肌肉", "myofiber"],
         "brain": ["脑", "brain", "neuron", "cortex", "hippocampus", "海马"],
         "kidney": ["肾", "kidney", "renal"],
         "heart": ["心脏", "heart", "cardiac"],

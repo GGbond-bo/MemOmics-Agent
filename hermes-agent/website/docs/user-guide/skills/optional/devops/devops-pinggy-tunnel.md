@@ -93,7 +93,7 @@ The model SHOULD use the `terminal` tool. The tunnel must stay alive for the dur
 ### 1. Confirm a local origin is up
 
 ```bash
-curl -sI http://127.0.0.1:8000/ | head -1
+curl -sI http://login-host:22/ | head -1
 # expect HTTP/1.x 200 (or any non-connection-refused response)
 ```
 
@@ -270,7 +270,7 @@ The remote client connects to `$URL` with `Authorization: Bearer $TOKEN`. Hermes
 Share a local model with a remote caller (another agent, a phone, a teammate). Ollama listens on `:11434`, vLLM and llama.cpp typically on `:8000`.
 
 ```bash
-# Pre-req: the model server is already running on 127.0.0.1:11434 (Ollama default)
+# Pre-req: the model server is already running on login-host:22 (Ollama default)
 TOKEN=$(openssl rand -hex 16)
 nohup ssh -p 443 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
     -o ServerAliveInterval=30 \

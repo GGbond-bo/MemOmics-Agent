@@ -31,7 +31,7 @@ seurat_obj <- NormalizeData(seurat_obj, normalization.method="LogNormalize", sca
 seurat_obj <- FindVariableFeatures(seurat_obj, selection.method="vst", nfeatures=3000)
 seurat_obj <- ScaleData(seurat_obj, features=VariableFeatures(seurat_obj))
 ```
-效果可靠，已验证通过 40K cells 人类骨骼肌 snRNA-seq 分析。
+效果可靠，已验证通过 40K cells 人类示例组织 snRNA-seq 分析。
 
 ### 4. return.only.var.genes（部分缓解）
 ```r

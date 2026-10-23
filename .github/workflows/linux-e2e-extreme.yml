@@ -72,23 +72,23 @@ jobs:
           nohup .venv/bin/python webui/server.py > server.log 2>&1 &
           BOOTED=0
           for i in $(seq 1 150); do
-            if curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:8899/ 2>/dev/null; then BOOTED=1; break; fi
+            if curl -fsS -o /dev/null --max-time 5 http://login-host:22/ 2>/dev/null; then BOOTED=1; break; fi
             sleep 5
           done
           echo "SERVER_BOOTED=$BOOTED"
           [ "$BOOTED" = "1" ] || { tail -80 server.log; exit 1; }
           echo '--- chain: root ---'
-          curl -sS -o /dev/null -w 'root HTTP %{http_code}\n' http://127.0.0.1:8899/
+          curl -sS -o /dev/null -w 'root HTTP %{http_code}\n' http://login-host:22/
           echo '--- chain: health ---'
-          curl -sS --max-time 15 http://127.0.0.1:8899/api/health; echo
+          curl -sS --max-time 15 http://login-host:22/api/health; echo
           echo '--- chain: update/check (版本链路) ---'
-          curl -sS --max-time 20 http://127.0.0.1:8899/api/update/check | head -c 600; echo
+          curl -sS --max-time 20 http://login-host:22/api/update/check | head -c 600; echo
           echo '--- chain: env/check (环境探测链路) ---'
-          curl -sS --max-time 20 http://127.0.0.1:8899/api/env/check | head -c 900; echo
+          curl -sS --max-time 20 http://login-host:22/api/env/check | head -c 900; echo
           echo '--- env discovery: environment.json 回填验证 ---'
           cat environment.json
           echo '--- chain: sessions ---'
-          curl -sS --max-time 15 -X POST http://127.0.0.1:8899/api/sessions/new | head -c 300; echo
+          curl -sS --max-time 15 -X POST http://login-host:22/api/sessions/new | head -c 300; echo
           echo '--- server.log tail ---'
           tail -25 server.log
 
@@ -169,7 +169,7 @@ jobs:
           PYEOF
           nohup .venv/bin/python webui/server.py > server-llm.log 2>&1 &
           for i in $(seq 1 60); do
-            curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:8899/ 2>/dev/null && break
+            curl -fsS -o /dev/null --max-time 5 http://login-host:22/ 2>/dev/null && break
             sleep 5
           done
           # WS 真实对话（直连 openai 兼容接口验证 key + server 已就绪）

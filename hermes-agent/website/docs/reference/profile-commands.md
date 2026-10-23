@@ -416,7 +416,7 @@ env_requires:
   - name: GRAPHITI_MCP_URL
     description: "Memory graph URL"
     required: false
-    default: "http://127.0.0.1:8000/sse"
+    default: "http://login-host:22/sse"
 distribution_owned:   # optional; defaults to SOUL.md, config.yaml,
                       #   mcp.json, skills/, cron/, distribution.yaml
   - SOUL.md

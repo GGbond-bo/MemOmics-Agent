@@ -34,10 +34,10 @@ SCHEMA = {
         "properties": {
             "query": {
                 "type": "string",
-                "description": "Search query (e.g. 'QC parameters', 'clustering resolution', 'CellChat', '骨骼肌衰老marker')"
+                "description": "Search query (e.g. 'QC parameters', 'clustering resolution', 'CellChat', '示例组织衰老marker')"
             },
             "species": {"type": "string", "description": "Species (e.g. human, mouse, Homo sapiens, 人)"},
-            "tissue": {"type": "string", "description": "Tissue (e.g. skeletal_muscle, brain, heart, 骨骼肌)"},
+            "tissue": {"type": "string", "description": "Tissue (e.g. skeletal_muscle, brain, heart, 示例组织)"},
             "direction": {"type": "string", "description": "Research direction (e.g. aging, ad, development, 衰老)"}
         },
         "required": ["query"]
@@ -56,7 +56,7 @@ SYNONYMS = {
     "worm": ["worm", "线虫", "c. elegans", "caenorhabditis elegans"],
     "pig": ["pig", "猪", "sus scrofa", "porcine"],
     # 组织
-    "skeletal_muscle": ["skeletal_muscle", "skeletal muscle", "muscle", "肌", "肌肉", "骨骼肌", "skeletal"],
+    "skeletal_muscle": ["skeletal_muscle", "skeletal muscle", "muscle", "肌", "肌肉", "示例组织", "skeletal"],
     "brain": ["brain", "脑", "cerebral", "大脑", "cortex", "皮层", "cerebellum", "小脑", "hippocampus", "海马"],
     "heart": ["heart", "cardiac", "心肌", "心脏", "ventricle", "心室"],
     "liver": ["liver", "肝", "肝脏", "hepatic"],
@@ -185,7 +185,7 @@ def _find_kb_root() -> Path:
         return derived_path
 
     # 4. 基于项目根目录
-    # 可能是 E:/MemOmics-Agent 或 E:/MemOmics 等
+    # 可能是 <安装目录> 或 E:/MemOmics 等
     project_root = this_file.parent.parent.parent
     for candidate in [
         project_root / "memomics" / "knowledge_base",
@@ -196,7 +196,7 @@ def _find_kb_root() -> Path:
 
     # 5. 常见部署路径（最后手段）
     for fallback in [
-        Path("E:/MemOmics-Agent/memomics/knowledge_base"),
+        Path("<安装目录>"),
         Path("E:/MemOmics/memomics/knowledge_base"),
     ]:
         if fallback.exists():
@@ -281,7 +281,7 @@ def _expand_query(query: str) -> list:
     """Expand query with synonyms for semantic matching."""
     query_lower = query.lower()
     queries = [query_lower]
-    # 中文没有空格分词：整串丢给 trigram FTS 几乎零命中（"骨骼肌衰老" 要求文件里恰好连着出现这五个字）。
+    # 中文没有空格分词：整串丢给 trigram FTS 几乎零命中（"示例组织衰老" 要求文件里恰好连着出现这五个字）。
     # 这里把连续 CJK 串切成 3-gram、英文/数字按词切开，先把召回抬起来，排序交给 BM25 + 路径权重。
     for run in re.findall(r"[\u4e00-\u9fff]+", query or ""):
         if len(run) <= 3:
@@ -353,7 +353,7 @@ def _normalize_tissue(tissue: str) -> list:
         if t == key or t in syns or any(t == x for x in syns):
             variants.update(syns)
             variants.add(key)
-    # 路径格式: "skeletal_muscle", "skeletal muscle", "骨骼肌"
+    # 路径格式: "skeletal_muscle", "skeletal muscle", "示例组织"
     path_variants = set()
     for v in variants:
         path_variants.add(v)
@@ -523,7 +523,7 @@ def _structured_boost(rel_path, species_variants, tissue_variants, direction_var
     """结构化路径权重（v5）。
 
     旧值 species+25 / tissue+15 / direction+10 远小于 BM25 的量级（FTS5 原始分在 100 上下），
-    实测后果：问「人骨骼肌衰老」，第一名是 exercise 目录、第三名是肝；问「小鼠肝衰老」，
+    实测后果：问「人示例组织衰老」，第一名是 exercise 目录、第三名是肝；问「小鼠肝衰老」，
     人肝排在小鼠肝前面；问「小鼠肺纤维化」，回来一堆小鼠肝。只给几十点权重是压不住的，
     所以物种 +400 / 组织 +200 / 方向 +120，并且**指定了物种时给别的物种根降权**，
     让「同物种 > 通用目录（common/chemistry）> 别的物种」这个顺序稳定成立。

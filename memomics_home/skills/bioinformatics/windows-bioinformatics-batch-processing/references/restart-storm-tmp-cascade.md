@@ -1,4 +1,4 @@
-# 重启风暴 → 脚本级 unlink(tmp) → 级联失败（2026-08-07 GSE278576 40 样本实锤）
+# 重启风暴 → 脚本级 unlink(tmp) → 级联失败（2026-08-07 GSE000000 40 样本实锤）
 
 ## 事故时间线（memomics-1135ed52，ArchR createArrowFiles 批处理）
 

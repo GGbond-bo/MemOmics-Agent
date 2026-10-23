@@ -23,7 +23,7 @@ powershell.exe -NoProfile -Command "Start-Process cmd.exe -Verb RunAs -ArgumentL
 
 ## ⛔ 坑 1：HKLM BasePath=E:\WSL 对 store 版 WSL 不生效！
 - 注册表确实写入了（`reg query HKLM\...\Lxss` 能看到 BasePath=E:\WSL），但 **Ubuntu 发行版仍装到 `C:\Users\<user>\AppData\Local\wsl\<guid>\ext4.vhdx`**（store 版 WSL 2.7.x 用自己的路径管理，HKLM BasePath 是老流程）
-- 验证：HKCU 的发行版条目 BasePath = `C:\Users\23136\AppData\Local\wsl\{guid}`（本机实测 1.4GB）
+- 验证：HKCU 的发行版条目 BasePath = `<用户目录> 1.4GB）
 - **迁移 E 盘必须在发行版可用后**（完成后或重启后）：
   `wsl --shutdown` → `wsl --export Ubuntu E:\ubuntu-backup.tar` → `wsl --unregister Ubuntu` → `wsl --import Ubuntu E:\WSL\Ubuntu E:\ubuntu-backup.tar --version 2` → 删 tar
 - 不要在 OOBE 未完成时做 export/import（vhdx 正在被写/锁）
@@ -48,7 +48,7 @@ powershell.exe -NoProfile -Command "Start-Process cmd.exe -Verb RunAs -ArgumentL
 
 ## 安装产物（2026-08-31 本机实测）
 - WSL2 store 版 2.7.12.0（C:\Program Files\WSL\）+ Ubuntu 26.04 注册（Version=2）
-- vhdx 1.4GB：`C:\Users\23136\AppData\Local\wsl\1fb83261-d85b-441f-a959-737a7a7c481d\ext4.vhdx`
+- vhdx 1.4GB：`<用户目录>
 - 脚本 `E:\wsl_install.cmd`、日志 `E:\wsl_install.log`
 - 重启后待办：① 完成 Ubuntu 初始化（用户 `wsl` 建账户）② 迁移 C→E:\WSL\Ubuntu（export/import）③ `pip install pybigwig` 跑 L1 打分
 

@@ -1,7 +1,7 @@
 ---
 name: fig-split-program-heatmap-R
 description: >-
-  骨骼肌肌纤维 AUCell 程序打分矩阵热图（base graphics 零依赖 R 版）：18 程序 × 6 组 / 5 效应(Cohen's d) / 10 亚群三型版式，
+  示例组织肌纤维 AUCell 程序打分矩阵热图（base graphics 零依赖 R 版）：18 程序 × 6 组 / 5 效应(Cohen's d) / 10 亚群三型版式，
   RdBu_r 双色带 + 行分组色条 + 亚群 45° 标签，一次出 FigA1/A2/A3 + FigB1/B2/B3 六图 × PNG/PDF/SVG/TIFF @300dpi。
   触发词："fig_split_v10 的 R 版" / "18 程序打分热图出 R 版" / "6组×亚群矩阵热图 R" / "五效应 Cohen's d 热图 R" / "RdBu_r 双色热图 base graphics"
 metadata:
@@ -25,7 +25,7 @@ verified: 2026-09-15
 
 | 输入 | 格式 | 说明 |
 |------|------|------|
-| 细胞级打分表 | CSV（`MF_AUCell_meta.csv` 型） | 需含 `type`（6 组）、`annotation_L3`（10 亚群）、`samplename`，以及 `<程序名>_AUC` 列（无 `_AUC` 后缀时自动回退原名） |
+| 细胞级打分表 | CSV（`示例评分方法_meta.csv` 型） | 需含 `type`（6 组）、`annotation_L3`（10 亚群）、`samplename`，以及 `<程序名>_AUC` 列（无 `_AUC` 后缀时自动回退原名） |
 | 五效应统计表 | CSV（`effect5_d_v2.csv` 型） | 列：`effect`(Aging/T2D/ExYoung/ExOld/ExT2D)、`sub`、`score`、`d`、`q` |
 | 程序分组 | 脚本内 `PROGRAM` / `PROG_GROUPS` | 18 程序按功能轴分 5 组（见下），身份打分另 4 个单组 |
 
@@ -41,7 +41,7 @@ verified: 2026-09-15
 
 ## 验证状态
 
-- **验证日期**：2026-09-15；数据来源：真实（`E:/骨骼肌锻炼/MF_AUCell_meta.csv` 508,661 细胞 × 58 列，R 4.5.3）
+- **验证日期**：2026-09-15；数据来源：真实（`<数据目录> 508,661 细胞 × 58 列，R 4.5.3）
 - 与 Python 原版逐项比对结果：
 
 | 核验项 | 结果 |

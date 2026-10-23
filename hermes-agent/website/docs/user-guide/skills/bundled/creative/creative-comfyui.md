@@ -109,7 +109,7 @@ output download that the CLI doesn't do.
 ```bash
 # What's available?
 command -v comfy >/dev/null 2>&1 && echo "comfy-cli: installed"
-curl -s http://127.0.0.1:8188/system_stats 2>/dev/null && echo "server: running"
+curl -s http://login-host:22/system_stats 2>/dev/null && echo "server: running"
 
 # Can this machine run ComfyUI locally? (GPU/VRAM/disk check)
 python3 scripts/hardware_check.py
@@ -153,7 +153,7 @@ python3 scripts/extract_schema.py workflow_api.json
 ### Step 3: Run with parameters
 
 ```bash
-# Local (defaults to http://127.0.0.1:8188)
+# Local (defaults to http://login-host:22)
 python3 scripts/run_workflow.py \
   --workflow workflow_api.json \
   --args '{"prompt": "a beautiful sunset over mountains", "seed": -1, "steps": 30}' \
@@ -407,7 +407,7 @@ Default location: `~/comfy/ComfyUI` (Linux), `~/Documents/comfy/ComfyUI`
 ```bash
 comfy launch --background                       # background daemon on :8188
 comfy launch -- --listen 0.0.0.0 --port 8190    # LAN-accessible custom port
-curl -s http://127.0.0.1:8188/system_stats      # health check
+curl -s http://login-host:22/system_stats      # health check
 ```
 
 ---
@@ -505,7 +505,7 @@ python3 scripts/run_workflow.py \
 
 Manual upload via REST:
 ```bash
-curl -X POST "http://127.0.0.1:8188/upload/image" \
+curl -X POST "http://login-host:22/upload/image" \
   -F "image=@photo.png" -F "type=input" -F "overwrite=true"
 # Returns: {"name": "photo.png", "subfolder": "", "type": "input"}
 
@@ -540,10 +540,10 @@ curl -X POST "https://cloud.comfy.org/api/upload/image" \
 
 ```bash
 # Local
-curl -s http://127.0.0.1:8188/queue | python3 -m json.tool
-curl -X POST http://127.0.0.1:8188/queue -d '{"clear": true}'    # cancel pending
-curl -X POST http://127.0.0.1:8188/interrupt                      # cancel running
-curl -X POST http://127.0.0.1:8188/free \
+curl -s http://login-host:22/queue | python3 -m json.tool
+curl -X POST http://login-host:22/queue -d '{"clear": true}'    # cancel pending
+curl -X POST http://login-host:22/interrupt                      # cancel running
+curl -X POST http://login-host:22/free \
   -H "Content-Type: application/json" \
   -d '{"unload_models": true, "free_memory": true}'
 
@@ -560,7 +560,7 @@ python3 scripts/fetch_logs.py --tail-queue --host https://cloud.comfy.org
 
 2. **Server must be running** — all execution requires a live server.
    `comfy launch --background` starts one. Verify with
-   `curl http://127.0.0.1:8188/system_stats`.
+   `curl http://login-host:22/system_stats`.
 
 3. **Model names are exact** — case-sensitive, includes file extension.
    `check_deps.py` does fuzzy matching (with/without extension and folder

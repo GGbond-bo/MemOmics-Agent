@@ -119,7 +119,7 @@ rb.add_figure(
     caption_en="UMAP Visualization",
     method_zh="Seurat UMAP 降维可视化",
     result_zh="12个细胞群清晰分离",
-    bio_zh="Type II 纤维细胞是最大群体，符合骨骼肌组织特征",
+    bio_zh="Type II 纤维细胞是最大群体，符合示例组织组织特征",
     param_source_zh="聚类分辨率0.5来自知识库推荐（139条匹配）"
 )
 

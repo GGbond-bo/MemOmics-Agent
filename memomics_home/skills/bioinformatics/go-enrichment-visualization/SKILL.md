@@ -59,12 +59,12 @@ heatmap above is cleaner than a full dotplot grid.
 ## R environment bridge (reuse existing envs — do NOT reinstall or re-probe)
 `ComplexHeatmap`/`circlize` are NOT actually in the main R 4.5.3 (`E:/R-libs/R-4.5.3`) *despite
 `environment.json` listing them in key_pkgs*; they live in **R 4.4.2**
-(`C:/Users/23136/AppData/Local/R/R-4.4.2/`, ~526 pkgs). R 4.5.3 has `openxlsx`/`svglite`/`ragg`,
+(`<用户目录>, ~526 pkgs). R 4.5.3 has `openxlsx`/`svglite`/`ragg`,
 R 4.4.2 lacks them. Zero-install bridge:
 1. `execute_r` (kernel = R 4.5.3, has `openxlsx`) reads the `.xlsx`, cleans (drop rows where
    col1 == `"Cluster"`, keep rows whose GO ID matches `^GO:`), writes `data/go_heatmap_data.csv`.
 2. `terminal` runs R 4.4.2 Rscript (has ComplexHeatmap):
-   `"C:/Users/23136/AppData/Local/R/R-4.4.2/bin/x64/Rscript.exe" script.R`
+   `"<用户目录>" script.R`
 3. Export via **base `grDevices`** `png()`/`pdf()`/`svg()` — these ship with R and do NOT need
    svglite/ragg, so R 4.4.2 emits all three formats despite missing those packages.
    (A `circlize` "built under R 4.4.3" warning is harmless; `null device 1` lines are normal dev.off.)
@@ -347,7 +347,7 @@ Wi <- (tot_w + 0.20)/2.54; Hi <- (tot_h + 0.20)/2.54        # +0.2 cm 缓冲
 2. **默认用 Jaccard 去冗余**（纯集合运算，秒级，零 GOSemSim 依赖）：`scripts/jaccard_term_dedup.R`。阈值 Jaccard > 0.7 = 高度冗余；按 `p.adjust` 升序贪心一趟，未被归簇者当簇代表，`Members` 列留被合并词条供人工核对；矩阵 `median(off-diagonal)` 可作整体冗余度写进报告。
 3. 真要 `simplify()`：**只允许在 `p.adjust < 0.05` 的显著子集、且 `nrow <= 200` 时调用**（守卫写进脚本：`safe_simplify()`，别靠人记）。> 200 直接跳过改用 Jaccard。
 4. 假死判据：窗口 280s 内 CPU/IO 零变化 = 假死 → 强杀 → **改结构重跑，不要原样重试同一脚本**。⚠️ 强杀前先查 CommandLine：含 `_kernel_worker.py/.R`、`webui/server.py` 的是平台基础设施（按设计空闲待命），绝不杀；MSYS bash 下 `taskkill //F //T` 会被吃参数，用 psutil 按进程树杀。
-5. GO 引擎库路径：clusterProfiler / org.Hs.eg.db / enrichplot / DOSE 装在用户库 `C:/Users/23136/R/R-4.5.3-library`，持久内核默认 `.libPaths()` 不含它 → 跑前 `.libPaths(c("E:/R-libs/R-4.5.3", "C:/Users/23136/R/R-4.5.3-library", .libPaths()))`，否则报 "there is no package called 'clusterProfiler'"。
+5. GO 引擎库路径：clusterProfiler / org.Hs.eg.db / enrichplot / DOSE 装在用户库 `<用户目录>，持久内核默认 `.libPaths()` 不含它 → 跑前 `.libPaths(c("E:/R-libs/R-4.5.3", "<用户目录>", .libPaths()))`，否则报 "there is no package called 'clusterProfiler'"。
 6. **已落盘的 ORA 表永不重算**：只补缺的那部分（去冗余 / simplify / 出图）。
 
 > 完整排查记录（已落盘 vs 缺失产物对照表、6 组 ORA 产出数、分级替代方案、阈值依据）：`references/go-ora-simplify-hang-and-jaccard-dedup.md`

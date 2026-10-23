@@ -682,7 +682,7 @@ def stop_kernel_by_id(kernel_id: str) -> dict:
 
 # ---------------- 用户决策（2026-10-18）----------------
 INTERACTIVE_IDLE_SEC = 6 * 3600     # 决策1：6 小时不动自动结束
-LOGIN_NODE_PATTERNS = ("login", "cngb-login")   # 决策3：登录节点禁止跑重分析
+LOGIN_NODE_PATTERNS = ("login", "cluster-login")   # 决策3：登录节点禁止跑重分析
 
 
 def is_login_node(host: str) -> bool:
@@ -851,7 +851,7 @@ def submit_job(code: str, lang: str = "R", purpose: str = "RNA", slots: int = 4,
         _m = _re.search(r"Your job(?:-array)?\s+(\d+)", out)
         job_id = "" if _fail else (_m.group(1) if _m else "")
         if not job_id:
-            # 降级：该集群（ssh3/ssh0/ssh23）scheduler=none，正确模式是**直接 ssh 到计算节点 nohup 直跑**
+            # 降级：该集群（node1/node3/node4）scheduler=none，正确模式是**直接 ssh 到计算节点 nohup 直跑**
             try:
                 _exitf = remote_script + ".exit"
                 _inner = (f"cd {workdir or '~'} && {exe} {remote_script} > {remote_log} 2>&1; "

@@ -118,7 +118,7 @@ SCHEMA = {
                                 "cloud=云平台（本机核不了 → 全部 unverified，绝不算缺包）。"
                                 "集群任务别用 local 判——本地缺 ≠ 集群缺。")
             },
-            "node": {"type": "string", "description": "scope=cluster：节点名（如 ssh23；只配一个节点时可省）"},
+            "node": {"type": "string", "description": "scope=cluster：节点名（如 node4；只配一个节点时可省）"},
             "env": {"type": "string", "description": "scope=cluster：conda 环境名（如 R4.41）"},
             "rscript": {"type": "string", "description": "scope=cluster：Rscript 绝对路径（覆盖自动探测）"},
         },

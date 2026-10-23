@@ -7,7 +7,7 @@ import asyncio, json, sys, time
 import websockets
 
 SID = "memomics-2274ab75"
-WS_URL = "ws://127.0.0.1:8899/ws"
+WS_URL = "ws://login-host:22/ws"
 
 MESSAGES = [
     "就用 scripts/ 的约定，并按记忆回答：R 版本和 R 库目录是什么？",

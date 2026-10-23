@@ -6,7 +6,7 @@ Hermes Kanban 系统所设计的四个使用场景的完整演示，需在浏览
 
 ```bash
 hermes kanban init           # 可选；首次执行 `hermes kanban <任何命令>` 会自动初始化
-hermes dashboard             # 在浏览器中打开 http://127.0.0.1:9119
+hermes dashboard             # 在浏览器中打开 http://login-host:22
 # 点击左侧导航栏中的 Kanban
 ```
 

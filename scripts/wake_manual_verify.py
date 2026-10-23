@@ -4,19 +4,19 @@ import asyncio, json, time, urllib.request
 import websockets
 
 SID = "memomics-2274ab75"
-WS_URL = "ws://127.0.0.1:8899/ws"
-PLAN = r"E:\MemOmics-Agent\results\memomics-2274ab75\task_plan.md"
+WS_URL = "ws://login-host:22/ws"
+PLAN = r"<安装目录>"
 
 def wakeup(reason="progress", msg="manual test"):
     body = json.dumps({"reason": reason, "msg": msg}).encode()
     req = urllib.request.Request(
-        f"http://127.0.0.1:8899/api/sessions/{SID}/wakeup",
+        f"http://login-host:22/api/sessions/{SID}/wakeup",
         data=body, headers={"Content-Type": "application/json"}, method="POST")
     with urllib.request.urlopen(req, timeout=15) as resp:
         return json.loads(resp.read().decode())
 
 def last_self_checks(n=3):
-    path = r"E:\MemOmics-Agent\results\memomics-2274ab75\token_usage.jsonl"
+    path = r"<安装目录>"
     out = []
     for line in open(path, encoding="utf-8"):
         line = line.strip()

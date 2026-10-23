@@ -544,7 +544,7 @@ DeepRare 14 · Co-Scientist 14 · ChemCrow 14 · ChemGraph 12 · BioMaster 11 �
 
 🔴 **⓪-e 的第二形态：路径串「自我嵌套」而不是被截断（2026-10-12 二轮实测，同轮 5 条）**。
 本轮会话要求块报的是这种：
-`"E:\文献\AI\agent\literature\10.1038_s4158(E:\文献\AI\agent\literature\10.1038_s41586-025-10097-9.pdf" 不存在`
+`"<数据目录>:\文献\AI\agent\literature\10.1038_s41586-025-10097-9.pdf" 不存在`
 —— 被引号包住的那串**自己套着自己的截断前缀**。判据：**把「不存在的路径」按 `(` 切一刀，
 若括号里又出现一条完整路径（或该串自己的前缀）⇒ 渲染器伪影，不是文件丢了**。
 ⇒ 处置与 ⓪-e 主条相同（批量实查 → 一行更正 → 台账销账 → 此后各轮正文不再提），只是**检测式不同**：
@@ -952,7 +952,7 @@ DeepRare 14 · Co-Scientist 14 · ChemCrow 14 · ChemGraph 12 · BioMaster 11 �
       本裁决只管「发给用户的那条回复」。
    4-b-vii 🔴 **核销轮不得改写 `task_plan.md` 的 Goal 行 —— 主线目标会被「维护型循环」吃掉（2026-10-13 `memomics-be17649b` 实测）**：
       同一会话跑满 20 轮回执核销后，`task_plan.md` 的 **Goal 字段变成了「处理系统投递的 deleg 回执（迟到重放核销）」**，
-      原交付目标只剩标题行里一段被截断的 PDF 名（`"E:\文献\AI\Closed-loop transfer enables artificial intelligence to yield chemical`）。
+      原交付目标只剩标题行里一段被截断的 PDF 名（`"<数据目录> transfer enables artificial intelligence to yield chemical`）。
       下一次唤醒注入的就是这份 plan ⇒ 主线任务（竞品卡交付）**在任何摘要里都不再出现**，只剩「核销」二字
       —— 于是循环自我确认：唤醒看到 Goal=核销 ⇒ 再核销 ⇒ 再写进 Goal。
       ⇒ 判据（机械）：**核销 / 唤醒 / LoopX tick 属维护动作，⛔ 不改写主目标。**

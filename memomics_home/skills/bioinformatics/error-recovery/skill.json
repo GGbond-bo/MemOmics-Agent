@@ -64,7 +64,7 @@
       "auto_score": 0.0,
       "approved": false,
       "custom_script": false,
-      "result": "探查用户本地是否有 GRCh38.primary_assembly.genome.fa.gz 和 gencode.v32.primary_assembly.annotation.gtf.gz：search_files 在 E:/ 与 C:/Users/23136 返回 0；bash find E 盘 maxdepth4/全盘 deep 均 0（仅 /e/tmp/GRCh38.H3K4me3... "
+      "result": "探查用户本地是否有 GRCh38.primary_assembly.genome.fa.gz 和 gencode.v32.primary_assembly.annotation.gtf.gz：search_files 在 E:/ 与 <用户目录> 返回 0；bash find E 盘 maxdepth4/全盘 deep 均 0（仅 /e/tmp/GRCh38.H3K4me3... "
     },
     {
       "species": "",

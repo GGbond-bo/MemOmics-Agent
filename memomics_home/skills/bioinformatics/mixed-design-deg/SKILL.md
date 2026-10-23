@@ -87,7 +87,7 @@ as a random effect」一句，指向 MAST 模型**含样本随机效应**；但�
 不要在论文里替它断言随机效应有无，也**不要**拿这篇当 `(1|individual)` 的引用依据
 （要引随机效应：自己给 `glmer` 实测，或引该篇**细胞比例**分析那句明写了 `(1|sample)` 的 Poisson GLMM）。
 同一篇的**细胞比例**分析则用 Poisson GLMM `n ~ age + modality + (1|sample) + offset(log(total cell))`
-—— 该用随机效应的地方它确实用了。代码：`github.com/3DC-STAR-Anthony/NHPABC` →
+—— 该用随机效应的地方它确实用了。代码：`github.com/3DC-STAR-Anthony/example-cohort` →
 `snRNA/04.Identification_of_differentially_expressed_genes(DEGs)/RUV_MAST_pDEG_MBA.R`、`RUV-seq_sDEGs.R`。
 
 ⇒ **本类设计（多供体 / 每组 7–10 / Pre-Post 配对）的推荐仍是 pseudobulk + dream LMM**

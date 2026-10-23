@@ -52,14 +52,14 @@
 - 与 muscat 的 **DA**（组成变化）呼应：按亚群做 pseudobulk DEG 对**亚群内部**表达变化敏感，
   对**亚群之间比例变化结构性失明** —— 组成变化必须单独检验。
 
-## E. 本类项目的应用先例（骨骼肌 + 运动 + 糖尿病 / 衰老）
+## E. 本类项目的应用先例（示例组织 + 运动 + 糖尿病 / 衰老）
 
 | 文献 | 年份 | 为什么有用 |
 |---|---|---|
 | Hansen *J Physiol*（PMID **40413649**） | 2025 | **单核 RNA-seq + 训练干预 + 2 型糖尿病**；结论「T2D 个体肌核转录响应被削弱」—— 与「老年糖尿病组运动」设计镜像对应 |
 | Lixandrao *J Appl Physiol*（PMID 40839394） | 2025 | 老年男女抗阻训练高/低响应者，within-subject 设计 |
 | Koopmans *Adv Sci*（PMID 41704039） | 2026 | 年龄依赖的肌核多组学对肥大刺激的响应 |
-| Zhang X *Cell*（PMID **42612631**） | 2026 | 猴脑衰老图谱，**细胞级 MAST + RUV 因子**做主 DEG 的官方先例（源码 `github.com/3DC-STAR-Anthony/NHPABC`） |
+| Zhang X *Cell*（PMID **42612631**） | 2026 | 猴脑衰老图谱，**细胞级 MAST + RUV 因子**做主 DEG 的官方先例（源码 `github.com/3DC-STAR-Anthony/example-cohort`） |
 | Dilbaz *bioRxiv* | 2025 | 肌纤维类型特异的训练适应（小鼠），`10.1101/2025.11.04.686534` |
 
 ## 选型速查（判据 → 方法）

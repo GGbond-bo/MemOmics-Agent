@@ -79,7 +79,7 @@ evidence_quote  min=   91(n=4)   p25=  128  median=  157  max=  244(n=1)
 
 同一轮里，会话要求块标注：
 
-> ⚠️ 以下要求中的路径不存在，请向用户核实：`E:\文献\AI\Closed-loop transfer enables a(…`
+> ⚠️ 以下要求中的路径不存在，请向用户核实：`<数据目录> transfer enables a(…`
 
 实测 `os.path.exists()` **为真**（同目录 2 个文件）—— 警告是**字符串被截断显示**造成的误报
 （注意警告里的路径本身在 `…enables a` 处被切断了）。

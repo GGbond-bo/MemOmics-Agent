@@ -29,8 +29,8 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle, FancyArrowPatch
 
-OUT = r"E:/MemOmics-Agent/results/memomics-afd2d418/task2/figures"
-SRC = r"E:/MemOmics-Agent/results/memomics-afd2d418/task2/results/deg_subcluster_updown_coef025_matrix.csv"
+OUT = r"<安装目录>"
+SRC = r"<安装目录>"
 # 变体开关（内核 exec 时可注入）：right = 竖直箭头在各自数字右侧 | center = 竖直箭头贴中心线内侧
 MF_VARIANT = globals().get("MF_VARIANT", "center")
 STEM = globals().get("STEM_OVERRIDE") or "fig_deg_updown_8sub_MF_v7b_arrows_at_center"

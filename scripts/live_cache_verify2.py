@@ -4,19 +4,19 @@ import asyncio, json, time
 import websockets
 
 SID = "memomics-2274ab75"
-WS_URL = "ws://127.0.0.1:8899/ws"
+WS_URL = "ws://login-host:22/ws"
 
 MSGS = [
     # heavy：数据路径 + 执行关键词
-    "用工具读一下 E:/骨骼肌锻炼/MF_AUCell_meta.csv 的前 5 行，报告列名。",
+    "用工具读一下 <数据目录> 的前 5 行，报告列名。",
     # light：闲聊/知识问（无执行）
     "R 语言里 dplyr 的 filter 和 slice 有什么区别？一句话回答。",
     # heavy again：不同分析问题
-    "统计 E:/骨骼肌锻炼/MF_AUCell_meta.csv 有多少列（用工具数），只回答数字。",
+    "统计 <数据目录> 有多少列（用工具数），只回答数字。",
 ]
 
 async def last_turn():
-    path = r"E:\MemOmics-Agent\results\memomics-2274ab75\token_usage.jsonl"
+    path = r"<安装目录>"
     last = None
     for line in open(path, encoding="utf-8"):
         line = line.strip()

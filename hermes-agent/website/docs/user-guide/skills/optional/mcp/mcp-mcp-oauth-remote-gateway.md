@@ -200,7 +200,7 @@ POST to the `registration_endpoint` with:
 ```json
 {
   "client_name": "Hermes Agent (manual OAuth)",
-  "redirect_uris": ["http://127.0.0.1:8765/callback"],
+  "redirect_uris": ["http://login-host:22/callback"],
   "grant_types": ["authorization_code", "refresh_token"],
   "response_types": ["code"],
   "token_endpoint_auth_method": "none",
@@ -238,7 +238,7 @@ default set on its own. Fabricating scope strings against an empty
 Open this URL in your browser:
 <authorize_url>
 
-After approving, your browser will try to load http://127.0.0.1:8765/callback
+After approving, your browser will try to load http://login-host:22/callback
 and fail to connect — THAT'S EXPECTED. Just copy the entire URL from the
 address bar (it will contain ?code=...&state=...) and paste it back here.
 ```
@@ -278,7 +278,7 @@ When the user pastes the callback URL:
 ```json
 {
   "client_id": "...",
-  "redirect_uris": ["http://127.0.0.1:8765/callback"],
+  "redirect_uris": ["http://login-host:22/callback"],
   "grant_types": ["authorization_code", "refresh_token"],
   "response_types": ["code"],
   "token_endpoint_auth_method": "none",

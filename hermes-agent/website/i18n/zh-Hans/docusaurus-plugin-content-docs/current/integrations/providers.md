@@ -859,7 +859,7 @@ ip route show | grep -i default | awk '{ print $3 }'
 model:
   default: qwen2.5-coder:32b
   provider: custom
-  base_url: http://172.29.192.1:11434/v1   # Windows 主机 IP，非 localhost
+  base_url: http://login-host:22/v1   # Windows 主机 IP，非 localhost
 ```
 
 :::tip 动态获取
@@ -912,7 +912,7 @@ New-NetFirewallRule -DisplayName "Allow WSL2 to Model Server" -Direction Inbound
 ```bash
 # 将 URL 替换为你服务器的地址和端口
 curl http://localhost:11434/v1/models          # 镜像模式
-curl http://172.29.192.1:11434/v1/models       # NAT 模式（使用你的实际主机 IP）
+curl http://login-host:22/v1/models       # NAT 模式（使用你的实际主机 IP）
 ```
 
 如果收到列出模型的 JSON 响应，说明配置正确。在 Hermes 配置中使用相同的 URL 作为 `base_url`。

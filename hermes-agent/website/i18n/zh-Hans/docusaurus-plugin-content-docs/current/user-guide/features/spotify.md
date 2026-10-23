@@ -63,7 +63,7 @@ hermes auth spotify
 | App name | 任意（例如 `hermes-agent`） |
 | App description | 任意（例如 `personal Hermes integration`） |
 | Website | 留空 |
-| Redirect URI | `http://127.0.0.1:43827/spotify/callback` |
+| Redirect URI | `http://login-host:22/spotify/callback` |
 | Which API/SDKs? | 勾选 **Web API** |
 
 同意条款并点击 **Save**。在下一页点击 **Settings** → 复制 **Client ID** 并粘贴到 Hermes 提示中。这是 Hermes 唯一需要的值——PKCE 不使用 client secret。
@@ -73,7 +73,7 @@ hermes auth spotify
 若设置了 `SSH_CLIENT` 或 `SSH_TTY`，Hermes 在向导和 OAuth 步骤中均会跳过自动打开浏览器。复制 Hermes 打印的 dashboard URL 和授权 URL，在本地机器的浏览器中打开，然后正常操作——本地 HTTP 监听器仍在远程主机的 `43827` 端口运行。你的笔记本浏览器无法直接访问远程回环地址，需要通过 SSH 本地端口转发：
 
 ```bash
-ssh -N -L 43827:127.0.0.1:43827 user@remote-host
+ssh -N -L 43827:login-host:22 user@remote-host
 ```
 
 关于跳板机/堡垒机设置及其他注意事项（mosh、tmux、端口冲突），请参阅 [OAuth over SSH / Remote Hosts](../../guides/oauth-over-ssh.md)。
@@ -237,7 +237,7 @@ hermes auth logout spotify
 
 **`get_currently_playing` 返回 `204 No Content`** — 当前所有设备上均无内容播放。这是 Spotify 的正常响应，不是错误；Hermes 将其呈现为说明性的空结果（`is_playing: false`）。
 
-**`INVALID_CLIENT: Invalid redirect URI`** — 你的 Spotify 应用设置中的 redirect URI 与 Hermes 使用的不匹配。默认值为 `http://127.0.0.1:43827/spotify/callback`。请将其添加到应用的允许 redirect URI 列表中，或在 `~/.hermes/.env` 中将 `HERMES_SPOTIFY_REDIRECT_URI` 设置为你注册的值。
+**`INVALID_CLIENT: Invalid redirect URI`** — 你的 Spotify 应用设置中的 redirect URI 与 Hermes 使用的不匹配。默认值为 `http://login-host:22/spotify/callback`。请将其添加到应用的允许 redirect URI 列表中，或在 `~/.hermes/.env` 中将 `HERMES_SPOTIFY_REDIRECT_URI` 设置为你注册的值。
 
 **`429 Too Many Requests`** — Spotify 的速率限制。Hermes 会返回友好的错误提示；等待一分钟后重试。若持续出现，你可能在脚本中运行了紧密循环——Spotify 的配额大约每 30 秒重置一次。
 

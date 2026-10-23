@@ -48,9 +48,9 @@ recommend 非空（有 ≥100MB 项）？
 # 建标记：读了什么 / 缓存放哪 / 产物是什么 / 几时过期
 python -m memomics.bio_tools.large_cache mark \
   --task-id MF_light_20261008 --title "MF 10GB 长任务" \
-  --input /hwfssz3/PS_JLU/zhangbo/MF_clean_annotation_umap.rds \
-  --cache-root /hwfssz3/PS_JLU/zhangbo/MF_work/cache \
-  --artifact /hwfssz3/PS_JLU/zhangbo/MF_work/cache/light.rds \
+  --input /cluster/share/user/MF_clean_annotation_umap.rds \
+  --cache-root /cluster/share/user/MF_work/cache \
+  --artifact /cluster/share/user/MF_work/cache/light.rds \
   --remote --ttl-days 14 --session-dir results/<sid>
 
 # 看全 / 自证 / 清理（默认 dry-run）

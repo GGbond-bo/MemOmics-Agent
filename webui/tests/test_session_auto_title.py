@@ -25,7 +25,7 @@ def _inject_user_msgs(sid, n):
     for i in range(n):
         s["messages"].append({
             "role": "user",
-            "content": f"第{i + 1}条消息：分析人类骨骼肌单细胞数据",
+            "content": f"第{i + 1}条消息：分析人类示例组织单细胞数据",
             "time": "",
         })
 
@@ -33,7 +33,7 @@ def _inject_user_msgs(sid, n):
 class FakeResp:
     """mock chat/completions 响应：固定总结出一个标题"""
 
-    def __init__(self, title="人类骨骼肌单细胞分析"):
+    def __init__(self, title="人类示例组织单细胞分析"):
         self._title = title
 
     def raise_for_status(self):
@@ -143,14 +143,14 @@ def test_auto_summary_updates_title(new_session, monkeypatch):
     server._title_summary_locks.clear()
     server._auto_summarize_title(new_session)
     assert new_session not in server._title_summary_locks  # finally 清理
-    assert s["title"].startswith("人类骨骼肌单细胞分析")  # 容忍其他测试留下的同名
+    assert s["title"].startswith("人类示例组织单细胞分析")  # 容忍其他测试留下的同名
     assert s["title_source"] == "auto"
     db = server._get_session_db()
     if db:
-        assert db.get_session_title(new_session) == "人类骨骼肌单细胞分析"
+        assert db.get_session_title(new_session) == "人类示例组织单细胞分析"
     # WS 推送事件已记录（切回该会话时前端靠它刷新标题）
     evs = [m for m in s.get("progress_log", []) if m.get("type") == "session_title"]
-    assert evs and evs[-1]["title"] == "人类骨骼肌单细胞分析"
+    assert evs and evs[-1]["title"] == "人类示例组织单细胞分析"
 
 
 def test_auto_summary_title_collision_continues(new_session, monkeypatch):
@@ -162,7 +162,7 @@ def test_auto_summary_title_collision_continues(new_session, monkeypatch):
     s["_title_summary_at_msg"] = 0
     db = server._get_session_db()
     other = None
-    collide_title = f"人类骨骼肌单细胞分析-{uuid.uuid4().hex[:4]}"
+    collide_title = f"人类示例组织单细胞分析-{uuid.uuid4().hex[:4]}"
     try:
         if db:
             other = server._create_session(title=f"占位-{uuid.uuid4().hex[:4]}")["id"]
@@ -296,15 +296,15 @@ def test_scenario_noisy_title_cleaned(new_session, monkeypatch):
 
 def test_scenario_same_title_skipped(new_session, monkeypatch):
     """场景：总结结果与现名相同 → 不写回、不发事件（幂等）"""
-    fake = FakeLLM(default="人类骨骼肌单细胞分析")
+    fake = FakeLLM(default="人类示例组织单细胞分析")
     monkeypatch.setattr(httpx, "post", fake)
     s = server._sessions[new_session]
     s["title_source"] = "auto"
-    s["title"] = "人类骨骼肌单细胞分析"  # 已是最佳名
+    s["title"] = "人类示例组织单细胞分析"  # 已是最佳名
     _set_user_msgs(new_session, [f"内容{i}" for i in range(6)])
     evs_before = len(s.get("progress_log", []))
     server._auto_summarize_title(new_session)
-    assert s["title"] == "人类骨骼肌单细胞分析"
+    assert s["title"] == "人类示例组织单细胞分析"
     assert len(s.get("progress_log", [])) == evs_before  # 无新事件
 
 
@@ -314,7 +314,7 @@ def test_scenario_same_title_skipped(new_session, monkeypatch):
 
 def test_angle_meta_projection_synced(new_session, monkeypatch, tmp_path):
     """角度：results_dir 下 session.meta.json 的 display_name 同步更新"""
-    fake = FakeLLM(default="人类骨骼肌单细胞分析")
+    fake = FakeLLM(default="人类示例组织单细胞分析")
     monkeypatch.setattr(httpx, "post", fake)
     s = server._sessions[new_session]
     s["title_source"] = "auto"
@@ -325,13 +325,13 @@ def test_angle_meta_projection_synced(new_session, monkeypatch, tmp_path):
     _set_user_msgs(new_session, [f"内容{i}" for i in range(6)])
     server._auto_summarize_title(new_session)
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    assert meta["display_name"] == "人类骨骼肌单细胞分析"
+    assert meta["display_name"] == "人类示例组织单细胞分析"
     assert "renamed_at" in meta
 
 
 def test_angle_rename_event_audited(new_session, monkeypatch):
     """角度：自动改名也写审计（rename_events.jsonl，source=auto）"""
-    fake = FakeLLM(default="人类骨骼肌单细胞分析")
+    fake = FakeLLM(default="人类示例组织单细胞分析")
     monkeypatch.setattr(httpx, "post", fake)
     s = server._sessions[new_session]
     s["title_source"] = "auto"
@@ -344,7 +344,7 @@ def test_angle_rename_event_audited(new_session, monkeypatch):
     last = json.loads(open(log_path, encoding="utf-8").read().strip().split("\n")[-1])
     assert last["session_id"] == new_session
     assert last["source"] == "auto"
-    assert last["new_title"] == "人类骨骼肌单细胞分析"
+    assert last["new_title"] == "人类示例组织单细胞分析"
 
 
 def test_angle_prompt_uses_session_content(new_session, monkeypatch):
@@ -370,14 +370,14 @@ def test_angle_prompt_uses_session_content(new_session, monkeypatch):
 
 def test_angle_consecutive_summaries_throttled(new_session, monkeypatch):
     """角度：总结成功后 _title_summary_at_msg 推进 → 第二次调度被防抖拦截"""
-    fake = FakeLLM(default="人类骨骼肌单细胞分析")
+    fake = FakeLLM(default="人类示例组织单细胞分析")
     monkeypatch.setattr(httpx, "post", fake)
     s = server._sessions[new_session]
     s["title_source"] = "auto"
     s["title"] = "pytest-初始标题"
     _set_user_msgs(new_session, [f"内容{i}" for i in range(8)])
     server._auto_summarize_title(new_session)
-    assert s["title"] == "人类骨骼肌单细胞分析"
+    assert s["title"] == "人类示例组织单细胞分析"
     assert int(s["_title_summary_at_msg"]) == 8  # 指针推进
     n_calls = len(fake.calls)
     server._schedule_title_summary(new_session)  # 没有新增消息
@@ -393,13 +393,13 @@ def test_multi_user_sessions_isolated(new_session, monkeypatch):
     """多用户：两个会话内容不同 → 各自总结互不污染"""
     other = server._create_session(title=f"其他用户-{uuid.uuid4().hex[:4]}")["id"]
     try:
-        fake = FakeLLM(route={"骨骼肌": "人类骨骼肌单细胞分析", "ATAC": "小鼠脑 ATAC 峰值分析"})
+        fake = FakeLLM(route={"示例组织": "人类示例组织单细胞分析", "ATAC": "小鼠脑 ATAC 峰值分析"})
         monkeypatch.setattr(httpx, "post", fake)
         s1 = server._sessions[new_session]
         s1["title_source"] = "auto"
         s1["title"] = "pytest-初始标题"
         _set_user_msgs(new_session, [
-            "人类骨骼肌单细胞数据",
+            "人类示例组织单细胞数据",
             "UMAP 聚类看分群",
             "marker 基因注释",
             "细胞类型比例差异",
@@ -415,7 +415,7 @@ def test_multi_user_sessions_isolated(new_session, monkeypatch):
         ])
         server._auto_summarize_title(new_session)
         server._auto_summarize_title(other)
-        assert s1["title"] == "人类骨骼肌单细胞分析"
+        assert s1["title"] == "人类示例组织单细胞分析"
         assert s2["title"].startswith("小鼠脑 ATAC 峰值分析")
         assert len(fake.calls) == 2  # 两次独立调用
     finally:
@@ -469,7 +469,7 @@ def test_multi_user_manual_and_auto_coexist(new_session, monkeypatch):
     """多用户：manual 会话（用户自定义名）与 auto 会话并存，互不干扰"""
     other = server._create_session(title=f"手动用户-{uuid.uuid4().hex[:4]}")["id"]
     try:
-        fake = FakeLLM(default="人类骨骼肌单细胞分析")
+        fake = FakeLLM(default="人类示例组织单细胞分析")
         monkeypatch.setattr(httpx, "post", fake)
         # auto 会话正常总结
         s1 = server._sessions[new_session]
@@ -484,7 +484,7 @@ def test_multi_user_manual_and_auto_coexist(new_session, monkeypatch):
         _set_user_msgs(other, [f"内容{i}" for i in range(6)])
         server._auto_summarize_title(new_session)
         server._auto_summarize_title(other)
-        assert s1["title"] == "人类骨骼肌单细胞分析"
+        assert s1["title"] == "人类示例组织单细胞分析"
         assert s2["title"] == "我的专属会话名"  # 手动名未被覆盖
     finally:
         server._sessions.pop(other, None)

@@ -75,7 +75,7 @@ metadata:
 `results/trajectory_summary.md`（A/B/C 分级 + 限制声明 + 验证集）
 `figures/` 300dpi：轨迹图（细胞类型/伪时间/分组/注释各一）、多根对照图、独立降维对照图、伪时间 × 组小提琴、供体级配对斜率图、效应热图、根敏感性条形图。
 
-📄 完整配方与本次实例数值（MF_2000：2132 细胞，RSS/TypeI/TypeII，24 供体配对）见 `references/robustness-gates-and-donor-level-stats.md`。
+📄 完整配方与本次实例数值（示例数据：2132 细胞，RSS/TypeI/TypeII，24 供体配对）见 `references/robustness-gates-and-donor-level-stats.md`。
 
 ## ⛔ 收尾强制协议
 

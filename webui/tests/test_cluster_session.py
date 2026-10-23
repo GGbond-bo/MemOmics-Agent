@@ -97,11 +97,11 @@ def test_obj_name_from_path(pair):
 def test_registry_roundtrip_and_latest(pair):
     cs, _ = pair
     assert cs._load_registry() == {}
-    cs._registry_upsert({"id": "s-b", "node": "ssh23", "dir": "/wd/b", "created": "2026-10-09 10:00:00",
+    cs._registry_upsert({"id": "s-b", "node": "node4", "dir": "/wd/b", "created": "2026-10-09 10:00:00",
                          "last_active": "2026-10-09 10:05:00", "status": "active"})
-    cs._registry_upsert({"id": "s-a", "node": "ssh3", "dir": "/wd/a", "created": "2026-10-09 09:00:00",
+    cs._registry_upsert({"id": "s-a", "node": "node1", "dir": "/wd/a", "created": "2026-10-09 09:00:00",
                          "last_active": "2026-10-09 11:00:00", "status": "active"})
-    cs._registry_upsert({"id": "s-dead", "node": "ssh3", "dir": "/wd/d", "created": "2026-10-08 09:00:00",
+    cs._registry_upsert({"id": "s-dead", "node": "node1", "dir": "/wd/d", "created": "2026-10-08 09:00:00",
                          "last_active": "2026-10-08 12:00:00", "status": "stopped"})
     reg = cs._load_registry()
     assert set(reg) == {"s-a", "s-b", "s-dead"}
@@ -109,8 +109,8 @@ def test_registry_roundtrip_and_latest(pair):
     assert cs.find_session("nope") is None
     # 最近活跃（未停止优先，stopped 兜底）
     assert cs.latest_session()["id"] == "s-a"
-    assert cs.latest_session("ssh3")["id"] == "s-a"
-    assert cs.latest_session("ssh23")["id"] == "s-b"
+    assert cs.latest_session("node1")["id"] == "s-a"
+    assert cs.latest_session("node4")["id"] == "s-b"
     # 全部 stopped 时才回落到 stopped
     cs._registry_touch(cs.find_session("s-a"), status="stopped")
     assert cs.latest_session()["id"] == "s-b"
@@ -118,7 +118,7 @@ def test_registry_roundtrip_and_latest(pair):
 
 def test_registry_touch_merges(pair):
     cs, _ = pair
-    rec = cs._registry_upsert({"id": "s-x", "node": "ssh3", "dir": "/wd/x"})
+    rec = cs._registry_upsert({"id": "s-x", "node": "node1", "dir": "/wd/x"})
     out = cs._registry_touch(rec, last_status="ok", readrds_calls=1)
     assert out["dir"] == "/wd/x" and out["last_status"] == "ok"
     assert cs.find_session("s-x")["last_status"] == "ok"
@@ -283,7 +283,7 @@ def _wire_status(cs, rc, monkeypatch, output):
     fake = _FakeConn(output=output)
     monkeypatch.setattr(rc, "_select_node",
                         lambda cfg, req: ({"workdir": "/wd", "host": "h", "user": "u"},
-                                          req or "ssh23", None))
+                                          req or "node4", None))
     monkeypatch.setattr(rc, "_get_conn", lambda cfg: fake)
     monkeypatch.setattr(rc, "_exec_env", lambda conn, cmd, timeout=None: conn.execute(cmd))
     return fake
@@ -291,7 +291,7 @@ def _wire_status(cs, rc, monkeypatch, output):
 
 def test_action_status_alive(pair, monkeypatch):
     cs, rc = pair
-    cs._registry_upsert({"id": "s-1", "node": "ssh23", "dir": "/wd/sess/s-1", "status": "active"})
+    cs._registry_upsert({"id": "s-1", "node": "node4", "dir": "/wd/sess/s-1", "status": "active"})
     out_text = "\n".join([
         "==STATE==", "pid=4242", "status=idle", "started=2026-10-09 10:00:00",
         "updated=2026-10-09 10:10:00", "jobs_done=3", "readrds_calls=1", "objects=5", "rss_kb=1048576",
@@ -313,7 +313,7 @@ def test_action_status_alive(pair, monkeypatch):
 
 def test_action_status_dead_gives_recovery_hint(pair, monkeypatch):
     cs, rc = pair
-    cs._registry_upsert({"id": "s-2", "node": "ssh3", "dir": "/wd/sess/s-2", "status": "active"})
+    cs._registry_upsert({"id": "s-2", "node": "node1", "dir": "/wd/sess/s-2", "status": "active"})
     out_text = "\n".join(["==STATE==", "pid=1", "status=stopped", "readrds_calls=2", "objects=0",
                           "==PS==", "MM_DEAD", "==QUEUE==", "--run--", "==DONE==", "==CKPT==",
                           "ckpt/c1.rds", "==LOG==", "[t] daemon exit"])
@@ -325,11 +325,11 @@ def test_action_status_dead_gives_recovery_hint(pair, monkeypatch):
 
 def test_action_exec_through_fake_conn(pair, monkeypatch):
     cs, rc = pair
-    cs._registry_upsert({"id": "s-3", "node": "ssh23", "dir": "/wd/sess/s-3", "status": "active"})
+    cs._registry_upsert({"id": "s-3", "node": "node4", "dir": "/wd/sess/s-3", "status": "active"})
     fake = _FakeConn(output="")
     monkeypatch.setattr(rc, "_select_node",
                         lambda cfg, req: ({"workdir": "/wd", "host": "h", "user": "u"},
-                                          req or "ssh23", None))
+                                          req or "node4", None))
     monkeypatch.setattr(rc, "_get_conn", lambda cfg: fake)
     posted = {}
 
@@ -358,9 +358,9 @@ def test_action_exec_through_fake_conn(pair, monkeypatch):
 
 def test_action_exec_async_returns_immediately(pair, monkeypatch):
     cs, rc = pair
-    cs._registry_upsert({"id": "s-4", "node": "ssh23", "dir": "/wd/sess/s-4", "status": "active"})
+    cs._registry_upsert({"id": "s-4", "node": "node4", "dir": "/wd/sess/s-4", "status": "active"})
     monkeypatch.setattr(rc, "_select_node",
-                        lambda cfg, req: ({"workdir": "/wd", "host": "h"}, req or "ssh23", None))
+                        lambda cfg, req: ({"workdir": "/wd", "host": "h"}, req or "node4", None))
     monkeypatch.setattr(rc, "_get_conn", lambda cfg: _FakeConn())
     monkeypatch.setattr(cs, "_remote_write",
                         lambda conn, path, text, mode="600", timeout=300: {"ok": True, "path": path})
@@ -373,9 +373,9 @@ def test_action_exec_async_returns_immediately(pair, monkeypatch):
 
 def test_action_list_sorted(pair):
     cs, _ = pair
-    cs._registry_upsert({"id": "s-old", "node": "ssh3", "title": "old", "created": "2026-10-01 00:00:00",
+    cs._registry_upsert({"id": "s-old", "node": "node1", "title": "old", "created": "2026-10-01 00:00:00",
                          "last_active": "2026-10-01 00:00:00"})
-    cs._registry_upsert({"id": "s-new", "node": "ssh23", "title": "new", "created": "2026-10-09 00:00:00",
+    cs._registry_upsert({"id": "s-new", "node": "node4", "title": "new", "created": "2026-10-09 00:00:00",
                          "last_active": "2026-10-09 00:00:00"})
     payload = json.loads(cs.action_list({}, {}))
     assert payload["count"] == 2 and payload["sessions"][0]["id"] == "s-new"
@@ -385,7 +385,7 @@ def test_action_list_sorted(pair):
 def test_action_list_live_uses_output_text(pair, monkeypatch):
     """live=true 要连上去核实（回归：曾把 _exec_disp 的 dict 当字符串 splitlines 炸掉）。"""
     cs, rc = pair
-    cs._registry_upsert({"id": "s-live", "node": "ssh23", "dir": "/wd/sess/s-live",
+    cs._registry_upsert({"id": "s-live", "node": "node4", "dir": "/wd/sess/s-live",
                          "last_active": "2026-10-09 00:00:00"})
     out_text = "\n".join(["==STATE==", "pid=77", "status=idle", "readrds_calls=3", "objects=4",
                           "rss_kb=2048", "==PS==", "77 2048 00:01 Ss R", "MM_ALIVE",
@@ -480,7 +480,7 @@ def test_cells_from_output_parses_and_strips_header(pair):
 
 def test_action_cells_reverses_to_notebook_order(pair, monkeypatch):
     cs, rc = pair
-    cs._registry_upsert({"id": "s-nb", "node": "ssh23", "dir": "/wd/sess/s-nb", "status": "active"})
+    cs._registry_upsert({"id": "s-nb", "node": "node4", "dir": "/wd/sess/s-nb", "status": "active"})
     out = "\n".join([
         "==CELL== r-2", "status: ok", "ms: 39000", "readrds_calls: 1", "objects: 20",
         "==CODE==", 'obj <- RunUMAP(obj)', "==OUTPUT==", "umap ok",
@@ -504,7 +504,7 @@ def test_action_cells_reverses_to_notebook_order(pair, monkeypatch):
 
 def test_action_plot_returns_data_uri_and_guards(pair, monkeypatch):
     cs, rc = pair
-    cs._registry_upsert({"id": "s-plot", "node": "ssh23", "dir": "/wd/sess/s-plot",
+    cs._registry_upsert({"id": "s-plot", "node": "node4", "dir": "/wd/sess/s-plot",
                          "status": "active"})
     b64 = "iVBORw0KGgoAAAANSUhEUg=="
     fake = _wire_status(cs, rc, monkeypatch, "MM_BYTES:1234\nMM_NAME:r-9_01.png\n" + b64)
@@ -520,7 +520,7 @@ def test_action_plot_returns_data_uri_and_guards(pair, monkeypatch):
 
 def test_action_plot_error_paths(pair, monkeypatch):
     cs, rc = pair
-    cs._registry_upsert({"id": "s-plot2", "node": "ssh23", "dir": "/wd/sess/s-plot2",
+    cs._registry_upsert({"id": "s-plot2", "node": "node4", "dir": "/wd/sess/s-plot2",
                          "status": "active"})
     cases = [
         ("MM_OUTSIDE", "拒绝"),

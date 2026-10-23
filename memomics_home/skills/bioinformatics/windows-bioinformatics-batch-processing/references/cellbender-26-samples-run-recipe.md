@@ -3,7 +3,7 @@
 ## 背景
 
 - **物种**: Homo sapiens (human)
-- **组织**: skeletal muscle (骨骼肌)
+- **组织**: skeletal muscle (示例组织)
 - **方向**: aging (年轻 vs 老年)
 - **平台**: DNB (BGI/MGI)
 - **样本**: 26 个, 每样本 ~2M droplets

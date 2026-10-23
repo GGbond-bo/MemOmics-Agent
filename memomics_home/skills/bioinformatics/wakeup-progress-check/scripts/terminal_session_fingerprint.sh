@@ -8,7 +8,7 @@
 #        ③ 交付物字节 + mtime，外加「晚于 task_plan mtime 的未记账候选」。
 #
 # 用法: bash terminal_session_fingerprint.sh <会话目录> [载体相对路径] [交付目录]
-#   bash terminal_session_fingerprint.sh E:/MemOmics-Agent/results/memomics-xxxx data/cards.json deliverables
+#   bash terminal_session_fingerprint.sh <安装目录> data/cards.json deliverables
 #
 # 判读：md5 同值（记"第 N 次同值"）+ 交付物字节/时间戳全同 + 无未记账产出 ⇒ 零写入收敛轮。
 

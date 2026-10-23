@@ -3,7 +3,7 @@
 **触发场景**：`library(monocle3)` / `library(slingshot)` 报 *there is no package called 'X'*，但 `check_env` / `rail_review` 说"已安装"；或某个 R 版本能加载包、另一个不能。
 
 **根因（2026-09-24 实测）**：机器上有多个 R 安装，各自有各自的 library。`check_env` 探测到的库 ≠ `execute_r` 持久内核实际使用的库，所以"已装"经常是假象。
-实测分布（人骨骼肌轨迹任务）：
+实测分布（人示例组织轨迹任务）：
 
 | R 安装 | library | 关键包 |
 |---|---|---|

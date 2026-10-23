@@ -1,6 +1,6 @@
 # 多样本 / 低细胞数双细胞检测 — 可跑配方
 
-> 实测来源：2026-09-24，`MF_2000.rds`（Seurat，2132 cells × 51227 genes，48 样本，6 组 Y/O/OD × Pre/Post，≈44 细胞/样本）。
+> 实测来源：2026-09-24，`示例数据.rds`（Seurat，2132 cells × 51227 genes，48 样本，6 组 Y/O/OD × Pre/Post，≈44 细胞/样本）。
 
 ## 1. 事实核查（一次 execute_r 打印全部）
 
@@ -21,7 +21,7 @@ cat("integer counts:", all(cnt@x == round(cnt@x)), "| sums:", range(Matrix::colS
 ## 2. 导出中间件（R-4.5.3 → 磁盘，供 Python 或 R-4.4.2 复用）
 
 ```r
-out <- "E:/MemOmics-Agent/results/<sid>/data"; dir.create(out, recursive = TRUE, showWarnings = FALSE)
+out <- "<安装目录>"; dir.create(out, recursive = TRUE, showWarnings = FALSE)
 writeMM(cnt, file.path(out, "counts.mtx"))
 writeLines(rownames(cnt), file.path(out, "features.tsv"))
 writeLines(colnames(cnt), file.path(out, "barcodes.tsv"))
@@ -34,7 +34,7 @@ write.csv(md, file.path(out, "metadata.csv"))
 
 ```python
 import scanpy as sc, pandas as pd, numpy as np
-out = "E:/MemOmics-Agent/results/<sid>/data"
+out = "<安装目录>"
 ad = sc.read_mtx(f"{out}/counts.mtx").T                     # 转成 cells × genes
 ad.var_names = [l.strip() for l in open(f"{out}/features.tsv")]
 ad.obs_names = [l.strip() for l in open(f"{out}/barcodes.tsv")]
@@ -52,14 +52,14 @@ print(ad.obs.groupby("samplename", observed=True)["predicted_doublet"].mean().so
 
 ```bash
 # bash 里直调绝对路径（⛔ 不要套 cmd //c：MSYS 会吃掉参数，只起 cmd banner、脚本一行不跑）
-"C:/Users/23136/AppData/Local/R/R-4.4.2/bin/x64/Rscript.exe" "E:/.../scripts/doublet.R" > log/doublet.log 2>&1; echo "exit=$?"
+"<用户目录>" "E:/.../scripts/doublet.R" > log/doublet.log 2>&1; echo "exit=$?"
 ```
 
 ```r
 # doublet.R：只读 mtx + meta，零 Seurat 依赖
-.libPaths(c("C:/Users/23136/AppData/Local/R/R-4.4.2/library", .libPaths()))
+.libPaths(c("<用户目录>", .libPaths()))
 suppressMessages({library(Matrix); library(SingleCellExperiment); library(scDblFinder)})
-out <- "E:/MemOmics-Agent/results/<sid>/data"
+out <- "<安装目录>"
 cnt <- readMM(file.path(out, "counts.mtx"))
 rownames(cnt) <- readLines(file.path(out, "features.tsv"))
 colnames(cnt) <- readLines(file.path(out, "barcodes.tsv"))

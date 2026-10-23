@@ -161,8 +161,8 @@ def test_clean_remote_only_prints_command(lc, tmp_path):
     """远端产物不在本机假删，只给命令（由 remote_cluster 执行）。"""
     big = _big(tmp_path / "remote.rds", 120)
     lc.new_marker("task-5", "集群任务", lc.scan([big])["items"],
-                  cache_root="/hwfssz3/PS_JLU/zhangbo/cache",
-                  artifacts=["/hwfssz3/PS_JLU/zhangbo/cache/light.rds"], remote=True)
+                  cache_root="/cluster/share/user/cache",
+                  artifacts=["/cluster/share/user/cache/light.rds"], remote=True)
     r = lc.clean(task_id="task-5", dry_run=False)
     assert any("rm -rf" in c for c in r["remote_commands"])
     assert not any(d["action"] == "deleted" for d in r["deleted"])
@@ -240,28 +240,28 @@ def _load_rc():
 
 def test_marker_remote_paths_not_mangled(lc):
     """remote=True 时输入/产物/cache_root 原样记账（不许被 abspath 拼成 Windows 怪胎）。"""
-    m = lc.new_marker("t-remote", "远端任务", ["/hwfssz3/PS_JLU/zhangbo/x.rds"],
-                      remote=True, cache_root="/hwfssz3/PS_JLU/zhangbo/cache",
-                      artifacts=["/hwfssz3/PS_JLU/zhangbo/cache/x.qs"])
-    assert m["inputs"][0]["path"] == "/hwfssz3/PS_JLU/zhangbo/x.rds"
-    assert m["cache_root"] == "/hwfssz3/PS_JLU/zhangbo/cache"
-    assert m["artifacts"][0] == "/hwfssz3/PS_JLU/zhangbo/cache/x.qs"
+    m = lc.new_marker("t-remote", "远端任务", ["/cluster/share/user/x.rds"],
+                      remote=True, cache_root="/cluster/share/user/cache",
+                      artifacts=["/cluster/share/user/cache/x.qs"])
+    assert m["inputs"][0]["path"] == "/cluster/share/user/x.rds"
+    assert m["cache_root"] == "/cluster/share/user/cache"
+    assert m["artifacts"][0] == "/cluster/share/user/cache/x.qs"
     # 远端 active 标记进查询集合；本机标记不进
-    assert "/hwfssz3/PS_JLU/zhangbo/x.rds" in lc.marked_remote_paths()
+    assert "/cluster/share/user/x.rds" in lc.marked_remote_paths()
     lc.new_marker("t-local", "本机", [], remote=False)
     assert not any(p.startswith("t-local") for p in lc.marked_remote_paths())
     # cleaned 的远端标记不再算数
     mm = lc.load_marker("t-remote")
     mm["status"] = "cleaned"
     lc.save_marker(mm)
-    assert "/hwfssz3/PS_JLU/zhangbo/x.rds" not in lc.marked_remote_paths()
+    assert "/cluster/share/user/x.rds" not in lc.marked_remote_paths()
 
 
 def test_persist_gate_paths_extraction():
     rc = _load_rc()
     # 读语句里的数据路径被抓；巡检行（ls/stat/du 开头）里的不算
-    cmd = 'readRDS("/hwfssz3/PS_JLU/zhangbo/MuSC.rds")\nls -lh /hwfssz3/PS_JLU/zhangbo/other.rds'
-    assert rc._persist_gate_paths(cmd) == ["/hwfssz3/PS_JLU/zhangbo/MuSC.rds"]
+    cmd = 'readRDS("/cluster/share/user/MuSC.rds")\nls -lh /cluster/share/user/other.rds'
+    assert rc._persist_gate_paths(cmd) == ["/cluster/share/user/MuSC.rds"]
     assert rc._persist_gate_paths("stat -c '%s' /a/b.rds") == []
     assert rc._persist_gate_paths("echo hello") == []
     # --input=/c/d.bam 形式 + 去重
@@ -272,13 +272,13 @@ def test_persist_gate_paths_extraction():
 def test_persist_gate_decide():
     rc = _load_rc()
     big = [{"path": "/a/big.rds", "size": 200 * 1048576}]
-    payload = rc._persist_gate_decide(big, set(), "ssh3", 100)
+    payload = rc._persist_gate_decide(big, set(), "node1", 100)
     assert payload["status"] == "needs_persist"
     assert payload["big_inputs"][0]["path"] == "/a/big.rds"
     assert "scan --remote" in payload["flow"][0]
     # 账本已覆盖 → 放行；无大件 → 放行
-    assert rc._persist_gate_decide(big, {"/a/big.rds"}, "ssh3", 100) is None
-    assert rc._persist_gate_decide([], set(), "ssh3", 100) is None
+    assert rc._persist_gate_decide(big, {"/a/big.rds"}, "node1", 100) is None
+    assert rc._persist_gate_decide([], set(), "node1", 100) is None
 
 
 def test_persist_gate_wired_into_run_submit():

@@ -74,7 +74,7 @@ ln -s ~/hermes-achievements ~/.hermes/plugins/hermes-achievements
 Then rescan dashboard plugins:
 
 ```bash
-curl http://127.0.0.1:9119/api/dashboard/plugins/rescan
+curl http://login-host:22/api/dashboard/plugins/rescan
 ```
 
 If backend API routes 404, restart `hermes dashboard`; plugin APIs are mounted at dashboard startup.
@@ -86,7 +86,7 @@ If you installed with git:
 ```bash
 cd ~/.hermes/plugins/hermes-achievements
 git pull --ff-only
-curl http://127.0.0.1:9119/api/dashboard/plugins/rescan
+curl http://login-host:22/api/dashboard/plugins/rescan
 ```
 
 If the update changes backend routes or `plugin_api.py`, restart `hermes dashboard` after pulling.

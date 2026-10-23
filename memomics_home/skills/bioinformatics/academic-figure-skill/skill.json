@@ -207,7 +207,7 @@
       "tissue": "skeletal_muscle",
       "direction": "exercise+aging+diabetes",
       "script": "42_volcano5_8sub_FINAL.R",
-      "params": "{\"input\":\"D:/我的下载/DEG_fdr05_coef025_5contrasts.xlsx (md5=a45d67ee 与 task2/results 副本同源)\",\"canvas\":\"14x7 inch @300dpi = 4200x2100 px\",\"subclusters\":8,\"categories\":\"down_high/up_high/mid_sig_black (无 not_sig)\",\"n_points\":{\"Aging\":16915,\"DM\":269,\"Ex_Young\":99,\"Ex_Old\":1322,\"Ex_DM\":226}}",
+      "params": "{\"input\":\"<数据目录>/DEG_fdr05_coef025_5contrasts.xlsx (md5=a45d67ee 与 task2/results 副本同源)\",\"canvas\":\"14x7 inch @300dpi = 4200x2100 px\",\"subclusters\":8,\"categories\":\"down_high/up_high/mid_sig_black (无 not_sig)\",\"n_points\":{\"Aging\":16915,\"DM\":269,\"Ex_Young\":99,\"Ex_Old\":1322,\"Ex_DM\":226}}",
       "date": "2026-09-30",
       "score": 0.0,
       "auto_score": 0.0,

@@ -44,7 +44,7 @@ hermes proxy start
 
 ```
 Starting Hermes proxy for Nous Portal
-  Listening on:  http://127.0.0.1:8645/v1
+  Listening on:  http://login-host:22/v1
   Forwarding to: (resolved per-request from your subscription)
   Use any bearer token in the client — the proxy attaches your real credential.
 ```
@@ -57,7 +57,7 @@ unit if you want it to survive logout.
 Any OpenAI-compatible app config takes the same triple:
 
 ```
-Base URL:   http://127.0.0.1:8645/v1
+Base URL:   http://login-host:22/v1
 API key:    anything (e.g. "sk-unused")
 Model:      Hermes-4-70B    # or Hermes-4.3-36B, Hermes-4-405B
 ```
@@ -123,7 +123,7 @@ Edit `~/.openviking/ov.conf`:
   "vlm": {
     "provider": "openai",
     "model": "Hermes-4-70B",
-    "api_base": "http://127.0.0.1:8645/v1",
+    "api_base": "http://login-host:22/v1",
     "api_key": "unused-proxy-attaches-real-creds"
   }
 }
@@ -151,7 +151,7 @@ bookmark summarization. In its config:
 
 ```bash
 # Karakeep .env
-OPENAI_API_BASE_URL=http://127.0.0.1:8645/v1
+OPENAI_API_BASE_URL=http://login-host:22/v1
 OPENAI_API_KEY=any-non-empty-string
 INFERENCE_TEXT_MODEL=Hermes-4-70B
 ```

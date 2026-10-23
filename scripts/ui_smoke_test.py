@@ -17,14 +17,14 @@ def main():
     proc = subprocess.Popen(
         [EDGE, "--headless=new", "--remote-debugging-port=9333",
          "--remote-allow-origins=*", f"--user-data-dir={udd}",
-         "--no-first-run", "--disable-gpu", "http://127.0.0.1:8899/"],
+         "--no-first-run", "--disable-gpu", "http://login-host:22/"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         # 等 CDP 就绪
         ws_url = ""
         for _ in range(60):
             try:
-                v = json.loads(urllib.request.urlopen("http://127.0.0.1:9333/json/version", timeout=3).read())
+                v = json.loads(urllib.request.urlopen("http://login-host:22/json/version", timeout=3).read())
                 ws_url = v["webSocketDebuggerUrl"]
                 break
             except Exception:
@@ -44,7 +44,7 @@ def main():
         # 等页面加载完成
         time.sleep(4)
         # 找到页面 target
-        targets = json.loads(urllib.request.urlopen("http://127.0.0.1:9333/json/list", timeout=5).read())
+        targets = json.loads(urllib.request.urlopen("http://login-host:22/json/list", timeout=5).read())
         page = next((t for t in targets if t.get("type") == "page" and "8899" in t.get("url", "")), None)
         assert page, "页面 target 未找到"
         pws = websocket.create_connection(page["webSocketDebuggerUrl"], timeout=30)

@@ -1,8 +1,8 @@
 # 远端 `.rds` 对象「身份核对」——不下载大文件，判断哪个对象对上用户描述
 
-**场景**：用户在集群上有一堆多 GB 的 Seurat `.rds`，只给一段口头描述（「骨骼肌 snRNA、60 万细胞、
+**场景**：用户在集群上有一堆多 GB 的 Seurat `.rds`，只给一段口头描述（「示例组织 snRNA、60 万细胞、
 23 个注释、不是 ATAC」），要你确认**哪个文件是它**。
-实测来源：2026-10-18 `/hwfssz3/PS_JLU/liuyuxuan3/Muscle/`（ssh3）。
+实测来源：2026-10-18 `/cluster/share/liuyuxuan3/Muscle/`（node1）。
 
 ## 三步：盘点 → 估选 → 读一次核对
 
@@ -41,10 +41,10 @@ Merge/{Merge_MF 11.1G, Exer_MF 1.5G, FSHD_MF 1.1G, Merge_MuSC 2.1G, ...}
 ### ③ 读一次、一直用：`session_start` → `session_exec`
 ```text
 remote_cluster(action="session_start",
-               input="/hwfssz3/.../Muscle_All.rds",   # 大 rds 路径
+               input="/cluster/.../Muscle_All.rds",   # 大 rds 路径
                object="muscle_all",                    # 会话里的对象名
                env="R4.4.1_zb",
-               rscript="/hwfssz3/PS_JLU/zhangbo/envs/R4.4.1_zb/bin/Rscript",
+               rscript="/cluster/share/user/envs/R4.4.1_zb/bin/Rscript",
                title="...")
 ```
 实测回报（关键行）：
@@ -53,7 +53,7 @@ load: seconds 225.2 | 已读入 … -> muscle_all（225.2 秒）
       维度/类型: 51227 x 604244  Seurat        <-- 细胞数就在这里
 mem_note: 节点内存：总 3023GB / 可用 875GB；输入 7.07GB
 ```
-- **7.07 GB / 225 秒**（R 4.4.1，ssh3）；会话 RSS 约 37 GB（3 TB 节点无压力，但仍应问用户要不要收）。
+- **7.07 GB / 225 秒**（R 4.4.1，node1）；会话 RSS 约 37 GB（3 TB 节点无压力，但仍应问用户要不要收）。
 - 之后同会话 `session_exec` 复用内存对象，**不再回读文件**（`readrds_calls` 审计恒为 1）。
 
 随后 `session_exec` 跑 `scripts/probe_rds_meta.R`：打维度 / assay / reductions / **每列元数据基数与取值**，

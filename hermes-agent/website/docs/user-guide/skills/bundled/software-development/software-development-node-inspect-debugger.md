@@ -95,20 +95,20 @@ When the process is already running (e.g. a long-lived dev server or the TUI gat
 ```bash
 # 1. Send SIGUSR1 to enable the inspector on an existing process
 kill -SIGUSR1 <pid>
-# Node prints: Debugger listening on ws://127.0.0.1:9229/<uuid>
+# Node prints: Debugger listening on ws://login-host:22/<uuid>
 
 # 2. Attach the debugger CLI
 node inspect -p <pid>
 # or by URL
-node inspect ws://127.0.0.1:9229/<uuid>
+node inspect ws://login-host:22/<uuid>
 ```
 
 To start a process with the inspector from the beginning:
 
 ```bash
-node --inspect script.js           # listen on 127.0.0.1:9229, keep running
+node --inspect script.js           # listen on login-host:22, keep running
 node --inspect-brk script.js       # listen AND pause on first line
-node --inspect=0.0.0.0:9230 script.js   # custom host:port
+node --inspect=login-host:22 script.js   # custom host:port
 ```
 
 For TypeScript via tsx:
@@ -230,10 +230,10 @@ TUI_PID=$(pgrep -f 'ui-tui/dist/entry' | head -1)
 kill -SIGUSR1 "$TUI_PID"
 
 # 3. Find the WS URL
-curl -s http://127.0.0.1:9229/json/list | jq -r '.[0].webSocketDebuggerUrl'
+curl -s http://login-host:22/json/list | jq -r '.[0].webSocketDebuggerUrl'
 
 # 4. Attach
-node inspect ws://127.0.0.1:9229/<uuid>
+node inspect ws://login-host:22/<uuid>
 ```
 
 Interacting with the TUI (typing in its window) continues to advance execution; your debugger can pause it on a breakpoint at any `sb(...)`.
@@ -285,7 +285,7 @@ require('fs').writeFileSync('/tmp/heap.heapsnapshot', chunks.join(''));
 
 3. **Port collisions.** Default is `9229`. If multiple Node processes are inspecting, pass `--inspect=0` (random port) and read the actual URL from `/json/list`:
    ```bash
-   curl -s http://127.0.0.1:9229/json/list   # lists all inspectable targets on the host
+   curl -s http://login-host:22/json/list   # lists all inspectable targets on the host
    ```
 
 4. **Child processes.** `--inspect` on a parent does NOT inspect its children. Use `NODE_OPTIONS='--inspect-brk' node parent.js` to propagate to every child; be aware they all need unique ports (Node auto-increments when `NODE_OPTIONS='--inspect'` is inherited).
@@ -294,13 +294,13 @@ require('fs').writeFileSync('/tmp/heap.heapsnapshot', chunks.join(''));
 
 6. **Running `node inspect` through an agent terminal.** It's a PTY-friendly REPL. In Hermes, launch it with `terminal(pty=true)` or `background=true` + `process(action='submit', data='...')`. Non-PTY foreground mode will work for one-shot commands but not for interactive stepping.
 
-7. **Security.** `--inspect=0.0.0.0:9229` exposes arbitrary code execution. Always bind to `127.0.0.1` (the default) unless you have an isolated network.
+7. **Security.** `--inspect=login-host:22` exposes arbitrary code execution. Always bind to `127.0.0.1` (the default) unless you have an isolated network.
 
 ## Verification Checklist
 
 After setting up a debug session, verify:
 
-- [ ] `curl -s http://127.0.0.1:9229/json/list` returns exactly the target you expect
+- [ ] `curl -s http://login-host:22/json/list` returns exactly the target you expect
 - [ ] First breakpoint actually hits (if it doesn't, you likely missed `--inspect-brk` or attached after execution completed)
 - [ ] Source listing at pause shows the right file (mismatch = sourcemap issue, see pitfall 1)
 - [ ] `exec process.pid` in `repl` returns the PID you meant to attach to

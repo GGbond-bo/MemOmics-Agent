@@ -32,7 +32,7 @@
 | # | 检查项 | 工具动作 | 实测值 | 判定 |
 |---|---|---|---|---|
 | ① | 云上文件是否存在 | `dcs_cloud(action="ls", path="/Files/Monica/snRNAseq/annotated_objects", long=True)` | `20261008_PFC_substates_mapped.rds` = **10,069,730,145 B**（9.38 GB）`entity_id=NB2026100814382497165083` | ✅ 存在；**单文件**（非目录） |
-| ② | 凭据 | `dcs_cloud(action="context")` | `current_user=zhangbo11`，PAT `expires_at=2026-11-09` | ✅ 未过期 |
+| ② | 凭据 | `dcs_cloud(action="context")` | `current_user=user`，PAT `expires_at=2026-11-09` | ✅ 未过期 |
 | ③ | 项目欠费 | 同上 | `P24Z10200N1046` `is_arrears=false`（当前项目） | ✅ 不欠费 |
 | ④ | 默认下载目录 | 同上 | `download_dir = E:\zhangxiao` | ✅ 与报错里的目标一致 |
 | ⑤ | **本地目标文件** | `read_file("E:\\zhangxiao\\20261008_PFC_substates_mapped.rds", limit=1)` | **`file_size: 0`** | ❌ **0 字节空壳残留** |

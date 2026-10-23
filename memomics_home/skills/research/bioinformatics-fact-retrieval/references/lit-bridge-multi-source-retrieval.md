@@ -9,7 +9,7 @@
 MemOmics 进程里没有 MCP 客户端 ⇒ 工具名调不到。仓库自带 CLI 桥把它重写成标准库实现（零 pip 依赖、零 API key）：
 
 ```
-E:/MemOmics-Agent/memomics_home/skills/bioinformatics/nature-academic-search/scripts/lit_bridge.py
+<安装目录>
 ```
 
 四个子命令：`search <query>` / `paper <id>` / `cite <id>`（APA / GB-T 7714 / BibTeX / RIS）/ `mesh <term>`。
@@ -19,7 +19,7 @@ E:/MemOmics-Agent/memomics_home/skills/bioinformatics/nature-academic-search/scr
 
 ```bash
 cd /e/MemOmics-Agent
-export HTTP_PROXY=http://127.0.0.1:6478 && export HTTPS_PROXY=http://127.0.0.1:6478   # 本机出口需代理
+export HTTP_PROXY=http://login-host:22 && export HTTPS_PROXY=http://login-host:22   # 本机出口需代理
 S=memomics_home/skills/bioinformatics/nature-academic-search/scripts/lit_bridge.py
 .venv/Scripts/python.exe "$S" search "<query>" --sources pubmed --limit 8 --json
 ```
@@ -73,7 +73,7 @@ for p, lst in walk(d): ...                 # walk() 递归找出所有 dict-list
 
 ## 6. 本次实测证据（2026-09-25）
 
-主题：骨骼肌衰老 × 单细胞。
+主题：示例组织衰老 × 单细胞。
 
 | 源 | 检索式 | 命中 | 交付选取 |
 |---|---|---|---|
@@ -91,7 +91,7 @@ for p, lst in walk(d): ...                 # walk() 递归找出所有 dict-list
 
 ```bash
 cd /e/MemOmics-Agent
-export HTTP_PROXY=http://127.0.0.1:6478 && export HTTPS_PROXY=http://127.0.0.1:6478
+export HTTP_PROXY=http://login-host:22 && export HTTPS_PROXY=http://login-host:22
 S=memomics_home/skills/bioinformatics/nature-academic-search/scripts/lit_bridge.py
 P=.venv/Scripts/python.exe
 for src in pubmed crossref; do
@@ -108,7 +108,7 @@ done
 | 源 | 检索式 | 命中 | 说明 |
 |---|---|---|---|
 | PubMed | 同 §6 | 8 | 元数据完整（含 PMID / 卷期页），`errors` 空 |
-| Crossref | **字面长句同式** | **6** | 与 §4 结论一致：字面式命中少且脏 —— 3 条不切题（鸡骨骼肌**发育**补充材料 `component` 且 `year=None`、骨骼肌**发育**综述 `10.1016/j.biopha.2023.114631`、**卒中 microglia** `10.14336/ad.2026.0803`），仅 3 条切题（两篇 `igaf122.*` 会议摘要 + Nature Aging 评论 `10.1038/s43587-024-00629-9`） |
+| Crossref | **字面长句同式** | **6** | 与 §4 结论一致：字面式命中少且脏 —— 3 条不切题（鸡示例组织**发育**补充材料 `component` 且 `year=None`、示例组织**发育**综述 `10.1016/j.biopha.2023.114631`、**卒中 microglia** `10.14336/ad.2026.0803`），仅 3 条切题（两篇 `igaf122.*` 会议摘要 + Nature Aging 评论 `10.1038/s43587-024-00629-9`） |
 
 ⇒ **Crossref 交付前必须逐条按标题切题度筛**（不止按 `type`）：`component` 没有 `year`、且常属**别的物种 / 别的发育阶段**；清单里写明"命中 6 条、取最贴合 3 条"，并在源状态说明里把被剔除条目的 DOI 点名列出来——让用户看得到剔除动作。
 ⇒ 反面教训：本次若用 `tail` 解读，会连"Crossref 到底命中几条"都说不准，只能给出一个看似完整实则截断的表。

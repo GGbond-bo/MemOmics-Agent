@@ -541,7 +541,7 @@ def test_data_paths_follow_install_location():
     assert server.RESULTS_DIR == os.path.join(server.MEMOMICS_DIR, "results")
     assert server._PREVIEW_ROOTS == [server.WORK_DIR, server.RESULTS_DIR, server.MEMOMICS_DIR]
     src = io.open(os.path.join(server.MEMOMICS_DIR, "webui", "server.py"), encoding="utf-8").read()
-    for bad in ("E:/MemOmics-Agent", "E:\\\\MemOmics-Agent", "C:\\\\Users\\\\23136"):
+    for bad in ("<安装目录>", "E:\\\\MemOmics-Agent", "C:\\\\Users\\\\<用户>"):
         assert bad not in src, "server.py 里还留着开发机路径: " + bad
 
 

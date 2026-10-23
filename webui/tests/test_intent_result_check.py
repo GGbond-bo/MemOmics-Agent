@@ -86,5 +86,5 @@ def test_other_intents_unchanged(text, expect):
 
 def test_result_check_does_not_steal_data_path_task():
     """带新数据路径 + 执行词的任务不应被 result_check 抢走。"""
-    it = _intent("用 Seurat 处理 E:/骨骼肌锻炼/MF_AUCell_meta.csv 做聚类出图")
+    it = _intent("用 Seurat 处理 <数据目录> 做聚类出图")
     assert it == "analysis", f"data-path task misrouted -> {it}"

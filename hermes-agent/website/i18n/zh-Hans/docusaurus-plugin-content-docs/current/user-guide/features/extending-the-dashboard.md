@@ -797,7 +797,7 @@ Dashboard 扫描三个目录中的 `dashboard/manifest.json`：
 
 ```bash
 # Force a rescan without restart
-curl http://127.0.0.1:9119/api/dashboard/plugins/rescan
+curl http://login-host:22/api/dashboard/plugins/rescan
 ```
 
 ……或重启 `hermes dashboard`。
@@ -879,11 +879,11 @@ cp -r hermes-example-plugins/strike-freedom-cockpit ~/.hermes/plugins/
 ## 故障排查
 
 **我的主题没有出现在选择器中。**
-检查文件是否在 `~/.hermes/dashboard-themes/` 中且以 `.yaml` 或 `.yml` 结尾。刷新页面。运行 `curl http://127.0.0.1:9119/api/dashboard/themes`——你的主题应出现在响应中。如果 YAML 有解析错误，dashboard 会记录到 `~/.hermes/logs/` 下的 `errors.log`。
+检查文件是否在 `~/.hermes/dashboard-themes/` 中且以 `.yaml` 或 `.yml` 结尾。刷新页面。运行 `curl http://login-host:22/api/dashboard/themes`——你的主题应出现在响应中。如果 YAML 有解析错误，dashboard 会记录到 `~/.hermes/logs/` 下的 `errors.log`。
 
 **我的插件标签页没有显示。**
 1. 检查 manifest 是否在 `~/.hermes/plugins/<name>/dashboard/manifest.json`（注意 `dashboard/` 子目录）。
-2. 运行 `curl http://127.0.0.1:9119/api/dashboard/plugins/rescan` 强制重新发现。
+2. 运行 `curl http://login-host:22/api/dashboard/plugins/rescan` 强制重新发现。
 3. 打开浏览器开发工具 → Network——确认 `manifest.json`、`index.js` 和任何 CSS 均无 404 加载成功。
 4. 打开浏览器开发工具 → Console——查找 IIFE 执行期间的错误或 `window.__HERMES_PLUGINS__ is undefined`（表示 SDK 未初始化，通常是更早的 React 渲染崩溃导致）。
 5. 验证你的 bundle 以与 `manifest.json:name` **相同的名称**调用 `window.__HERMES_PLUGINS__.register(...)`。

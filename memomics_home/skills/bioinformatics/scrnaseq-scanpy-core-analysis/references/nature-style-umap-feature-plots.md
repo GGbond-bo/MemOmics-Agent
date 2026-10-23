@@ -133,4 +133,4 @@ assert img.mode == 'RGBA', f"模式 {img.mode} 不是透明 RGBA"
 
 ## 实战案例
 
-2026-07-09 人类骨骼肌 SMF 数据（11,630 cells）：生成 RUNX1、COL19A1、ANKRD1 三基因的 Nature 风格 UMAP 特征图，20 个文件（10 PNG + 10 PDF），全部通过健康度检查。
+2026-07-09 人类示例组织 SMF 数据（11,630 cells）：生成 RUNX1、COL19A1、ANKRD1 三基因的 Nature 风格 UMAP 特征图，20 个文件（10 PNG + 10 PDF），全部通过健康度检查。

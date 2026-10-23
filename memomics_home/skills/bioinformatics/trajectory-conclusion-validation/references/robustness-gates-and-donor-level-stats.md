@@ -1,6 +1,6 @@
 # 轨迹结论稳健性硬门控 + 供体级统计配方
 
-> 来源：2026-09-24 MF_2000.rds（人骨骼肌 2132 细胞，RSS 卫星细胞 / TypeI / TypeII，48 样本 24 供体 Pre-Post 配对）Monocle3 路径 A 实战。
+> 来源：2026-09-24 示例数据.rds（人示例组织 2132 细胞，RSS 卫星细胞 / TypeI / TypeII，48 样本 24 供体 Pre-Post 配对）Monocle3 路径 A 实战。
 > 核心教训：**伪时间轴 = 「你选的那个嵌入 + 你选的那个根」下算出来的量**。换嵌入或换根会改变方向、甚至翻转结论。跑完必须过四道闸，再写结论。
 
 ## 0. 跨 R 版本桥接（monocle3 与 Seurat 装在两个 R 里时）
@@ -16,7 +16,7 @@ saveRDS(Embeddings(obj, "umap"), "data/traj_umap.rds")
 
 ```bash
 # ② 用另一个 R 的 Rscript 绝对路径跑 monocle3（bash 里直调，不要 cmd //c 包装）
-"C:/Users/23136/AppData/Local/R/R-4.4.2/bin/x64/Rscript.exe" \
+"<用户目录>" \
   "E:/.../scripts/traj_02_monocle3.R" > log/traj_monocle3.log 2>&1
 ```
 

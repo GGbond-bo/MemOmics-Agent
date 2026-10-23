@@ -33,7 +33,7 @@ _lock = threading.Lock()
 
 def _get_db_path():
     """获取记忆数据库路径（与 MemOmics 共用 memomics_home/memory_store.db）。"""
-    cur = Path(__file__).resolve().parent.parent.parent  # E:/MemOmics-Agent/
+    cur = Path(__file__).resolve().parent.parent.parent  # <安装目录>
     memomics_home = cur / "memomics_home"
     return str(memomics_home / "memory_store.db")
 

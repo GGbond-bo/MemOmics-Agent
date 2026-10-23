@@ -27,7 +27,7 @@ category: system
 
 ## 🚀 快速开始（新用户 5 分钟）
 
-> `<SKILL>` = 本技能目录（本机：`E:\MemOmics-Agent\memomics_home\skills\bioinformatics\adobe-illustrator`）。
+> `<SKILL>` = 本技能目录（本机：`<安装目录>
 > 统一入口 `scripts/ai.py` 自动找已装 harness；找不到就用**自带快照**（零安装）。`--json` 必须写在子命令**之前**。
 
 ```bash
@@ -64,7 +64,7 @@ python "<SKILL>/scripts/ai.py" --json doctor        # 确认 doc_count=0
 
 一键演示整条链（画/导出/清场 + sha256 摘要，另附看图提示）：`python "<SKILL>/scripts/loop_demo.py" --out <OUT>`。
 
-本机已装 harness 全路径（直接用亦可）：`E:\MemOmics-Agent\.venv\Scripts\cli-anything-illustrator.exe`。
+本机已装 harness 全路径（直接用亦可）：`<安装目录>
 
 ## 🎯 触发场景表（用户说什么 → 怎么走）
 

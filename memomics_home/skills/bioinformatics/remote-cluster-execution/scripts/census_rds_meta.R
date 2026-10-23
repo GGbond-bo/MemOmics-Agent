@@ -1,7 +1,7 @@
 ## census_rds_meta.R — 集群 rds 对象普查：逐文件细胞数 + 每个 meta 列的类目数
 ## 用途：几十个候选 rds 里找「满足某个条件」的那一个（细胞数 N / 注释 K 类）——见 remote-cluster-execution 铁规 12.1
 ## 用法：Rscript --vanilla census_rds_meta.R <目录> [子目录 …] > census.log 2>&1
-## 例    Rscript --vanilla census_rds_meta.R /hwfssz3/PS_JLU/liuyuxuan3/Muscle 0326 Merge
+## 例    Rscript --vanilla census_rds_meta.R /cluster/share/liuyuxuan3/Muscle 0326 Merge
 ##
 ## 投递：remote_cluster push → remote_cluster submit "Rscript --vanilla census_rds_meta.R <目录> … > census.log 2>&1"
 ## 收尾：remote_cluster pull census.log → 本机 execute_code 正则切块解析（不要整份读进上下文）

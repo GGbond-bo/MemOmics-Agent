@@ -84,7 +84,7 @@ mkdir -p ~/notebooks
 ```
 写入一个包含一个空代码单元格的最小 .ipynb JSON 文件，然后通过 Jupyter REST API 启动一个内核会话：
 ```
-curl -s -X POST http://127.0.0.1:8888/api/sessions \
+curl -s -X POST http://login-host:22/api/sessions \
   -H "Content-Type: application/json" \
   -d '{"path":"scratch.ipynb","type":"notebook","name":"scratch.ipynb","kernel":{"name":"python3"}}'
 ```

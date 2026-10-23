@@ -9,7 +9,7 @@ Everything here is against UE 5.8's experimental plugin (id
 ## Architecture in one paragraph
 
 The **Unreal MCP** plugin hosts the HTTP server inside the editor process
-(default `http://127.0.0.1:8000/mcp`, loopback-only, no auth, HTTP + SSE
+(default `http://login-host:22/mcp`, loopback-only, no auth, HTTP + SSE
 only — no stdio/WebSocket). It implements the protocol but ships no tools of
 its own. Tools come from **Toolsets** — classes deriving from
 `UToolsetDefinition` (C++) or `unreal.ToolsetDefinition` (Python) — collected
@@ -271,7 +271,7 @@ Console variables:
 - **Log verbosity:** `Log LogModelContextProtocol Verbose` in the editor
   console.
 - **MCP Inspector** (`npx @modelcontextprotocol/inspector`, point at
-  `http://127.0.0.1:8000/mcp`, transport "Streamable HTTP") lists every
+  `http://login-host:22/mcp`, transport "Streamable HTTP") lists every
   advertised tool with schemas and offers form-based invocation — isolates
   "server broken" from "agent calling it wrong".
 - **After Live Coding / authoring:** connected clients can hold stale

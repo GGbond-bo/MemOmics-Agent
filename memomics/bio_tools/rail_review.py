@@ -54,7 +54,7 @@ SCHEMA = {
                 )
             },
             "node": {"type": "string",
-                     "description": "location=cluster：哪个节点（如 ssh23；只配一个节点时可省）"},
+                     "description": "location=cluster：哪个节点（如 node4；只配一个节点时可省）"},
             "env": {"type": "string",
                     "description": "location=cluster：哪个环境（conda env 名，如 R4.41；默认 remote.session.env）"},
             "rscript": {"type": "string",

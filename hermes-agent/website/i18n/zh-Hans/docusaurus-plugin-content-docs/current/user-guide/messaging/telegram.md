@@ -249,13 +249,13 @@ gateway 日志应显示：`[telegram] Connected to Telegram (webhook mode)`。
 
 ```yaml
 telegram:
-  proxy_url: "socks5://127.0.0.1:1080"
+  proxy_url: "socks5://login-host:22"
 ```
 
 **方式二：环境变量**
 
 ```bash
-TELEGRAM_PROXY=socks5://127.0.0.1:1080
+TELEGRAM_PROXY=socks5://login-host:22
 ```
 
 支持的协议：`http://`、`https://`、`socks5://`。
@@ -364,7 +364,7 @@ services:
     container_name: tg-bot-api
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8081:8081"   # 仅绑定到回环地址；见安全说明
+      - "login-host:22:8081"   # 仅绑定到回环地址；见安全说明
     environment:
       TELEGRAM_API_ID: "12345"           # 第一步中的 api_id
       TELEGRAM_API_HASH: "abcdef..."     # 第一步中的 api_hash
@@ -398,7 +398,7 @@ curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/logOut"
 验证本地服务器能代表机器人与 Telegram 通信：
 
 ```bash
-curl "http://127.0.0.1:8081/bot<YOUR_BOT_TOKEN>/getMe"
+curl "http://login-host:22/bot<YOUR_BOT_TOKEN>/getMe"
 # 预期响应：{"ok":true,"result":{"id":...,"is_bot":true,...}}
 ```
 
@@ -410,8 +410,8 @@ curl "http://127.0.0.1:8081/bot<YOUR_BOT_TOKEN>/getMe"
 platforms:
   telegram:
     extra:
-      base_url: "http://127.0.0.1:8081/bot"
-      base_file_url: "http://127.0.0.1:8081/file/bot"
+      base_url: "http://login-host:22/bot"
+      base_file_url: "http://login-host:22/file/bot"
       local_mode: true        # 见下方第五步——仅在机器人数据目录
                               # 对 Hermes 进程可读时设置此项
 ```

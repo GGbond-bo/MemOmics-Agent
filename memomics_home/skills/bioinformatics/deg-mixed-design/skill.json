@@ -36,7 +36,7 @@
       "tissue": "skeletal_muscle",
       "direction": "aging",
       "script": "explore_MF2000_meta.R",
-      "params": "readRDS MF_2000.rds; Seurat v5 Assay5 用 LayerData(layer=\"counts\")",
+      "params": "readRDS 示例数据.rds; Seurat v5 Assay5 用 LayerData(layer=\"counts\")",
       "date": "2026-09-24",
       "score": 9,
       "auto_score": 0.0,

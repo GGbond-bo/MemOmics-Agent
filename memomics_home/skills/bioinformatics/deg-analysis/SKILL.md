@@ -181,7 +181,7 @@ Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正
 | human | skeletal_muscle | aging | 2026-07-17 | test_degs.r | - | - |  |
 | human | skeletal_muscle | aging | 2026-07-17 | test_degs.r | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-24 | 01_deg_YPost_vs_OPost.R + 02_deg_pseudobulk_qc_sensitivity.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | data_probe_MF_2000 | - | - |  |
+| human | skeletal_muscle | aging | 2026-09-24 | data_probe_示例数据 | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-24 | 02_deg_sensitivity_withinL3_LOO.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-24 | 01_deg_YPost_vs_OPost_MF2000.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-24 | 03_deg_composition_lfcShrink_tiers.R | - | - |  |
@@ -209,7 +209,7 @@ Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正
 | human | skeletal_muscle | exercise+aging | 2026-09-28 | 15_diag_new_deg_inflation.py | - | - |  |
 | human | skeletal_muscle | exercise+aging | 2026-09-29 | 19_coef_threshold_stats.py | - | - |  |
 | human | skeletal_muscle | exercise+aging | 2026-09-29 | lit_verify_coef_thresholds | - | - |  |
-| human | skeletal_muscle | exercise+aging | 2026-09-29 | fetch_NHPABC_official_threshold | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-29 | fetch_example_cohort_threshold | - | - |  |
 | human | skeletal_muscle | exercise+aging | 2026-09-29 | 20_coef_threshold_diagnosis.py | - | - |  |
 | human | skeletal_muscle | exercise | 2026-09-29 | 21_export_coef025_by_contrast.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-29 | 21_export_coef025_by_contrast.py | - | - |  |

@@ -222,14 +222,14 @@ def test_c2_userinfo_and_missing_host(sb):
 
 def test_c3_non_public_literals(sb):
     cases = {
-        "http://127.0.0.1:8899/api/version": "url_loopback",
+        "http://login-host:22/api/version": "url_loopback",
         "http://127.1.2.3/": "url_loopback",
         "http://[::1]/": "url_loopback",
         "http://169.254.169.254/latest/meta-data/": "url_link_local",
         "http://[fe80::1]/": "url_link_local",
         "http://10.0.0.7/": "url_private",
         "http://172.16.5.5/": "url_private",
-        "http://192.168.1.1/": "url_private",
+        "http://10.0.0.1/": "url_private",
         "http://[fd00::1]/": "url_private",
         "http://0.0.0.0/": "url_reserved",
         "http://100.64.0.1/": "url_not_global",

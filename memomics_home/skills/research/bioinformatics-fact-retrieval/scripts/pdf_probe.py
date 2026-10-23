@@ -9,11 +9,11 @@
 用法
 ----
   # 1) 只抽取全文（落盘，后续反复 grep 不必重抽）
-  python pdf_probe.py "E:/文献/AI/agent/literature/Biomni.pdf" \
+  python pdf_probe.py "<数据目录>" \
       --out results/<sid>/data/Biomni_fulltext.txt
 
   # 2) 抽取 + 命中探针（计数按降序打印，每个词给 n 个上下文窗口）
-  python pdf_probe.py "E:/文献/AI/agent/literature/Biomni.pdf" \
+  python pdf_probe.py "<数据目录>" \
       --out results/<sid>/data/Biomni_fulltext.txt \
       --kw "2,500" "knowledge base" "skill" "action space" "retrieval" \
       --w 1200 --n 2

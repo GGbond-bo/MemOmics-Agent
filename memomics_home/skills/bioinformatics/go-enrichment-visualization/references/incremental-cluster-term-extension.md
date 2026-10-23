@@ -38,7 +38,7 @@ for i, c in enumerate(seen, 1):
 
 ```python
 import pathlib, pandas as pd
-base = pathlib.Path(r"E:/MemOmics-Agent/results/memomics-440038cf")
+base = pathlib.Path(r"<安装目录>")
 m = pd.read_csv(base/"data/MF_SMF_go_matrix.csv", index_col=0)   # 48 x 15
 
 # (a) 插两列
@@ -122,4 +122,4 @@ render(m2, "with_genes", 11.5, 11.0)   # 行名更长 ⇒ 画布加宽
 ## 5. 门禁与自进化
 
 - 本轮每次 `terminal` 后系统强制 `skill_evolution(action="record_run")` 才能继续下一个 terminal；矩阵构建脚本与出图脚本各记一次。
-- `rail_review(phase="post")` 的 `location` 会**自动推断成集群 ssh23**（本机有常驻集群会话时）—— 该审查对本机 R 图任务只是形审，包检查按 location 判定，inferred 的问题只报警告不拦截。
+- `rail_review(phase="post")` 的 `location` 会**自动推断成集群 node4**（本机有常驻集群会话时）—— 该审查对本机 R 图任务只是形审，包检查按 location 判定，inferred 的问题只报警告不拦截。

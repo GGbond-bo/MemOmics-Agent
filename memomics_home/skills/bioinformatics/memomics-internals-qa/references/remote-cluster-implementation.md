@@ -20,7 +20,7 @@
 | 作业脚本 | slurm `#SBATCH` / pbs `#PBS` / gridengine `#$`（GE 不吃 `-o %j`，会生成字面量叫 `%j` 的文件） | `:871-910+` |
 | 多节点（MobaXterm 式命名） | `nodes:` 段支持 3 种写法（名字即主机名/别名、字符串=显式 host、全量字段含 `proxy_jump`）；`default_node`、`node_policy`、`allow_unlisted_nodes` | `:117-126`, `:250-361` |
 | 选点策略 | 单节点静默用 / 指定名字必须命中（大小写不敏感）/ 有 `default_node` 用默认 / **多节点+没指定 → `status=needs_node` 硬拦**（不许自己挑） | `:370-440` |
-| 作业账本 | 投递写 `memomics_home/remote/jobs.jsonl`；查作业**按节点名严格匹配**（ssh3/ssh5 可能同一台登录机，比 host 会串） | `:454-465`, `:682-722` |
+| 作业账本 | 投递写 `memomics_home/remote/jobs.jsonl`；查作业**按节点名严格匹配**（node1/node2 可能同一台登录机，比 host 会串） | `:454-465`, `:682-722` |
 | 连接错误识别 | `_is_conn_error()` 覆盖 connection closed/reset/refused、broken pipe、no route、kex_exchange_identification、host key、permission denied 等 | `:672-679` |
 | 可发现性 | `remote_cluster_enabled()` = `check_fn`：没配 `remote:` 段 → 工具**不出现在工具列表** | `:234-243` |
 | 配置 | `memomics_home/config.yaml` 的 `remote:` 段，可被 `MEMOMICS_REMOTE_*` 覆盖；配置解析失败只 warning 不崩 | `:33-62`, `:163-231` |

@@ -310,13 +310,13 @@ If Telegram's API is blocked or you need to route traffic through a proxy, set a
 
 ```yaml
 telegram:
-  proxy_url: "socks5://127.0.0.1:1080"
+  proxy_url: "socks5://login-host:22"
 ```
 
 **Option 2: environment variable**
 
 ```bash
-TELEGRAM_PROXY=socks5://127.0.0.1:1080
+TELEGRAM_PROXY=socks5://login-host:22
 ```
 
 Supported schemes: `http://`, `https://`, `socks5://`.
@@ -425,7 +425,7 @@ services:
     container_name: tg-bot-api
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8081:8081"   # bind to loopback only; see security note
+      - "login-host:22:8081"   # bind to loopback only; see security note
     environment:
       TELEGRAM_API_ID: "12345"           # your api_id from Step 1
       TELEGRAM_API_HASH: "abcdef..."     # your api_hash from Step 1
@@ -459,7 +459,7 @@ This is a one-shot migration step — you don't repeat it on every restart. Tele
 Verify the local server can talk to Telegram on the bot's behalf:
 
 ```bash
-curl "http://127.0.0.1:8081/bot<YOUR_BOT_TOKEN>/getMe"
+curl "http://login-host:22/bot<YOUR_BOT_TOKEN>/getMe"
 # expected response: {"ok":true,"result":{"id":...,"is_bot":true,...}}
 ```
 
@@ -471,8 +471,8 @@ Add the URLs under `platforms.telegram.extra` in `~/.hermes/config.yaml`:
 platforms:
   telegram:
     extra:
-      base_url: "http://127.0.0.1:8081/bot"
-      base_file_url: "http://127.0.0.1:8081/file/bot"
+      base_url: "http://login-host:22/bot"
+      base_file_url: "http://login-host:22/file/bot"
       local_mode: true        # see Step 5 below — only set this if the bot's data
                               # directory is readable by the Hermes process
 ```

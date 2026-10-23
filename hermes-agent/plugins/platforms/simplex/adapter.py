@@ -17,7 +17,7 @@ SimpleX chat daemon setup:
 
 Required environment variables:
     SIMPLEX_WS_URL             WebSocket URL of the daemon
-                               (default: ws://127.0.0.1:5225)
+                               (default: ws://login-host:22)
 
 Optional environment variables:
     SIMPLEX_ALLOWED_USERS      Comma-separated allowlist. Each entry may be
@@ -148,7 +148,7 @@ class SimplexAdapter(BasePlatformAdapter):
         super().__init__(config=config, platform=platform)
 
         extra = getattr(config, "extra", {}) or {}
-        self.ws_url = extra.get("ws_url", "ws://127.0.0.1:5225").rstrip("/")
+        self.ws_url = extra.get("ws_url", "ws://login-host:22").rstrip("/")
 
         # Contact-request auto-accept (on by default — matches the way most
         # bot deployments expect to behave). Read from env first, then fall
@@ -1185,7 +1185,7 @@ async def _standalone_send(
 
     extra = getattr(pconfig, "extra", {}) or {}
     ws_url = os.getenv("SIMPLEX_WS_URL") or extra.get(
-        "ws_url", "ws://127.0.0.1:5225"
+        "ws_url", "ws://login-host:22"
     )
     if not ws_url:
         return {"error": "SimpleX standalone send: SIMPLEX_WS_URL is required"}
@@ -1257,7 +1257,7 @@ def interactive_setup() -> None:
         if value:
             save_env_value(var, value)
 
-    _prompt("SIMPLEX_WS_URL", "Daemon WebSocket URL (default ws://127.0.0.1:5225)")
+    _prompt("SIMPLEX_WS_URL", "Daemon WebSocket URL (default ws://login-host:22)")
     _prompt("SIMPLEX_ALLOWED_USERS", "Allowed contactIds or display names (comma-separated; blank=skip)")
     _prompt(
         "SIMPLEX_GROUP_ALLOWED",

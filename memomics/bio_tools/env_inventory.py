@@ -1283,7 +1283,7 @@ def _cluster_hint(state: dict) -> str:
                 % state.get("config_path", "memomics_home/config.yaml"))
     if not state.get("nodes"):
         return ("集群已启用但没有登记节点：config.yaml 的 remote: 段填 host（单节点）"
-                "或 nodes: 段登记多台机器（ssh3: {} / ssh5: {}）")
+                "或 nodes: 段登记多台机器（node1: {} / node2: {}）")
     return ""
 
 

@@ -4,11 +4,11 @@ import asyncio, json, time
 import websockets
 
 SID = "memomics-2274ab75"
-WS_URL = "ws://127.0.0.1:8899/ws"
+WS_URL = "ws://login-host:22/ws"
 
 # 场景序列（真实科研流：画图 → 打断问别的 → 继续画图 → 更多混合）
 SCENARIOS = [
-    ("heavy-violin-1", "用 E:/骨骼肌锻炼/MF_AUCell_meta.csv 画一张 LRP1B+ 亚群 AMPK_PGC1a 打分的小提琴图。先看 scripts/ 有没有现成脚本，有就直接复用改数据路径，没有就写新的。"),
+    ("heavy-violin-1", "用 <数据目录> 画一张 LRP1B+ 亚群 AMPK_PGC1a 打分的小提琴图。先看 scripts/ 有没有现成脚本，有就直接复用改数据路径，没有就写新的。"),
     ("light-interrupt", "顺便问一下：R 里 factor 和 character 类型有什么区别？一句话。"),
     ("heavy-violin-2", "继续画图：再画一张 OTUD1+ 亚群 scoreAtrophy 的小提琴图，风格和上一张保持一致。"),
     ("heavy-other", "用同一个数据文件，统计一下 26 个 *_AUC 打分列的平均值，列个表。"),
@@ -16,7 +16,7 @@ SCENARIOS = [
 ]
 
 async def last_turn():
-    path = r"E:\MemOmics-Agent\results\memomics-2274ab75\token_usage.jsonl"
+    path = r"<安装目录>"
     last = None
     for line in open(path, encoding="utf-8"):
         line = line.strip()

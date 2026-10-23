@@ -441,23 +441,23 @@ def test_d5_303_downgrades_post_to_get(prov, enforce, connect_recorder):
 # ====================================================== E. 代理与 net.local
 def test_e1_proxy_disables_pinning(prov, enforce, plain_spy, connect_recorder):
     prov.grant("net.fetch", "example.com", ttl_s=100)
-    r = NG.urlopen("http://example.com/x", proxy="http://127.0.0.1:6478")
+    r = NG.urlopen("http://example.com/x", proxy="http://login-host:22")
     assert connect_recorder == [], "代理场景不该走钉 IP 直连"
-    assert plain_spy[0]["proxy"] == "http://127.0.0.1:6478"
+    assert plain_spy[0]["proxy"] == "http://login-host:22"
     assert r.via_proxy is True and NG.counters()["proxy"] >= 1
 
 
 def test_e2_loopback_never_goes_through_proxy(prov, enforce, plain_spy, local_http):
-    r = NG.urlopen(local_http + "/hello", action="net.local", proxy="http://127.0.0.1:6478")
+    r = NG.urlopen(local_http + "/hello", action="net.local", proxy="http://login-host:22")
     assert plain_spy == [], "环回目标必须直连（否则代理把本机服务也代理走了）"
     assert json.loads(r.read())["ok"] is True
 
 
 def test_e3_env_proxy_is_picked_up(prov, enforce, plain_spy, monkeypatch):
-    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:6478")
+    monkeypatch.setenv("HTTPS_PROXY", "http://login-host:22")
     prov.grant("net.fetch", "example.com", ttl_s=100)
     NG.urlopen("https://example.com/x")
-    assert plain_spy and plain_spy[0]["proxy"] == "http://127.0.0.1:6478"
+    assert plain_spy and plain_spy[0]["proxy"] == "http://login-host:22"
 
 
 def test_e4_net_local_allows_loopback_by_default(prov, enforce, local_http):

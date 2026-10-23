@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 远端集群环境探查（只读，登录节点可跑）
 # 用法:  bash probe_cluster_envs.sh <conda_root> [PKG1 PKG2 ...]
-# 例:    bash probe_cluster_envs.sh /hwfssz3/PS_JLU/zhangxiao6/software/miniconda3
+# 例:    bash probe_cluster_envs.sh /cluster/share/zhangxiao6/software/miniconda3
 #
 # 一次跑完四件事：① env 列表+类型+版本 ② 逐 R env 关键包 ③ 逐 Python env 关键包 ④ activate 可用性
 # 设计要点（见 SKILL.md 铁规 0）：环境名不可信 —— 只以 find.package / find_spec 的实测结果为准。

@@ -46,7 +46,7 @@ fastmcp list server.py --json
 List tools from an HTTP endpoint:
 
 ```bash
-fastmcp list http://127.0.0.1:8000/mcp --json
+fastmcp list http://login-host:22/mcp --json
 ```
 
 Call a tool with key-value arguments:

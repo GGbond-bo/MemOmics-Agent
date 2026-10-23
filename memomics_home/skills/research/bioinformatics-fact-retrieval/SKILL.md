@@ -44,7 +44,7 @@ short-description: "Retrieve and verify bioinformatics facts from official docs 
    `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID:<PMID>&resultType=core&format=json`（取 `abstractText` 字段，用于引用性能/结论数字）
 4. **多源清单式检索（用户要「PubMed / Crossref 各 N 篇，附 DOI，只要清单」）→ 走仓库自带的 CLI 桥 `lit_bridge.py`**（上游 MCP 服务在本平台不可达，这个桥是标准库实现、零 API key）：
    `memomics_home/skills/bioinformatics/nature-academic-search/scripts/lit_bridge.py search "<query>" --sources pubmed,crossref --limit 8 --json`
-   先 `export HTTP_PROXY=http://127.0.0.1:6478 && export HTTPS_PROXY=http://127.0.0.1:6478`。**JSON 结果数组的键是 `records`**（顶层 = `query/count/sources_used/errors/records`）——⛔ 别凭被截断的回执片段猜 schema，先 `print(list(d.keys()))`；两源查询写法不同、Crossref 需换检索式并过滤 `type`，完整配方 + 实测证据见 `references/lit-bridge-multi-source-retrieval.md`
+   先 `export HTTP_PROXY=http://login-host:22 && export HTTPS_PROXY=http://login-host:22`。**JSON 结果数组的键是 `records`**（顶层 = `query/count/sources_used/errors/records`）——⛔ 别凭被截断的回执片段猜 schema，先 `print(list(d.keys()))`；两源查询写法不同、Crossref 需换检索式并过滤 `type`，完整配方 + 实测证据见 `references/lit-bridge-multi-source-retrieval.md`
 5. **只读检索的交付口径（用户已明确，2026-09-25）**：只要清单 ⇒ 输出 Markdown 表格（标题/期刊/年/DOI，PubMed 附 PMID）+ 实际检索式与命中数，**失败源照实报**；**不落文件、不入库、不跑分析、不弹意图表单、不追问「要不要导出」、不强行辩论**（清单类无候选参数 ⇒ L0 跳过）
 6. **「给这个结论找引用」类请求（论断→引用匹配）**：先**拆成 2-4 个子论断**再逐条配文献 + **保守支撑分级**（strong/partial/background/limiting/metadata-only）；综述只作 context；某半句查不到摘要级原始证据 ⇒ **如实报缺口并建议改写措辞**，不得用"标题相关"凑数。`search_papers`/`query_ncbi` **都不回摘要**，定级前必须用 §1-步3 的 Europe PMC `resultType=core` 批量取 `abstractText`。完整流程、批量模板、接口坑、可复用工作示例（卫星细胞衰老论断 7 篇）见 `references/claim-to-citation-support-grading.md`
 
@@ -80,7 +80,7 @@ API 返回的是数据库视图，答不了「你手上这份 GTF 里它长什�
    左端 = 反义 lncRNA 启动子、**右端 = 宿主基因启动子**。据此统计「宿主基因 TSS 近端可及性 Post−Pre」，
    才答得上用户真正想问的「运动是否也影响宿主基因」。
    ⛔ 三条不可越界的推论：① **可及性 ≠ 转录**（染色质开放是必要不充分条件，只支持「该位点被重塑」）；
-   ② **变化方向不可先验假定**（人骨骼肌耐力训练的 ATAC 证据是往**闭合**走：PMID 40623475，标题级核实）；
+   ② **变化方向不可先验假定**（人示例组织耐力训练的 ATAC 证据是往**闭合**走：PMID 40623475，标题级核实）；
    ③ **基因边界 ≠ 在用的启动子**（MEF2C 有 56 个转录本、多个替代启动子 ⇒ 先看 ATAC 峰 / RNA 覆盖落在哪个 TSS）。
    配对结构必须按**供体配对**（同人 Pre vs Post），⛔ 不能把 Pre 组与 Post 组当独立样本比。
    ⚠️ 交付口径：**「能统计，但对象要换」比一口否定（"ATAC 无法归属"）更准确**——过度否定与过度断言
@@ -258,7 +258,7 @@ python 正则：去 `<script>/<style>` → 去标签 → `html.unescape` → `\s
 
 | 用 `lit_bridge.py ... --json` 检索后解析**零输出、也不报错**（`json.load` 成功、循环不执行） | 结果数组键是 **`records`**，我按惯例写成 `results` ⇒ 取到空列表、静默跳过；根因是**只用 `tail` 看被截断的回执片段就推断 schema**（2026-09-25 实测，白烧 1 轮） | 解析前先 `print(list(d.keys()))` 打印顶层键（或写递归 `walk()` 自动找 dict-list），**一次定 schema**；⛔ 下次遇到任何新 CLI/API 的 JSON，都别凭片段猜键名 |
 | 把 `tail -c 5000` 看 `lit_bridge.py --json` 的输出当成"完整结果" → **`count` 字段与前 1–2 条记录被静默吃掉**，交付清单凭空少项（2026-09-25 实测：PubMed 首跑 tail 只剩 7 条、`count` 完全看不到，据此汇报就会漏报命中数） | `tail` 从**尾部**截断，JSON 头部的 `query/count/sources_used` 与靠前记录先被切掉；回执看着"就是这些"，实则截断 | 报"命中几条 / 交付清单"时**一律管道进 python 解析 JSON，绝不看 tail 片段**：`... --json | <py> -c $'…'`（git-bash 下多行 `-c` 用 **ANSI-C 引用 `$'…\n…'`**，免去嵌套转义引号——比 `\n` 手拼与 heredoc 都稳）；只打印 年 / 期刊 / 标题 / DOI / PMID / type 六个字段。完整可粘命令见 `references/lit-bridge-multi-source-retrieval.md` §解析 |
-| Crossref 同一条字面检索式**每次都混入明显不切题的条目**（2026-09-25 实测：`skeletal muscle aging single-cell RNA sequencing` → `count=6`，其中 3 条是鸡骨骼肌发育的补充材料 `component`（`year=None`）、骨骼肌**发育**综述、**卒中 microglia**——与骨骼肌衰老无关） | Crossref 是全学科全类型索引，字面词命中即返回；`component`（论文补充材料）连 `year` 都缺 ⇒ 不能按年份排序/筛选，排序结果会莫名把 None 排头 | 交付前**逐条按标题切题度筛**（不只是按 `type` 过滤）：剔 `component` / 跨物种跨疾病条目；清单里**标注真实类型**（会议摘要/预印本/评论/期刊论文）并写明"命中 N 条、取最贴合 M 条"，被剔除的条目在"源状态说明"里点名列 DOI——**让用户看得到剔除动作，而不是只看到 3 行表** |
+| Crossref 同一条字面检索式**每次都混入明显不切题的条目**（2026-09-25 实测：`skeletal muscle aging single-cell RNA sequencing` → `count=6`，其中 3 条是鸡示例组织发育的补充材料 `component`（`year=None`）、示例组织**发育**综述、**卒中 microglia**——与示例组织衰老无关） | Crossref 是全学科全类型索引，字面词命中即返回；`component`（论文补充材料）连 `year` 都缺 ⇒ 不能按年份排序/筛选，排序结果会莫名把 None 排头 | 交付前**逐条按标题切题度筛**（不只是按 `type` 过滤）：剔 `component` / 跨物种跨疾病条目；清单里**标注真实类型**（会议摘要/预印本/评论/期刊论文）并写明"命中 N 条、取最贴合 M 条"，被剔除的条目在"源状态说明"里点名列 DOI——**让用户看得到剔除动作，而不是只看到 3 行表** |
 | Crossref 侧命中数远低于预期（`--limit 3` 只回 2 条，且全是会议摘要） | Crossref 对**并列名词的字面短语**匹配弱；换领域惯用词后命中翻数倍（实测 `single-cell RNA sequencing` → 2 条 vs `single-cell transcriptomics` → 9 条、`single-nucleus atlas` → 6 条）。另：Crossref 条目**无 PMID**，且混入 `book-chapter` / `posted-content`(预印本) / `peer-review` / `grant` 等非正式类型 | 一条检索式命中不足就**换词重跑**（比调 `--limit` 有效）；交付前按 `type` 过滤或**逐条标注类型**（会议摘要/预印本要写清）；要 PMID 回 PubMed 侧查 |
 | 只读文献检索收尾时被门禁连环点名：rail_review(post) 判 `代码过短` / `使用 &&` failed，debate 门控要求升级 L2 | 审查器与辩论门控都按**分析级任务**标定，与「只读检索、零文件产出」口径天然不匹配（用户本轮明令"不生成文件"） | **如实说明口径不匹配 + 给真实证据（命令 + 命中数），不补假产物、不硬凑辩论**；处置细节与判据见 `platform-execution-pitfalls` 使用要点 §13 |
 

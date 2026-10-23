@@ -76,7 +76,7 @@ class TestTlsContext:
         """proxy=None 必须真直连，不能静默复用系统代理
 
         历史缺陷：build_opener() 自动挂的 ProxyHandler 读系统注册表；
-        本机 ProxyEnable=1 指向 127.0.0.1:6478，于是所谓"失败降级直连"
+        本机 ProxyEnable=1 指向 login-host:22，于是所谓"失败降级直连"
         仍走同一代理、同一失败原因 —— 双路兜底形同虚设。
 
         实现说明：ProxyHandler({}) 不注册任何协议方法，因此不会出现在

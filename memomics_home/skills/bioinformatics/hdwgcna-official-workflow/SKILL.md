@@ -20,7 +20,7 @@ prerequisites:
 # hdWGCNA 官方 workflow（Windows 实操版）
 
 端到端跑通 hdWGCNA 官方教程（Morabito et al. 2023 Cell Rep Methods）并出 7 类官方标准图。
-已在骨骼肌 MF（20000 cells / 6524 metacells / 10176 genes）实测通过（2026-08-01，hdWGCNA 0.4.12，R 4.4.2）。
+已在示例组织 MF（20000 cells / 6524 metacells / 10176 genes）实测通过（2026-08-01，hdWGCNA 0.4.12，R 4.4.2）。
 
 ## 什么时候用
 - 需要模块-性状关联（module-trait correlation）直接回答"哪个模块响应哪个效应"时
@@ -101,9 +101,9 @@ obj@misc$MF_wgcna$wgcna_net$TOMFiles <- "E:/.../TOM_official/MF_wgcna_TOM.rda"
 - ✅ 正确做法：hdWGCNA 流程**一律用 terminal + R 4.4.2 全路径**，不要用 execute_r
 ```r
 # 正确路径必须含 x64（少了 x64 会报"系统找不到指定的路径"）
-# C:/Users/23136/AppData/Local/R/R-4.4.2/bin/x64/Rscript.exe
+# <用户目录>
 ```
-- R 4.4.2 库：`E:/R-libs/R-4.4.2` + `C:/Users/23136/R/R-4.4.2-library` + `AppData/Local/R/R-4.4.2/library`
+- R 4.4.2 库：`E:/R-libs/R-4.4.2` + `<用户目录> + `AppData/Local/R/R-4.4.2/library`
 - 版本实测：hdWGCNA 0.4.12 / WGCNA 1.74 / Seurat 5.5.0 / future 1.70.0 / enrichR 3.4
 
 ### 10. 🔴 metacell 对象键名 = `wgcna_metacell_obj`（不是 `metacell_obj`）
@@ -233,7 +233,7 @@ stopifnot(ncol(datExpr) == length(primary_lab), nrow(datExpr) < ncol(datExpr))
 - ⚠️ 拆模块失败排查顺序：先换完整基因集重跑，再下"低异质性/均质"结论——NMF 可作互补验证（见 `references/limitations-and-literature.md`），但不可作为跳过完整基因集尝试的理由
 
 ## 环境备注（本机）
-- R 4.4.2 在 `C:/Users/23136/AppData/Local/R/R-4.4.2/`，可执行文件必须写全 **`bin/x64/Rscript.exe`**（⚠️ 2026-09-24 修正：本文档原写"execute_r 和 PATH 的 Rscript 用这个"已过时 —— execute_r 内核实际跑 **R 4.5.3**，见坑 #9；Program Files 下只有 4.5.3/4.6.1，其中 R 4.5.3 的 Matrix.dll 已损坏——`loadNamespace` 任何依赖 Matrix 的包都会报 LoadLibrary failure，遇此直接用 `C:/Users/23136/AppData/Local/R/R-4.4.2/bin/Rscript.exe` 跑参数核实/诊断脚本）
+- R 4.4.2 在 `<用户目录>，可执行文件必须写全 **`bin/x64/Rscript.exe`**（⚠️ 2026-09-24 修正：本文档原写"execute_r 和 PATH 的 Rscript 用这个"已过时 —— execute_r 内核实际跑 **R 4.5.3**，见坑 #9；Program Files 下只有 4.5.3/4.6.1，其中 R 4.5.3 的 Matrix.dll 已损坏——`loadNamespace` 任何依赖 Matrix 的包都会报 LoadLibrary failure，遇此直接用 `<用户目录> 跑参数核实/诊断脚本）
 - hdWGCNA 0.4.12 + WGCNA 1.74 + enrichR 3.4（.onAttach 联网不可达）已装进 AppData 库
 - 网络：GitHub raw/codeload 有时可达，github.com 页面 curl 常 reset——R 包安装优先 pak 或已缓存
 

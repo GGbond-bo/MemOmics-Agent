@@ -5,8 +5,8 @@
 同时报告精确命中率（理想意图==输出）与可接受率（输出∈集合）。
 """
 import sys, sqlite3, re, time
-sys.path.insert(0, r'E:\MemOmics-Agent\webui')
-sys.path.insert(0, r'E:\MemOmics-Agent\hermes-agent')
+sys.path.insert(0, r'<安装目录>')
+sys.path.insert(0, r'<安装目录>')
 
 # mid -> (理想意图, 可接受意图集合)
 LABELS = {
@@ -52,7 +52,7 @@ LABELS = {
     33245: ("direct_exec", {"direct_exec", "analysis"}),
 }
 
-DB = r'E:\MemOmics-Agent\memomics_home\state.db'
+DB = r'<安装目录>'
 c = sqlite3.connect(f'file:{DB}?mode=ro', uri=True)
 texts = {}
 for mid in LABELS:

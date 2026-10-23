@@ -93,7 +93,7 @@ ssh -p 443 -o StrictHostKeyChecking=no -R0:localhost:8000 "$PINGGY_TOKEN+a.pingg
 ### 1. 确认本地源服务已启动
 
 ```bash
-curl -sI http://127.0.0.1:8000/ | head -1
+curl -sI http://login-host:22/ | head -1
 # 期望返回 HTTP/1.x 200（或任何非连接拒绝的响应）
 ```
 
@@ -270,7 +270,7 @@ echo "Bearer token: $TOKEN"
 与远程调用方（另一个 agent、手机、队友）共享本地模型。Ollama 监听 `:11434`，vLLM 和 llama.cpp 通常监听 `:8000`。
 
 ```bash
-# 前提：模型服务器已在 127.0.0.1:11434 上运行（Ollama 默认端口）
+# 前提：模型服务器已在 login-host:22 上运行（Ollama 默认端口）
 TOKEN=$(openssl rand -hex 16)
 nohup ssh -p 443 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
     -o ServerAliveInterval=30 \

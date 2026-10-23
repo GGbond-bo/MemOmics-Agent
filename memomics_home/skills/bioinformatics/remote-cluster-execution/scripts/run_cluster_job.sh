@@ -5,7 +5,7 @@
 #
 # 用法：bash run_cluster_job.sh <INPUT.rds> <WORKDIR> [额外参数...]
 # 环境变量（默认取 environment.json.cluster.policy 锁定的工作环境）：
-#   CONDA_ROOT=/hwfssz3/PS_JLU/zhangxiao6/software/miniconda3
+#   CONDA_ROOT=/cluster/share/zhangxiao6/software/miniconda3
 #   ENV_NAME=R4.41                 # RNA→R4.41 / ATAC→R4.3.3（只读，禁装包）
 #   STAGE=checkpoint_job.R         # 同目录下的 R 脚本
 # ============================================================================
@@ -15,7 +15,7 @@ INPUT="${1:?用法: run_cluster_job.sh <INPUT.rds> <WORKDIR> [参数...]}"
 WORKDIR="${2:?用法: run_cluster_job.sh <INPUT.rds> <WORKDIR> [参数...]}"
 shift 2 || true
 
-CONDA_ROOT="${CONDA_ROOT:-/hwfssz3/PS_JLU/zhangxiao6/software/miniconda3}"
+CONDA_ROOT="${CONDA_ROOT:-/cluster/share/zhangxiao6/software/miniconda3}"
 ENV_NAME="${ENV_NAME:-R4.41}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STAGE="${STAGE:-checkpoint_job.R}"

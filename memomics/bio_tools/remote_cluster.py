@@ -42,7 +42,7 @@ StrictHostKeyChecking=accept-new/ConnectTimeout/-p/-i）与执行语义和 memom
       scheduler: auto               # auto | slurm | pbs | gridengine | none
       partition: cpu                # Slurm 默认分区
       queue: ""                     # PBS 默认队列
-      local_root: E:/MemOmics-Agent # 与 remote_root 配对，用于路径映射（可选）
+      local_root: <安装目录> # 与 remote_root 配对，用于路径映射（可选）
       remote_root: /home/zhangsan/proj
       job_dir: ""                   # 作业脚本/日志目录，默认 <workdir>/memomics_jobs
       timeout: 300                  # run 默认超时（秒）
@@ -142,7 +142,7 @@ def _get_config_path() -> Path:
         from hermes_constants import get_hermes_home
         base = Path(get_hermes_home())
     except Exception:
-        base = Path(os.environ.get("MEMOMICS_HOME", "E:/MemOmics-Agent/memomics_home"))
+        base = Path(os.environ.get("MEMOMICS_HOME", "<安装目录>"))
     return base / "config.yaml"
 
 
@@ -281,8 +281,8 @@ def _normalize_nodes(raw) -> dict:
 
         remote:
           nodes:
-            ssh3: {}                    # 名字本身就是 ssh 主机名 / ~/.ssh/config 里的别名
-            ssh5: ssh5.example.org      # 字符串 = 显式主机名
+            node1: {}                    # 名字本身就是 ssh 主机名 / ~/.ssh/config 里的别名
+            node2: node2.example.org      # 字符串 = 显式主机名
             gpu1:                       # 完整写法：只写要覆盖的字段
               host: 10.0.0.5
               user: zhang
@@ -456,7 +456,7 @@ def _select_node(cfg: dict, requested: str = ""):
                   "**先问用户要在哪个节点上跑**，拿到答复后再用 node=\"<名字>\" 重新调用；"
                   "不要自己挑一个，也不要用最近一次用过的。"),
         "nodes": _nodes_brief(table),
-        "usage": "remote_cluster(action='submit', node='ssh3', command='...')",
+        "usage": "remote_cluster(action='submit', node='node1', command='...')",
         "policy": cfg.get("node_policy") or "ask",
         "tip": ("想挑最闲的节点：先 action='nodes' 看 load_per_cpu/idle_now，再把选中的名字传进来"
                 "（node_policy=auto 的自动择优还没实现，目前仍按 ask 处理）。"),
@@ -478,7 +478,7 @@ def _rec_matches_node(rec: dict, cfg: dict) -> bool:
     """作业记录是否属于当前节点。
 
     记录里**有** node 字段就必须按节点名严格比：多个节点可能是同一个集群的不同入口，
-    host 完全可能一样（例如 ssh3/ssh5 都指向同一台登录机），再退回比 host 会把
+    host 完全可能一样（例如 node1/node2 都指向同一台登录机），再退回比 host 会把
     A 节点的作业当成 B 节点的。只有升级前的旧记录（没有 node 字段）才退化成比 host。
     """
     name = str(cfg.get("_name") or "")
@@ -2442,7 +2442,7 @@ def _glob_local(raw: str, root: Path) -> list:
 
 
 # 远端展开通配符用的 python 一句话：**必须 py2/py3 双兼容**。
-# 实测踩坑（2026-10-09，ssh23）：节点上只有 /usr/bin/python = Python 2.7.5，没有 python3；
+# 实测踩坑（2026-10-09，node4）：节点上只有 /usr/bin/python = Python 2.7.5，没有 python3；
 # 原来的 `[print(...) for p in ps]` 在 py2 里是语法错误（print 是语句），整条 pull/locate 通配符
 # 直接报 SyntaxError「远端没找到」。所以：不用 print()、不用 f-string，只留两边都合法的写法。
 _REMOTE_GLOB_PY = ('import glob,sys,os;ps=[];'
@@ -2455,7 +2455,7 @@ _REMOTE_GLOB_PY = ('import glob,sys,os;ps=[];'
 def _locate_remote_glob(conn, cands: list, out: dict) -> dict:
     """远端通配符：借节点上的 python 展开（shell 里带引号的 glob 不会自己展开）。
 
-    先试 python3 再退 python —— 有些节点（ssh23）只有 Python 2.7.5，所以脚本本身要 py2 也能跑。
+    先试 python3 再退 python —— 有些节点（node4）只有 Python 2.7.5，所以脚本本身要 py2 也能跑。
     """
     pats = " ".join(shlex.quote(c) for c in cands if c)
     cmd = ("for PY in python3 python; do command -v $PY >/dev/null 2>&1 || continue; "
@@ -3011,7 +3011,7 @@ def _action_session_plot(cfg: dict, args: dict) -> str:
 # R 包清单（按节点 + env）—— 「按执行位置审查」的集群半边（2026-10-09）
 #
 # 用户实测事故：rail_review(pre) 只查**本机** R 包清单，本地缺 RUVSeq 就把**集群投递**硬拦了
-# （"Missing packages: RUVSeq"），而 ssh23 的 R4.41 里其实装着。于是：
+# （"Missing packages: RUVSeq"），而 node4 的 R4.41 里其实装着。于是：
 #   本地的任务查本地包、集群的任务查集群包、云平台单独标"没法在本地核实"。
 # 这里负责集群侧的事实来源：一次 ssh 读全量包清单 → 本地缓存（默认 12h）→
 # env_check(scope="cluster") 与 rail_review(location="cluster") 都吃它。
@@ -3243,7 +3243,7 @@ def _conn_hint(exc, node_cfg) -> str:
             jump = extra[i + 1]
     if "could not resolve hostname" in text:
         return ("本机解析不了这个主机名——它是集群内网名字，必须给这个节点配「跳板机」"
-                "（⚙️ 配置 → 节点行的跳板机框，填 用户名@登录口IP，如 zhangbo11@192.168.61.11），"
+                "（⚙️ 配置 → 节点行的跳板机框，填 用户名@登录口IP，如 user@login-host），"
                 "让登录口去解析它。")
     if "banner" in text or "unknown port 65535" in text:
         return ("走跳板的连接在跳板那一跳就断了（banner 超时 / UNKNOWN port 65535 的典型表现）——"
@@ -3281,7 +3281,7 @@ def remote_cluster_handler(args=None, **kwargs) -> str:
             "① 单节点：\n  enabled: true\n  host: <登录节点>\n  user: <用户名>\n"
             "  key: <私钥路径>\n  workdir: <远端工作目录>\n"
             "② 多节点（命名节点，用 node= 选机器）：\n  enabled: true\n  user: <用户名>\n"
-            "  key: <私钥路径>\n  workdir: <共享工作目录>\n  nodes:\n    ssh3: {}\n    ssh5: {}\n"
+            "  key: <私钥路径>\n  workdir: <共享工作目录>\n  nodes:\n    node1: {}\n    node2: {}\n"
             "（或用环境变量 MEMOMICS_REMOTE_ENABLED/HOST/USER/KEY/WORKDIR 临时覆盖）"
         )
     if action not in _ACTIONS:
@@ -3376,10 +3376,10 @@ SCHEMA = {
         "（缓存 12 小时，refresh=true 强制重读），给了 packages=[...] 就报 installed/missing。"
         "用途：决定「这个包集群上有没有」、以及 rail_review(location='cluster') 的包审查依据。"
         "**别拿本机包清单去判集群任务**（本地缺 ≠ 集群缺——实测本地缺 RUVSeq 曾把投递硬拦，"
-        "而 ssh23 的 R4.41 里是有的）。\n"
+        "而 node4 的 R4.41 里是有的）。\n"
         "  • nodes  —— 列配置里的所有节点，逐个探连通性 + 负载（谁空着、谁连不上）；"
         "不指定节点也能调用。\n"
-        "【用哪个节点】config 的 remote.nodes 里配了多个命名节点（如 ssh3/ssh5）时，"
+        "【用哪个节点】config 的 remote.nodes 里配了多个命名节点（如 node1/node2）时，"
         "用 node=\"<名字>\" 指定；**只配了一个节点时不用传，工具静默用它**。"
         "配了多个但没传 node：**若设了 default_node 就静默用默认节点**（用户说「用集群」即默认节点）；"
         "只有既没传 node 又没配 default_node 才返回 status=needs_node + 候选列表，"
@@ -3427,7 +3427,7 @@ SCHEMA = {
             },
             "node": {
                 "type": "string",
-                "description": ("用哪个远端节点（remote.nodes 里配置的名字，如 ssh3/ssh5）。"
+                "description": ("用哪个远端节点（remote.nodes 里配置的名字，如 node1/node2）。"
                                 "只配了一个节点时可省略；配了多个又没给这个参数，工具会拒绝执行"
                                 "并列出候选——这时必须先问用户要用哪个节点。"
                                 "也可以用 action='nodes' 先看各节点负载再决定。"),

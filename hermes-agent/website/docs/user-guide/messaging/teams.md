@@ -117,7 +117,7 @@ docker logs -f hermes
 
 Look for:
 ```
-[teams] Webhook server listening on 0.0.0.0:3978/api/messages
+[teams] Webhook server listening on login-host:22/api/messages
 ```
 
 ---

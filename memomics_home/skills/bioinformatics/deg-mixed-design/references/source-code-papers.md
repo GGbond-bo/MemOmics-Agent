@@ -6,8 +6,8 @@
 
 | 文章 | 期刊·年 | 结构 | 源码状态 |
 |---|---|---|---|
-| Lovric et al. "Single-cell sequencing deconvolutes cellular responses to exercise in human skeletal muscle" | 2023 (GEO **GSE214544**) | 单细胞 + 骨骼肌 + 运动前后 | 第三方复现仓库（GitHub API 实查确认）：`evanpeikon/GSM_6611295`、`aspiroo/GSE214544-SC-RNA-RStudio` |
-| Kedlian et al. "Human skeletal muscle aging atlas" | Nat Aging 2024, DOI 10.1038/s43587-024-00613-3, PMID 38622407 | 人类骨骼肌衰老图谱，跨组比较 | Teichlab GitHub org 下，仓库名需现场再确认（`Teichlab/SkeletalMuscleAgingAtlas` 404） |
+| Lovric et al. "Single-cell sequencing deconvolutes cellular responses to exercise in human skeletal muscle" | 2023 (GEO **GSE214544**) | 单细胞 + 示例组织 + 运动前后 | 第三方复现仓库（GitHub API 实查确认）：`evanpeikon/GSM_6611295`、`aspiroo/GSE214544-SC-RNA-RStudio` |
+| Kedlian et al. "Human skeletal muscle aging atlas" | Nat Aging 2024, DOI 10.1038/s43587-024-00613-3, PMID 38622407 | 示例研究场景图谱，跨组比较 | Teichlab GitHub org 下，仓库名需现场再确认（`Teichlab/SkeletalMuscleAgingAtlas` 404） |
 | Edman et al. "The 24-hour molecular landscape after exercise…MYC" | EMBO Rep 2024, DOI 10.1038/s44319-024-00299-z, PMID 39482487 | 运动前后配对时间序列 | 方法公开；代码需确认 |
 | Pillon et al. "Molecular choreography of acute exercise" | Cell Metab 2020 | bulk 运动时间序列（配对/重复测量方法可参考） | PillonLab 分析代码公开（仓库名需现场确认） |
 

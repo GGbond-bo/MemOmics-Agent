@@ -517,7 +517,7 @@ docker run -d \
 model:
   provider: custom
   model: my-model
-  base_url: http://127.0.0.1:8000/v1
+  base_url: http://login-host:22/v1
   api_key: "none"
 ```
 
@@ -540,7 +540,7 @@ docker exec hermes curl -s http://vllm:8000/v1/models
 
 ### Ollama
 
-Ollama 的配置方式相同。如果 Ollama 在宿主机上运行，使用 `host.docker.internal:11434`（macOS/Windows）或 `127.0.0.1:11434`（Linux 使用 `--network host`）。如果 Ollama 在同一 Docker 网络的独立容器中运行：
+Ollama 的配置方式相同。如果 Ollama 在宿主机上运行，使用 `host.docker.internal:11434`（macOS/Windows）或 `login-host:22`（Linux 使用 `--network host`）。如果 Ollama 在同一 Docker 网络的独立容器中运行：
 
 ```yaml
 model:

@@ -97,7 +97,7 @@ description: "使用 ComfyUI 生成图像、视频和音频——安装、启动
 ```bash
 # 检查可用内容
 command -v comfy >/dev/null 2>&1 && echo "comfy-cli: installed"
-curl -s http://127.0.0.1:8188/system_stats 2>/dev/null && echo "server: running"
+curl -s http://login-host:22/system_stats 2>/dev/null && echo "server: running"
 
 # 此机器能否在本地运行 ComfyUI？（GPU/VRAM/磁盘检查）
 python3 scripts/hardware_check.py
@@ -137,7 +137,7 @@ python3 scripts/extract_schema.py workflow_api.json
 ### 第三步：带参数运行
 
 ```bash
-# 本地（默认 http://127.0.0.1:8188）
+# 本地（默认 http://login-host:22）
 python3 scripts/run_workflow.py \
   --workflow workflow_api.json \
   --args '{"prompt": "a beautiful sunset over mountains", "seed": -1, "steps": 30}' \
@@ -374,7 +374,7 @@ comfy --skip-prompt install --nvidia --fast-deps  # 基于 uv 的依赖解析
 ```bash
 comfy launch --background                       # 后台守护进程，端口 :8188
 comfy launch -- --listen 0.0.0.0 --port 8190    # 局域网可访问的自定义端口
-curl -s http://127.0.0.1:8188/system_stats      # 健康检查
+curl -s http://login-host:22/system_stats      # 健康检查
 ```
 
 ---
@@ -471,7 +471,7 @@ python3 scripts/run_workflow.py \
 
 通过 REST 手动上传：
 ```bash
-curl -X POST "http://127.0.0.1:8188/upload/image" \
+curl -X POST "http://login-host:22/upload/image" \
   -F "image=@photo.png" -F "type=input" -F "overwrite=true"
 # 返回：{"name": "photo.png", "subfolder": "", "type": "input"}
 
@@ -499,10 +499,10 @@ curl -X POST "https://cloud.comfy.org/api/upload/image" \
 
 ```bash
 # 本地
-curl -s http://127.0.0.1:8188/queue | python3 -m json.tool
-curl -X POST http://127.0.0.1:8188/queue -d '{"clear": true}'    # 取消待处理任务
-curl -X POST http://127.0.0.1:8188/interrupt                      # 取消运行中任务
-curl -X POST http://127.0.0.1:8188/free \
+curl -s http://login-host:22/queue | python3 -m json.tool
+curl -X POST http://login-host:22/queue -d '{"clear": true}'    # 取消待处理任务
+curl -X POST http://login-host:22/interrupt                      # 取消运行中任务
+curl -X POST http://login-host:22/free \
   -H "Content-Type: application/json" \
   -d '{"unload_models": true, "free_memory": true}'
 
@@ -514,7 +514,7 @@ python3 scripts/fetch_logs.py --tail-queue --host https://cloud.comfy.org
 
 1. **必须使用 API 格式** — 所有脚本和 `/api/prompt` 端点均需要 API 格式的工作流 JSON。脚本会检测编辑器格式（顶层含 `nodes` 和 `links` 数组）并提示通过"Workflow → Export (API)"（新版 UI）或"Save (API Format)"（旧版 UI）重新导出。
 
-2. **服务器必须运行** — 所有执行操作都需要运行中的服务器。`comfy launch --background` 可启动服务器。通过 `curl http://127.0.0.1:8188/system_stats` 验证。
+2. **服务器必须运行** — 所有执行操作都需要运行中的服务器。`comfy launch --background` 可启动服务器。通过 `curl http://login-host:22/system_stats` 验证。
 
 3. **模型名称必须精确** — 区分大小写，包含文件扩展名。`check_deps.py` 会进行模糊匹配（含/不含扩展名和文件夹前缀），但工作流本身必须使用规范名称。使用 `comfy model list` 查看已安装内容。
 

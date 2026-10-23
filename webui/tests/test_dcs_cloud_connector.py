@@ -410,13 +410,13 @@ def test_analysis_run_and_task_cancel_compose(_isolate):
     assert bad["status"] == "error" and "command" in bad["error"]
 
     ok = json.loads(dc.dcs_cloud_handler({"action": "analysis_run", "name": "t1",
-                                          "command": "sh /work/zhangbo11/x.sh",
+                                          "command": "sh /work/user/x.sh",
                                           "resource": "vf=32g,num_proc=8", "image": "img:latest",
                                           "mount": "/Files/a,/Files/b", "output_path": "/Files/out"}))
     assert ok["status"] == "ok" and ok["task_id"] == "A1"
     argv = _argv_of(_isolate)
     assert "analysis run" in argv
-    assert "sh /work/zhangbo11/x.sh" in argv          # Windows 下 argv.txt 里这个参数带引号
+    assert "sh /work/user/x.sh" in argv          # Windows 下 argv.txt 里这个参数带引号
     assert "-l vf=32g,num_proc=8" in argv and "--image img:latest" in argv
     assert "-m /Files/a,/Files/b" in argv and "-o /Files/out" in argv
 
@@ -433,7 +433,7 @@ def test_flow_tasks_and_images_shape(_isolate):
     _write_cfg(_isolate, {"enabled": True, "cli_path": _fake_cli_dispatch(_isolate, {
         "workflow tasks": {"exit_code": 0, "message": "ok", "data": {"page": 1, "total": 1, "records": [
             {"task_id": "W202607230088006", "status": "运行中", "wf_name": "Copy-scRNA-seq_v3",
-             "wf_version": "v3.2.2", "expense": "27.30", "create_user": "zhangbo11"}]}},
+             "wf_version": "v3.2.2", "expense": "27.30", "create_user": "user"}]}},
         "image ls": {"exit_code": 0, "message": "ok", "data": {"page": 1, "total": 1, "records": [
             {"name": "r441_nebula_probe_d", "tags": "latest", "prog_env": "workflow"}]}},
     })})

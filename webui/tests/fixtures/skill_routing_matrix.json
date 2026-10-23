@@ -817,7 +817,7 @@
     {
       "id": "remote-cluster-execution-02",
       "intent": "环境清点",
-      "text": "ssh3 上现在有哪些环境？",
+      "text": "node1 上现在有哪些环境？",
       "must_hit": [
         "remote-cluster-execution"
       ],

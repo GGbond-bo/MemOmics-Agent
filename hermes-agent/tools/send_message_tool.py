@@ -1485,7 +1485,7 @@ async def _send_signal(extra, chat_id, message, media_files=None):
     from gateway.platforms.signal_format import markdown_to_signal
 
     try:
-        http_url = extra.get("http_url", "http://127.0.0.1:8080").rstrip("/")
+        http_url = extra.get("http_url", "http://login-host:22").rstrip("/")
         account = extra.get("account", "")
         if not account:
             return {"error": "Signal account not configured"}

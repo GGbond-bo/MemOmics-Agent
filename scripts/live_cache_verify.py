@@ -4,16 +4,16 @@ import asyncio, json, time
 import websockets
 
 SID = "memomics-2274ab75"
-WS_URL = "ws://127.0.0.1:8899/ws"
+WS_URL = "ws://login-host:22/ws"
 
 MSGS = [
-    "帮我分析这个文件的结构：E:/骨骼肌锻炼/MF_AUCell_meta.csv。只做一件事：用工具读取文件头部并报告列名和前3行内容，不要跑完整分析。",
-    "接着这个数据：E:/骨骼肌锻炼/MF_AUCell_meta.csv。统计一下总共有多少行数据（用工具数一下），只回答数字。",
+    "帮我分析这个文件的结构：<数据目录>，不要跑完整分析。",
+    "接着这个数据：<数据目录>，只回答数字。",
 ]
 
 async def last_turn():
     """读 jsonl 最后一行 deltas"""
-    path = r"E:\MemOmics-Agent\results\memomics-2274ab75\token_usage.jsonl"
+    path = r"<安装目录>"
     last = None
     for line in open(path, encoding="utf-8"):
         line = line.strip()

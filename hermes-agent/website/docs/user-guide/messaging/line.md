@@ -106,7 +106,7 @@ hermes gateway
 The agent log shows:
 
 ```
-LINE: webhook listening on 0.0.0.0:8646/line/webhook (public: https://my-tunnel.example.com)
+LINE: webhook listening on login-host:22/line/webhook (public: https://my-tunnel.example.com)
 ```
 
 Add the bot as a friend from the LINE app (scan the QR in the channel's **Messaging API** tab) and send it a message.

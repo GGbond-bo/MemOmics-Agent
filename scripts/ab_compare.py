@@ -10,18 +10,18 @@
 """
 import asyncio, json, os, sys, sqlite3, time, uuid
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-os.environ.setdefault("MEMOMICS_HOME", r"E:\MemOmics-Agent\memomics_home")
+os.environ.setdefault("MEMOMICS_HOME", r"<安装目录>")
 
-WS = "ws://127.0.0.1:8899/ws"
-DB = r"E:\MemOmics-Agent\memomics_home\state.db"
-RESULTS = r"E:\MemOmics-Agent\results"
+WS = "ws://login-host:22/ws"
+DB = r"<安装目录>"
+RESULTS = r"<安装目录>"
 
 QUESTIONS = [
     "按会话记忆回答：数据文件路径是什么？出图必须带什么统计量？各一行即可。",
     "按会话记忆回答：绘图脚本放哪个目录？配色要求是什么？",
     "用 execute_code 读取 data/summary.csv 并打印行数，只要结果。",
 ]
-EXPECT = [("MF_AUCell_meta.csv", "P 值"), ("scripts", "蓝"), ("execute_code", "")]
+EXPECT = [("示例评分方法_meta.csv", "P 值"), ("scripts", "蓝"), ("execute_code", "")]
 
 
 def _messages():
@@ -30,9 +30,9 @@ def _messages():
     i = 0
     # 早期：任务 + 第一条记忆要求（数据路径 + P 值）
     seed = [
-        ("user", "帮我分析 E:/骨骼肌锻炼/MF_AUCell_meta.csv 的 AUCell 打分，先看看结构。"),
+        ("user", "帮我分析 <数据目录> 的 AUCell 打分，先看看结构。"),
         ("assistant", "数据加载完成：382MB，22 个打分列，10 个亚群，6 组样本。先做个体级聚合统计。"),
-        ("user", "记住：数据文件固定是 E:/骨骼肌锻炼/MF_AUCell_meta.csv，以后出图必须带 P 值标注。"),
+        ("user", "记住：数据文件固定是 <数据目录>，以后出图必须带 P 值标注。"),
         ("assistant", "已记住。开始按五效应轴（Aging/T2D/ExYoung/ExOld/ExT2D）做效应矩阵统计。"),
         ("user", "跑 DESeq2 差异分析，比较 O_Pre vs Y_Pre。"),
         ("assistant", "DEG 完成：共 220 个基因，其中 117 个显著（padj<0.05），上调 61、下调 56。"),
@@ -110,7 +110,7 @@ def seed_sid(raw_sid):
     os.makedirs(os.path.join(rd, "scripts"), exist_ok=True)
     os.makedirs(os.path.join(rd, "data"), exist_ok=True)
     with open(os.path.join(rd, "REQUIREMENTS.md"), "w", encoding="utf-8") as f:
-        f.write("数据文件固定是 E:/骨骼肌锻炼/MF_AUCell_meta.csv，出图必须带 P 值标注\n"
+        f.write("数据文件固定是 <数据目录>，出图必须带 P 值标注\n"
                 "绘图脚本统一放 scripts/ 目录，配色统一用蓝橙\n"
                 "最终图都要输出 PNG+PDF+TIFF 三格式\n")
     with open(os.path.join(rd, "task_plan.md"), "w", encoding="utf-8") as f:

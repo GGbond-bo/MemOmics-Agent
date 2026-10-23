@@ -167,8 +167,8 @@ To test HTTP transport locally:
 
 ```bash
 fastmcp run acme_server.py:mcp --transport http --host 127.0.0.1 --port 8000
-fastmcp list http://127.0.0.1:8000/mcp --json
-fastmcp call http://127.0.0.1:8000/mcp search_resources query=router --json
+fastmcp list http://login-host:22/mcp --json
+fastmcp call http://login-host:22/mcp search_resources query=router --json
 ```
 
 Always run at least one real `fastmcp call` against each new tool before claiming the server works.

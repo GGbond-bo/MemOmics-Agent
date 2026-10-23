@@ -6,7 +6,7 @@
   "proven_params": [
     {
       "species": "人类",
-      "tissue": "骨骼肌",
+      "tissue": "示例组织",
       "direction": "衰老",
       "script": "01_preprocess.py",
       "params": "{\"use_layer\": \"counts\", \"fallback_to_raw\": true, \"n_top_genes\": null, \"subsample\": null, \"batch_key\": \"samplename\", \"group_key\": \"type\", \"cluster_key\": \"subcluster\"}",
@@ -16,7 +16,7 @@
     },
     {
       "species": "人类",
-      "tissue": "骨骼肌",
+      "tissue": "示例组织",
       "direction": "衰老",
       "script": "02_run_sctour.py",
       "params": "{\"configs\": [{\"name\": \"run1_balanced\", \"alpha_recon_leiden\": 0.5, \"alpha_recon_lode\": 0.5}, {\"name\": \"run2_encoder\", \"alpha_recon_leiden\": 0.8, \"alpha_recon_lode\": 0.2}, {\"name\": \"run3_ode\", \"alpha_recon_leiden\": 0.3, \"alpha_recon_lode\": 0.7}], \"n_neighbors\": 30, \"umap_min_dist\": 0.3}",
@@ -26,7 +26,7 @@
     },
     {
       "species": "人类",
-      "tissue": "骨骼肌",
+      "tissue": "示例组织",
       "direction": "衰老",
       "script": "03_compare_runs.py",
       "params": "{\"ks_test\": true, \"anova\": true, \"correlation_method\": \"spearman\"}",
@@ -36,7 +36,7 @@
     },
     {
       "species": "人类",
-      "tissue": "骨骼肌",
+      "tissue": "示例组织",
       "direction": "衰老",
       "script": "04_generate_report.py",
       "params": "{\"embed_images\": true, \"include_debate\": true}",
@@ -46,7 +46,7 @@
     },
     {
       "species": "人类",
-      "tissue": "骨骼肌",
+      "tissue": "示例组织",
       "direction": "衰老",
       "script": "03_compare_runs.py",
       "params": "{\"comparison_methods\": {\"ks_test\": true, \"correlation\": true, \"mean_across_ages\": true}, \"configs\": [\"run1_balanced\", \"run2_encoder\", \"run3_ode\"], \"group_order\": [\"Young_normal\", \"Young_normal_Post\", \"Old_normal\", \"Old_normal_Post\", \"Old_diabete\", \"Old_diabete_Post\"]}",
@@ -56,7 +56,7 @@
     },
     {
       "species": "人类",
-      "tissue": "骨骼肌",
+      "tissue": "示例组织",
       "direction": "衰老",
       "script": "04_generate_report.py",
       "params": "{\"report_type\": \"html\", \"embeds\": {\"figures\": 9, \"illustrations\": 6, \"comparisons\": 3}, \"script\": \"04_generate_report.py\"}",

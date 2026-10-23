@@ -143,7 +143,7 @@ DIRECTION_MAP = {
     "metabolism": ["代谢", "metabolic", "diabetes", "糖尿病", "obesity", "肥胖", "脂质", "lipid"],
     "cardiovascular": ["心脏", "cardiac", "heart", "心血管", "cardiovascular", "血管", "vascular", "动脉", "atherosclerosis"],
     "hepatology": ["肝脏", "liver", "hepatic", "肝细胞", "hepatocyte", "肝硬化", "cirrhosis"],
-    "muscle_biology": ["骨骼肌", "muscle", "skeletal", "肌肉", "myogenesis", "肌萎缩", "atrophy"],
+    "muscle_biology": ["示例组织", "muscle", "skeletal", "肌肉", "myogenesis", "肌萎缩", "atrophy"],
     "microbiome": ["微生物", "microbiome", "菌群", "microbiota", "16s", "metagenom", "宏基因组"],
     "infectious": ["感染", "infection", "病毒", "virus", "细菌", "bacteria", "宿主", "host", "covid", "SARS"],
     "drug_response": ["药物", "drug", "耐药", "resistance", "敏感性", "sensitivity", "药靶", "target"],

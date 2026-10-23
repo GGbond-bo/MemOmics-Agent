@@ -1,6 +1,6 @@
 {
   "topic": "路线A(去神经路线) scTour 伪时间方向验证：Zone1(0.22) → Zone2(0.39) → NMJ(0.43) → Zone5(0.67)/Zone6(0.66)，低伪时间=病理，高伪时间=健康",
-  "context": "人类骨骼肌衰老 scRNA-seq。SMF亚聚类(Zone1~6+NMJ)。路线A包含Zone1(3,022细胞/72岁)→Zone2(822细胞/68岁)→NMJ(59细胞/59岁)→Zone5(4,912细胞/57岁)→Zone6(753细胞/54岁)。scTour run1_balanced配置(200epoch, balanced架构)，361秒训练完成。Zone1内部基因梯度：底部MYH7+(慢肌83%)→中部RUNX1+++(去神经93%)→上部COL19A1+(NMJ重塑43%)。关键发现：伪时间从Zone1(最低/最病理)→Zone5/6(最高/最健康)，与年龄梯度完全一致(72y→54y)。",
+  "context": "示例研究场景 scRNA-seq。SMF亚聚类(Zone1~6+NMJ)。路线A包含Zone1(3,022细胞/72岁)→Zone2(822细胞/68岁)→NMJ(59细胞/59岁)→Zone5(4,912细胞/57岁)→Zone6(753细胞/54岁)。scTour run1_balanced配置(200epoch, balanced架构)，361秒训练完成。Zone1内部基因梯度：底部MYH7+(慢肌83%)→中部RUNX1+++(去神经93%)→上部COL19A1+(NMJ重塑43%)。关键发现：伪时间从Zone1(最低/最病理)→Zone5/6(最高/最健康)，与年龄梯度完全一致(72y→54y)。",
   "hash": "b58e48130eb72f7d",
   "timestamp": "2026-07-08 23:11:33",
   "result": {

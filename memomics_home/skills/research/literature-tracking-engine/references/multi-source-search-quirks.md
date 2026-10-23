@@ -26,7 +26,7 @@ efetch:  ?db=pubmed&id=<逗号分隔 PMID>&retmode=xml&rettype=abstract
 - ⚠️ **日粒度日期必须写成 `YYYY/MM/DD`（斜杠）**，写 `YYYY-MM-DD` 在 `[dp]` 里不生效。
 - ⚠️ **esummary 不返回摘要**（`lit_bridge.py` 的 pubmed 源就只有题录）；要摘要必须走 efetch XML。
 - 🔴 **参考文献 DOI 陷阱（本会话真实事故）**：解析 `art.findall(".//ArticleIdList/ArticleId")` 会**连参考文献的
-  ArticleIdList 一起抓**，当本文自身的 DOI 缺失时就抓到某一篇引文的 DOI。实测后果：人骨骼肌图谱（EBioMedicine）
+  ArticleIdList 一起抓**，当本文自身的 DOI 缺失时就抓到某一篇引文的 DOI。实测后果：人示例组织图谱（EBioMedicine）
   被打上了 `10.1007/s00401-023-02637-2`（一篇 Acta Neuropathologica 的 DOI）→ 去重键、引用、笔记 frontmatter 全错。
   **正确写法**：
   ```python
@@ -81,7 +81,7 @@ GET https://api.openalex.org/works
 | 噪声 | 为什么被召回 |
 |------|-------------|
 | 巨噬细胞/纤维化社论（Front Immunol） | 摘要里出现 skeletal muscle |
-| 重症肌无力精准治疗综述 | 出现"骨骼肌无力 / neuromuscular"措辞 |
+| 重症肌无力精准治疗综述 | 出现"示例组织无力 / neuromuscular"措辞 |
 | 高原鱼类 small RNA 数据集（Sci Data） | 含 muscle / gills / skin 关键词 |
 
 处理：门控否决后仍**保留 E 类记录**（附否决理由），下次调词表时有据可依；

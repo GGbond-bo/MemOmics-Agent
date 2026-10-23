@@ -515,7 +515,7 @@ class _SessionKernelPool(KernelPool):
         try:
             import json as _json
             _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # hermes-agent/
-            _app_root = os.path.dirname(_root)  # E:\MemOmics-Agent
+            _app_root = os.path.dirname(_root)  # <安装目录>
             _env_json = _json.load(open(os.path.join(_app_root, "environment.json"), encoding="utf-8-sig"))
             return _env_json.get("paths", {}).get("r", {}) or {}
         except Exception:
@@ -577,7 +577,7 @@ class _SessionKernelPool(KernelPool):
             # 2026-09-24 真机事故（11c-go-9000 / sid memomics-6cb793a7）：这里只注入
             # environment.json 的 lib_user（E:/R-libs/R-4.5.3）就 return 了，于是持久 kernel
             # 的 .libPaths() 只剩「主力库 + R 自带」两项 —— clusterProfiler 这类装在用户自建库
-            # （C:\Users\23136\R\R-4.5.3-library）里的包，在 execute_r 里一律
+            # （<用户目录>，在 execute_r 里一律
             # "there is no package called 'clusterProfiler'"；而同一个包用 check_env 走的
             # memomics._r_lib_env()（候选库 11 个）明明能找到。
             # docs/ENVIRONMENT_MANAGEMENT.md 说两处"完全同一个 R_LIBS"，实测并不是。

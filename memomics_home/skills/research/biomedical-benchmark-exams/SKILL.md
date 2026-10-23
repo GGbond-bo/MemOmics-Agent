@@ -1,6 +1,6 @@
 ---
 name: biomedical-benchmark-exams
-description: 作答 MemOmics benchmarker 生物医学评测考试题（E:\benchmarker\exams\）。触发词："benchmarker测试"/"试卷N"/"考试题.json"/"密封答案"/"开始作答"。覆盖 TaskA 语义索引(MeSH标签生成)、TaskB 问答(yesno/factoid/list/summary)、TaskC MESINESP(DeCS编码)、LABBench2(分子克隆问答) 的作答、验证与评分。含 MeSH 标签生成的关键陷阱（MajorTopicYN 过滤导致 Recall 暴跌）与 DeCS 查询端点陷阱。
+description: 作答 MemOmics benchmarker 生物医学评测考试题（<数据目录>"benchmarker测试"/"试卷N"/"考试题.json"/"密封答案"/"开始作答"。覆盖 TaskA 语义索引(MeSH标签生成)、TaskB 问答(yesno/factoid/list/summary)、TaskC MESINESP(DeCS编码)、LABBench2(分子克隆问答) 的作答、验证与评分。含 MeSH 标签生成的关键陷阱（MajorTopicYN 过滤导致 Recall 暴跌）与 DeCS 查询端点陷阱。
 ---
 
 # Biomedical Benchmark Exams (benchmarker)
@@ -77,7 +77,7 @@ efetch retmode=xml → 提取全部 <DescriptorName>（不做 MajorTopicYN 过�
 
 ## LABBench2 — 分子克隆/湿实验问答
 题目：10 道克隆/质粒/DNA 序列题（如给序列设计引物、注释质粒、酶切分析）。
-- 先 `read_file` 试题 JSON；附件序列文件（.gb/.fa/.dna）在 E:\benchmarker\ 下没有时，直接 `query_ncbi(db="nuccore", query="MYOD1 Homo sapiens mRNA NM_002478")` / `query_ensembl` 抓真实序列（NM_002478 = MYOD1 1803bp，Ensembl REST `/lookup/id/{id}?expand=1` 拿 canonical_transcript + transcripts，`/overlap/translation/...` 返回 404 别用）。
+- 先 `read_file` 试题 JSON；附件序列文件（.gb/.fa/.dna）在 <数据目录> 下没有时，直接 `query_ncbi(db="nuccore", query="MYOD1 Homo sapiens mRNA NM_002478")` / `query_ensembl` 抓真实序列（NM_002478 = MYOD1 1803bp，Ensembl REST `/lookup/id/{id}?expand=1` 拿 canonical_transcript + transcripts，`/overlap/translation/...` 返回 404 别用）。
 - 相关 skill：`pcr-primer-design` 已注册（golden_gate_assembly / annotate_plasmid / digest_sequence 为 skill hub 名，本机不适用会报 unsupported，用 pcr-primer-design 即可）。
 - 序列题答案必须是可验证的（引物 Tm/GC 可算、酶切位点可定位），不要只给名称。
 

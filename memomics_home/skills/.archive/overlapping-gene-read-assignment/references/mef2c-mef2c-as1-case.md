@@ -1,6 +1,6 @@
 # 案例：MEF2C / MEF2C-AS1 read 归属质疑（2026-10-01 实测）
 
-人类骨骼肌 snRNA-seq（48 样本 6 组 Y/O/OD × Pre/Post，10 亚群），
+人类示例组织 snRNA-seq（48 样本 6 组 Y/O/OD × Pre/Post，10 亚群），
 DEG = 亚群内细胞级 glmer（coef 阈 0.25 + FDR），5 个 contrast。
 合作者（PI 侧）对「MEF2C 运动后无显著变化」的结论提出两层质疑：
 ①生物学上「抑制 MEF2C 说不通，我预期是相反的」；②方法学上「reads 落在重叠区，你怎么区分 MEF2C vs MEF2C-AS1」。

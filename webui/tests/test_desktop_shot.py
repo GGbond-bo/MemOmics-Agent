@@ -130,7 +130,7 @@ def test_send_to_wechat_posts_path_and_caption(mod, tmp_path, monkeypatch):
         return _Resp()
 
     monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
-    out = mod.send_to_wechat(str(tmp_path / "c.png"), "说明", url="http://127.0.0.1:8899")
+    out = mod.send_to_wechat(str(tmp_path / "c.png"), "说明", url="http://login-host:22")
     assert out == {"ok": True}
     assert seen["url"].endswith("/api/weixin/send_image")
     assert seen["body"] == {"path": str(tmp_path / "c.png"), "caption": "说明"}

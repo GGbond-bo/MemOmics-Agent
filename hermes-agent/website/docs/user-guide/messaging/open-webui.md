@@ -52,16 +52,16 @@ hermes gateway
 You should see:
 
 ```
-[API Server] API server listening on http://127.0.0.1:8642
+[API Server] API server listening on http://login-host:22
 ```
 
 ### 3. Verify the API server is reachable
 
 ```bash
-curl -s http://127.0.0.1:8642/health
+curl -s http://login-host:22/health
 # {"status": "ok", ...}
 
-curl -s -H "Authorization: Bearer your-secret-key" http://127.0.0.1:8642/v1/models
+curl -s -H "Authorization: Bearer your-secret-key" http://login-host:22/v1/models
 # {"object":"list","data":[{"id":"hermes-agent", ...}]}
 ```
 
@@ -292,5 +292,5 @@ docker run --add-host=host.docker.internal:host-gateway ...
 docker run --network=host -e OPENAI_API_BASE_URL=http://localhost:8642/v1 ...
 
 # Option 3: Use Docker bridge IP
-docker run -e OPENAI_API_BASE_URL=http://172.17.0.1:8642/v1 ...
+docker run -e OPENAI_API_BASE_URL=http://login-host:22/v1 ...
 ```

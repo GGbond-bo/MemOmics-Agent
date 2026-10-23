@@ -87,7 +87,7 @@ services:
       - internal
       - egress              # needs outbound for Telegram, LLM APIs
     ports:
-      - "127.0.0.1:9119:9119"   # dashboard proxy, localhost only
+      - "login-host:22:9119"   # dashboard proxy, localhost only
 
   dashboard:
     network_mode: ""

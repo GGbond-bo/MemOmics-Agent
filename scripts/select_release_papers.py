@@ -21,7 +21,7 @@ CURATED = [
     "10.1016_j.devcel.2026.03.010.pdf",            # ✅已翻译+摘要+知识（肌肉图谱 Dev Cell）
     "10.1038_s41467-025-56896-6.pdf",              # ✅已翻译+摘要（Nat Commun）
     "hotspot.pdf",                                  # ✅摘要+知识（方法学 Cell Systems）
-    "lipid_signature_marks_in_human_muscle_aging.pdf",   # Nature Aging 2024 人骨骼肌脂质
+    "lipid_signature_marks_in_human_muscle_aging.pdf",   # Nature Aging 2024 人示例组织脂质
     "s41588-024-01961-x.pdf",                       # Nature Genetics 空间转录组
 ]
 

@@ -173,7 +173,7 @@ trainer = L.Trainer(
 
 **Node 0 (master)**:
 ```bash
-export MASTER_ADDR=192.168.1.100
+export MASTER_ADDR=10.0.0.1
 export MASTER_PORT=12355
 export WORLD_SIZE=16  # 2 nodes × 8 GPUs
 export NODE_RANK=0
@@ -183,7 +183,7 @@ python train.py
 
 **Node 1 (worker)**:
 ```bash
-export MASTER_ADDR=192.168.1.100
+export MASTER_ADDR=10.0.0.1
 export MASTER_PORT=12355
 export WORLD_SIZE=16
 export NODE_RANK=1

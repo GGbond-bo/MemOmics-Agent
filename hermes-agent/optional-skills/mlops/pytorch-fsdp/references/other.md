@@ -1699,7 +1699,7 @@ Single-Node multi-process distributed training
 
 Multi-Node multi-process distributed training: (e.g. two nodes)
 
-Node 1: (IP: 192.168.1.1, and has a free port: 1234)
+Node 1: (IP: 10.0.0.1, and has a free port: 1234)
 
 To look up what optional arguments this module offers:
 

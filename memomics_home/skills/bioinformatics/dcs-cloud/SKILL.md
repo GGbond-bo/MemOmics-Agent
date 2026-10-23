@@ -59,9 +59,9 @@ dcs_cloud(action="context")     # 一次拿到：当前用户/当前项目/候�
   "header": "云平台开工确认",
   "question": "这次在云平台上跑，用哪个项目？（当前项目是 P25Z10200N1075，只是候选）",
   "options": [
-    {"label": "P25Z10200N1075 · FSHD 骨骼肌时空图谱", "desc": "当前项目 · BGI-时空 · 有失败任务", "recommended": true},
+    {"label": "P25Z10200N1075 · FSHD 示例组织时空图谱", "desc": "当前项目 · BGI-时空 · 有失败任务", "recommended": true},
     {"label": "P24Z10200N1046 · 唐氏综合症/老年痴呆", "desc": "BGI-时空"},
-    {"label": "P25Z10200N1110 · 运动干预骨骼肌衰老", "desc": "⚠️ 欠费：投递会被拦，需先充值"}
+    {"label": "P25Z10200N1110 · 运动干预示例组织衰老", "desc": "⚠️ 欠费：投递会被拦，需先充值"}
   ]
 }
 ```
@@ -89,7 +89,7 @@ dcs_cloud(action="context")     # 一次拿到：当前用户/当前项目/候�
 ```
 dcs_cloud(action="context")                                # 看默认下载目录
 dcs_cloud(action="ls", path="/Files/Muscle", long=True)    # 定位文件（点/选出来）
-dcs_cloud(action="download", path="/Files/Muscle/x.csv", target="E:/MemOmics-Agent/results/dcs", type="web")
+dcs_cloud(action="download", path="/Files/Muscle/x.csv", target="<安装目录>", type="web")
 ```
 > 小文件 `web`（下载 ≤200MB，且不支持文件夹/FastQ/BAM）；大文件用 `raw` 换 `oss`/`raysync`。
 

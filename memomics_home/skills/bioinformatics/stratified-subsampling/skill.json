@@ -30,7 +30,7 @@
       "tissue": "skeletal_muscle",
       "direction": "aging",
       "script": "subsample_10k_random.py",
-      "params": "{\"target_total\": 10000, \"seed\": 42, \"method\": \"random\", \"input\": \"Migule_lai_24 _new.h5ad (324,434 cells)\"}",
+      "params": "{\"target_total\": 10000, \"seed\": 42, \"method\": \"random\", \"input\": \"示例数据.h5ad (324,434 cells)\"}",
       "date": "2026-07-17",
       "score": 9,
       "auto_score": 0.0,

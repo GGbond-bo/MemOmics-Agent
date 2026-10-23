@@ -17,7 +17,7 @@ pybliometrics）。MemOmics 是单页 WebUI + 自研 agent 循环，进程里没
   1. 只用标准库（urllib + xml.etree + json + argparse + concurrent.futures），零 pip 安装；
      上游 sources/ 要 toml + defusedxml + pybliometrics，装在用户机器上会炸。
   2. 零 API key：PubMed E-utilities / Crossref / arXiv / OpenAlex 都无需 key（有 key 更快）。
-  3. 读 HTTP_PROXY / HTTPS_PROXY（本机代理 http://127.0.0.1:6478）。
+  3. 读 HTTP_PROXY / HTTPS_PROXY（本机代理 http://login-host:22）。
   4. 单源失败不影响其它源：错误逐源收集，最后一起报告（对齐上游「report specific tool
      failures and continue with remaining tools」）。
   5. 退出码：0 = 至少一个源返回结果；2 = 全部源失败或无结果。

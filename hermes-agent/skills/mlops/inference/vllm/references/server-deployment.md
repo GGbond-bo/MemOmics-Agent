@@ -168,7 +168,7 @@ For models too large for single node:
 
 **Node 1** (master):
 ```bash
-export MASTER_ADDR=192.168.1.10
+export MASTER_ADDR=10.0.0.1
 export MASTER_PORT=29500
 export RANK=0
 export WORLD_SIZE=2
@@ -180,7 +180,7 @@ vllm serve meta-llama/Llama-2-70b-hf \
 
 **Node 2** (worker):
 ```bash
-export MASTER_ADDR=192.168.1.10
+export MASTER_ADDR=10.0.0.1
 export MASTER_PORT=29500
 export RANK=1
 export WORLD_SIZE=2

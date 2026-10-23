@@ -77,7 +77,7 @@
       "auto_score": 0.0,
       "approved": false,
       "custom_script": false,
-      "result": "E:/专利/patent/human_Hf_ATAC_40_clustered.rds 为 ArchRProject（265,909 cells, cellColData 含 Sample/TSSEnrichment/nFrags/DoubletScore/Clusters）；monkey_Hf_ATAC_final.rds 待查"
+      "result": "<数据目录> 为 ArchRProject（265,909 cells, cellColData 含 Sample/TSSEnrichment/nFrags/DoubletScore/Clusters）；monkey_Hf_ATAC_final.rds 待查"
     },
     {
       "species": "",
@@ -90,7 +90,7 @@
       "auto_score": 0.0,
       "approved": false,
       "custom_script": false,
-      "result": "human ArchRProject Arrow 文件路径指向远端集群(/hwfssz3/PS_JLU/zhangbo/...)，本机不存在；但 cellColData(265909 cells, 30 clusters, QC列)完整。C25/C26/C28/C29 QC 正常(TSS 8.5-11.4)，不是低质量群"
+      "result": "human ArchRProject Arrow 文件路径指向远端集群(/cluster/share/user/...)，本机不存在；但 cellColData(265909 cells, 30 clusters, QC列)完整。C25/C26/C28/C29 QC 正常(TSS 8.5-11.4)，不是低质量群"
     },
     {
       "species": "",
@@ -285,7 +285,7 @@
       "auto_score": 0.0,
       "approved": false,
       "custom_script": false,
-      "result": "MF_2000(2132细胞) 18 群 marker 注释完成：Type I 6群(0/1/5/7/14/17，859细胞)、Type IIa 1群(C8, 211)、Type IIa/IIx mixed 5群(C2/3/4/6/13, 564)、Type IIx 1群(C9, 230)、Type IIx/I mixed(C10,198)/Type IIx/IIa mixed(C11/12/15"
+      "result": "示例数据(2132细胞) 18 群 marker 注释完成：Type I 6群(0/1/5/7/14/17，859细胞)、Type IIa 1群(C8, 211)、Type IIa/IIx mixed 5群(C2/3/4/6/13, 564)、Type IIx 1群(C9, 230)、Type IIx/I mixed(C10,198)/Type IIx/IIa mixed(C11/12/15"
     }
   ],
   "proven_script": "annotate_mf2000_dotplot.R",

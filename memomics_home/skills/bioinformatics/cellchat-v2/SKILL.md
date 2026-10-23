@@ -271,7 +271,7 @@ for (col in colnames(seurat_obj@meta.data)) {
 | LRsig 无 prob 列, 实际列名: interaction_name, pathway_na | 对 CellChat 对象槽位结构理解不足：误以为显著性 LR 表（LRsig） | 两层修复：① 语法层：cc@LR$LRsig 是 S4Vectors::DataFrame，必须 a |
 | 热图失败: outgoing "grid.draw"没有适用于"c('Heatmap', 'Addi | 平台/包版本差异：CellChat 1.6.1 内部用 ComplexHeatm | CellChat 1.6.1 的 netAnalysis_signalingRole_heatmap |
 | R 4.4.2: package or namespace load failed for 'Seu | R 4.4.2 用户库只有 CellChat/NMF 等少数包，缺 Seurat | 用 R_LIBS 同时挂两个库：4.4.2 用户库（提供 CellChat/NMF）+ E:/R-l |
-| library(CellChat): there is no package called 'Cel | CellChat+NMF 只装在 R 4.4.2 用户库；平台 execute_ | 定位到 CellChat/NMF 实际装在 R 4.4.2 用户库（C:/Users/23136/A |
+| library(CellChat): there is no package called 'Cel | CellChat+NMF 只装在 R 4.4.2 用户库；平台 execute_ | 定位到 CellChat/NMF 实际装在 R 4.4.2 用户库（<用户目录> |
 | execute_r: <text>:3:103: unexpected symbol — exec( | execute_r 传输长代码时对 exec(open(...).read()) | 改用 source("path", encoding="utf-8") 执行脚本文件，避免 exec |
 | `b'...'` in idents | Python bytes from h5ad metadata | Clean with `gsub("^b['\"](.*?)['\"]$", "\\1", x)` |
 | Small cluster inflated weight | No population.size normalization | Run both FALSE and TRUE, debate ranking changes |

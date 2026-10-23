@@ -1,6 +1,6 @@
 # GO ORA 全量结果卡死（simplify / GOSemSim）与 Jaccard 去冗余替代方案
 
-会话来源：memomics-97bc1d82（人骨骼肌 MF，Y_Post vs O_Post，细胞级 Wilcoxon DEG → GO 富集）
+会话来源：memomics-97bc1d82（人示例组织 MF，Y_Post vs O_Post，细胞级 Wilcoxon DEG → GO 富集）
 日期：2026-09-24
 
 ## 1. 现象
@@ -77,10 +77,10 @@ PID 59900 | 281s 内 CPU/IO 零变化 | RSS 2335MB → 3873MB
 
 ## 6. 环境要点
 
-clusterProfiler / org.Hs.eg.db / enrichplot / DOSE 在用户库 `C:/Users/23136/R/R-4.5.3-library`，持久内核默认 `.libPaths()` 不含：
+clusterProfiler / org.Hs.eg.db / enrichplot / DOSE 在用户库 `<用户目录>，持久内核默认 `.libPaths()` 不含：
 
 ```r
-.libPaths(c("E:/R-libs/R-4.5.3", "C:/Users/23136/R/R-4.5.3-library", .libPaths()))
+.libPaths(c("E:/R-libs/R-4.5.3", "<用户目录>", .libPaths()))
 ```
 
 不追加则 `library(clusterProfiler)` 报 "there is no package called 'clusterProfiler'"。

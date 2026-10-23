@@ -23,7 +23,7 @@
 import json, os, re, sys, time
 
 # ---- 按需修改 ----
-CFG = r"E:/MemOmics-Agent/memomics_home/config.yaml"   # 读根级 api_base / api_key（不打印 key）
+CFG = r"<安装目录>"   # 读根级 api_base / api_key（不打印 key）
 MODEL = "deepseek-flash"
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "probe_context_window.json")
 CHARS_PER_TOKEN = 6.94        # 自校准起点（重复英文句），跑完第一档请按 usage 修正

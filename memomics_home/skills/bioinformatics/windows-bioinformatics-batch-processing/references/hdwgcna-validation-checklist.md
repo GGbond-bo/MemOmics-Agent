@@ -1,4 +1,4 @@
-# hdWGCNA 结果验证清单（审稿人视角 C1-C5）— MF 骨骼肌实测
+# hdWGCNA 结果验证清单（审稿人视角 C1-C5）— MF 示例组织实测
 
 > 来源：memomics-2f229850 session，MF_subset_2000.rds（10 亚群 × 2000 cells）hdWGCNA 官方流程。
 > 官方流程参数：MetacellsByGroups(k=25) + blockwiseModules(signed, bicor) → **power=10, R²=0.982, 11 模块**。

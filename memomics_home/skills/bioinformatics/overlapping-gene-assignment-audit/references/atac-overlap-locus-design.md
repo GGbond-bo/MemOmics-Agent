@@ -65,15 +65,15 @@ win = (tss - 2000, tss + 2000)          # ±2 kb，够容纳启动子 + 近端�
 | 39706290 | PRR14 mediates mechanotransduction and regulates myofiber identity via MEF2C in skeletal muscle | Metabolism 2025, DOI 10.1016/j.metabol.2024.156109 | MEF2C 与机械转导的既有联系 |
 
 **空白检索（= 卖点）**：`query_ncbi(db='pubmed', query='MEF2C-AS1')` 命中 6 篇，全部为肿瘤 ceRNA /
-5q14.3 结构重排 / 血液肿瘤，**0 篇骨骼肌或运动**。⇒「AS1 变 → MEF2C 变」**无文献支持**；
+5q14.3 结构重排 / 血液肿瘤，**0 篇示例组织或运动**。⇒「AS1 变 → MEF2C 变」**无文献支持**；
 反义 lncRNA 常由自身启动子独立受调控，只能靠证据，不能靠假定。
 
 ## 六、动手前的弹窗口径（数据来源不能替用户假定）
 
 用 `ask_user(kind="clarify", options=[...])`，四选项（本轮实际用过，用户认可）：
 
-1. 我自己有骨骼肌 ATAC（运动前后）—— 需给 fragments / bigWig；按两个 TSS ±2 kb 做**供体配对**统计
-2. 用公共数据（如人骨骼肌运动 multiome）—— 可同时看可及性与表达
+1. 我自己有示例组织 ATAC（运动前后）—— 需给 fragments / bigWig；按两个 TSS ±2 kb 做**供体配对**统计
+2. 用公共数据（如人示例组织运动 multiome）—— 可同时看可及性与表达
 3. 先不做，只想确认合作方的意图理解对不对 —— 本轮回答即结论
 4. 先把「AS1 上升」这个前提验一遍 —— 先查链特异性/多重比对，再谈 ATAC
 

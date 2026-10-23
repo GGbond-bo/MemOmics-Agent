@@ -5,7 +5,7 @@
 ## 1. 事故与根因（为什么这份 reference 存在）
 
 - 本 skill 已写好铁规 10，随后仍对集群上 **662MB** 的
-  `/hwfssz3/PS_JLU/zhangbo/Muscle_96_38/Umap/MuSC_exercise_clean_dele_cluster_umap.rds`
+  `/cluster/share/user/Muscle_96_38/Umap/MuSC_exercise_clean_dele_cluster_umap.rds`
   直接写脚本 + `submit`，**无 scan / 无弹窗 / 无标记**。
 - 用户追问：「**你没有持久化吗？**」
 - 三条实证（复查用这三条，别只靠记忆）：
@@ -30,7 +30,7 @@ mark   --task-id TASK_ID [--title T] [--input P] [--cache-root P]
 
 - 实现走 `os.path.exists(p)` / `os.path.getsize(p)` / `_dir_size(p)`（`large_cache.py:150-163`）；
 - **没有 `--remote` 参数**（模块 docstring 亦写明"不在本机访问远端"）；
-- 喂集群路径（`/hwfssz3/...`）→ 返回 `{"exists": false, "size": 0}`，**不是报错**，
+- 喂集群路径（`/cluster/...`）→ 返回 `{"exists": false, "size": 0}`，**不是报错**，
   所以很容易被误读成"没有大文件"。
 - ⇒ **集群输入的体积必须另取**（`stat -c '%s|%y|%n'`），判定后再 `mark`。
 

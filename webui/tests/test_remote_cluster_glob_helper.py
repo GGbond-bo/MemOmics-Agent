@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """远端通配符展开助手（`_REMOTE_GLOB_PY`）的守卫测试 —— 2026-10-09。
 
-事故：ssh23 上 `python` 是 **Python 2.7.5**（没有 python3），而助手原来写成
+事故：node4 上 `python` 是 **Python 2.7.5**（没有 python3），而助手原来写成
 `[print(...) for p in ps]` —— py2 里 print 是语句，列表推导里直接 SyntaxError，于是
 「pull/locate 带通配符」整条路报「远端没找到」（看起来像路径问题，其实是脚本没跑起来）。
 
@@ -42,7 +42,7 @@ def test_helper_code_is_python2_safe():
     assert "f'" not in code and 'f"' not in code, "不许用 f-string（py2 没有）"
     # py3 语法自证
     compile(code, "<remote-glob>", "exec")
-    # 命令里 python3 优先、python 兜底（ssh23 只有 py2），且失败会报错不静默
+    # 命令里 python3 优先、python 兜底（node4 只有 py2），且失败会报错不静默
     cmd_src = open(RC_PATH, encoding="utf-8").read()
     i = cmd_src.index("def _locate_remote_glob")
     j = cmd_src.index("for PY in python3 python", i)
@@ -74,7 +74,7 @@ def test_helper_runs_and_prints_machine_readable_lines(tmp_path):
         [str(tmp_path / "r-a_01.png"), str(tmp_path / "r-a_02.png"), str(tmp_path / "sub")])
 
 
-@pytest.mark.skipif(not PY2, reason="本机没有 python2，跳过 py2 实测（ssh23 上靠 run 动作验收）")
+@pytest.mark.skipif(not PY2, reason="本机没有 python2，跳过 py2 实测（node4 上靠 run 动作验收）")
 def test_helper_actually_parses_under_python2(tmp_path):
     """本机有 py2 就真上一遍：py2 里 const 必须能编译+跑。"""
     rc = _load_rc()

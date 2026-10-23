@@ -27,7 +27,7 @@
 ## 3. 验证配方（分级，成本从低到高）
 
 **L1（默认，便宜，不用 BAM、不用 ATAC）**
-- 输入：**pseudobulk counts + GTF**（本次 = Gencode v32 primary assembly；数据 = 已有骨骼肌 RNA 的 DEG 来源矩阵）。
+- 输入：**pseudobulk counts + GTF**（本次 = Gencode v32 primary assembly；数据 = 已有示例组织 RNA 的 DEG 来源矩阵）。
 - 动作：对重叠基因对（sense/antisense）逐 UMI/read 归属统计 —— 问题基因的 counts 里，
   有多少落在自己的链上、有多少可被反义转录本解释。
 - 结论口径：给出「可归属比例」，而不是直接判「表达量是假的」。
@@ -90,7 +90,7 @@
 2. **"可及性变多 → 基因被上调"** —— ❌ 可及性是转录的**必要不充分**条件（还看 Pol II 起始/暂停释放、
    延伸、RNA 稳定性）。实证反例：单细胞 multiome 观测到染色质与转录组的**时间性解耦**
    （DUET-seq, PMID 42801560）。结论上限只能是"该位点被重塑/更活跃"，不是"基因被上调"。
-3. **预设变化方向** —— ❌ 不能假定"运动后必然变开放"。已发表人骨骼肌耐力训练 ATAC 是往**闭合**走
+3. **预设变化方向** —— ❌ 不能假定"运动后必然变开放"。已发表人示例组织耐力训练 ATAC 是往**闭合**走
    （de Smalen 2025, Mol Metab, PMID 40623475，标题逐字："Endurance training promotes chromatin closure
    and timely repression of the post-exercise immediate early stress response"）。
 
@@ -122,7 +122,7 @@
 - DEG 参数（FDR/logFC 阈值、样本不平衡、对比组设计）不在这里 —— 走本 skill §六/§八 与
   `deg-analysis` 的 Critical Pitfalls。
 - **领域空白提醒**：MEF2C-AS1 的 PubMed 命中全部集中在肿瘤 ceRNA / 5q14.3 结构重排 / 血液肿瘤，
-  **无任何骨骼肌或运动相关研究**。因此"AS1 变化 → sense 基因变化"在该组织**没有文献支撑**，
+  **无任何示例组织或运动相关研究**。因此"AS1 变化 → sense 基因变化"在该组织**没有文献支撑**，
   属待验证假说（反义 lncRNA 常有自己的启动子、独立受调控）——须靠证据而非假定。
 
 ## 10. 附加文献
@@ -130,5 +130,5 @@
 - [PMID:35478247] Grandi et al. *Chromatin accessibility profiling by ATAC-seq.* Nat Protoc (2022)
 - [PMID:42801560] Cheng D et al. DUET-seq，染色质与转录组时间性调控解耦 (2026)
 - [PMID:40623475] de Smalen et al. *Endurance training promotes chromatin closure…* Mol Metab (2025)
-- [PMID:40393809] Rubenstein et al. 人骨骼肌耐力运动单细胞 multiome（RNA+ATAC 同细胞范式）
+- [PMID:40393809] Rubenstein et al. 人示例组织耐力运动单细胞 multiome（RNA+ATAC 同细胞范式）
 - [PMID:30675018] Klemm, Shipony & Greenleaf. *Chromatin accessibility and the regulatory epigenome.* Nat Rev Genet (2019)

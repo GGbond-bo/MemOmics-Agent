@@ -750,7 +750,7 @@ Matrix E2EE requires `libolm`, which doesn't compile on macOS ARM64 (Apple Silic
 ```
 macOS (Host):
   └─ hermes gateway
-       ├─ api_server adapter ← listens on 0.0.0.0:8642
+       ├─ api_server adapter ← listens on login-host:22
        ├─ AIAgent ← single source of truth
        ├─ Sessions, memory, skills
        └─ Local file access (Obsidian, projects, etc.)
@@ -812,7 +812,7 @@ services:
       MATRIX_DEVICE_ID: "HERMES_BOT"
 
       # Proxy mode — forward to host agent
-      GATEWAY_PROXY_URL: "http://192.168.1.100:8642"
+      GATEWAY_PROXY_URL: "http://login-host:22"
       GATEWAY_PROXY_KEY: "your-secret-key-here"
     volumes:
       - ./matrix-store:/root/.hermes/platforms/matrix/store
@@ -851,7 +851,7 @@ Proxy mode is configured on the **container side** (the thin gateway):
 
 | Setting | Description |
 |---------|-------------|
-| `GATEWAY_PROXY_URL` | URL of the remote Hermes API server (e.g., `http://192.168.1.100:8642`) |
+| `GATEWAY_PROXY_URL` | URL of the remote Hermes API server (e.g., `http://login-host:22`) |
 | `GATEWAY_PROXY_KEY` | Bearer token for authentication (must match `API_SERVER_KEY` on the host) |
 | `gateway.proxy_url` | Same as `GATEWAY_PROXY_URL` but in `config.yaml` |
 

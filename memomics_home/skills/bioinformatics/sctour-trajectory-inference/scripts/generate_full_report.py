@@ -238,7 +238,7 @@ li{{margin:4px 0}}
 {records_html}</div>
 
 <div class="sec"><h2>🎯 7. 最终结论</h2>
-<div class="kf"><strong>核心发现：</strong>运动显著降低衰老骨骼肌 scTour 伪时间（↓34-39%），效应量远大于年轻组（↓5%）。
+<div class="kf"><strong>核心发现：</strong>运动显著降低衰老示例组织 scTour 伪时间（↓34-39%），效应量远大于年轻组（↓5%）。
 <span style="color:#888">[经辩论 #5 裁决：结论需限定为"运动相关转录组重塑，方向与衰老相反"，而非直接声称"逆转衰老"]</span></div>
 <ol>
 <li><strong>衰老效应</strong>：Old_normal 伪时间显著高于 Young_normal（KS=0.46, p&lt;0.001）</li>

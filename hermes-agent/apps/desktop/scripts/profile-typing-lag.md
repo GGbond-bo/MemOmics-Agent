@@ -14,7 +14,7 @@ desktop chat composer.
 
 Vite 8 + plugin-react 6 has a known issue where the React Fast Refresh
 preamble script isn't injected into `index.html`, so opening Electron at
-`http://127.0.0.1:5174` throws `$RefreshReg$ is not defined` on every TSX
+`http://login-host:22` throws `$RefreshReg$ is not defined` on every TSX
 module and the React tree never mounts. Workaround: run vite with HMR off.
 
 ```bash
@@ -24,7 +24,7 @@ node scripts/dev-no-hmr.mjs
 
 # Terminal B — start Electron with CDP exposed
 cd apps/desktop
-XCURSOR_SIZE=24 HERMES_DESKTOP_DEV_SERVER=http://127.0.0.1:5174 \
+XCURSOR_SIZE=24 HERMES_DESKTOP_DEV_SERVER=http://login-host:22 \
   ../../node_modules/.bin/electron --remote-debugging-port=9222 .
 ```
 
@@ -372,7 +372,7 @@ Possible approaches (none implemented here):
 
 ### Vite dev-build issue (separate)
 
-`http://127.0.0.1:5174/node_modules/.vite/deps/react.js` resolves to
+`http://login-host:22/node_modules/.vite/deps/react.js` resolves to
 `react/cjs/react.production.js`, and `react-dom_client.js` →
 `react-dom-client.production.js`. As a result:
 

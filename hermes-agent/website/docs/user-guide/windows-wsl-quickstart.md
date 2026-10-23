@@ -219,7 +219,7 @@ This is the reverse direction and is less documented elsewhere, but it's what yo
 
 #### Subcase 2a: from the Windows host itself
 
-On **Windows 11 22H2+ with mirrored mode enabled**, there is nothing to do. A process in WSL that binds to `0.0.0.0:8080` (or even `127.0.0.1:8080`) is reachable from a Windows browser at `http://localhost:8080`. WSL publishes the bind back to the host automatically.
+On **Windows 11 22H2+ with mirrored mode enabled**, there is nothing to do. A process in WSL that binds to `login-host:22` (or even `login-host:22`) is reachable from a Windows browser at `http://localhost:8080`. WSL publishes the bind back to the host automatically.
 
 On **NAT mode** (Windows 10 / older Windows 11), the default "localhost forwarding" in WSL2 will generally forward Linux-side `127.0.0.1` binds to Windows `localhost`, so a Hermes service started with `--host 127.0.0.1` is usually reachable as `http://localhost:PORT` from Windows. If it isn't:
 

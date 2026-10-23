@@ -1,6 +1,6 @@
 # 实测案例：弱信号数据上"不该剔"的完整证据链
 
-> 数据：人骨骼肌 scRNA（Seurat v5），**2132 细胞 × 51227 基因**，48 样本（平均仅 44 细胞/样本），
+> 数据：人示例组织 scRNA（Seurat v5），**2132 细胞 × 51227 基因**，48 样本（平均仅 44 细胞/样本），
 > 6 组（Y/O/OD × Pre/Post），celltype 3 类（TypeI / TypeII / RSS），annotation_L3 10 亚群。
 > 已知是更大数据集（原始 11630 细胞）的**子集**，富集了 special MF 亚群。
 > counts 校验：nnz 5,529,187，**全整数**，nCount 1001–24313（确认 raw counts，可做检测）。

@@ -1,17 +1,17 @@
-# GSE278576 GSM 级 fragments 映射表（已验证 2026-08-03）
+# GSE000000 GSM 级 fragments 映射表（已验证 2026-08-03）
 
-> 背景：用户想下载 GSE278576（人海马衰老多组学，Science 2026）的 40 个 ATAC 样本 fragments
+> 背景：用户想下载 GSE000000（人海马衰老多组学，Science 2026）的 40 个 ATAC 样本 fragments
 > 做跨物种 CRE 保守性专利（猴海马 ATAC vs 人海马 ATAC）。
 > 用户按 GSE supplementary 页找 fragments 找不到 → 根因：fragments 在 GSM 级，不在 GSE 级。
 
 ## 关键结构认知（GEO 数据两级存放）
 
 ```
-GSE278576 supplementary 页（用户看到的）:
-  ├── GSE278576_ATAC_CA1_age20-40.bw  (121M)  ← 聚合信号（按海马亚区×年龄组）
-  ├── GSE278576_ATAC_Astro.bw         (302M)  ← 聚合信号（按细胞类型）
-  ├── GSE278576_RAW.tar               (89.2G) ← ⛔ 千万别下，太大
-  └── GSE278576_hcXX_raw_feature_bc_matrix.h5  ← Multiome 矩阵
+GSE000000 supplementary 页（用户看到的）:
+  ├── GSE000000_ATAC_CA1_age20-40.bw  (121M)  ← 聚合信号（按海马亚区×年龄组）
+  ├── GSE000000_ATAC_Astro.bw         (302M)  ← 聚合信号（按细胞类型）
+  ├── GSE000000_RAW.tar               (89.2G) ← ⛔ 千万别下，太大
+  └── GSE000000_hcXX_raw_feature_bc_matrix.h5  ← Multiome 矩阵
 
 每个 GSM 样本页面（fragments 在这里!）:
   https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM8549615
@@ -59,8 +59,8 @@ https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8549nnn/GSM8549615/suppl/GSM8549615_
 
 ```bash
 # 1. 拉全 GSM 列表（不要手猜编号）
-curl -k -s "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=gds&term=GSE278576[ACCN]&retmax=100&retmode=json"
-# 或 query_ncbi(db="gds", query="GSE278576[ACCN] AND ATAC", max_results=50)
+curl -k -s "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=gds&term=GSE000000[ACCN]&retmax=100&retmode=json"
+# 或 query_ncbi(db="gds", query="GSE000000[ACCN] AND ATAC", max_results=50)
 
 # 2. 每个 URL curl -sI 验证（200 OK + Content-Length 合理）
 curl -k -sI "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8549nnn/GSM8549615/suppl/GSM8549615_hc77_atac_fragments.tsv.gz"

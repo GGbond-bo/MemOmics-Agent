@@ -602,7 +602,7 @@ See [Website Blocklist](/user-guide/configuration#website-blocklist) in the conf
 
 All URL-capable tools (web search, web extract, vision, browser) validate URLs before fetching them to prevent Server-Side Request Forgery (SSRF) attacks. Blocked addresses include:
 
-- **Private networks** (RFC 1918): `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`
+- **Private networks** (RFC 1918): `10.0.0.0/8`, `172.16.0.0/12`, `10.0.0.1/16`
 - **Loopback**: `127.0.0.0/8`, `::1`
 - **Link-local**: `169.254.0.0/16` (includes cloud metadata at `169.254.169.254`)
 - **CGNAT / shared address space** (RFC 6598): `100.64.0.0/10` (Tailscale, WireGuard VPNs)

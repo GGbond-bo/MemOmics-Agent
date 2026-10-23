@@ -1,6 +1,6 @@
 # 细胞级 MAST + 样本/供体随机效应（glmer）——可跑骨架与三个伪装型报错
 
-> 2026-09-26 实测于真实数据（人骨骼肌，24 供体 / 48 样本 / 6 条件 / 10 亚群）
+> 2026-09-26 实测于真实数据（人示例组织，24 供体 / 48 样本 / 6 条件 / 10 亚群）
 > 环境：R 4.5.3 + MAST 1.32.0 + lme4 2.0.6（MAST 从 R 4.4.2 用户库借用可用）
 > 配套：`deg-mixed-design` §方案 C、`references/celllevel-inference-unit-and-sample-structure.md`
 
@@ -63,7 +63,7 @@ fit <- MAST::zlm(~ stim + (1 | individual), sca, method = "glmer", ebayes = FALS
 ```
 公式没问题、`sca` 确实是 `SingleCellAssay`，但那行实际在抱怨 **cData 里找不到 `individual`**。
 
-**根因**：照搬官方代码用 `model.matrix()` **预先展开固定效应**当 cData。NHPABC 原文的公式是
+**根因**：照搬官方代码用 `model.matrix()` **预先展开固定效应**当 cData。example-cohort 原文的公式是
 纯固定效应（`~ stim + W_1..W_5`），所以能这么写；一旦公式含 `(1|individual)`，
 `individual` 就不在 cData 里 → MAST 内部取变量失败 → 异常类型不匹配被当成 sca 类型问题抛出。
 

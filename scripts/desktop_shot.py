@@ -28,7 +28,7 @@ import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_SUBDIR = os.path.join("results", "desktop_shots")
-WEBUI_URL = os.environ.get("MEMOMICS_WEBUI_URL", "http://127.0.0.1:8899")
+WEBUI_URL = os.environ.get("MEMOMICS_WEBUI_URL", "http://login-host:22")
 
 
 def _ensure_import_path() -> None:

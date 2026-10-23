@@ -112,7 +112,7 @@ def test_local_models_detection(client, monkeypatch):
     ids = [m["id"] for m in d["models"]]
     assert "qwen3:8b" in ids
     assert d["models"][0]["server"] == "ollama"
-    assert d["models"][0]["base_url"] == "http://127.0.0.1:11434/v1"
+    assert d["models"][0]["base_url"] == "http://login-host:22/v1"
 
 
 def test_add_local_provider(client, tmp_path, monkeypatch):
@@ -120,7 +120,7 @@ def test_add_local_provider(client, tmp_path, monkeypatch):
     import server as _srv
     monkeypatch.setattr(_srv, "_PROVIDER_KEYS_FILE", str(tmp_path / "keys.json"))
     r = client.post("/api/provider/local", json={
-        "model": "qwen3:8b", "base_url": "http://127.0.0.1:11434/v1", "server": "ollama"})
+        "model": "qwen3:8b", "base_url": "http://login-host:22/v1", "server": "ollama"})
     assert r.status_code == 200
     d = r.json()
     assert d["ok"] and d["provider_id"] == "local-ollama"

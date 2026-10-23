@@ -1,6 +1,6 @@
 # 双路线 SCENIC 比较工作流（Dual-Route SCENIC Comparison）
 
-> 2026-07-09 实战记录：人类骨骼肌 SMF 亚聚类，11,630 cells，GRNBoost2-Only 模式
+> 2026-07-09 实战记录：人类示例组织 SMF 亚聚类，11,630 cells，GRNBoost2-Only 模式
 
 ## 背景
 

@@ -18,7 +18,7 @@
 ### 2. 获取服务端 URL 和密码
 
 在 BlueBubbles Server → **Settings → API** 中，记录：
-- **Server URL**（例如 `http://192.168.1.10:1234`）
+- **Server URL**（例如 `http://login-host:22`）
 - **Server Password**
 
 ### 3. 配置 Hermes
@@ -34,7 +34,7 @@ hermes gateway setup
 或直接在 `~/.hermes/.env` 中设置环境变量：
 
 ```bash
-BLUEBUBBLES_SERVER_URL=http://192.168.1.10:1234
+BLUEBUBBLES_SERVER_URL=http://login-host:22
 BLUEBUBBLES_PASSWORD=your-server-password
 ```
 
