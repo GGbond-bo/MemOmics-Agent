@@ -331,6 +331,8 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
 .nav-item { padding:9px 18px; cursor:pointer; display:flex; align-items:center; gap:10px; font-size:13px; color:var(--text); transition:background 0.2s; border-left:3px solid transparent; }
 /* 2026-10-23（用户要求）：分析结果栏红色提醒 —— 有新结果时亮起，点一下该栏就消失 */
 .nav-red-badge { display:inline-block; min-width:16px; height:16px; line-height:16px; padding:0 5px; margin-left:2px; border-radius:9px; background:#ff4d4f; color:#fff; font-size:10px; font-weight:700; text-align:center; box-shadow:0 0 0 2px rgba(255,77,79,0.16); animation:navRedPulse 1.8s ease-in-out infinite; }
+/* 2026-10-24（用户要求）：红点纯标记模式——不带数字的小圆点 */
+.nav-red-badge.dot-only { min-width:9px; width:9px; height:9px; padding:0; margin-left:4px; border-radius:50%; vertical-align:2px; }
 @keyframes navRedPulse { 0%,100% { transform:scale(1); } 50% { transform:scale(1.14); } }
 .nav-item.has-red-badge { color:#ff4d4f; }
 .nav-item:hover { background:var(--primary-light); }
@@ -879,7 +881,7 @@ html[data-theme="dark"] .ev-chain .ev-t, #kb-node-modal .ev-chain .ev-t { color:
 .dcb-fail td { padding:3px 8px 3px 0; font-size:11px; color:var(--text-light); vertical-align:top; }
 /* 待办块 */
 .todo-block { margin:8px 0; }
-.todo-item { display:flex; align-items:center; gap:8px; padding:5px 8px; font-size:13px; border-radius:4px; transition:background 0.2s; }
+.todo-item { display:flex; align-items:center; gap:8px; padding:5px 8px; font-size:13px; border-radius:4px; transition:background 0.2s; cursor:pointer; }  /* 2026-10-24：点击划掉/恢复 */
 .todo-item:hover { background:var(--hover); }
 .todo-item .todo-icon { font-size:14px; flex-shrink:0; }
 .todo-item .todo-text { flex:1; min-width:0; word-break:break-word; }
@@ -1173,8 +1175,9 @@ html[data-theme="dark"] .ev-chain .ev-t, #kb-node-modal .ev-chain .ev-t { color:
 .rv-toolbar2 { display:flex; gap:6px; justify-content:center; margin-top:12px; flex-wrap:wrap; }
 .sort-chip { font-size:11px; padding:2px 9px; border-radius:10px; border:1px solid var(--border); background:var(--bg); color:var(--text-light); cursor:pointer; }
 /* 2026-10-23：「新」标记与「最新文件」标记条（点开后即恢复正常、数字递减） */
-.sort-chip.new-chip { color:#ff4d4f; border-color:rgba(255,77,79,0.45); }
-.sort-chip.new-chip.active { background:#ff4d4f; color:#fff; border-color:#ff4d4f; }
+.sort-chip.new-chip { color:#ff4d4f; border-color:rgba(255,77,79,0.45); transition:background 1s linear; }
+.sort-chip.new-chip.holding { background:#ff4d4f; color:#fff; }   /* 长按 1s：红色逐渐填满=清除进度 */
+.sort-chip.new-chip.active { background:#ff4d4f; color:#fff; border-color:#ff4d4f; transition:none; }
 .file-item.file-new-item { background:rgba(255,77,79,0.07); }
 .file-new-tag { flex:0 0 auto; margin-left:2px; padding:0 5px; border-radius:8px; background:#ff4d4f; color:#fff; font-size:10px; font-weight:700; line-height:1.6; }
 .fig-thumb.fig-new-item { box-shadow:0 0 0 2px #ff4d4f; border-radius:8px; }
@@ -1952,7 +1955,7 @@ var I18N = {
      'rs_count_items':'共 {0} 项','rs_count_figs':'共 {0} 张图','rs_count_unread':' · 未查看 {0}','rs_all_viewed':' · 全部已查看',
      'rs_empty_results':'暂无分析结果','rs_unread_done':'🎉 没有未查看的文件了','rs_show_all':'显示全部文件',
       'rs_new_tag':'新','rs_new_chip':'🆕 最新文件 {0}',
-      'rs_new_only_title':'上次点开「分析结果」后新出现的文件与图片；点开看过一个，数字就减一',
+      'rs_new_only_title':'上次点开「分析结果」后新出现的文件与图片；点开看过一个，数字就减一；长按 1 秒清除全部最新标记',
       'rs_new_none':'这一层没有新的更新。',
      'rs_up':'返回上一级','rs_root':'🏠 根目录','rs_session':'会话 {0}',
      'rs_figs_empty':'暂无图片。分析过程中生成的图会自动出现在这里。','rs_figs_failed':'加载图片失败',
@@ -2048,7 +2051,7 @@ var I18N = {
      'rs_count_items':'{0} items','rs_count_figs':'{0} images','rs_count_unread':' · {0} unviewed','rs_all_viewed':' · all viewed',
      'rs_empty_results':'No analysis results yet','rs_unread_done':'🎉 Nothing left unviewed','rs_show_all':'Show all files',
       'rs_new_tag':'NEW','rs_new_chip':'🆕 Latest files: {0}',
-      'rs_new_only_title':'Files/figures added since you last opened Results; the number drops as you open them',
+      'rs_new_only_title':'Files/figures added since you last opened Results; the number drops as you open them; long-press 1s to clear all new marks',
       'rs_new_none':'Nothing new here.',
      'rs_up':'Up one level','rs_root':'🏠 Root','rs_session':'Session {0}',
      'rs_figs_empty':'No images yet. Figures generated during analysis will appear here automatically.','rs_figs_failed':'Failed to load images',
@@ -3579,7 +3582,7 @@ document.addEventListener('DOMContentLoaded', applyUILang);
         <span id="sort-time" class="sort-chip active" onclick="setResultsSort('time_desc')" data-i18n="rs_sort_latest" data-i18n-title="rs_sort_latest_title" title="目录永远在最上面；文件按修改时间倒序，最新生成的在最上面">🕐 最新在上</span>
         <span id="sort-name" class="sort-chip" onclick="setResultsSort('name')" data-i18n="rs_sort_name" data-i18n-title="rs_sort_name_title" title="目录永远在最上面，其余按名称排序">🔤 按名称</span>
         <span id="sort-unread" class="sort-chip" style="display:none;margin-left:6px;" onclick="toggleUnreadFilter()" data-i18n="rs_unread_only" data-i18n-title="rs_unread_only_title" title="只显示还没打开看过的文件">🔵 只看未查看</span>
-        <span id="sort-new" class="sort-chip new-chip" style="display:none;margin-left:6px;" onclick="toggleNewFilter()" title="上次点开「分析结果」后新出现的文件与图片；点开看过一个，数字就减一">🆕 最新文件</span>
+        <span id="sort-new" class="sort-chip new-chip" style="display:none;margin-left:6px;" onclick="rsNewChipClick()" onpointerdown="rsNewChipPressStart(event)" onpointerup="rsNewChipPressEnd()" onpointerleave="rsNewChipPressCancel()" title="上次点开「分析结果」后新出现的文件与图片；点开看过一个，数字就减一；长按 1 秒清除全部最新标记">🆕 最新文件</span>
         <span id="results-count" style="margin-left:auto;"></span>
       </div>
       <!-- 图片缩略图网格 -->
@@ -4206,6 +4209,19 @@ function handleMessage(msg) {
       currentAssistantEl = addAssistantMsg('');
       currentBubble = currentAssistantEl.querySelector('.bubble');
       fullText = msg.partial_text;
+      // 2026-10-23（过程/结论分层配套）：没有分段基线时先垫「整稿一段」——
+      // 收尾折叠要求「分段拼接 == 整稿」，丢了分段会整轮小结摊在聊天里不折。
+      if (!fullSegs.length) fullSegs = [msg.partial_text];
+      if (currentBubble) renderBubbleIncremental(currentBubble, fullText);
+    }
+    // 2026-10-23（配套）：本地恢复的全文可能落后于服务端累计文本（持久化快照约 5 秒粒度），
+    // 服务端文本是权威值 —— 只在前缀一致时补齐差值，并补进最后一段（保持分段与整稿对齐）。
+    if (msg.partial_text && currentAssistantEl && fullText &&
+        msg.partial_text.length > fullText.length && msg.partial_text.indexOf(fullText) === 0) {
+      var _ptMiss = msg.partial_text.slice(fullText.length);
+      fullText = msg.partial_text;
+      if (!fullSegs.length) fullSegs = [''];
+      fullSegs[fullSegs.length - 1] += _ptMiss;
       if (currentBubble) renderBubbleIncremental(currentBubble, fullText);
     }
     // 如果本地缓存已恢复进度时间线，跳过服务器重放（避免覆盖）
@@ -4301,6 +4317,10 @@ function handleMessage(msg) {
       if (_segBreak && fullSegs.length && fullSegs[fullSegs.length - 1].trim()) { fullSegs.push(''); }
       _segBreak = false;
       if (!fullSegs.length) fullSegs.push('');
+      // 2026-10-23：新一段刚开始 → 先前的段先收进折叠块，只让当前段继续长（边跑边折叠）
+      if (fullSegs.length >= 2 && !(fullSegs[fullSegs.length - 1] || '').length) {
+        try { _foldDoneSegs(); } catch (e) {}
+      }
       fullSegs[fullSegs.length - 1] += (msg.content || '');
     }
     if (currentBubble) {
@@ -4346,8 +4366,9 @@ function handleMessage(msg) {
     // P3: 意图确认弹窗（勾选后提交 → 答复作为用户消息发出）
     showAskForm(msg);
   } else if (msg.type === 'ask_form_answered') {
-    // 答复已被服务端记录（含用户直接在输入框回复的情况）→ 收起弹窗
-    if (!msg.form_id || !_askForm || _askForm.form_id === msg.form_id) { hideAskForm(); }
+    // 答复已被服务端记录（含用户直接在输入框回复的情况）→ 收起弹窗并清掉挂起态
+    // （2026-10-24：原来只 hide 不清 _askForm，切语言时旧表单会诈尸弹出）
+    if (!msg.form_id || !_askForm || _askForm.form_id === msg.form_id) { hideAskForm(); _askForm = null; }
   } else if (msg.type === 'notice') {
     // notice 进时间线，带 key 以便 notice_clear 清除
     addProgressItem(msg.content.substring(0,40), 'done', '', msg.ts || _nowTs(), msg.key || '');
@@ -4474,6 +4495,7 @@ function handleMessage(msg) {
     _p8Audit();  // P8: 本轮命中的置顶技能是否真的加载过
   } else if (msg.type === 'error') {
     if (currentAssistantEl && currentAssistantEl.classList.contains('thinking')) currentAssistantEl.remove();
+    try { _splitProcessConclusion(); } catch (e) {}   // 2026-10-23：出错也折叠过程（别摊一堆小结）
     hideLiveStatus('❌ 运行出错');
     _stopLiveStatusTicker();
     addError(msg.content);
@@ -4498,6 +4520,7 @@ function handleMessage(msg) {
     // P1-2: 文件改动结算（write_file/patch 跑完后服务端广播轻量列表）
     _changes.data = msg; renderChanges(msg);
   } else if (msg.type === 'cancelled') {
+    try { _splitProcessConclusion(); } catch (e) {}   // 2026-10-23：停止也折叠过程
     hideLiveStatus('⏹️ 已停止');
     _stopLiveStatusTicker();
     addError('任务已取消');
@@ -4975,6 +4998,8 @@ async function send(background) {
     return;
   }
   if (currentSid === targetSid) addUserMsg(text, imageUrls);
+  // 2026-10-23：上一轮若是异常收尾（没走 complete），发下一条前先把它折起来
+  try { if (currentBubble && fullSegs.length >= 2) _splitProcessConclusion(); } catch (e) {}
   clearPendingImages();
   fullText = '';
   fullSegs = [];
@@ -5087,6 +5112,7 @@ function _submitAskFormMulti() {
     });
   } catch (e) {}
   hideAskForm();
+  _askForm = null;   // 2026-10-24：提交后清掉挂起态（否则切语言时旧表单诈尸弹出）
   var input = document.getElementById('input');
   if (!input) { addError(t('af_no_input') + ansText); return; }
   input.value = input.value.trim() ? (input.value.trim() + '\n' + ansText) : ansText;
@@ -5188,7 +5214,9 @@ function showAskForm(msg) {
 
 function _p3OnLangChange() {
   // P6-2：弹窗开着时切中/英 → 立刻按新语言重画（勾选状态保留）
-  if (_askForm && _askForm.msg) { try { showAskForm(_askForm.msg); } catch (e) {} }
+  // 2026-10-24（用户反馈 memomics-ae774700）：弹窗已收起（提交过/稍后再答/服务端已记录答复）
+  // 的表单不能借切语言诈尸——只有弹窗正显示着才重画。
+  if (_askForm && _askForm.msg && document.getElementById('askform-overlay')) { try { showAskForm(_askForm.msg); } catch (e) {} }
 }
 
 async function _submitAskForm() {
@@ -5223,6 +5251,7 @@ async function _submitAskForm() {
     console.error('ask_form answer report failed', e);
   }
   hideAskForm();
+  _askForm = null;   // 2026-10-24：提交后清掉挂起态（否则切语言时旧表单诈尸弹出）
   // 答复本身作为用户消息发出（沿用既有通道：运行中会自动变成 steer 引导）
   var input = document.getElementById('input');
   if (!input) { addError(t('af_no_input') + ansText); return; }
@@ -7298,6 +7327,8 @@ function renderDebateCard(payload) {
 function _dcbBreakBubble() {
   if (!currentAssistantEl && !currentBubble) return;
   try { _flushStreamRender(); } catch (e) {}
+  // 2026-10-23：卡片插入前先把这一轮攒下的过程收进折叠块（否则整段小结永远摊在聊天里）
+  try { if (fullSegs.length >= 2) _splitProcessConclusion(); } catch (e) {}
   // 2026-10-14：被截断分出去的旧气泡通常是过程叙述 —— 标成过程样式，视觉退居二线
   if (currentAssistantEl) currentAssistantEl.classList.add('msg-process');
   currentAssistantEl = null;
@@ -7548,7 +7579,10 @@ function _doStreamRender() {
   if (currentBubble._splitDone) return;   // 2026-10-14：已按「过程/结论」重建过，残留定时器别把合并稿渲染回来
   var _msgs = document.getElementById('messages');
   var _anchor = (_msgs && _autoScroll === false) ? (currentBubble.offsetTop - _msgs.scrollTop) : null;
-  renderBubbleIncremental(currentBubble, fullText);
+  // 2026-10-23：已进入「边跑边折叠」形态 → 只渲染当前段（历史段在折叠块里，整稿重画会把它们再摊出来）
+  var _text = fullText;
+  if (currentBubble._procFolded && fullSegs.length) _text = fullSegs[fullSegs.length - 1] || '';
+  renderBubbleIncremental(currentBubble, _text);
   if (_anchor !== null) { _msgs.scrollTop = currentBubble.offsetTop - _anchor; } else { scrollBottom(); }
 }
 function _scheduleStreamRender() {
@@ -7596,6 +7630,28 @@ function _procBlockHtml(segs, opt) {
          '<div class="proc-body">' + body + '</div></details>';
 }
 
+/* 2026-10-23：**边跑边折叠** —— 每到新一轮（工具边界后的第一段开始），先把已完成的段收进
+   折叠块，当前段继续流式渲染。长任务跑十几分钟也不会把交互框堆满小结（用户实测反馈：
+   「输出了一大堆、没有结论、都是一堆小结」——以前只在回合正常结束时才折，中途一直摊着）。 */
+function _foldDoneSegs() {
+  if (!currentBubble) return;
+  var done = [];
+  for (var i = 0; i < fullSegs.length; i++) {
+    var s = (fullSegs[i] || '').trim();
+    if (s && s !== '(empty)') done.push(fullSegs[i]);
+  }
+  if (!done.length) return;
+  var host = currentBubble.querySelector('.proc-fold');
+  if (!host) {
+    host = document.createElement('div');
+    host.className = 'proc-fold';
+    currentBubble.insertBefore(host, currentBubble.firstChild);
+  }
+  host.innerHTML = _procBlockHtml(done, { stats: { steps: done.length, elapsed: _procElapsedShort() } });
+  currentBubble._procFolded = true;   // 后续流式只画「当前段」
+  _flushStreamRender();
+}
+
 function _splitProcessConclusion() {
   if (!currentBubble || !currentAssistantEl) return;
   // 一致性守卫（2026-10-23 修订）：原先只在「分段拼接 == 整稿」时才折叠 —— 但 complete
@@ -7621,6 +7677,7 @@ function _splitProcessConclusion() {
   if (tail) concl += (concl.trim() ? '\n\n' : '') + tail;   // 额外收尾并入结论（保内容完整）
   currentBubble._incr = null;            // 增量渲染块缓存作废（DOM 已整格重建）
   currentBubble._splitDone = true;       // 防残留流式定时器把合并稿重新渲染回来
+  currentBubble._procFolded = false;     // 收尾整格重建后，「边跑边折叠」的中间形态结束
   currentBubble.innerHTML = _procBlockHtml(segs, { stats: { steps: segs.length, elapsed: _procElapsedShort() } }) +
     _citeWrapHtml(renderMarkdown(concl)) +
     '<button class="copy-btn" onclick="copyMessage(this)" title="' + T('复制此消息') + '">' + T('📋 复制') + '</button>';
@@ -7718,7 +7775,9 @@ function renderSegmentHtml(seg) {
     if (seg.closed) return renderGenUiBlock(seg.code);
     return renderCodeBlockHtml(seg.fence, 'dsh-ui');
   }
-  return renderTextSegment(seg.raw);
+  // 2026-10-23：增量渲染路径也要接引用（_citeWrapHtml）—— 之前只有 switchSession 的
+  // innerHTML 分支包了引用，统一走增量渲染后 [12] 这类引用就点不动了。
+  return _citeWrapHtml(renderTextSegment(_stripMachinePreamble(seg.raw)));
 }
 function renderBubbleIncremental(bubble, text) {
   if (!bubble) return;
@@ -7799,8 +7858,26 @@ function escapeHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+/* 2026-10-23：协议块不是给用户看的（SOUL 铁律 -3 的 🏷INTENT 前导码、铁律 0 的「🔍 触发检查」
+   清单系统要消费，所以仍然输出），但聊天里要剥掉，只留说人话的阶段小结。
+   用户原话：「小结，怎么是这些内容呢？我看不懂」——整段小结全是 INTENT=analysis_exec /
+   应触发 skill / rail_review(pre): 待调用 / task_plan.md: 待创建 这类内部机制词。
+   原文完整保留在数据库 / 运行日志里，这里只影响显示。 */
+function _stripMachinePreamble(text) {
+  if (!text) return text;
+  var t = String(text);
+  // ① 前导码行：🏷INTENT:analysis_exec|CONF:0.95|DOMAIN:bulk
+  t = t.replace(/^[ \t]*🏷\s*INTENT:[^\n]*\n(?:[ \t]*\n)?/m, '');
+  // ② 触发检查清单块：从「🔍 触发检查」一直吃到下一个空行
+  t = t.replace(/^[ \t]*🔍\s*触发检查[^\n]*\n(?:(?![ \t]*\n)[^\n]*(?:\n|$))*/m, '');
+  // ③ 夹在正文里的同类协议行（勾选项 / 工具状态 / 计划状态）
+  t = t.replace(/^[ \t]*(?:🏷\s*INTENT=|skill_search\s*\/\s*skill_view|skill_view\s*已调用|search_knowledge[^\n]*待做|rail_review\(pre\)|task_plan\.md\s*[:：])[^\n]*\n/gm, '');
+  return t.replace(/^\s*\n/, '');
+}
+
 function renderMarkdown(text) {
   if (!text) return '';
+  text = _stripMachinePreamble(text);   // 2026-10-23：聊天里不显示协议块（日志/DB 里仍有）
   // 长文本截断：防止正则回溯卡死整页；fence 感知——不把代码块/mermaid 腰斩
   if (text.length > 15000) {
     var cut = 15000;
@@ -9129,6 +9206,10 @@ function _viewRecord(sid) {
     v: 1, sid: sid, ts: Date.now(),
     html: cache.messageHtml,
     fullText: cache.fullText || '',
+    // 2026-10-23（过程/结论分层配套）：分段基线也要随快照持久化 —— 刷新后接着跑时，
+    // 收尾折叠要求「分段拼接 == 整稿」；丢了分段，整轮阶段小结就会摊在聊天里不折。
+    fullSegs: Array.isArray(cache.fullSegs) ? cache.fullSegs.slice() : [],
+    segBreak: !!cache.segBreak,
     reasoningText: cache.reasoningText || '',
     items: _viewSafeItems(cache.items),
     streamingAssistant: !!cache.streamingAssistant,
@@ -9206,7 +9287,8 @@ function _viewShrink(rec) {
   var tries = [
     function(r) { return r; },
     function(r) { return Object.assign({}, r, { items: [] }); },
-    function(r) { return Object.assign({}, r, { items: [], reasoningText: '' }); }
+    function(r) { return Object.assign({}, r, { items: [], reasoningText: '' }); },
+    function(r) { return Object.assign({}, r, { items: [], reasoningText: '', fullSegs: [] }); }
   ];
   for (var i = 0; i < tries.length; i++) {
     var cand = tries[i](rec);
@@ -9243,6 +9325,8 @@ function _viewApplyToCache(sid, rec) {
   cache.fromPersist = true;
   cache.messageHtml = rec.html || '';
   cache.fullText = rec.fullText || '';
+  cache.fullSegs = Array.isArray(rec.fullSegs) ? rec.fullSegs.slice() : [];   // 2026-10-23：分段随持久化快照还原
+  cache.segBreak = !!rec.segBreak;
   cache.reasoningText = rec.reasoningText || '';
   cache.items = Array.isArray(rec.items) ? rec.items : [];
   cache.streamingAssistant = !!rec.streamingAssistant;
@@ -9567,7 +9651,19 @@ function switchSession(sid) {
       currentAssistantEl = addAssistantMsg('');
       currentBubble = currentAssistantEl.querySelector('.bubble');
       fullText = d.partial_text;
-      if (currentBubble) currentBubble.innerHTML = _citeWrapHtml(renderMarkdown(fullText));
+      if (!fullSegs.length) fullSegs = [d.partial_text];
+      // 2026-10-23：与 WS 路径统一走增量渲染（此前直接 innerHTML —— 之后流式再渲染时
+      // 会在旧内容下面又挂一个渲染块，同一段文字在气泡里重复出现）。
+      if (currentBubble) renderBubbleIncremental(currentBubble, fullText);
+    }
+    // 同上：服务端累计文本是权威值，前缀一致时补齐差值（并补进最后一段）
+    if (d.partial_text && currentAssistantEl && fullText &&
+        d.partial_text.length > fullText.length && d.partial_text.indexOf(fullText) === 0) {
+      var _ptMiss2 = d.partial_text.slice(fullText.length);
+      fullText = d.partial_text;
+      if (!fullSegs.length) fullSegs = [''];
+      fullSegs[fullSegs.length - 1] += _ptMiss2;
+      if (currentBubble) renderBubbleIncremental(currentBubble, fullText);
     }
     // 只有本地缓存为空且 WS progress_replay 也没填进度时才用 HTTP 重放
     if (d.progress_log && d.progress_log.length > 0 && !cached.hasSnapshot && !progressTimelineEl && progressItems.length === 0) {
@@ -16138,11 +16234,14 @@ function _rsBadgeRender() {
   if (nav && nav.classList) nav.classList.toggle('has-red-badge', n > 0);
   if (!el) return;
   if (n > 0) {
-    el.textContent = (n > 99) ? '99+' : String(n);
+    // 2026-10-24（用户要求）：只亮红点标记，不显示数字（数量留在悬停提示里）
+    el.textContent = '';
     el.title = tf('rs_badge_new', n);
+    el.classList.add('dot-only');
     el.style.display = '';
   } else {
     el.style.display = 'none';
+    el.classList.remove('dot-only');
     el.removeAttribute('title');
   }
 }
@@ -16793,6 +16892,45 @@ function toggleNewFilter() {
   loadResultsFiles();
   loadFigures();
 }
+// 2026-10-24（用户要求）：「最新文件」chip 长按 1s = 清除当前会话全部「最新」标记，恢复正常
+//（短按仍是切换「只看最新」筛选；按住时红色逐渐填满作进度提示，填满即清）
+var _newChipTimer = null, _newChipLongFired = false;
+function rsNewChipPressStart(e) {
+  rsNewChipPressCancel();
+  var el = document.getElementById('sort-new');
+  if (el) el.classList.add('holding');
+  _newChipTimer = setTimeout(function() {
+    _newChipTimer = null;
+    _newChipLongFired = true;
+    _rsJustNewClearAll();
+  }, 1000);
+}
+function rsNewChipPressEnd() { rsNewChipPressCancel(); }
+function rsNewChipPressCancel() {
+  if (_newChipTimer) { clearTimeout(_newChipTimer); _newChipTimer = null; }
+  var el = document.getElementById('sort-new');
+  if (el) el.classList.remove('holding');
+}
+function rsNewChipClick() {
+  if (_newChipLongFired) { _newChipLongFired = false; return; }   // 长按已处理，吃掉这次点击
+  toggleNewFilter();
+}
+function _rsJustNewClearAll() {
+  // 一次性清掉当前会话全部「最新」标记：条目「新」标、只看最新筛选、侧栏红点一起恢复正常
+  if (!currentSid) return;
+  _rsJustNew[currentSid] = null;
+  _rsJustNewSave(currentSid);
+  _rsNewKeys[currentSid] = { files: [], figs: [] };
+  _showNewOnly = false;
+  _rsSeenSet(currentSid, Date.now());        // 基线推到现在 → 这一批不再算「新」
+  _rsBadgeCount[currentSid] = 0;
+  _rsBadgeRender();
+  _lastFilesSig = '';
+  _lastFiguresSig = '';
+  _renderSortBar();
+  loadResultsFiles();
+  loadFigures();
+}
 var _lastResultItems = [], _lastFigItems = [], _lastFigBase = '';
 var _lastFilesShown = 0;
 
@@ -16979,7 +17117,7 @@ function renderGoalBar() {
       var running = (status === 'in_progress' || status === 'running');
       var icon = status === 'completed' ? '✅' : running ? '🔄' : status === 'cancelled' ? '❌' : '⬜';
       var cls = status === 'completed' ? ' done' : running ? ' in-progress' : status === 'cancelled' ? ' cancelled' : '';
-      return '<div class="todo-item' + cls + '"><span class="todo-icon">' + icon + '</span><span class="todo-text">' + escapeHtml(x.title || x.content || '') + '</span></div>';
+      return '<div class="todo-item' + cls + '" onclick="todoItemToggle(' + JSON.stringify(String(x.id || x.title || x.content || '')) + ')" title="' + escapeHtml(T('点击划掉/恢复（不合需求的待办直接划掉，别死盯旧清单）')) + '"><span class="todo-icon">' + icon + '</span><span class="todo-text">' + escapeHtml(x.title || x.content || '') + '</span></div>';
     }).join('');
   } else { list.innerHTML = ''; }
   // 2026-09-24：全部完成 → 自动收起清单一次（只留一行「待办 n/n ✅」，点 ▾ 仍可展开）。
@@ -17031,6 +17169,30 @@ function _syncGoalBarWidth() {
 }
 
 function toggleGoalBar() { _goalBar.collapsed = !_goalBar.collapsed; renderGoalBar(); }
+
+// 2026-10-24（用户口径）：单条待办点击 = 划掉/恢复（不合需求的直接划掉，不死盯旧清单）
+async function todoItemToggle(id) {
+  if (!currentSid || !id) return;
+  var cur = null;
+  for (var i = 0; i < _goalBar.todos.length; i++) {
+    if (String(_goalBar.todos[i].id) === String(id)) { cur = _goalBar.todos[i]; break; }
+  }
+  if (!cur) return;
+  var next = (cur.status === 'cancelled') ? 'pending' : 'cancelled';
+  cur.status = next; renderGoalBar();   // 乐观更新
+  try {
+    var r = await fetch('/api/sessions/' + encodeURIComponent(currentSid) + '/todos/item', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: id, status: next })
+    });
+    var d = await r.json();
+    if (d && d.ok && Array.isArray(d.todos)) {
+      _goalBar.todos = d.todos;
+      if (typeof d.revision === 'number') _goalBar.revision = d.revision;
+      renderGoalBar();
+    }
+  } catch (e) {}
+}
 
 function restoreGoalTextEl() {
   var inp = document.getElementById('gb-goal-text');

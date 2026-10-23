@@ -272,6 +272,36 @@ def test_delete_todos_keeps_goal(client, new_session):
         _cleanup_kv(sid)
 
 
+# --- C3. 单条待办划掉/恢复（2026-10-24 用户口径：不合需求的待办可直接划掉，不死盯旧清单） ---
+
+def test_todo_item_strike_and_restore(client, new_session):
+    """POST /api/sessions/{sid}/todos/item：划掉 → cancelled 并记 override；
+    再点 → 恢复 pending；坏 status / 不存在的 id 拒收。"""
+    sid = new_session
+    try:
+        sess = server._sessions[sid]
+        server._session_emit(sess, {"type": "todos_update",
+                                    "todos": [{"id": "t1", "title": "跑 QC", "status": "pending"},
+                                              {"id": "t2", "title": "出图", "status": "pending"}]})
+        r = client.post(f"/api/sessions/{sid}/todos/item", json={"id": "t1", "status": "cancelled"})
+        assert r.status_code == 200 and r.json()["ok"], r.text
+        todos = client.get(f"/api/todos/{sid}").json()["todos"]
+        assert {t["id"]: t["status"] for t in todos} == {"t1": "cancelled", "t2": "pending"}
+        assert sess["_todo_overrides"]["t1"] == "cancelled", "划掉要记 override（防历史重水合复活）"
+        # 广播出去（前端目标条靠事件同步）
+        assert sess["progress_log"][-1]["type"] == "todos_update"
+        r = client.post(f"/api/sessions/{sid}/todos/item", json={"id": "t1", "status": "pending"})
+        assert r.json()["ok"]
+        assert {t["id"]: t["status"]
+                for t in client.get(f"/api/todos/{sid}").json()["todos"]}["t1"] == "pending"
+        assert not client.post(f"/api/sessions/{sid}/todos/item",
+                               json={"id": "t1", "status": "bogus"}).json()["ok"]
+        assert not client.post(f"/api/sessions/{sid}/todos/item",
+                               json={"id": "nope", "status": "cancelled"}).json()["ok"]
+    finally:
+        _cleanup_kv(sid)
+
+
 def test_delete_todos_unknown_session_404(client):
     r = client.delete("/api/sessions/does-not-exist-p1-1-todos/todos")
     assert r.status_code == 404

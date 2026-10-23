@@ -5,9 +5,12 @@ description: >-
   `.doc`（read_file 直接拒读）。图片/扫描页走 RapidOCR（rapidocr_onnxruntime，ONNX
   模型随 pip wheel 打包，零联网）；旧版 `.doc` 走 antiword；`.docx` 走 read_file。
   含整册扫描 PDF 的批量 OCR 循环（scripts/ocr_scanned_pdf.py）。
-  🔴 含**纯文本模型的读图三级降级链**：L1 `vision_describe` 本地像素事实 →
-  L2 文本抽取（RapidOCR/antiword）→ L3 多模态模型语义实读（DashScope `qwen3-vl-plus`，
-  scripts/read_image_via_qwen_vl.py）。用户问"你能看懂这张图吗"时走 L1→L3，**不许回"我看不了"**。
+  🔴 含**读图三级降级链（模型无视觉时的兜底）**：⚠️ 2026-10-24 起 vision_describe v3
+  自动选路——当前模型有视觉（deepseek-flash / kimi-k2.6 / MiniMax-M3 / gpt-4o / gemini /
+  claude 等都算）就由模型直接实读，**不要再当纯文本环境处理**；确无视觉或 mode=model
+  失败回退时才走 L1 `vision_describe` 本地像素事实 → L2 文本抽取（RapidOCR/antiword）→
+  L3 多模态模型语义实读（DashScope `qwen3-vl-plus`，scripts/read_image_via_qwen_vl.py）。
+  用户问"你能看懂这张图吗"时走 vision_describe（auto），不够再 L3，**不许回"我看不了"**。
   用于：用户上传图问"能识图吗"/"能看懂这张图吗"/"描述一下这张图"/"read this image"、
   PDF 抽文字返回空、用户给一批 学校/单位下发的 .doc 或扫描件原件要求整理标注。
 category: General Utility
@@ -44,7 +47,8 @@ trigger:
 
 - **L1 的 OCR 为空 ≠ 图有问题**：纯图形图本来就没字 —— 这本身是一条证据（"图中无文字"由 L1 与 L3 双证）。
 - **汇报口径（重要）**：L3 的语义描述必须**说明来源**（"由外部多模态模型 qwen3-vl-plus 读取"），
-  不得声称"我看到了图片"—— 纯文本模型没有视觉，铁律 32。把 L1 像素事实与 L3 语义**互相印证**后再下结论，
+  纯文本模型没有视觉、不得声称"我看到了图片"（铁律 32）——但 2026-10-24 起 vision_describe
+  mode=model 的返回**就是当前模型自己实读**，此时可以声称看到了图片。把 L1 像素事实与 L3 语义**互相印证**后再下结论，
   单靠 L3 一段话作答 = 单一来源。
 - 出图/图表类图（UMAP / 箱线 / 热图）语义问题 → 先 L1，再按 `cns-visualization` 那一侧的口径看数据本身。
 

@@ -116,12 +116,18 @@ COVERAGE_MATRIX = [
     ("nature-paper-card", "直白", "文献拆解", "拆解"),
     ("nature-paper-card", "英文", "make a paper card", "card"),
     ("nature-paper-card", "场景", "帮我拆一下这篇 Nature 衰老文章", "拆"),
-    # —— nature-reader：精读 ——
+    # —— nature-reader：全文对照/翻译 ——
+    # 2026-10-24 口径修订（用户反馈「一说精读就变成中英文翻译」）：裸「精读/解读」
+    # 是「要解读」→ paper-summary；nature-reader 只在明确要全文对照/翻译/读全文时触发。
     ("nature-reader", "直白", "读论文", "读"),
-    ("nature-reader", "直白", "精读论文", "精读"),
+    ("nature-reader", "直白", "论文翻译", "翻译"),
     ("nature-reader", "英文", "read this paper", "read"),
     ("nature-reader", "场景", "帮我读这篇文章", "读"),
     ("nature-reader", "场景", "这篇文献翻译一下", "翻译"),
+    ("nature-reader", "场景", "精读这篇文献，中英对照翻译", "中英对照"),
+    # —— 裸「精读」= 要解读 → paper-summary（2026-10-24 新口径）——
+    ("paper-summary", "直白", "精读论文", "精读"),
+    ("paper-summary", "场景", "帮我精读一下这篇文献", "精读"),
 ]
 
 
@@ -175,12 +181,13 @@ class TestDistractorNoFalseTrigger:
 
 class TestSimilarSkillsDistinct:
     def test_reading_chain_distinct(self):
-        """paper-summary(快读) / nature-reader(精读) / nature-paper-card(拆解) / literature-review(综述)
-        四个深度层级触发词不应互相覆盖核心词。"""
+        """paper-summary(解读) / nature-reader(全文对照翻译) / nature-paper-card(拆解) / literature-review(综述)
+        四个深度层级触发词不应互相覆盖核心词。
+        2026-10-24 口径：裸「精读/解读」归 paper-summary；nature-reader 的锚点是对照/翻译/读全文。"""
         idx = _index_text()
         layers = {
-            "paper-summary": "文献解读",
-            "nature-reader": "精读|翻译|read",
+            "paper-summary": "精读|解读",
+            "nature-reader": "对照|翻译|read",
             "nature-paper-card": "拆解|card",
             "literature-review": "综述|review",
         }

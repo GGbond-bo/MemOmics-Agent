@@ -375,8 +375,8 @@ SCHEMA = {
         "直接理解与逐项读数）；模型没有视觉时自动回退本地管道（OCR 提取图中文字 + 颜色分布 + "
         "坐标轴/柱状/网格等元素检测 + ASCII 亮度图）。用户发图片、需要核对图表/截图/"
         "示意图内容时必须调用，基于返回内容回答，禁止凭空描述图片内容。"
-        "mode=\"local\" 强制本地管道（门禁/核验需要 OCR 条数等机器判据时用）；"
-        "mode=\"model\" 强制模型视觉。image_path 为本地绝对路径。"
+        "mode 参数平时省略即可（默认 auto 自动选路）；仅当门禁/核验必须要 OCR 条数等"
+        "机器判据时才传 \"local\"；强制模型视觉传 \"model\"。image_path 为本地绝对路径。"
     ),
     "parameters": {
         "type": "object",
@@ -385,7 +385,7 @@ SCHEMA = {
             "question": {"type": "string", "description": "要回答的问题（分析结果里取对应事实）"},
             "max_tokens": {"type": "integer", "default": 800, "description": "保留（接口兼容）"},
             "mode": {"type": "string", "default": "auto",
-                     "description": "auto=自动选路（默认）| model=强制模型视觉 | local=强制本地管道（核验/机器判据）"},
+                     "description": "平时省略（=auto 自动选路）；local=强制本地管道（仅门禁/核验要机器判据时）；model=强制模型视觉"},
         },
         "required": ["image_path"],
     },

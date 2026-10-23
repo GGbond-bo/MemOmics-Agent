@@ -55,6 +55,7 @@ const code = [
   grab('_rsBadgeScan'), grab('_rsMergeKeys'),
   grab('_rsJustNewKey'), grab('_rsJustNewLoad'), grab('_rsJustNewSave'),
   grab('_rsJustNewOf'), grab('_rsJustNewHas'), grab('_rsJustNewCount'), grab('_rsJustNewClearItem'),
+  grab('_rsJustNewClearAll'),
   grab('_rsNewFilterOn'), grab('_visibleResultItems')
 ].join(NL);
 
@@ -62,6 +63,8 @@ const factory = new Function('env', [
   'var currentSid = "";',
   'var _showUnreadOnly = false, _showNewOnly = false;',
   'var _lastFigItems = [], _runStartTs = null;',
+  'var _lastFilesSig = "", _lastFiguresSig = "";',
+  'var _renderSortBar = env.noop, loadFigures = env.noop, loadResultsFiles = env.noop;',
   'var localStorage = env.localStorage, document = env.document, tf = env.tf;',
   code,
   'return {',
@@ -75,7 +78,7 @@ const factory = new Function('env', [
   '  visible: _visibleResultItems,',
   '  setFigs: function (v) { _lastFigItems = v || []; },',
   '  setRunStart: function (v) { _runStartTs = v; },',
-  '  clearItem: _rsJustNewClearItem,',
+  '  clearItem: _rsJustNewClearItem, clearAll: _rsJustNewClearAll,',
   '  noteFig: _rsBadgeNoteNewFigure',
   '};'].join(NL));
 
@@ -88,14 +91,15 @@ function makeLs() {
 }
 function newEnv(reuseLs) {
   const ls = reuseLs || makeLs();
-  const badge = { textContent: '', title: '', style: { display: 'none' },
+  const badge = { textContent: '', title: '', style: { display: 'none' }, _cls: {},
+    classList: { add: function (c) { badge._cls[c] = true; }, remove: function (c) { delete badge._cls[c]; } },
     removeAttribute: function (n) { if (n === 'title') this.title = ''; } };
   const nav = { _cls: {}, classList: { toggle: function (c, on) { nav._cls[c] = !!on; } } };
   const doc = { getElementById: function (id) {
     return id === 'nav-results-badge' ? badge : (id === 'nav-results' ? nav : null);
   } };
   const e = factory({
-    localStorage: ls, document: doc,
+    localStorage: ls, document: doc, noop: function () {},
     tf: function (key) {
       const a = Array.prototype.slice.call(arguments, 1);
       const d = { rs_badge_new: '有 {0} 个新分析结果，点击查看' };
@@ -103,6 +107,12 @@ function newEnv(reuseLs) {
     }
   });
   return { e: e, ls: ls, badge: badge, nav: nav };
+}
+
+// 2026-10-24（用户要求）：红点只亮标记不带数字（数量在悬停 title 里）
+function dotOn(badge, n) {
+  return badge.style.display === '' && badge.textContent === ''
+    && badge._cls['dot-only'] === true && badge.title.indexOf(String(n)) >= 0;
 }
 
 const NOW = Math.floor(Date.now() / 1000);
@@ -124,13 +134,13 @@ console.log('== B. 有新结果 → 亮红点（计数、只增不减） ==');
   e.setSid('s1');
   e.seenSet('s1', (NOW - 100) * 1000);
   e.scan([{ name: 'new1.png', mtime_epoch: NOW }], []);
-  check('新图 → 计数 1、红点亮起', badge.style.display === '' && badge.textContent === '1', JSON.stringify(badge));
+  check('新图 → 红点亮起（纯标记无数字，数量在悬停提示）', dotOn(badge, 1), JSON.stringify(badge));
   check('「分析结果」栏同时标红', nav._cls['has-red-badge'] === true);
-  check('提示文案带数量', badge.title.indexOf('1') >= 0, badge.title);
+  check('悬停提示文案带数量', badge.title.indexOf('1') >= 0, badge.title);
   e.scan([], []);
-  check('下一轮没新增 → 计数不降（防闪）', badge.textContent === '1');
+  check('下一轮没新增 → 红点不闪（防闪）', dotOn(badge, 1));
   e.scan([{ name: 'new1.png', mtime_epoch: NOW }, { name: 'new2.png', mtime_epoch: NOW + 1 }, { name: 'new3.png', mtime_epoch: NOW + 2 }], []);
-  check('再来两张 → 计数 3（每次刷新都按完整列表重算）', badge.textContent === '3', badge.textContent);
+  check('再来两张 → 提示数量 3（每次刷新都按完整列表重算）', dotOn(badge, 3), badge.title);
 }
 
 console.log('== C. 点开「分析结果」→ 消失；之后再出新结果 → 再出现 ==');
@@ -145,7 +155,7 @@ console.log('== C. 点开「分析结果」→ 消失；之后再出新结果 �
   e.scan([{ name: 'a.png', mtime_epoch: NOW - 1 }], []);
   check('已经看过的那张不再算新', badge.style.display === 'none');
   e.scan([{ name: 'b.png', mtime_epoch: Math.floor(Date.now() / 1000) + 2 }], []);
-  check('又有新结果 → 红点再次出现', badge.style.display === '' && badge.textContent === '1', JSON.stringify(badge));
+  check('又有新结果 → 红点再次出现', dotOn(badge, 1), JSON.stringify(badge));
 }
 
 console.log('== D. 只算当前会话（两个会话互不串） ==');
@@ -154,7 +164,7 @@ console.log('== D. 只算当前会话（两个会话互不串） ==');
   e.setSid('A');
   e.seenSet('A', (NOW - 100) * 1000);
   e.scan([{ name: 'a.png', mtime_epoch: NOW }], []);
-  check('会话 A 亮起计数 1', badge.textContent === '1');
+  check('会话 A 亮起（数量 1）', dotOn(badge, 1));
   e.setSid('B');
   e.render();
   check('切到会话 B（自己没新结果）→ 不显示 A 的红点', badge.style.display === 'none', JSON.stringify(badge));
@@ -162,10 +172,10 @@ console.log('== D. 只算当前会话（两个会话互不串） ==');
   e.scan([{ name: 'old_b.png', mtime_epoch: NOW - 50 }], []);
   check('B 的老结果也不冒充「新」', badge.style.display === 'none');
   e.bump();
-  check('切回前 B 自己出新图 → 只亮 B 的', badge.style.display === '' && badge.textContent === '1');
+  check('切回前 B 自己出新图 → 只亮 B 的', dotOn(badge, 1));
   e.setSid('A');
   e.render();
-  check('切回 A → 显示 A 自己的计数（不是 B 的）', badge.style.display === '' && badge.textContent === '1');
+  check('切回 A → 显示 A 自己的（不是 B 的）', dotOn(badge, 1));
 }
 
 console.log('== E. 文件与目录的细节 ==');
@@ -174,9 +184,9 @@ console.log('== E. 文件与目录的细节 ==');
   e.setSid('s1');
   e.seenSet('s1', (NOW - 100) * 1000);
   e.scan([], [{ name: 'scripts', is_dir: true, mtime_epoch: NOW }, { name: 'r.rds', mtime: NOW }, { name: 'old.txt', mtime: NOW - 500 }]);
-  check('目录不算、数字 mtime 算、旧文件不算', badge.textContent === '1', badge.textContent);
+  check('目录不算、数字 mtime 算、旧文件不算', dotOn(badge, 1), badge.title);
   e.scan([], [{ name: 'r.rds', mtime: NOW }, { name: 'report.docx', mtime: '2099-01-01 00:00:00' }]);
-  check('字符串 mtime 也能解析（世纪后）', badge.textContent === '2', badge.textContent);
+  check('字符串 mtime 也能解析（世纪后）', dotOn(badge, 2), badge.title);
   check('_rsItemMs：epoch/数字/字符串/空', e.itemMs({ mtime_epoch: 5 }) === 5000
     && e.itemMs({ mtime: 5 }) === 5000 && e.itemMs({ mtime: '2099-01-01 00:00:00' }) > 0 && e.itemMs(null) === 0);
 }
@@ -271,14 +281,35 @@ console.log('== I. 假新图拦截：刚发问不该亮（服务器重扫老图 
     e.noteFig({ name: 'ancient.png', mtime: hms(Date.now() - 10 * 60 * 1000) }, false) === false && badge.style.display === 'none');
   check('真的新图（本轮产物）→ 点亮并记名',
     e.noteFig({ name: 'fresh.png', mtime: hms(Date.now()) }, false) === true
-    && badge.style.display === '' && badge.textContent === '1', JSON.stringify(badge));
-  check('同一张再来一次 → 不重复计数', e.noteFig({ name: 'fresh.png', mtime: hms(Date.now()) }, false) === false && badge.textContent === '1');
+    && dotOn(badge, 1), JSON.stringify(badge));
+  check('同一张再来一次 → 不重复计数', e.noteFig({ name: 'fresh.png', mtime: hms(Date.now()) }, false) === false && dotOn(badge, 1));
   e.clear();
   check('点开之后同名的图不再重复点亮', e.noteFig({ name: 'fresh.png', mtime: hms(Date.now()) }, false) === false && badge.style.display === 'none');
   // 没有本轮开始时间（任务已完成/未知）时退回「列表成员」判定，不误杀
   e.setRunStart(null);
   check('拿不到本轮开始时间 → 依靠列表成员判断（不误杀新图）',
     e.noteFig({ name: 'late.png', mtime: hms(Date.now()) }, false) === true);
+}
+
+console.log('== J. 长按 1s 清除全部「最新」标记（2026-10-24 用户要求） ==');
+{
+  const { e, ls, badge } = newEnv();
+  e.setSid('s1');
+  e.seenSet('s1', (NOW - 100) * 1000);
+  e.scan([{ name: 'n1.png', mtime_epoch: NOW }], [{ name: 'n2.csv', path: '/r/n2.csv', mtime: NOW }]);
+  e.clear();   // 点开结果栏 → 冻结成「最新」清单
+  check('清前：清单 2 项、红点曾亮起', e.justNewCount() === 2);
+  e.setNewOnly(true);
+  e.clearAll();
+  check('清除后：清单归零、红点消失',
+    e.justNewCount() === 0 && badge.style.display === 'none');
+  check('「只看最新」筛选一并复位（列表回正常）',
+    e.visible([{ name: 'n2.csv', path: '/r/n2.csv', is_dir: false }]).length === 1);
+  check('本机持久化同步清空（刷新后不复活）',
+    JSON.parse(ls.getItem('memomics_res_justnew_s1') || 'null') === null);
+  // 清完之后出的新东西仍然算新（基线推到清除时刻，不是永久封口）
+  e.scan([{ name: 'n3.png', mtime_epoch: Math.floor(Date.now() / 1000) + 5 }], []);
+  check('清除不是封口：之后再出新结果 → 红点照常亮起', dotOn(badge, 1));
 }
 
 console.log(NL + '----');

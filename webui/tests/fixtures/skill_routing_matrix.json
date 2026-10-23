@@ -581,12 +581,21 @@
     },
     {
       "id": "promoted-nature-reader-taozhe",
-      "intent": "缺口转正",
+      "intent": "缺口转正（2026-10-24 口径修订：裸「精读」= 要解读 → paper-summary；nature-reader 只在明确要全文对照/翻译/读全文时触发——用户反馈「一说精读就变成中英文翻译」）",
       "text": "精读这篇论文，逐段解读一下",
       "must_hit": [
-        "nature-reader"
+        "paper-summary"
       ],
       "max_hits": 2
+    },
+    {
+      "id": "reffigreplication-01",
+      "intent": "口语（2026-10-24 补登：该 RED 技能此前没有路由用例）",
+      "text": "把这张图当 reference，按它的规格复刻一版",
+      "must_hit": [
+        "reference-figure-replication"
+      ],
+      "max_hits": 5
     },
     {
       "id": "promoted-paramextract-shiyan",
