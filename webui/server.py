@@ -13273,12 +13273,17 @@ def _platform_asset() -> str:
 # ── 差异覆盖的保留清单（对齐打包.bat 排除：用户数据/环境/密钥绝不覆盖）──
 _KEEP_DIRS = (".venv", ".git", ".backups", "node_modules", "miniconda_env", "miniconda",
               "runtime", "memomics_home", "results", "uploads", "log", "ArchRLogs",
-              "__pycache__", ".pytest_cache", ".idea", ".vscode")
+              "__pycache__", ".pytest_cache", ".idea", ".vscode",
+              # 2026-10-24（用户要求）：知识库是用户私有内容（自建/导入的条目），
+              # 更新包与全量包都不得覆盖——只让代码更新，私有数据一律保留
+              "knowledge_base")
 _KEEP_FILES = (".env", ".install_path", "venv_deps_ok.txt", "venv_vision_ok.txt",
-               "VERSION",  # 本地版本标识不被远端覆盖（覆盖会破坏比较）
+               # VERSION 例外：_is_keep_path 里已提前放行，允许 update 包刷新版本号
+               # （2026-10-23 前它在这里被拦下，导致「更新后版本号不变」）
                )
 _KEEP_TOP_LEVEL = ("memomics_home", "results", "uploads", "log", ".venv", "runtime",
-                   "node_modules", "miniconda_env", "miniconda", ".git", ".backups")
+                   "node_modules", "miniconda_env", "miniconda", ".git", ".backups",
+                   "knowledge_base")
 
 
 def _is_keep_path(rel: str, allow_skills: bool = True, allow_version: bool = True) -> bool:
