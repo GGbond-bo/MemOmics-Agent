@@ -49,12 +49,22 @@ MemOmics-Agent 是一个以 [Hermes](https://github.com/NousResearch/hermes-agen
 9. **微信桥接**：进度推送、图片直发微信（可选）。
 10. **旧安装自愈（fix bundle）**：升级后首次启动自动迁移配置级修复，无需手动处理。
 
-## 快速开始
+## 下载与安装
+
+**所有安装包都在 Releases 页下载** → **<https://github.com/GGbond-bo/MemOmics-Agent/releases/latest>**
+
+| 我要… | 下载哪个 | 说明 |
+|---|---|---|
+| **第一次安装**（Windows） | `MemOmics-Windows.zip` | 全量包，约 700 MB，**自带 Python 运行环境**，解压即用 |
+| **第一次安装**（macOS Apple 芯片） | `MemOmics-macOS-arm64.tar.gz` | 全量包，约 423 MB |
+| **第一次安装**（macOS Intel） | `MemOmics-macOS-x86_64.tar.gz` | 全量包，约 433 MB |
+| **第一次安装**（Linux / 服务器 / 集群） | `MemOmics-Linux.tar.gz` / `MemOmics-Cluster.tar.gz` | 挂在 v2026-10-14 的 Release 里 |
+| **升级已有的安装** | `MemOmics-update.zip` | 轻量更新包，约 157 MB，**只含代码与技能**，你的配置/会话/记忆/知识库都会保留 |
 
 ### Windows（开箱即用）
 
-1. 下载最新版 `MemOmics-Windows.zip`，解压（路径不含中文为佳）
-2. 双击 `启动.bat` —— 首次自动装依赖（Python 缺失时自动装内置 Miniconda）
+1. 去 [Releases](https://github.com/GGbond-bo/MemOmics-Agent/releases/latest) 下载 `MemOmics-Windows.zip`，解压（路径不含中文为佳）
+2. 双击 `启动.bat` —— 随包已带 Python 环境，无需另装；首次启动会自检并补齐依赖
 3. 浏览器打开 `http://127.0.0.1:8899`
 4. 左侧「⚙️ 设置」填入 API Key（DeepSeek / GPT / Claude 等 **任意 OpenAI 兼容网关**）
 5. 开始提问，例如：
@@ -64,17 +74,36 @@ MemOmics-Agent 是一个以 [Hermes](https://github.com/NousResearch/hermes-agen
  样本名是 samplename，组别是 type，帮我可视化一下这些分数"
 ```
 
-### Linux / macOS / HPC 集群
+### macOS
 
 ```bash
-tar -xzf MemOmics-Linux.tar.gz && cd MemOmics && bash start.sh
+tar -xzf MemOmics-macOS-arm64.tar.gz    # Intel 机用 MemOmics-macOS-x86_64.tar.gz
+cd MemOmics && ./start.sh
 ```
+
+首次运行若被 Gatekeeper 拦下：右键 `start.sh` →「打开」，或 `xattr -dr com.apple.quarantine .`
+
+### Linux / 服务器 / HPC 集群
+
+```bash
+tar -xzf MemOmics-Linux.tar.gz && cd MemOmics && bash start.sh     # 集群版用 MemOmics-Cluster.tar.gz
+# 常驻服务：参考包内 launchers/memomics.service（systemd）
+```
+
+### 升级已有安装（三种方式，任选其一）
+
+1. **WebUI 一键更新（推荐）**：打开页面 → 左下角「检查更新」→ 按提示下载并重启
+2. **更新包脚本**：下载 `MemOmics-update.zip` → 解压到**安装目录的上一级** → Windows 双击包内 `update_windows.bat`（macOS/Linux 用 `bash update_macos_linux.sh`）。包内根目录名就是 `MemOmics`，与安装目录同名，可直接合并覆盖；脚本会自动定位安装目录，**只覆盖代码、不删用户数据**
+3. **手动覆盖**：解压 `MemOmics-update.zip` → 关闭程序 → 把包内 `MemOmics` 里的内容整体覆盖到安装目录 → 重新启动
+
+> 更新后**必须重启程序**（关掉旧窗口再启动，或在 WebUI 里用「一键重启」）才会加载新代码。
+> 你的 `memomics_home`（API 配置、会话、记忆、知识库、文献）与 `results/`（分析结果）都不会被覆盖。
 
 ### 系统要求
 
 | 组件 | 要求 | 说明 |
 |---|---|---|
-| Python | 3.11 – 3.13 | 首启自动建 venv + 装依赖 |
+| Python | 3.11 – 3.13 | 首启自动建 venv + 装依赖；Windows/macOS 包已自带 |
 | R | ≥ 4.5（可选） | Seurat / ArchR 等 R 分析需要 |
 | 内存 | ≥ 16GB（推荐 32GB+） | 单细胞大对象分析 |
 | GPU | 可选 | CellBender 等去污染大幅加速 |
@@ -83,19 +112,21 @@ tar -xzf MemOmics-Linux.tar.gz && cd MemOmics && bash start.sh
 
 ```
 MemOmics-Agent/
-├── memomics/          # 领域核心：分析工具、知识库、控制平面（LoopX）、进程监控
-├── webui/             # Web 服务：会话、审查门禁、自愈看门狗、任务状态机
+├── webui/             # Web 服务：会话、审查门禁、自愈看门狗、任务状态机、前端页面
+├── memomics/          # 领域核心：分析工具、连接器、控制平面、进程监控
 ├── hermes-agent/      # Agent 底座：Hermes 框架（Nous Research, MIT）工具执行器、持久内核、记忆
-├── memomics_home/       # 技能库(400+) / 记忆 / 文献 / 会话数据库
-├── results/           # 每个会话的分析结果（独立目录）
-├── docs/              # 设计文档
-├── 启动.bat / start.sh # 各平台启动器（Linux/macOS/集群分版）
-└── scripts/           # 环境校验、修复迁移等自愈脚本
+├── memomics_home/     # 技能库（500+）/ 内置提示 / 资源
+├── scripts/           # 环境校验、修复迁移等自愈脚本
+├── launchers/         # 各平台启动器与更新脚本母本
+├── start_linux.sh / start_macos.sh / 启动.bat   # 各平台启动器
+└── requirements*.txt  # 依赖清单
 ```
 
-## 升级旧安装
+> 运行期才会出现的目录（`results/`、`memomics_home/sessions/`、`memomics_home/memories/`、
+> `memomics_home/knowledge_base/`）不在仓库里，由程序在你自己机器上创建。
 
-下载新包 → 关闭旧程序 → **解压整体覆盖旧目录**（memomics_home 中的 API 配置/会话/记忆自动保留）→ 重新启动。首次启动自动执行修复迁移；底部状态栏可核对 `fix_bundle` 版本号。详见 `README_INSTALL.md`。
+> 升级步骤见上面「**升级已有安装**」一节；首次启动会自动执行修复迁移，底部状态栏可核对 `fix_bundle` 版本号。
+> 更细的安装/配置说明见 [`README_INSTALL.md`](README_INSTALL.md)。
 
 ## 常见问题
 

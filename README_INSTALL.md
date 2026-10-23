@@ -1,4 +1,8 @@
-﻿# MemOmics 安装指南（v2026-10-09）
+# MemOmics 安装指南
+
+> 版本以 [Releases 最新版](https://github.com/GGbond-bo/MemOmics-Agent/releases/latest) 为准（当前 `v2026-10-23`）。
+> **下载入口：<https://github.com/GGbond-bo/MemOmics-Agent/releases/latest>**
+> 全量包 = 第一次安装用（自带 Python 环境）；更新包 = 已有安装升级用（只含代码与技能，保留你的数据）。
 
 MemOmics 是一个跑在**本机**的组学分析 Agent：自带 WebUI、技能库、文献库与知识库，
 所有数据留在你自己的电脑/服务器上。
