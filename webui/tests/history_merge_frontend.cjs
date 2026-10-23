@@ -22,13 +22,22 @@ function check(name, cond, extra) {
   else { fail++; console.log('  FAIL ' + name + (extra === undefined ? '' : '  -> ' + extra)); }
 }
 function grab(name) {
+  // 2026-10-23：字符串感知 —— _fmtToolResult 的代码里有 '{' / '[' 字面量，
+  // 朴素括号计数会被它们带偏（"括号不配对"）。
   const sig = 'function ' + name + '(';
   const i = HTML.indexOf(sig);
   if (i < 0) throw new Error('找不到函数 ' + name);
-  let depth = 0;
+  let depth = 0, quote = '';
   for (let k = HTML.indexOf('{', i); k < HTML.length; k++) {
-    if (HTML[k] === '{') depth++;
-    else if (HTML[k] === '}') { depth--; if (depth === 0) return HTML.slice(i, k + 1); }
+    const c = HTML[k];
+    if (quote) {
+      if (c === '\\') { k++; continue; }
+      if (c === quote) quote = '';
+      continue;
+    }
+    if (c === "'" || c === '"') { quote = c; continue; }
+    if (c === '{') depth++;
+    else if (c === '}') { depth--; if (depth === 0) return HTML.slice(i, k + 1); }
   }
   throw new Error('括号不配对 ' + name);
 }
@@ -118,6 +127,7 @@ const code = [
   grab('_fmtDur'),
   grabVar('_toolLabels'),
   grab('_toolLabel'),
+  grab('_procBlockHtml'),
   grab('addUserMsg'),
   grab('addAssistantMsg')
 ].join(NL);
@@ -128,6 +138,8 @@ const factory = new Function('env', [
   'var renderMarkdown = env.renderMarkdown, _citeWrapHtml = env._citeWrapHtml;',
   'var initMermaid = env.initMermaid, scrollBottom = env.scrollBottom;',
   'var _registerTurnEl = env._registerTurnEl, _turnSeq = 0;',
+  'var tf = env.tf, t = env.t;',
+  'function T(s) { return s; }   // 真实页面里 T() 走通用翻译层；测试里取身份函数',
   code,
   'return { run: _renderHistoryFlow, box: env.document.getElementById("messages"),',
   '         addAssistantMsg: addAssistantMsg, addUserMsg: addUserMsg };'
@@ -139,7 +151,18 @@ const env = {
   renderMarkdown: function (t) { return String(t || ''); },
   _citeWrapHtml: function (h) { return h; },
   initMermaid: function () {}, scrollBottom: function () {},
-  _registerTurnEl: function () {}
+  _registerTurnEl: function () {},
+  // 2026-10-23：关键过程折叠块的文案（真实现见 index.html 的 tf()/t()）
+  tf: function (key) {
+    const a = Array.prototype.slice.call(arguments, 1);
+    const d = { proc_block: '📋 关键过程 · {0} 个阶段{1}（点击展开/收起）' };
+    return String(d[key] || key).replace(/\{(\d+)\}/g, function (m, i) { return a[+i] != null ? String(a[+i]) : m; });
+  },
+  t: function (k) {
+    const d = { proc_elapsed: '用时', proc_args: '参数', proc_result: '结果', proc_more: '详情',
+                proc_skill: '技能', proc_output: '产出', proc_steer: '用户引导', proc_running: '执行中…' };
+    return d[k] || k;
+  }
 };
 const api = factory(env);
 
@@ -167,7 +190,8 @@ check('文本按顺序拼接', bs.length === 1 &&
   bs[0]._html.indexOf('Diagnosis is clear') < bs[0]._html.indexOf('Both builders are source-driven') &&
   bs[0]._html.indexOf('Both builders') < bs[0]._html.indexOf('Full picture') &&
   bs[0]._html.indexOf('Full picture') < bs[0]._html.indexOf('Now writing the fix script'));
-check('片段之间有段落分隔', bs.length === 1 && /Diagnosis is clear[^<]*\n\nBoth builders/.test(bs[0]._html), JSON.stringify((bs[0]._html || '').slice(0, 120)));
+check('中间过程按「阶段」分块（3 段过程 = 3 个 proc-stage）', bs.length === 1 && (bs[0]._html.match(/proc-stage/g) || []).length === 3, JSON.stringify((bs[0]._html || '').slice(0, 120)));
+check('最后一段（结论）留在折叠块之外', bs.length === 1 && bs[0]._html.indexOf('Now writing the fix script.') > bs[0]._html.indexOf('proc-body'));
 check('只有 1 个复制按钮', bs.length === 1 && copyBtnCount(bs[0]) === 1, bs.length ? copyBtnCount(bs[0]) : 'n/a');
 check('工具数按整轮累加 = 6', bs.length === 1 && bs[0]._html.indexOf('🛠 6 次工具调用') >= 0);
 check('耗时按整轮累加 = 1:25', bs.length === 1 && bs[0]._html.indexOf('⏱ 1:25') >= 0, (bs[0]._html.match(/⏱[^<·]*/) || [''])[0]);
@@ -210,6 +234,25 @@ els = api.run([
 check('无文本 → 0 个气泡', bubbles().length === 0, '实际 ' + bubbles().length);
 check('哨兵/空白都不渲染', messagesBox.children.length === 0);
 
+// ---- 4.5) 「关键过程」= 阶段小结（2026-10-23 修订）：历史回放同样是纯文字分阶段 ----
+console.log('4.5) 关键过程：历史回放 = 阶段小结文字');
+resetBox();
+els = api.run([
+  { role: 'user', content: '做 QC', turn: 1 },
+  { role: 'assistant', content: '先核实文件，用 ls 确认 12 个文件都在', turn: 1, elapsed: 5, tool_count: 1, tool_names: ['terminal'] },
+  { role: 'assistant', content: '按 min_genes=200 过滤后剩 8712 个细胞', turn: 1, elapsed: 7, tool_count: 1, tool_names: ['execute_python'] },
+  { role: 'assistant', content: '结果如下', turn: 1, elapsed: 3, tool_count: 0 }
+]);
+bs = bubbles();
+check('一轮仍是 1 个气泡', bs.length === 1, '实际 ' + bs.length);
+const h = bs[0] ? String(bs[0]._html) : '';
+check('折叠块摘要带 阶段数/用时', h.indexOf('关键过程 · 2 个阶段 · 用时 0:15') >= 0, h.slice(0, 240));
+check('过程段纯文字分阶段（proc-stage / proc-no / proc-say）',
+  h.indexOf('proc-stage') >= 0 && h.indexOf('proc-no') >= 0 && h.indexOf('proc-say') >= 0);
+check('不再是文件/工具清单（无 proc-act / 无参数结果块）', h.indexOf('proc-act') < 0 && h.indexOf('<pre>') < 0);
+check('阶段小结文字都在（12 个文件 / 8712 个细胞）', h.indexOf('12 个文件') >= 0 && h.indexOf('8712 个细胞') >= 0);
+check('结论照常突出，不被折叠块吞掉', h.indexOf('结果如下') >= 0 && h.indexOf('proc-say') < h.indexOf('结果如下'));
+
 // ---- 5) 真实会话数据（可选 fixture，CI 里没有就跳过） ----
 const fxPath = process.env.HISTORY_FIXTURE;
 if (fxPath && fs.existsSync(fxPath)) {
@@ -231,6 +274,16 @@ if (fxPath && fs.existsSync(fxPath)) {
     const t = String(m.content).trim().slice(0, 24);
     return rendered.some(function (el) { return String(el._html || '').indexOf(t) >= 0; });
   }));
+  // 2026-10-23：折叠体检（HISTORY_DUMP=1 时打印最后一条的折叠结构 + 重复检测）
+  if (process.env.HISTORY_DUMP === '1' && rendered.length) {
+    const lastHtml = String(rendered[rendered.length - 1]._html || '');
+    console.log('[dump] 最后气泡：折叠块=' + (lastHtml.indexOf('<details class="proc-block"') >= 0)
+      + ' 默认折叠=' + (lastHtml.indexOf('<details class="proc-block" open>') < 0)
+      + ' proc-stage×' + (lastHtml.match(/proc-stage/g) || []).length
+      + ' 重复检测(环境就绪)×' + (lastHtml.match(/环境就绪/g) || []).length
+      + ' 长度=' + lastHtml.length);
+    if (process.env.HISTORY_DUMP === '2') console.log(lastHtml.slice(0, 500));
+  }
 } else {
   console.log('5) 跳过真实数据（未提供 HISTORY_FIXTURE）');
 }

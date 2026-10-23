@@ -256,7 +256,7 @@ def test_outline_render_and_jump_are_wired():
 def test_outline_render_escapes_text():
     html = _fe()
     blk = html.split("function refreshOutline()")[1].split("function jumpToTurn(")[0]
-    assert "escapeHtml(q || '（无提问）')" in blk
+    assert "escapeHtml(q || T('（无提问）'))" in blk
     assert "escapeHtml(a.length > 90" in blk
     # 摘要不能裸拼进 innerHTML
     assert ">'+ q +" not in blk and ">'+ a +" not in blk

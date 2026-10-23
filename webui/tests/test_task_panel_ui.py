@@ -61,6 +61,9 @@ global.clearInterval = function(id) { timers[id - 1] = null; };
 global.fetch = function() { return Promise.reject(new Error('harness 不联网')); };
 global.alert = function() {};
 global.confirm = function() { return true; };
+// 2026-10-23：面板文案走通用翻译层 T()；沙箱里给身份函数（断言中文口径）
+global.UI_LANG = 'zh';
+global.T = function(s) { return s; };
 // T9：面板用全局 ws 发订阅消息（index.html 里那个聊天连接），这里给个假 socket
 global.WebSocket = { OPEN: 1 };
 global.ws = { readyState: 1, sent: [], send: function(t) { this.sent.push(t); } };

@@ -2388,6 +2388,11 @@ def _session_no_live_work(session):
 def _detect_action_promise(result: str, tool_call_log: list) -> bool:
     if not result or not result.strip():
         return False
+    # 2026-10-24 误报修复（用户反馈：门禁卡住执行任务时连环误报）：
+    # 回复在解释"被拦/门禁"（agent 做了动作但被挡下，或停手说明原因）→
+    # 不是说而不做；被拦场景由门禁自己的 require 提示引导，不再强制唤醒重试。
+    if any(m in result for m in ("⛔", "已被拦截", "被拦截", "执行保护", "门禁", "BLOCKED")):
+        return False
     _done_words = ["已生成", "已完成", "已运行", "已执行", "以上是", "结果如下",
                    "输出如下", "见上图", "见下图", "已读取", "已查到", "已确认",
                    "结果已", "已出好", "已出图", "已写好", "已保存", "已交付"]
@@ -7417,9 +7422,13 @@ _REPLY_STYLE = """
 ## 回复排版（可读性铁律 · 严格执行）
 
 ### 中间回合（接下来还要调工具的回合）
-- 最多 1–2 句话，动词开头，只说「在做什么 + 为什么」（如"先核实云上文件是否存在"）。
-- **不要**在中间回合写半成品结论、不要罗列数据细节、不要用表格/标题/长列表。
-- 前端会把这些播报自动收进「关键过程」折叠块，所以尽管简短，不必担心用户看不到。
+- 3–6 句，写成**阶段小结 + 逻辑链**（会收进「关键过程」折叠层；用户就靠这些文字看懂 MemOmics 是怎么一步步执行任务的，信息密度要够）：
+  1)【为什么】这一阶段要解决什么、为什么先做它（判断依据）；
+  2)【怎么做】方法与做法：说清「用什么方法 / 手段」——按任务类型自然适配（数据分析 → 统计或算法方法与该写清的口径阈值；实验流程 → 方案设计、平台或试剂、对照设置；文献与资料调研 → 检索来源与检索式、筛选标准；编码与工程 → 技术方案、框架与关键改动思路；写作与整理 → 材料来源与结构；批处理 / 运维 → 流程与脚本策略……）；以及用到的工具 / 技能 / 知识库；运行环境（语言、软件、关键库、平台或设备，写实际可核对的名称与版本）；
+  3)【结果】这一步实际得到什么：关键数字 / 规模 / 初步结论、成功还是失败；
+  4)【应变】换了方法或绕了弯路：原来用什么、为什么换、换成什么；
+  5)【下一步】据此准备做什么。
+- 不限学科与任务类型（分析、实验、检索、编码、写作、批处理……都按同一套口径写）；目的是把**思考过程与执行过程**做成小阶段总结，让用户知道 MemOmics 是怎么执行任务的；不是流水账。**不要罗列文件路径或文件名清单、不要贴大段参数或结果原文、不要表格 / 长列表**；也不要写半成品结论（最终结论只留给最后一条）。
 
 ### 最终回答（本回合不再调工具、向用户交付的回合）
 结论先行，按此顺序组织（按用户实际需求取舍，没有的环节不写）：
@@ -14511,6 +14520,20 @@ _LOOP_EXEMPT_TOOLS = {
     "rail_review", "debate_analysis", "record_run", "check_env",
 }
 
+# 2026-10-24：监控/只读探查型命令签名——对同一目标反复查看是正常业务
+#（盯长任务日志/查进度/看进程），循环检测触发阈值对它们放宽（见 _loop_check）。
+_MONITOR_SIG_RE = re.compile(
+    r"^\s*(?:(?:tail|cat|head|ls|ps|df|du|free|wc|nvidia-smi|tasklist|netstat|"
+    r"echo|pwd|dir|type|more|sleep|grep)\b|Get-)", re.I)
+
+
+def _is_monitor_sig(sig: str) -> bool:
+    """监控/只读探查型签名——同一目标反复查看属正常业务，不按失控循环论。"""
+    try:
+        return bool(sig) and bool(_MONITOR_SIG_RE.search(sig))
+    except Exception:
+        return False
+
 
 def _loop_tool_sig(tool_name: str, args) -> str:
     """提取工具调用的命令特征签名（用于相似度比较）。"""
@@ -14559,7 +14582,8 @@ def _sig_has_progress(sg1: str, sg2: str) -> bool:
         return False
 
 
-def _loop_check(session, agent, event: str, tool_name: str = None, args=None, delta: str = None) -> bool:
+def _loop_check(session, agent, event: str, tool_name: str = None, args=None, delta: str = None,
+                tool_id: str = None) -> bool:
     """循环检测主入口。event: 'delta' | 'tool_start' | 'turn_end'。返回 True=刚注入干预。"""
     try:
         if session is None:
@@ -14588,29 +14612,40 @@ def _loop_check(session, agent, event: str, tool_name: str = None, args=None, de
                 if tool_name in _LOOP_EXEMPT_TOOLS:
                     # 豁免工具不累计（但保留文本分段语义，text_buf 已清空）
                     return False
+                # 2026-10-24：同一调用的重复回调（预检 + 执行 worker 同一 tid 触发
+                # 两次）只记一次——旧实现把一次真实调用记成两条，灵敏度直接翻倍。
+                if tool_id and g.get("last_tool_id") == tool_id:
+                    return False
+                g["last_tool_id"] = tool_id
                 _sig = _loop_tool_sig(tool_name, args)
                 g["tool_hist"].append((tool_name or "", _sig, now))
                 g["tool_hist"] = g["tool_hist"][-10:]
-                _hist = g["tool_hist"][-8:]
-                if len(_hist) >= 4:
-                    _pairs = 0
-                    for _i in range(len(_hist)):
-                        for _j in range(_i + 1, len(_hist)):
-                            _tn1, _sg1, _ = _hist[_i]
-                            _tn2, _sg2, _ = _hist[_j]
-                            if not _tn1 or _tn1 != _tn2:
-                                continue
-                            if not _sg1 and not _sg2:
-                                _pairs += 1  # 同名无参数工具 = 重复
-                            elif _sg1 and _sg2 and not _sig_has_progress(_sg1, _sg2) \
-                                    and _SeqMatcher(None, _sg1, _sg2).ratio() > 0.72:
-                                # 2026-08-14 出图/导出豁免：输出文件名不同 = 正常批量出图
-                                _t1, _t2 = _loop_out_target(_sg1), _loop_out_target(_sg2)
-                                if _t1 and _t2 and _t1 != _t2:
-                                    continue
-                                _pairs += 1
-                    if _pairs >= 4:
-                        triggered = ("工具调用循环", "连续执行相同/相似的监控命令")
+                # 2026-10-24 误报修复（用户反馈：有些任务就是需要重复执行）：
+                # 旧判据「最近 8 次里相似对 ≥4」是全对计数，同工具相似命令出现 4 次
+                # 即误报（C(4,2)=6）。改为「尾部连续段」：最近连续 N 次同工具且相邻
+                # 签名相似才算循环；监控/只读探查型命令本就需要反复执行，阈值放宽到 6。
+                # 出图豁免（输出文件不同）与数字推进豁免（step0→step1）保留。
+                _hist = g["tool_hist"]
+                _run = 1
+                for _k in range(len(_hist) - 1, 0, -1):
+                    _tn1, _sg1, _ = _hist[_k - 1]
+                    _tn2, _sg2, _ = _hist[_k]
+                    if not _tn1 or _tn1 != _tn2:
+                        break
+                    if not _sg1 and not _sg2:
+                        _run += 1  # 同名无参数工具 = 重复
+                        continue
+                    if _sg1 and _sg2 and not _sig_has_progress(_sg1, _sg2) \
+                            and _SeqMatcher(None, _sg1, _sg2).ratio() > 0.72:
+                        _t1, _t2 = _loop_out_target(_sg1), _loop_out_target(_sg2)
+                        if _t1 and _t2 and _t1 != _t2:
+                            break  # 输出文件不同 = 正常批量出图
+                        _run += 1
+                        continue
+                    break
+                _need = 6 if _is_monitor_sig(_hist[-1][1]) else 4
+                if _run >= _need:
+                    triggered = ("工具调用循环", "连续执行相同/相似的监控命令")
 
             elif event == "turn_end":
                 if len(g["text_buf"]) >= 25:
@@ -14630,17 +14665,17 @@ def _loop_check(session, agent, event: str, tool_name: str = None, args=None, de
             if not triggered:
                 return False
             _reason, _detail = triggered
-            # 防抖：180s 内最多 1 次；单个用户回合累计 ≤3 次
+            # 防抖（2026-10-24 放宽）：300s 内最多 1 次；单个用户回合累计 ≤4 次
             if g["inject_count"] >= 4:
                 return False
-            if now - g["last_inject_ts"] < 90:
+            if now - g["last_inject_ts"] < 300:
                 return False
             g["last_inject_ts"] = now
             g["inject_count"] += 1
             if _loop_inject_steer(session, agent, _reason, _detail):
                 try:
                     _session_emit(session, {"type": "info",
-                        "content": f"🔁 循环检测：{_reason}（{_detail}）。已注入强制收尾提示。",
+                        "content": f"🔁 循环检测：{_reason}（{_detail}）。已注入提示——若这是有意的重复（监控/批处理），忽略继续即可。",
                         "session_id": session["id"]})
                 except Exception:
                     pass
@@ -14653,7 +14688,7 @@ def _loop_check(session, agent, event: str, tool_name: str = None, args=None, de
 # 2026-10-19（K2）：系统干预段标记——_loop_inject_steer（循环检测）与
 # enforcement._inject_agent_hint（门禁提示）都经 _pending_steer 通道注入。
 # 新回合清空残留 steer 槽时，系统段作废、用户插话段抢救（chat 入口处调用）。
-_STEER_SYSTEM_MARKERS = ("【系统循环检测·强制干预】", "【系统强制提示】")
+_STEER_SYSTEM_MARKERS = ("【系统循环检测·强制干预】", "【系统循环检测·提示】", "【系统强制提示】")
 
 
 def _salvage_steer_text(raw) -> str:
@@ -14689,14 +14724,15 @@ def _loop_inject_steer(session, agent, reason: str, detail: str) -> bool:
             agent = session.get("running_agent")
         if agent is None:
             return False
+        # 2026-10-24（用户反馈）：软提示——检测器只提醒、不裁判。
+        # 任务本身需要的重复（监控/轮询/批处理/迭代）明确允许继续，不强制收尾。
         _steer = (
-            "【系统循环检测·强制干预】检测到你已连续多轮重复几乎相同的操作和表述（" + reason + "：" + detail + "）。"
-            "判定为循环失控，请立即停止重复：\n"
-            "1. 停止再执行重复的监控/查看动作；\n"
-            "2. 若任务产物已生成（图/文件已保存、命令返回成功），直接视为完成，禁止再做任何验证/检查动作；"
-            "仅当确实不知道结果时才做一次状态确认；\n"
-            "3. 用 2-3 句话给用户明确结论：任务已完成 / 已失败 / 已卡死（附原因与产物路径）；\n"
-            "4. 结束本轮回复，禁止再次执行重复动作。"
+            "【系统循环检测·提示】检测到你连续多轮执行了几乎相同的操作（" + reason + "：" + detail + "）。\n"
+            "请自我判断一次（二选一）：\n"
+            "1. 若这是任务本身需要的重复（监控进度 / 轮询日志 / 批量处理 / 迭代出图），"
+            "忽略本提示，继续你的工作即可，不用收尾、不用回复本条；\n"
+            "2. 若确实陷入了无进展的失控重复：停止重复动作——产物已生成就视为完成（不必再验证），"
+            "用 2-3 句话给用户明确结论（已完成 / 已失败 / 已卡死 + 原因 + 产物路径）后结束本轮。"
         )
         _lock = getattr(agent, "_pending_steer_lock", None)
         if _lock is not None:
@@ -20571,7 +20607,7 @@ async def ws_endpoint(ws: WebSocket):
                 def tool_start_cb(tool_id, tool_name, args=None, _s=session):
                     try:
                         # 循环检测：连续重复工具调用（如反复 tail 日志监控安装）
-                        _loop_check(_s, None, "tool_start", tool_name=tool_name, args=args)
+                        _loop_check(_s, None, "tool_start", tool_name=tool_name, args=args, tool_id=tool_id)
                         # 2026-08-16 任务类型：terminal background=True = 长任务运行时证据
                         if tool_name == "terminal" and isinstance(args, dict) and args.get("background") is True:
                             _mark_task_long_running(_s)
@@ -20729,7 +20765,17 @@ async def ws_endpoint(ws: WebSocket):
                         pass
 
                 # 跟踪已知的图片文件，用于检测新图
+                # 2026-10-23：先把磁盘上已有的图全部登记为「已知」—— 否则每轮第一次扫描会把
+                # 上一轮/历史的图当「新图」重发（用户反馈：刚发问就提示「有新的结果」，点开并没有）。
                 _known_figures = set()
+                try:
+                    _kf_base = session.get("results_dir", "")
+                    if _kf_base and os.path.isdir(_kf_base):
+                        for _kf_p in Path(_kf_base).rglob("*"):
+                            if _kf_p.is_file() and _kf_p.suffix.lower() in {".png", ".jpg", ".jpeg", ".svg"}:
+                                _known_figures.add(str(_kf_p))
+                except Exception:
+                    pass
 
                 def _scan_new_figures(_s=session):
                     """扫描 results_dir 下的新图片，返回新增列表"""

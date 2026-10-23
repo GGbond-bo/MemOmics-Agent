@@ -47,8 +47,9 @@ class TestThinkingRowIsTheOldLine:
             assert gone not in HTML, gone
 
     def test_summary_is_the_thinking_line(self):
-        assert '<summary><span class="rb-icon">💭</span><span class="rb-text">思考过程</span>' \
-               '<span class="rb-meta">展开</span></summary>' in HTML
+        # 2026-10-23：摘要文案走通用翻译层（T()），断言改成结构 + 文案键
+        assert '<summary><span class="rb-icon">💭</span><span class="rb-text">' in HTML
+        assert "T('思考过程')" in HTML and "T('展开')" in HTML
         assert '<div class="reasoning-content"></div>' in HTML
 
     def test_row_lives_in_message_flow_not_composer(self):

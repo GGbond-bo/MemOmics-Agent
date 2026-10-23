@@ -333,7 +333,8 @@ def test_gate_ttl_autorelease():
 
 
 def test_repeated_blocked_retries_trip_loop_guard(tmp_path, monkeypatch):
-    """模型反复重试被拦工具 → 循环检测注入强制收尾（不会无限重试）。"""
+    """模型反复重试被拦工具 → 循环检测注入收尾提示（不会无限重试）。
+    2026-10-24：干预文案从「强制干预」软化为「提示」（有意的重复允许继续）。"""
     sess = _sess(tmp_path, "mx-loopguard")
     events = []
     monkeypatch.setattr(server, "_session_emit",
@@ -346,8 +347,65 @@ def test_repeated_blocked_retries_trip_loop_guard(tmp_path, monkeypatch):
     fired = [server._loop_check(sess, agent, "tool_start", tool_name="terminal",
                                 args={"command": "Rscript run.R"}) for _ in range(5)]
     assert any(fired), "连续 5 次相同调用必须触发循环检测"
-    assert agent._pending_steer and "强制干预" in agent._pending_steer
+    assert agent._pending_steer and "【系统循环检测·提示】" in agent._pending_steer
     assert any("循环检测" in json.dumps(e, ensure_ascii=False) for e in events)
+
+
+def test_loop_guard_20261024_misfire_fixes(tmp_path, monkeypatch):
+    """2026-10-24 误报修复（用户反馈：有些任务就是需要重复执行）：
+    ① 监控型命令（tail 日志）连续 5 次不触发（阈值放宽到 6），第 6 次才触发；
+    ② 同一 tool_id 的重复回调（预检+执行worker 双触发）只记一次；
+    ③ 非连续的相似调用（中间夹着别的工具）不按循环论。"""
+    monkeypatch.setattr(server, "_session_emit", lambda s, m: None)
+
+    class _Agent:
+        _pending_steer = ""
+
+    # ① 监控命令放宽到 6 次
+    sess = _sess(tmp_path, "mx-lg-monitor")
+    agent = _Agent()
+    fired5 = [server._loop_check(sess, agent, "tool_start", tool_name="terminal",
+                                 args={"command": "tail -20 monitor.log"}, tool_id=f"t{i}")
+              for i in range(5)]
+    assert not any(fired5), "监控命令连续 5 次不应触发（阈值 6）"
+    assert server._loop_check(sess, agent, "tool_start", tool_name="terminal",
+                              args={"command": "tail -20 monitor.log"}, tool_id="t6"), \
+        "监控命令连续 6 次应触发"
+
+    # ② 同一 tool_id 双回调只记一次 → 4 次真实调用（8 条回调）才 4 条记录，不触发
+    sess2 = _sess(tmp_path, "mx-lg-dupcb")
+    agent2 = _Agent()
+    for i in range(3):
+        server._loop_check(sess2, agent2, "tool_start", tool_name="terminal",
+                           args={"command": "python build.py"}, tool_id=f"dup{i}")
+        server._loop_check(sess2, agent2, "tool_start", tool_name="terminal",
+                           args={"command": "python build.py"}, tool_id=f"dup{i}")  # 同 tid 重复回调
+    assert not agent2._pending_steer, "同一 tool_id 的重复回调不应被记成两次调用"
+
+    # ③ 相似调用中间夹着别的工具 → 连续段被打断，不触发
+    sess3 = _sess(tmp_path, "mx-lg-nonconsec")
+    agent3 = _Agent()
+    seq = [("terminal", {"command": "python a.py"}), ("write_file", {"path": "x.py"}),
+           ("terminal", {"command": "python a.py"}), ("write_file", {"path": "y.py"}),
+           ("terminal", {"command": "python a.py"}), ("write_file", {"path": "z.py"}),
+           ("terminal", {"command": "python a.py"})]
+    for i, (tn, aa) in enumerate(seq):
+        server._loop_check(sess3, agent3, "tool_start", tool_name=tn, args=aa, tool_id=f"s{i}")
+    assert not agent3._pending_steer, "非连续的相似调用不应判为循环"
+
+
+def test_action_promise_gate_explain_not_saying_without_doing():
+    """2026-10-24 说而不做误报修复：回复在解释「被门禁拦下」→ 不判说而不做
+    （旧逻辑按纯文本行动词命中 → 强制唤醒 → 再被拦 → 再唤醒的连环误报）。"""
+    # 被拦解释（含 ⛔/门禁/被拦截/BLOCKED 标记）+ 行动词：新逻辑跳过
+    assert server._detect_action_promise(
+        "⛔ 执行被拦截：前序审查未通过。我先重跑脚本生成结果文件。", []) is False
+    assert server._detect_action_promise(
+        "terminal 被门禁拦住了（未记录经验·铁律），需要先 record_run 解锁。", []) is False
+    # 真阳性保留：无门禁标记的行动承诺仍然命中
+    assert server._detect_action_promise("我先运行脚本生成结果 CSV", []) is True
+    # 完成叙述豁免保留
+    assert server._detect_action_promise("已生成结果 CSV，以上是结果", []) is False
 
 
 def test_second_ask_user_does_not_stack_locks(tmp_path, monkeypatch):

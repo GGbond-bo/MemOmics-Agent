@@ -159,6 +159,7 @@ const factory = new Function('env', [
   'var currentAssistantEl = null, currentBubble = null;',
   'var agentRunning = false, reasoningText = "";',
   'var addAssistantMsg = env.addAssistantMsg, scrollBottom = env.scrollBottom;',
+  'function T(s) { return s; }   // 真实页面里 T() 走通用翻译层；测试里取身份函数',
   code,
   'return {',
   '  api: { update: updateReasoningBlock, finish: finishReasoningBlock, latest: _thinkLatestLine, restore: _rbRestoreHistoryRow, attach: _rbAttach },',

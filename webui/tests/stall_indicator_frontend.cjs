@@ -67,6 +67,8 @@ const factory = new Function('env', [
   'var agentRunning = false, _runStartTs = null, _lastHeartbeatTs = 0, _lastApiCalls = 0;',
   'var _lastTool = "", _lastStalled = false, _lastTurns = 0, _liveStatusTimer = null;',
   'var _lastActivityTs = 0;',
+  'var _lastPhase = "", _lastPhaseStartTs = 0;   // 产品代码里这两个在同一条 var 声明里，桩同步补齐',
+  'function T(s) { return s; }   // 真实页面里 T() 走通用翻译层；测试里取身份函数',
   actMatch[0],
   code,
   'return {',
