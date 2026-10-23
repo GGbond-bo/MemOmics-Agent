@@ -1,8 +1,8 @@
 ---
 name: nature-reader
-description: "全文中英对照精读器：PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要；触发词：读论文, 精读论文, 论文翻译, 文献阅读, 帮我读这篇文章"
+description: "全文中英对照精读器：PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要；触发词：读论文, 论文翻译, 文献阅读, 帮我读这篇文章, 全文对照（2026-10-24 起裸「精读/解读」不触发本技能，走 paper-summary 解读）"
 when_to_use: "[nature-reader] 全文中英对照精读：PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照 Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要"
-trigger_keywords: ["读论文", "精读论文", "论文翻译", "文献翻译", "文献阅读", "帮我读这篇文章", "帮我读这篇", "帮我读一下", "读一下这篇", "翻译这篇paper", "全文对照", "paper translation", "read this paper", "deep reading", "read this"]
+trigger_keywords: ["读论文", "论文翻译", "文献翻译", "文献阅读", "帮我读这篇文章", "帮我读这篇", "翻译这篇", "帮我读一下", "读一下这篇", "翻译这篇paper", "全文对照", "中英对照", "双语对照", "paper translation", "read this paper", "deep reading", "read this"]
 trigger_level: RED 必触发
 
 
@@ -18,7 +18,7 @@ metadata:
 - 禁止直接用历史日志里的脚本运行而不经本次审查
 - 运行日志是"参考"不是"免审凭证"
 
-Build full-paper Chinese-English side-by-side, figure/table/equation-aware, source-grounded Markdown readers for journal or conference papers from PDF, DOI, arXiv, publisher HTML, or pasted text. Use whenever the user asks to translate or read a paper, make 中英文对照/原文对照/全文翻译解读, render equations instead of exposing raw LaTeX, extract figures or tables into the right positions, preserve figure/table placement near relevant prose, or keep exact source anchors for every block. This skill must not degrade into a summary-only output unless the user explicitly asks for a summary. Also trigger on general paper-reading and translation requests even without the word "Nature", such as reading/translating an academic paper, literature reading, understanding a paper, and Chinese phrasings like 读论文、精读论文、论文翻译、文献翻译、文献阅读、学术阅读、帮我读这篇文章、翻译这篇paper.
+Build full-paper Chinese-English side-by-side, figure/table/equation-aware, source-grounded Markdown readers for journal or conference papers from PDF, DOI, arXiv, publisher HTML, or pasted text. Use whenever the user asks to translate or read a paper, make 中英文对照/原文对照/全文翻译解读, render equations instead of exposing raw LaTeX, extract figures or tables into the right positions, preserve figure/table placement near relevant prose, or keep exact source anchors for every block. This skill must not degrade into a summary-only output unless the user explicitly asks for a summary. Also trigger on general paper-reading and translation requests even without the word "Nature", such as reading/translating an academic paper, literature reading, understanding a paper, and Chinese phrasings like 读论文、论文翻译、文献翻译、文献阅读、学术阅读、帮我读这篇文章、翻译这篇paper.（⚠️ 2026-10-24 口径修订：裸「精读/解读」（如"精读文献""精读这篇论文"）是**要解读**，走 paper-summary，不进本技能的全文对照翻译；只有明确要全文对照/双语/翻译时才用本技能。）
 
 # Full-Paper Markdown Reader — Router
 

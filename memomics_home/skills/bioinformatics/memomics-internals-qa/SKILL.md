@@ -32,6 +32,14 @@ metadata:
 
 > 用户会追问「**你看过原代码吗？别乱说**」。取证顺序反了会被当场质疑。
 
+**延伸（2026-10-23 实测）：工具回执同样是"自述"** —— `literature_import` / `save_reference` /
+`kb_extract_from_paper` 回执里的「`bibtex_file=…`」「`status: success`」**不等于**文件真落在那里
+（实测条目落在**会话级** `results/<sid>/references/`，全局 `memomics_home/references.bib` 里搜不到；
+`save_reference(global_lib=True)` 仍返回会话级 `duplicate`）→ 凡要把工具回执写进给用户的交付说明，
+**先 `grep`/`ls` 核验一次**（一条批量命令，不要一条条查）。
+取证清单与"会话压缩后用户只回『1，2都要做』时怎么从 `.memory/turn_archive/*.md` 还原菜单"
+→ `platform-execution-pitfalls/references/literature-tool-output-verification.md`
+
 **取证工具选择（2026-10-08 实测踩坑，读 2542 行工具源码时踩到）**：
 
 - **一次性规划好取证批次，2 轮内读完**：连续多轮 `read_file` / `search_files` 取证会被平台循环检测判成
@@ -168,3 +176,4 @@ search_files(target="files", pattern="debate_*.json")
 - `references/gating-and-isolation-implementation.md` — `debate_gate()` 行号级判据表（L0 八条跳过 / L1 / L2 触发条件 / 预算降级）、L1 温度池采样与裁判整理、**隔离的代码证据**、对外汇报话术模板
 - `references/kb-evidence-rails.md` — 三道证据铁轨的源码取证（行号 + 拒绝分支）、五级目录与三知识域、规模构成统计口径、证据质量边界
 - `references/remote-cluster-implementation.md` — 远端集群（`memomics/bio_tools/remote_cluster.py`）行号级实现地图（连接层继承 / Windows mux 降级 / 连接池 / scp SFTP→`-O` 回退 / 调度器探测 / 多节点 `needs_node` 硬拦 / jobs.jsonl 账本）、稳定性「工程处理 vs 固有边界」分栏、**vs MobaXterm 对照表与问答骨架**
+- `references/external-agent-review-paradigms.md` — 外部科研 agent（CellVoyager 等）审查范式 **vs MemOmics 辩论机制**的 13 轴对照（对内侧给 `file:line`、对外侧给原文页码）、可互相借鉴的三点（expectation-vs-actual 信号、缺语义读图环、防重复粒度）、诚实边界、「对比他人只讲优点 / 审自己必须给边界」用法分栏 —— 被问"我们的辩论跟 XX agent 有何不同"时直接复用，不必重新取证

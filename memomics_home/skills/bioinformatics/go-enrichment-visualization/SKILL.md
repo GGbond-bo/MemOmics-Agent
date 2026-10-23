@@ -49,6 +49,48 @@ where `Log(q-value)` = `-log10(q)` (negative; magnitude = significance exponent)
 - Rows = GO term name; gray = "this cluster lacks this term".
 - Export `svg` + `pdf` + `png@300dpi` (editable vector text for submission).
 
+## 示例分析 导出表的后处理（去冗余 + 稳健性审计）—— 必做核查清单
+
+用户给 `*_GO.xlsx`（示例分析 导出，`GeneList` 列为 `方向_亚群`）时，**先核查再分析**：
+
+1. **截断核查必须逐组做，不要跨组套用**：同目录 `示例分析_列基因数汇总.csv` 的 `capped` 列是唯一权威。
+   实测（2026-10-23）：Aging / O_EX 组多为 `capped=True`（up 截到 100 基因），
+   **DM_EX 组 20 列全为 False** —— 把「up 截断到 100、down 为全集」当成本表事实，
+   会写出一份口径全错的声明。用户选「做截断校正」时，正确落点可能是**功效校正**而非降采样：
+   列表规模跨 2–42 基因时跨列表 `LogP/Enrichment` 禁止直接比大小，一律换长度无关指标
+   （覆盖列表数 / Jaccard）。
+2. **`GeneList` 唯一值数 < 设计列数是常态，不是数据错误**：示例分析 只输出**有富集**的列表。
+   实测 20 列里只有 13 列有条目、7 列零条目（含 5 个 n≥5 的）—— **「零条目」本身是要报告的结论**，
+   不能只报有富集的那些（分母偏倚是审稿人必问项）。
+3. **去冗余必须分层（最容易做错的一步）**：
+   - **同一列表内** Jaccard>0.7 的词条 = 真冗余（GO 父子链共享同一批命中基因；实测 295→118，冗余率 60%）
+   - **跨列表同名词条 = 共享信号，绝不合并** —— 用户要的「跨亚群共享词条」正是后者
+   → per-list 贪心去冗余 与 跨列表按 GO ID 聚合统计共享，是两件独立的事，分开做。
+4. **小列表功效声明**：`p_min = hypergeom.sf(min(m, k) - 1, N_lib, m, k)`（完全重叠时的超几何上尾）。
+   `p_min > 0.05` 的列表（实测 n=2 / n=3）在结构上不可能显著 → 标 `underpowered`，其条目不进结论。
+5. **核实「最大列表占比」，并主动做 leave-one-list-out（LOO）**：实测 `up_RP_high(I)`（n=39 基因）
+   产出 224/564 条 = **40%**，这是审稿人第一顺位质疑（"单列表主导的伪共识"）。
+   LOO = 逐个剔除列表后重算共享词条的覆盖列表数/亚群数，配 Jaccard 0.5–0.9 阈值敏感性。
+   实测 LOO 剔除该列表后 **12/12 核心词条存活且仍跨 ≥5 列表**（myofibril 9 列表/7 亚群）
+   → 质疑被数据否决，这是可写进交付的**正面证据**（比空口辩解强得多）。
+6. **方向性不要自行解读**：ORA 不检验方向。同一词条同时出现在 up 与 down 两侧（实测 36/50）
+   **只能说两侧列表都含该基因集成员**，不能读作「反向库应」；判定需原始 DEG 的 effect size。
+   多角色辩论会把这条列为硬阻断（不得写"跨亚群核心信号"、不得写"反向适应"）—— 措辞按
+   「描述性富集画像 / 候选共享程序」，并列出补齐方向性所需的数据。
+7. **方向构成分开算，不要写差值**：`only_down = ((n_down>0)&(n_up==0)).sum()`、
+   `only_up = ((n_up>0)&(n_down==0)).sum()`。实测 36 双侧 / 7 仅 down / 7 仅 up；
+   用 `(n_down>0).sum() - (n_up>0).sum()` 这种差值写法会把 7/7 错报成 0/0。
+
+> 完整配方（脚本骨架、实测数字、LOO / 敏感性实现）见
+> `references/metascape-output-dedup-and-robustness-audit.md`。
+
+### 分面 dotplot 选词的几何陷阱（实测）
+按「跨列表共享数」降序给 panel 选词，会让**条目数最多的列表的特有信号被完全挤出图**
+（实测 `up_RP_high(I)` 占 40% 条目却几乎不可见 —— vision_describe 核验时才发现）。
+正确选词 = **共享词条 top N + 每列表在「同一 ontology 子集内」的 top 2 特异词条**。
+⚠️ per-list top2 必须在 ontology 子集内排序，否则 KEGG / MF 词条会被 BP/CC 挤掉
+（实测 KEGG panel 一度只剩 2 条，修正后 4 条；BP 11→14、MF 6→9）。
+
 ## Dotplot note
 For enrichment *dotplots* (x=cluster, y=term, size=gene count, color=-log10(q)), the user
 prefers a light-red→dark-red ramp; clusterProfiler's 7-step RdBu = `#b2182b → #2166ac`.
@@ -162,6 +204,26 @@ Always deliver BOTH files side by side and tell the user which is which; the gen
 **🔴 用户给的清单可能少于源表 —— 必须比对并主动报告**：本例用户在消息里给了 RSS 3 条 + Specialized MF 4 条，源表里这两个亚群**各有 5 条**（漏 `sensory system development`、`neuron projection development`、`modulation of chemical synaptic transmission`）。
 正确做法 = **按用户给的条目执行**（不擅自补），但交付时**逐条列出未纳入项 + 其 -log10(q)** 并问是否补。静默按子集出图 = 用户以为你用了全表。
 
+
+### 🔴 源表多 sheet → 先判是不是「子集视图」，别当两份数据（2026-10-23 实测 · `HAD_MF_BO_Selected_Paths_v2.xlsx`）
+
+本图族源表 `D:/肌肉锻炼/file/HAD_MF_BO_Selected_Paths_v2.xlsx` 有 **2 个 sheet**，极易被当成两套数据重复计数：
+
+| Sheet | 列 | 实质 |
+|---|---|---|
+| `Hoja1` | Cluster / Path ID / Path / Genes / Log(q-value) / Comments / Hypothesis | **主表**（本图族全部群体） |
+| `Specialized-MF_subcluster` | Category / CategoryID / GO / Description / Hits / Log(q-value) / GeneList / Unnamed: 7 | **子集视图，不是新数据**：`Hits` 列装的是**群体名**（cluster1–6 + NMJ），`Unnamed: 7` 是该词条的 **GO 类别（BP/CC）**；30 行与 Hoja1 逐条对应 |
+
+**判定动作（动手前 30 秒）**：把两 sheet 的 `(群体, 词条, -log10q)` 三元组对一遍 —— 完全重合即子集。
+**子集 sheet 只当「类别注释」用**（值得单独出一张类别拆解图），**不要单独统计它的行数/词条数** —— 否则 78 行会被报成 108 行。
+
+本表实测：`Hoja1` 82 行含 **4 处内嵌重复表头**（索引 20/39/54/68）→ 剔重 + 只留 `^GO:` 行后 = **78 行 / 17 群体 / 56 词条 / 矩阵稀疏度 91.8%**（78/952 非零）。
+
+**几何实测（56 行 × 17 列，零裁切）**：`cellwidth = 16` pt（比 v12b 的 24.66 窄 —— 列多时收窄）、`cellheight = 9` pt、`PAD(上右下左) = c(1.2, 3.5, 2.0, 4.5)` cm → `pdf(NULL)` 内量得内容 **26.63 × 23.70 cm** → 画布 **10.56 × 9.41 in（3169 × 2822 px @300dpi）**，PNG 146 KB 正常。行数 48 → 56 只改 `cellheight` 乘子，宽度只由列数决定。
+
+**⚠️ 截顶色标会藏掉量级差 —— 必须双向呈现**：图族沿用 `min(abs(logq), 10)` 截顶 + 图例写 `(clipped at 10)`，本表有 **18 个格被截**（最极端 RP_high 的 `translation` = **97 / 89**，OXPHOS 31–35）。热图上看不出 RP_high 与其它群体的量级差 ⇒ **交付时必须同时给一张用原始值的图**（分面棒棒糖 / log 轴汇总条形），并在回复里明写「热图截顶在 10，量级看另一张图」。少了这句 = 静默丢掉本表最强的生物学信号（RP_high 是 RNA/蛋白合成 + OXPHOS 双超活跃群体）。
+
+**稀疏度 >85% 时建议一次给四张**（本表 91.8% 实测好用）：① block-diagonal 热图（图族主图）② 分面棒棒糖（每群体一面，保留全量级）③ 群体汇总双面板（词条数 bar + max/median -log10q log 轴）④ 子集 sheet 的类别拆解。用户会按需砍，不会嫌多。
 
 ### Env note (pheatmap path needs NO CSV bridge)
 `pheatmap` + `RColorBrewer` are in **BOTH** R 4.5.3 (`execute_r` kernel, also has `openxlsx`) and R 4.4.2. So the whole pheatmap pipeline runs one-shot inside `execute_r`: read xlsx → build matrix → pheatmap → png/pdf/svg via base grDevices (`png(res=300)` + `pdf()` + `svg()`). Unlike the ComplexHeatmap path, no terminal-Rscript bridge required.
@@ -670,3 +732,12 @@ norm = Normalize(vmin=0, vmax=10)
 | human | skeletal_muscle | aging/exercise | 2026-10 | `templates/go_enrichment_facet_lollipop.py` | **稀疏矩阵替代形式（非零率 >85% 时首选，别出矩形热图）**：分面棒棒糖图，17 panel 网格 11.4×8.6 in，零空格子；含 GO 词条名缩写表 + `wspace≥1.6` 防 panel 标签压叠 + 「图注不得声称未实现的编码」自检。实例产出：`results/memomics-440038cf/figures/GO_enrichment_facet_lollipop_v1.{png,svg,pdf}`。 |
 | human | skeletal_muscle | aging/exercise | 2026-09-15 | `results/memomics-2274ab75/scripts/fig_A2_5effects_v3.R` | **base-graphics 多面板矩阵热图元脚本（零第三方依赖）**：17 程序 × 5 效应面板 × 10 亚群，`rect()` 拼格子 + `TwoSlopeNorm` 等价 256 级 LUT + FDR 星号 + 左侧**分组色块条**（5 轴色）+ `par(fig)` 右下/右侧色标。**已修两坑**：① 分组色块条移到 `draw_cbar()` **之前**绘制（v2 因顺序问题色块从未渲染）② 标签 `at = NROWS-0.5-row_pos` 行中心（v2 用底边偏半格）。四格式 @300dpi + manifest QA。**要复制这套版式就从 v3 起，不要从 v2 或 `fig_split_v10.R` 起——它们两坑都有**。同族：`scripts/fig_A3_transposed_v3.R`（转置版，干净）。 |
 | human | skeletal_muscle | aging | 2026-09-19 | `results/memomics-2274ab75/scripts/fig_A3_CNS_v5.R` | **转置矩阵热图·定稿版式（用户认可）**：亚群 x × 程序 y，17 程序 / 5 轴 / 10 亚群，107.9×155.5 mm，base graphics 零第三方依赖 + Arial + `svglite`（SVG 文字可编辑）。**关键常量**：`CELL=0.255`、`MAI=c(0.75,1.35,0.55,0.35)`、`LBLX=-0.04`（行标签右端紧贴热图，实测缝 3 px）、`LB0=-3.40/LB1=-4.11`（左侧分类色块）、`LNX=-4.27`（竖排轴名，**黑色 `COL_TXT`**）、标题 `mtext(side=3, line=0.60, at=(W/2-MAI[2])/CELL)`。脚本自带 strwidth 版式自检 + `archive_superseded/` 归档上一版。 |
+| human | skeletal_muscle | exercise+aging | 2026-10-23 | 00_inspect_metascape_stdio | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-23 | 01_scope_dedup.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-23 | 01_scope_dedup.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-23 | 02_figures.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-23 | read_dedup_sheets_summary | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-23 | 03_loo_sensitivity.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-23 | 04_figures_v2.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-23 | 03_loo_sensitivity.py(fix2) | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-23 | 04_figures_v2.py(fix) | - | - |  |

@@ -1,7 +1,7 @@
 ---
 name: gene-set-overlap-analysis
-description: 基因集合交并分析（韦恩图 / 多对比共表达交集 / 逆转分析）——建集合、出交集表、**做富集显著性检验**、画可交付韦恩图。触发：韦恩图/venn/画个韦恩图/交集/共表达/三组交集/共同基因/重叠基因/上调和下调分别多少/逆转分析/衰老上调运动后下调/DM上调运动后下调/交集有没有意义/UpSet。
-when_to_use: "[gene-set-overlap-analysis] 用户要比较多个对比（contrast）的 DEG 上调/下调基因集合、找交集或'逆转'基因（A 上调但 B 下调），要交集基因清单表或韦恩图时；或已有交集结果、要判断这个重叠到底有没有统计学意义时"
+description: 多集合交并/重叠分析（韦恩图 / 多对比共表达交集 / 逆转分析 / 每群体 top-N 清单表）——建集合、出交集表、**做重叠显著性检验（期望值门）**、画可交付图。触发：韦恩图/venn/画个韦恩图/交集/共表达/三组交集/共同基因/重叠基因/上调和下调分别多少/逆转分析/交集有没有意义/UpSet/每组top100清单/marker清单/这是什么表格/整理一下这个表格/画个图直观看一眼。
+when_to_use: "[gene-set-overlap-analysis] 用户要比较多个对比（contrast）的 DEG 上调/下调基因集合、找交集或'逆转'基因（A 上调但 B 下调）；或给出【每群体 top-N 清单表】（如每 cluster/细胞群 100 个蛋白/基因符号、无任何数值列）要'整理 + 这是什么表格 + 画个图直观看一眼'；或已有交集结果、要判断这个重叠到底有没有统计学意义时"
 display-name: "Gene Set Overlap Analysis (交集/韦恩 + 富集检验)"
 category: bioinformatics
 short-description: "多对比基因集合交并：韦恩图 + 交集表 + 重叠富集检验（期望值门）"
@@ -21,6 +21,9 @@ starting-prompt: "帮我做韦恩图，看看三组运动交集有什么，上�
 1. **交集必报期望**（期望值 + fold + P）——否则不许把交集清单当"结果"讲。
 2. **方向语义先用工具自证**，不许凭对比名字推断 Up/Down 指向谁。
 3. **集合口径必须写明**（基因级 / 同亚群级），口径不同数字不可比。
+4. **先判表型：DEG 对比表 vs 每群体 top-N 清单**——两者判读**相反**（见 §九）。
+   清单表里"重叠低于随机"是**设计期望**，"唯一显著富集的那对"才是线索；
+   别把"互斥"当生物学发现，也别把 fold<1 说成"没做出结果"。
 
 ---
 
@@ -198,6 +201,20 @@ def save(fig, stem):
 2. 计数正确：OCR/包围盒核对每个韦恩格子的数字 = 集合运算结果
 3. 导出：PNG 300dpi 非空（墨迹占比 5–35%）+ PDF `FontFile` 内嵌（`pdf.fonttype=42`）+ SVG 文字可编辑
 
+**⚠️ `bbox_inches="tight"` 与自检的相互作用（2026-10-23 实测踩到，害我多跑一轮）**
+
+放在**坐标轴外**的 `ax.text(..., transform=ax.transAxes, y=-0.30)` 或
+`ax.legend(bbox_to_anchor=(1.02, -0.30))`，保存时会被 tight bbox **收进画布**（图不丢字），
+但 `audit_figure_layout(fig)` 是在**收紧前**的画布上量的 ⇒ 必然报 `overflow`
+（实测 `'black box = P<0.05 (only c' bbox x[143,1206] y[-81,-55] out of canvas 3420x1290`）。
+
+**对策（一次过，别等自检报错再改）**：
+- 凡是要放在坐标轴外的说明文字，直接用 **`fig.text(x, y, ...)`** 放在画布内（如 `fig.text(0.055, 0.015, ...)`）。
+- **图例不要放轴外**：把颜色含义写进面板标题（`'B  Group-exclusive (blue) vs shared (red)'`），
+  比 `bbox_to_anchor` 图例既省版面又不会触发越界。
+- 结果判据仍是 `越界 0 | 重叠 0`；若报了 overflow 先确认是不是"tight 会收进来"这一类，
+  但**能一次消除就一次消除**——省下的那一轮正好躲开循环检测干预。
+
 ---
 
 ## 七、交付形状（用户口径）
@@ -237,8 +254,62 @@ def save(fig, stem):
 
 ---
 
+## 九、表型变体：每群体 top-N 清单表（marker list，无方向、无 universe）
+
+**表型**：列 = 群体，每列一列基因/蛋白符号，**整张表没有任何数值列**（无 coef / FDR / rank）。
+实测：`SMF_top100_protien.xlsx` = 100 行 × 7 列（`cluster1..6` + `NMJ`），列内无重复，
+700 条目 → **620 个唯一蛋白**。用户话术：「**这是什么表格 / 帮我整理一下 / 画个图直观看一眼**」。
+
+**🔴 判读与 DEG 对比表相反 —— 这是本变体的全部要义**：
+
+| | DEG 对比表 | 每群体 top-N 清单（本变体） |
+|---|---|---|
+| 重叠**低于**随机（fold<1） | 值得说"没富集" | **是设计期望**（清单按群体特异性挑，天然互斥） |
+| 重叠**高于**随机（fold>1, P 小） | 常规"共享/共表达" | ⭐ **唯一值得追的线索**（两组特征相似 / 同谱系） |
+| 方向语义（Up/Down） | 有，必须自证（§一） | **无** → 跳过 §一 |
+| universe | 未过滤全表的基因交集（§三） | 表内没有 → 见下 |
+
+**universe 怎么办**：取**本表出现的唯一基因数** N，并在交付里显式声明这是近似
+（"若拿到该蛋白质组完整定量表，把 N 换成全表蛋白数即可，结论方向不变"）。
+实测 N=620 ⇒ 期望 `|A|×|B|/N = 100×100/620 = 16.13`：
+
+| 结果 | 数字 |
+|---|---|
+| 21 对里低于随机（fold ≤ 0.62） | **20 对** |
+| 唯一显著富集 | **cluster5 ∩ cluster6**：obs 34 / exp 16.13 / **fold 2.11** / **P=8.9e-7**（BH×21 后仍显著） |
+| cluster1 与 cluster4/5/6/NMJ 重叠 | **0** |
+| 共享度分布 | 1 组 542 个 · 2 组 76 个 · 3 组 **2** 个（PLCE1、COLQ）· ≥4 组 **0** |
+
+> **"20/21 对偏低"本身就是"这些是 marker 清单"的证据**——必须写进交付，别当生物学发现。
+> 反过来，唯一显著的那对（cluster5/6）才是线索（很可能同纤维型/相邻亚群，聚类分辨率偏高拆成了两群）。
+> 旁证思路：查那个跨组基因是不是标志基因（本例 COLQ 是 NMJ 经典基因，同时出现在 NMJ 与 cluster5/6）。
+
+**整理的交付形状（用户说"整理一下这个表格"）**：
+长表 `(group, gene, rank_in_group)` + 成员矩阵 `genes × groups 的 0/1 + n_groups` +
+每组"独有 vs 与他组共享" + 跨组基因清单（≥2 组，含所属组）。
+另附一句**表内没有的信息要标注为"需用户确认"**：top-N 的筛选口径（表达量？组间差异？marker score？）
+表本身无法自证，**不许替用户猜**。
+
+**"画个图直观看一眼" = 三面板总览（7 组画不了韦恩图，别硬画）**：
+
+| 面板 | 做法 | 一眼看到什么 |
+|---|---|---|
+| **A** 两两 fold 热图 | `imshow(fold, cmap='RdBu_r', norm=TwoSlopeNorm(vmin=0, vcenter=1.0, vmax=2.2))`；格内写 fold 数值；**对角线涂灰**（自重叠无意义）；显著对（P<0.05）画黑框 | 整片蓝（互斥）+ **一个红格**（唯一富集） |
+| **B** 各组 独有(蓝) vs 共享(红) 水平堆叠条 | `barh` 两段，合计 = N；数值标条内 | 哪些群体最"专属"（cluster1 89 独有） |
+| **C** 共享度分布（出现在 N 组） | 柱状 + **log y 轴**（否则 542/76/2/0 会压平）；把 3 组基因名与 c5∩c6 数量写成面板内注释 | 几乎没有跨群通用 marker |
+
+图内文字用**英文**（DejaVu Sans 无 CJK 字形，中文放图注/正文）。出图前套用 §六 的
+`audit_figure_layout` + `bbox_inches="tight"` 那条对策。
+
+完整实录（脚本骨架、全部数字、版式修复过程）→ `references/topn-marker-list-overlap.md`
+
+---
+
 ## 参考与脚本
 
+- `references/topn-marker-list-overlap.md` —— **每群体 top-N 清单表变体**的完整实录：
+  `SMF_top100_protien.xlsx`（7 群体 × 100 蛋白）的统计表、三面板图脚本骨架、
+  为什么"互斥是设计期望"、以及 `fig.text` 版式修复全过程。
 - `scripts/mpl_text_layout_audit.py` —— **确定性版式自检**（包围盒越界 + 两两重叠），
   可直接 `import` 进任何 matplotlib 出图脚本；`save_figure(fig, stem, outdir, audit=True)` 一步导出
   PNG/PDF/SVG 并打印自检结果。**任何多面板图都建议焊上它**（不限于韦恩图）。
@@ -254,3 +325,14 @@ def save(fig, stem):
 - 相关 skill：`analysis-output-validity-gates`（通吃型集合的上游诊断 + 效应量阈值门）、
   `platform-execution-pitfalls`（出图迭代触发循环检测的处置）、
   `academic-figure-skill` / `cns-visualization`（发表级出图规范）。
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| human | skeletal_muscle | aging | 2026-10-23 | inspect_excel_head | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | 10_smf_top100_overlap_stats.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | 11_smf_top100_figure.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | 11_smf_top100_figure.py | - | - |  |

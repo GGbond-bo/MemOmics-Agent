@@ -2388,6 +2388,11 @@ def _session_no_live_work(session):
 def _detect_action_promise(result: str, tool_call_log: list) -> bool:
     if not result or not result.strip():
         return False
+    # 2026-10-24 误报修复（用户反馈：门禁卡住执行任务时连环误报）：
+    # 回复在解释"被拦/门禁"（agent 做了动作但被挡下，或停手说明原因）→
+    # 不是说而不做；被拦场景由门禁自己的 require 提示引导，不再强制唤醒重试。
+    if any(m in result for m in ("⛔", "已被拦截", "被拦截", "执行保护", "门禁", "BLOCKED")):
+        return False
     _done_words = ["已生成", "已完成", "已运行", "已执行", "以上是", "结果如下",
                    "输出如下", "见上图", "见下图", "已读取", "已查到", "已确认",
                    "结果已", "已出好", "已出图", "已写好", "已保存", "已交付"]
@@ -7321,6 +7326,12 @@ _EXECUTION_POLICY = """
 ### 6. 一切以用户为主
 问清目的 → 规划 → 执行 → 报错就解决，循环；用户打断才停，用户回答后继续。
 拿不准用户要什么时，回到第 5 条：问。
+
+### 7. 待办清单随需求走
+- 待办清单就是 task_plan：必须与当前任务严格对应，不相关的清单没有意义。
+- 用户新消息改变需求/方向时，先对清单做取舍再执行：过时的项标 cancelled，
+  或直接 todo（merge=false）按新需求重写一份；**不要带着旧清单继续跑**。
+- 交付后清单由系统自动清理，不用手动收尾；但中途改向要立刻对齐。
 """
 
 _PLANNING_PROMPT = """
@@ -7417,9 +7428,19 @@ _REPLY_STYLE = """
 ## 回复排版（可读性铁律 · 严格执行）
 
 ### 中间回合（接下来还要调工具的回合）
-- 最多 1–2 句话，动词开头，只说「在做什么 + 为什么」（如"先核实云上文件是否存在"）。
-- **不要**在中间回合写半成品结论、不要罗列数据细节、不要用表格/标题/长列表。
-- 前端会把这些播报自动收进「关键过程」折叠块，所以尽管简短，不必担心用户看不到。
+- ⚠️ **这段小结必须写在「正式回复的正文」里**：写进思考 / thinking（reasoning）通道用户看不到，等于没写（自检：你在思考里打的草稿，要能在正文里更精炼地写出来）。「禁止过程与结论混杂」只约束最终回答 —— 中间回合的正文本来就该是过程小结，不要因为怕「过程污染」而整轮不写正文。
+- 协议块照旧输出（铁律 -3 的 `🏷INTENT:` 前导码、铁律 0 的「🔍 触发检查」清单 —— 系统要消费），但它们**不算小结**：紧跟其后必须再用 2–4 句写**说人话**的阶段小结。
+- **小结要写成研究者能直接看懂的话**：讲清「在做什么 / 为什么这么做 / 这一步得到什么 / 接下来做什么」。
+  ⛔ 禁止把内部机制写进小结：不要出现 INTENT / CONF / DOMAIN / 触发检查 / skill 名称或清单 / skill_view / rail_review / task_plan / 待调用 / 待创建 / 已声明 这类词或勾选项。
+  ✅ 好例：「你给的表本身就是各亚群的 DEG 计数结果，不用重算差异分析；我接下来按 10 个亚群把上下调基因数画成柱状图，沿用之前的 CNS 配色与柱端标注规则，先出草图再定稿。」
+  ⛔ 坏例：「触发检查：🏷 INTENT=analysis_exec 已声明? [是]；应触发 skill: xxx；skill_view 已调用? [否]；rail_review(pre): 待调用；task_plan.md: 待创建」
+- 3–6 句，写成**阶段小结 + 逻辑链**（会收进「关键过程」折叠层；用户就靠这些文字看懂 MemOmics 是怎么一步步执行任务的，信息密度要够）：
+  1)【为什么】这一阶段要解决什么、为什么先做它（判断依据）；
+  2)【怎么做】方法与做法：说清「用什么方法 / 手段」——按任务类型自然适配（数据分析 → 统计或算法方法与该写清的口径阈值；实验流程 → 方案设计、平台或试剂、对照设置；文献与资料调研 → 检索来源与检索式、筛选标准；编码与工程 → 技术方案、框架与关键改动思路；写作与整理 → 材料来源与结构；批处理 / 运维 → 流程与脚本策略……）；以及用到的工具 / 技能 / 知识库；运行环境（语言、软件、关键库、平台或设备，写实际可核对的名称与版本）；
+  3)【结果】这一步实际得到什么：关键数字 / 规模 / 初步结论、成功还是失败；
+  4)【应变】换了方法或绕了弯路：原来用什么、为什么换、换成什么；
+  5)【下一步】据此准备做什么。
+- 不限学科与任务类型（分析、实验、检索、编码、写作、批处理……都按同一套口径写）；目的是把**思考过程与执行过程**做成小阶段总结，让用户知道 MemOmics 是怎么执行任务的；不是流水账。**不要罗列文件路径或文件名清单、不要贴大段参数或结果原文、不要表格 / 长列表**；也不要写半成品结论（最终结论只留给最后一条）。
 
 ### 最终回答（本回合不再调工具、向用户交付的回合）
 结论先行，按此顺序组织（按用户实际需求取舍，没有的环节不写）：
@@ -7433,6 +7454,7 @@ _REPLY_STYLE = """
 - 禁止过程与结论混杂：不在结论里夹流水账，不把"我打算/我去查/接下来"写进最终回答。
 - 禁止重复：中间播报说过的细节，最终回答只提炼引用，不整段复制。
 - 禁止半截交付：最终回答必须自成一体——用户只看最后这一条也能完全看懂结果。
+- 禁止「整轮正文为空」：中间回合不写正文 = 用户看不到任何进度（思考通道不显示），也拿不到「关键过程」折叠层；每轮至少 2–3 句阶段小结。
 """
 
 
@@ -8690,6 +8712,24 @@ def _auto_anchor_turn(session, user_text="", tool_name="", args=None):
         pass
 
 
+def _vision_cap_block(model_config=None) -> str:
+    """视觉能力一行卡（2026-10-24）：当前模型有原生视觉就在系统提示里明说——
+    否则 agent 按训练记忆误以为纯文本环境，vision_describe 被绕到本地 OCR 管道
+    （实测：deepseek-flash 明明有视觉，agent 却自称「纯文本模型」并 mode=local）。
+    """
+    try:
+        from memomics.bio_tools.vision_tool import _model_supports_vision
+        cfg = model_config or {}
+        if _model_supports_vision(cfg):
+            return ("\n\n【视觉能力】当前模型 %s 有原生视觉：看图直接调 vision_describe"
+                    "（省略 mode 参数），它会用你自己的视觉实读图片；"
+                    "仅当门禁/核验必须要 OCR 条数等机器判据时才传 mode=\"local\"。"
+                    % (cfg.get("model") or "?"))
+    except Exception:
+        pass
+    return ""
+
+
 def _env_digest_block() -> str:
     """环境卡片（env_inventory 缓存）—— 追加在 ephemeral_system_prompt 后面。
 
@@ -8867,7 +8907,7 @@ def _create_agent(model_config=None, session_id=None, session=None):
                           # 长输出(大 dsh-ui JSON/mermaid) 会被 max_tokens 截断成半截 JSON。
                           # 显式 8192，与 checkpoint writer 2026-08-22 加固经验一致。
         enabled_toolsets=["terminal", "file", "code_execution", "memomics", "todo", "memory", "skills", "web", "computer_use", "cronjob", "delegation", "image_gen", "session_search", "browser"],
-        ephemeral_system_prompt=skills_index + _PLANNING_PROMPT + "\n\n" + _EXECUTION_POLICY + _REPLY_STYLE + _env_digest_block(),
+        ephemeral_system_prompt=skills_index + _PLANNING_PROMPT + "\n\n" + _EXECUTION_POLICY + _REPLY_STYLE + _env_digest_block() + _vision_cap_block(cfg),
         quiet_mode=True,
         tool_progress_mode="all",
         session_id=session_id or f"memomics-{uuid.uuid4().hex[:8]}",
@@ -13233,12 +13273,17 @@ def _platform_asset() -> str:
 # ── 差异覆盖的保留清单（对齐打包.bat 排除：用户数据/环境/密钥绝不覆盖）──
 _KEEP_DIRS = (".venv", ".git", ".backups", "node_modules", "miniconda_env", "miniconda",
               "runtime", "memomics_home", "results", "uploads", "log", "ArchRLogs",
-              "__pycache__", ".pytest_cache", ".idea", ".vscode")
+              "__pycache__", ".pytest_cache", ".idea", ".vscode",
+              # 2026-10-24（用户要求）：知识库是用户私有内容（自建/导入的条目），
+              # 更新包与全量包都不得覆盖——只让代码更新，私有数据一律保留
+              "knowledge_base")
 _KEEP_FILES = (".env", ".install_path", "venv_deps_ok.txt", "venv_vision_ok.txt",
-               "VERSION",  # 本地版本标识不被远端覆盖（覆盖会破坏比较）
+               # VERSION 例外：_is_keep_path 里已提前放行，允许 update 包刷新版本号
+               # （2026-10-23 前它在这里被拦下，导致「更新后版本号不变」）
                )
 _KEEP_TOP_LEVEL = ("memomics_home", "results", "uploads", "log", ".venv", "runtime",
-                   "node_modules", "miniconda_env", "miniconda", ".git", ".backups")
+                   "node_modules", "miniconda_env", "miniconda", ".git", ".backups",
+                   "knowledge_base")
 
 
 def _is_keep_path(rel: str, allow_skills: bool = True, allow_version: bool = True) -> bool:
@@ -13258,6 +13303,12 @@ def _is_keep_path(rel: str, allow_skills: bool = True, allow_version: bool = Tru
     parts = [p for p in rel.split("/") if p and p != "."]  # 忽略空段和 ./ 段
     if not parts:
         return True
+    # 2026-10-23 事故修复：VERSION 与启动器必须允许覆盖（update 包要能刷版本号），
+    # 且要放在所有 keep 判定之前——否则被 _KEEP_FILES 里的 "VERSION" 提前拦掉。
+    if parts[-1] in ("VERSION", "启动.bat", "start.bat", "start.sh"):
+        return False
+    if parts[0] in ("MemOmics", "MemOmics-Windows") and parts[-1] == "VERSION":
+        return False
     top = parts[0]
     if top in _KEEP_TOP_LEVEL:
         # 例外 1: memomics_home/skills 技能库随版本更新
@@ -13416,6 +13467,9 @@ def _apply_overlay(extract_root: str, tops: list) -> int:
     import shutil as _sh
     _UPDATE_TASK["stage"] = "apply"
     copied = 0
+    skipped = 0
+    failed = 0
+    errors = []
     # 若 extract_root 本身就是某个 top 的内容目录，直接覆盖根
     base_name = os.path.basename(extract_root.rstrip(os.sep))
     roots = []
@@ -13454,14 +13508,27 @@ def _apply_overlay(extract_root: str, tops: list) -> int:
                     continue
                 s = os.path.join(root, fn)
                 d = os.path.join(dst_dir, rel_sub, fn)
+                # 2026-10-23：源与目标同一文件时跳过（多套一层的自覆盖会让计数虚高）
+                try:
+                    if os.path.exists(d) and os.path.samefile(s, d):
+                        skipped += 1
+                        continue
+                except OSError:
+                    pass
                 try:
                     os.makedirs(os.path.dirname(d), exist_ok=True)
                     _sh.copy2(s, d)
                     copied += 1
-                except Exception:
-                    # 单个文件失败不阻断（运行中占用等），记录继续
-                    pass
-    return copied
+                except Exception as _ce:
+                    # 单个文件失败不阻断（运行中占用等），但要记下来给用户看
+                    failed += 1
+                    if len(errors) < 20:
+                        errors.append("%s: %s" % (rel, _ce.__class__.__name__))
+    if failed and not copied:
+        # 全军覆没 = 明显异常（例如把内容根当成了新目录），直接报错而不是"成功"
+        raise RuntimeError("覆盖失败：%d 个文件全部无法写入（%s）"
+                           % (failed, "; ".join(errors[:3])))
+    return {"copied": copied, "skipped": skipped, "failed": failed, "errors": errors}
 
 
 @app.get("/api/update/check")
@@ -13751,14 +13818,37 @@ async def update_apply(payload: dict):
         tops = _safe_extract(archive, extract, is_tar=is_tar)
         if not tops:
             raise RuntimeError("安装包为空或解压失败")
-        # 解压后内容可能在顶层子目录（如 MemOmics-Windows/）
+        # 解压后内容通常在顶层子目录里（MemOmics/ / MemOmics-Windows/ 等）。
+        # 2026-10-23 事故修复：原来只认 start.bat / start.sh，而我们的包根只有
+        # 启动.bat / update_*.bat → 识别失败会把 MemOmics/ 当成"要新建的子目录"，
+        # 结果整包被覆盖到 <安装目录>/MemOmics/（多套一层），安装目录本身没变。
+        # 现在按「启动器名（含中文）」+「结构特征（webui/server.py 或 VERSION）」双重识别。
+        _ROOT_MARKERS = ("webui/server.py", "webui/index.html", "VERSION", "memomics/__init__.py")
+        _LAUNCHER_NAMES = ("start.bat", "start.sh", "启动.bat", "launch.bat",
+                           "update_windows.bat", "update_macos_linux.sh")
         extract_root = extract
         for t in tops:
             cand = os.path.join(extract, t)
-            if os.path.isdir(cand) and (os.path.isfile(os.path.join(cand, "start.bat")) or
-                                        os.path.isfile(os.path.join(cand, "start.sh"))):
+            if not os.path.isdir(cand):
+                continue
+            has_launcher = any(os.path.isfile(os.path.join(cand, n)) for n in _LAUNCHER_NAMES)
+            # 结构特征：必须真的像 MemOmics（webui/server.py 或 VERSION 在根）
+            has_signature = (os.path.isfile(os.path.join(cand, "webui", "server.py"))
+                             or (os.path.isfile(os.path.join(cand, "VERSION"))
+                                 and os.path.isdir(os.path.join(cand, "memomics"))))
+            if has_launcher or has_signature:
                 extract_root = cand
+                print("[MemOmics] 更新：识别包根 = %s（launcher=%s signature=%s）"
+                      % (t, has_launcher, has_signature), flush=True)
                 break
+            for m in _ROOT_MARKERS:  # 兜底：任意标记文件命中也算（如 strays）
+                if os.path.isfile(os.path.join(cand, m)):
+                    extract_root = cand
+                    print("[MemOmics] 更新：识别包根 = %s（marker=%s）" % (t, m), flush=True)
+                    break
+            else:
+                continue
+            break
         # 2.5 覆盖前先检测并迁掉老数据目录（2026-10-08 改名；老安装升级场景）
         _hmig = "noop"
         try:
@@ -13768,7 +13858,13 @@ async def update_apply(payload: dict):
         except Exception as _hme:
             _hmig = "error:%r" % (_hme,)
         # 3. 差异覆盖（保留用户数据）
-        copied = _apply_overlay(extract_root, tops)
+        _ov = _apply_overlay(extract_root, tops)
+        copied = _ov["copied"]
+        if _ov.get("failed") or _ov.get("skipped"):
+            print("[MemOmics] 更新覆盖：成功 %d / 跳过 %d / 失败 %d%s"
+                  % (copied, _ov.get("skipped", 0), _ov.get("failed", 0),
+                     ("；失败样例: " + ", ".join(_ov.get("errors", [])[:5])) if _ov.get("errors") else ""),
+                  flush=True)
         # 4. 应用文件级迁移
         fix_log = ""
         try:
@@ -13787,8 +13883,16 @@ async def update_apply(payload: dict):
         _msg = f"已覆盖 {copied} 个代码文件到 {MEMOMICS_DIR}" + ("" if os.path.basename(os.path.normpath(extract_root)) == os.path.basename(os.path.normpath(MEMOMICS_DIR)) else f"（安装目录名 {os.path.basename(os.path.normpath(MEMOMICS_DIR))} 与包内目录名不同，已按实际运行目录覆盖，不用改名）")
         if _hmig.startswith(("renamed", "merged")):
             _msg += "；检测到覆盖升级，已自动迁移旧数据目录（hermes_home→memomics_home）"
+        _ver_ok = (new_local.get("version") or "").strip() == (remote.get("tag") or "").strip()
+        if not _ver_ok:
+            # 2026-10-23：覆盖后版本号没变 = 有问题（例如覆盖层级不对），必须让用户看见
+            _msg += "；⚠️ 覆盖后版本号仍为 %s（预期 %s），请查看服务端日志" % (
+                new_local.get("version"), remote.get("tag"))
         return {"ok": True, "message": _msg, "fix_log": fix_log,
                 "new_version": new_local.get("version"), "restart_required": True,
+                "overlay": {"copied": copied, "skipped": _ov.get("skipped", 0),
+                            "failed": _ov.get("failed", 0), "errors": _ov.get("errors", [])[:5]},
+                "version_matches_remote": _ver_ok,
                 "install_dir": MEMOMICS_DIR, "asset_size_mb": remote.get("asset_size_mb")}
     except RuntimeError as e:
         _UPDATE_TASK["running"] = False
@@ -14452,6 +14556,20 @@ _LOOP_EXEMPT_TOOLS = {
     "rail_review", "debate_analysis", "record_run", "check_env",
 }
 
+# 2026-10-24：监控/只读探查型命令签名——对同一目标反复查看是正常业务
+#（盯长任务日志/查进度/看进程），循环检测触发阈值对它们放宽（见 _loop_check）。
+_MONITOR_SIG_RE = re.compile(
+    r"^\s*(?:(?:tail|cat|head|ls|ps|df|du|free|wc|nvidia-smi|tasklist|netstat|"
+    r"echo|pwd|dir|type|more|sleep|grep)\b|Get-)", re.I)
+
+
+def _is_monitor_sig(sig: str) -> bool:
+    """监控/只读探查型签名——同一目标反复查看属正常业务，不按失控循环论。"""
+    try:
+        return bool(sig) and bool(_MONITOR_SIG_RE.search(sig))
+    except Exception:
+        return False
+
 
 def _loop_tool_sig(tool_name: str, args) -> str:
     """提取工具调用的命令特征签名（用于相似度比较）。"""
@@ -14500,7 +14618,8 @@ def _sig_has_progress(sg1: str, sg2: str) -> bool:
         return False
 
 
-def _loop_check(session, agent, event: str, tool_name: str = None, args=None, delta: str = None) -> bool:
+def _loop_check(session, agent, event: str, tool_name: str = None, args=None, delta: str = None,
+                tool_id: str = None) -> bool:
     """循环检测主入口。event: 'delta' | 'tool_start' | 'turn_end'。返回 True=刚注入干预。"""
     try:
         if session is None:
@@ -14529,29 +14648,40 @@ def _loop_check(session, agent, event: str, tool_name: str = None, args=None, de
                 if tool_name in _LOOP_EXEMPT_TOOLS:
                     # 豁免工具不累计（但保留文本分段语义，text_buf 已清空）
                     return False
+                # 2026-10-24：同一调用的重复回调（预检 + 执行 worker 同一 tid 触发
+                # 两次）只记一次——旧实现把一次真实调用记成两条，灵敏度直接翻倍。
+                if tool_id and g.get("last_tool_id") == tool_id:
+                    return False
+                g["last_tool_id"] = tool_id
                 _sig = _loop_tool_sig(tool_name, args)
                 g["tool_hist"].append((tool_name or "", _sig, now))
                 g["tool_hist"] = g["tool_hist"][-10:]
-                _hist = g["tool_hist"][-8:]
-                if len(_hist) >= 4:
-                    _pairs = 0
-                    for _i in range(len(_hist)):
-                        for _j in range(_i + 1, len(_hist)):
-                            _tn1, _sg1, _ = _hist[_i]
-                            _tn2, _sg2, _ = _hist[_j]
-                            if not _tn1 or _tn1 != _tn2:
-                                continue
-                            if not _sg1 and not _sg2:
-                                _pairs += 1  # 同名无参数工具 = 重复
-                            elif _sg1 and _sg2 and not _sig_has_progress(_sg1, _sg2) \
-                                    and _SeqMatcher(None, _sg1, _sg2).ratio() > 0.72:
-                                # 2026-08-14 出图/导出豁免：输出文件名不同 = 正常批量出图
-                                _t1, _t2 = _loop_out_target(_sg1), _loop_out_target(_sg2)
-                                if _t1 and _t2 and _t1 != _t2:
-                                    continue
-                                _pairs += 1
-                    if _pairs >= 4:
-                        triggered = ("工具调用循环", "连续执行相同/相似的监控命令")
+                # 2026-10-24 误报修复（用户反馈：有些任务就是需要重复执行）：
+                # 旧判据「最近 8 次里相似对 ≥4」是全对计数，同工具相似命令出现 4 次
+                # 即误报（C(4,2)=6）。改为「尾部连续段」：最近连续 N 次同工具且相邻
+                # 签名相似才算循环；监控/只读探查型命令本就需要反复执行，阈值放宽到 6。
+                # 出图豁免（输出文件不同）与数字推进豁免（step0→step1）保留。
+                _hist = g["tool_hist"]
+                _run = 1
+                for _k in range(len(_hist) - 1, 0, -1):
+                    _tn1, _sg1, _ = _hist[_k - 1]
+                    _tn2, _sg2, _ = _hist[_k]
+                    if not _tn1 or _tn1 != _tn2:
+                        break
+                    if not _sg1 and not _sg2:
+                        _run += 1  # 同名无参数工具 = 重复
+                        continue
+                    if _sg1 and _sg2 and not _sig_has_progress(_sg1, _sg2) \
+                            and _SeqMatcher(None, _sg1, _sg2).ratio() > 0.72:
+                        _t1, _t2 = _loop_out_target(_sg1), _loop_out_target(_sg2)
+                        if _t1 and _t2 and _t1 != _t2:
+                            break  # 输出文件不同 = 正常批量出图
+                        _run += 1
+                        continue
+                    break
+                _need = 6 if _is_monitor_sig(_hist[-1][1]) else 4
+                if _run >= _need:
+                    triggered = ("工具调用循环", "连续执行相同/相似的监控命令")
 
             elif event == "turn_end":
                 if len(g["text_buf"]) >= 25:
@@ -14571,17 +14701,17 @@ def _loop_check(session, agent, event: str, tool_name: str = None, args=None, de
             if not triggered:
                 return False
             _reason, _detail = triggered
-            # 防抖：180s 内最多 1 次；单个用户回合累计 ≤3 次
+            # 防抖（2026-10-24 放宽）：300s 内最多 1 次；单个用户回合累计 ≤4 次
             if g["inject_count"] >= 4:
                 return False
-            if now - g["last_inject_ts"] < 90:
+            if now - g["last_inject_ts"] < 300:
                 return False
             g["last_inject_ts"] = now
             g["inject_count"] += 1
             if _loop_inject_steer(session, agent, _reason, _detail):
                 try:
                     _session_emit(session, {"type": "info",
-                        "content": f"🔁 循环检测：{_reason}（{_detail}）。已注入强制收尾提示。",
+                        "content": f"🔁 循环检测：{_reason}（{_detail}）。已注入提示——若这是有意的重复（监控/批处理），忽略继续即可。",
                         "session_id": session["id"]})
                 except Exception:
                     pass
@@ -14594,7 +14724,7 @@ def _loop_check(session, agent, event: str, tool_name: str = None, args=None, de
 # 2026-10-19（K2）：系统干预段标记——_loop_inject_steer（循环检测）与
 # enforcement._inject_agent_hint（门禁提示）都经 _pending_steer 通道注入。
 # 新回合清空残留 steer 槽时，系统段作废、用户插话段抢救（chat 入口处调用）。
-_STEER_SYSTEM_MARKERS = ("【系统循环检测·强制干预】", "【系统强制提示】")
+_STEER_SYSTEM_MARKERS = ("【系统循环检测·强制干预】", "【系统循环检测·提示】", "【系统强制提示】", "【待办收尾提示】")
 
 
 def _salvage_steer_text(raw) -> str:
@@ -14623,6 +14753,52 @@ def _salvage_steer_text(raw) -> str:
     return "\n".join(kept).strip()
 
 
+# 2026-10-23：阶段小结缺失提醒（用户实测会话 memomics-fd497d3a：10 个中间回合 content=0、reasoning 662–3400 字 —— 模型把过程全写进思考通道，交互框里既没有小结也没有可折叠内容）。
+def _maybe_narration_nudge(session) -> bool:
+    """上一轮正文为空（内容都写进了思考/reasoning）→ 提醒把阶段小结写进正文。
+
+    经 _pending_steer 通道注入（下一轮 LLM 调用前生效）；非首轮才提醒、同一回合最多 2 次。
+    """
+    try:
+        if session is None:
+            return False
+        st = session.setdefault("_narration", {"round_chars": 0, "nudges": 0, "tools": 0})
+        _chars = st.get("round_chars", 0)
+        st["tools"] = st.get("tools", 0) + 1
+        st["round_chars"] = 0        # 新一轮开始，正文长度重新计
+        if _chars >= 25:              # 上一轮有正文 → 无需提醒
+            return False
+        if st["tools"] <= 1:         # 第一轮不给压力（模型可能直接开工）
+            return False
+        if st.get("nudges", 0) >= 2:
+            return False
+        agent = session.get("running_agent")
+        if agent is None:
+            return False
+        _steer = (
+            "【系统强制提示】上一轮正文为空——内容只写进了思考/thinking 通道，用户在交互框里看不到。\n"
+            "按回复规范：**阶段小结要写在正式回复的正文里**。\n"
+            "请在本轮调用工具之前，先用 2–4 句把这一阶段的【为什么 / 怎么做 / 结果 / 下一步】写进正文，再继续调工具。"
+        )
+        _lock = getattr(agent, "_pending_steer_lock", None)
+        if _lock is not None:
+            with _lock:
+                agent._pending_steer = (agent._pending_steer + "\n" + _steer) if agent._pending_steer else _steer
+        else:
+            _cur = getattr(agent, "_pending_steer", "") or ""
+            agent._pending_steer = (_cur + "\n" + _steer) if _cur else _steer
+        st["nudges"] = st.get("nudges", 0) + 1
+        try:
+            _session_emit(session, {"type": "info",
+                "content": "💬 上一轮正文为空（内容写进了思考）——已提醒把阶段小结写进正文，交互框不再空着。",
+                "session_id": session["id"]})
+        except Exception:
+            pass
+        return True
+    except Exception:
+        return False
+
+
 def _loop_inject_steer(session, agent, reason: str, detail: str) -> bool:
     """通过 MemOmics 原生 _pending_steer 通道注入强制收尾提示（下一轮 LLM 调用前生效）。"""
     try:
@@ -14630,14 +14806,15 @@ def _loop_inject_steer(session, agent, reason: str, detail: str) -> bool:
             agent = session.get("running_agent")
         if agent is None:
             return False
+        # 2026-10-24（用户反馈）：软提示——检测器只提醒、不裁判。
+        # 任务本身需要的重复（监控/轮询/批处理/迭代）明确允许继续，不强制收尾。
         _steer = (
-            "【系统循环检测·强制干预】检测到你已连续多轮重复几乎相同的操作和表述（" + reason + "：" + detail + "）。"
-            "判定为循环失控，请立即停止重复：\n"
-            "1. 停止再执行重复的监控/查看动作；\n"
-            "2. 若任务产物已生成（图/文件已保存、命令返回成功），直接视为完成，禁止再做任何验证/检查动作；"
-            "仅当确实不知道结果时才做一次状态确认；\n"
-            "3. 用 2-3 句话给用户明确结论：任务已完成 / 已失败 / 已卡死（附原因与产物路径）；\n"
-            "4. 结束本轮回复，禁止再次执行重复动作。"
+            "【系统循环检测·提示】检测到你连续多轮执行了几乎相同的操作（" + reason + "：" + detail + "）。\n"
+            "请自我判断一次（二选一）：\n"
+            "1. 若这是任务本身需要的重复（监控进度 / 轮询日志 / 批量处理 / 迭代出图），"
+            "忽略本提示，继续你的工作即可，不用收尾、不用回复本条；\n"
+            "2. 若确实陷入了无进展的失控重复：停止重复动作——产物已生成就视为完成（不必再验证），"
+            "用 2-3 句话给用户明确结论（已完成 / 已失败 / 已卡死 + 原因 + 产物路径）后结束本轮。"
         )
         _lock = getattr(agent, "_pending_steer_lock", None)
         if _lock is not None:
@@ -18685,6 +18862,55 @@ async def delete_session_todos(sid: str):
     return {"ok": True, **payload}
 
 
+@app.post("/api/sessions/{sid}/todos/item")
+async def api_todo_item_update(request: Request, sid: str):
+    """单条待办划掉/恢复/标完成（2026-10-24 用户口径：不合需求的待办可直接划掉，
+    不要死盯旧清单）。
+
+    三处同步：会话展示副本 + state.db KV + 在跑的 agent store。
+    另记 session["_todo_overrides"]：agent store 每回合会从历史消息重水合
+    （旧状态复活），回合末回读时拿 override 盖上，用户划掉的项不会复活；
+    agent 自己重写/更新清单时 override 清零（agent 接管了计划）。
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": False, "error": "请求体不是合法 JSON"}
+    if sid not in _sessions:
+        _restore_single_session(sid)
+    if sid not in _sessions:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+    tid = str(body.get("id") or body.get("title") or "").strip()
+    status = str(body.get("status") or "").strip().lower()
+    if not tid:
+        return {"ok": False, "error": "缺 id"}
+    if status not in ("pending", "in_progress", "completed", "cancelled"):
+        return {"ok": False, "error": "status 只能是 pending/in_progress/completed/cancelled"}
+    session = _sessions[sid]
+    cur = _session_todos(session)
+    hit = False
+    for t in cur:
+        if str(t.get("id") or "") == tid or str(t.get("title") or "") == tid:
+            t["status"] = status
+            hit = True
+    if not hit:
+        return {"ok": False, "error": "没找到这条待办：%s" % tid}
+    pub = _sync_session_todos(session, cur, persist=True)
+    # 在跑的 agent store 同步（不在跑也没事——回合末回读时有 override 盖）
+    try:
+        _ag = session.get("running_agent")
+        _st = getattr(_ag, "_todo_store", None) if _ag is not None else None
+        if _st is not None and any(str(x.get("id")) == tid for x in _st.read()):
+            _st.write([{"id": tid, "status": status}], merge=True)
+    except Exception:
+        pass
+    session.setdefault("_todo_overrides", {})[tid] = status
+    _session_emit(session, {"type": "todos_update", "todos": pub,
+                            "ts": datetime.now().strftime("%H:%M:%S"),
+                            "session_id": session["id"]})
+    return {"ok": True, "todos": pub, "revision": int(session.get("todos_revision", 0) or 0)}
+
+
 # --- P1-2 (2026-09-23): 改动复核（跑前跑后快照 + diff + 单文件回滚） ---
 #
 # 借鉴 deer-flow 的部分（workspace_changes/types.py:63-116 的 WorkspaceFileChange 形状、
@@ -20487,12 +20713,15 @@ async def ws_endpoint(ws: WebSocket):
 
                 # 回调
                 has_delta = False  # 追踪是否已通过流式发送过文本
+                session.pop("_narration", None)   # 2026-10-23：阶段小结提醒按回合重置
 
                 def stream_cb(delta, _s=session):
                     nonlocal has_delta
                     try:
                         if delta is None: return
                         has_delta = True
+                        _narr = _s.setdefault("_narration", {"round_chars": 0, "nudges": 0, "tools": 0})
+                        _narr["round_chars"] = _narr.get("round_chars", 0) + len(str(delta))   # 2026-10-23 正文计数
                         _s["_turn_activity_ts"] = time.time()
                         _loop_check(_s, None, "delta", delta=delta)
                         _session_emit(_s, {"type": "delta", "content": str(delta), "session_id": _s["id"]})
@@ -20512,7 +20741,9 @@ async def ws_endpoint(ws: WebSocket):
                 def tool_start_cb(tool_id, tool_name, args=None, _s=session):
                     try:
                         # 循环检测：连续重复工具调用（如反复 tail 日志监控安装）
-                        _loop_check(_s, None, "tool_start", tool_name=tool_name, args=args)
+                        _loop_check(_s, None, "tool_start", tool_name=tool_name, args=args, tool_id=tool_id)
+                        # 2026-10-23：上一轮正文为空（内容全写进思考）→ 提醒把阶段小结写进正文
+                        _maybe_narration_nudge(_s)
                         # 2026-08-16 任务类型：terminal background=True = 长任务运行时证据
                         if tool_name == "terminal" and isinstance(args, dict) and args.get("background") is True:
                             _mark_task_long_running(_s)
@@ -20670,7 +20901,17 @@ async def ws_endpoint(ws: WebSocket):
                         pass
 
                 # 跟踪已知的图片文件，用于检测新图
+                # 2026-10-23：先把磁盘上已有的图全部登记为「已知」—— 否则每轮第一次扫描会把
+                # 上一轮/历史的图当「新图」重发（用户反馈：刚发问就提示「有新的结果」，点开并没有）。
                 _known_figures = set()
+                try:
+                    _kf_base = session.get("results_dir", "")
+                    if _kf_base and os.path.isdir(_kf_base):
+                        for _kf_p in Path(_kf_base).rglob("*"):
+                            if _kf_p.is_file() and _kf_p.suffix.lower() in {".png", ".jpg", ".jpeg", ".svg"}:
+                                _known_figures.add(str(_kf_p))
+                except Exception:
+                    pass
 
                 def _scan_new_figures(_s=session):
                     """扫描 results_dir 下的新图片，返回新增列表"""
@@ -20837,6 +21078,9 @@ async def ws_endpoint(ws: WebSocket):
                         # todo/todo_manage/memomics_pipeline 完成后同步待办到前端
                         if tool_name in ("todo", "todo_manage", "memomics_todo_manage", "memomics_pipeline"):
                             try:
+                                # 2026-10-24：agent 自己写/改清单 = 它接管了计划，
+                                # 用户手动划掉的 override 以 agent 的新清单为准清零
+                                _s["_todo_overrides"] = {}
                                 # memomics_pipeline 返回的 todos 写入 store
                                 if tool_name == "memomics_pipeline" and hasattr(_agent, "_todo_store"):
                                     try:
@@ -20872,7 +21116,15 @@ async def ws_endpoint(ws: WebSocket):
                                                 try:
                                                     import sys, os
                                                     from memomics.memomics_pipeline import modules_to_todos
-                                                    default_ids = ["01","02","03","04","05"]
+                                                    # 2026-10-24（用户反馈「待办跟任务不匹配」）：兜底不再硬编码
+                                                    # 01-05 通用管线——结果里带了实际选中的模块就按它们生成。
+                                                    _mods = result_obj.get("modules") or result_obj.get("selected_modules") or []
+                                                    _ids = []
+                                                    for _m in _mods:
+                                                        _mid = str((_m.get("id") or _m.get("module")) if isinstance(_m, dict) else _m).strip()
+                                                        if _mid:
+                                                            _ids.append(_mid)
+                                                    default_ids = _ids or ["01","02","03","04","05"]
                                                     pipe_todos = modules_to_todos(default_ids)
                                                     memomics_todos = []
                                                     for i, td in enumerate(pipe_todos):
@@ -21889,6 +22141,14 @@ async def ws_endpoint(ws: WebSocket):
                             _tstore = getattr(_agent, "_todo_store", None)
                             _cur_todos = [t for t in _tstore.read() if isinstance(t, dict)] if _tstore is not None else []
                             if _cur_todos:
+                                # 2026-10-24：用户手动划掉/恢复的 override 盖上——
+                                # store 每回合从历史重水合，不盖的话用户划掉的项会复活
+                                _ovr = _session.get("_todo_overrides") or {}
+                                if _ovr:
+                                    for _t in _cur_todos:
+                                        _k = str(_t.get("id") or "")
+                                        if _k in _ovr:
+                                            _t["status"] = _ovr[_k]
                                 _sync_session_todos(_session, _cur_todos)
                         except Exception:
                             pass
@@ -21948,6 +22208,40 @@ async def ws_endpoint(ws: WebSocket):
                                     "content": "⚠️ 检测到虚假完成声明（本回合无真实执行、文件未变化）——系统将强制重新执行",
                                     "session_id": _session["id"]})
                                 logger.info("[MemOmics] 检测到虚假完成声明 → 强制自检重跑")
+                        # 2026-10-24（用户口径：待办 = task_plan，任务交付后即清理）：
+                        # 回合交付声称完成 + 本回合有真实执行 + 清单仍有未完成项 →
+                        # 未完成项先按 completed 落账（日志留痕），再整单清理（store 清空 +
+                        # 前端清单撤下，与 DELETE /api/sessions/{sid}/todos 同一清法）。
+                        # 护栏：① 无真实执行不碰（虚假完成由上面的检测管）；
+                        # ② 回复带「接着/下一步/继续/随后」等续跑意向 → 不清——
+                        # 多回合任务的中间汇报不动清单。
+                        try:
+                            _claim_done2 = ("已完成", "已生成", "已交付", "已保存", "结果如下", "全部完成", "跑完了")
+                            _continue_hint = ("接着", "下一步", "继续", "随后", "接下来", "下一回合", "待唤醒")
+                            if _agent is not None and _session.get("_real_exec_this_turn") \
+                                    and any(_w in (result or "") for _w in _claim_done2) \
+                                    and not any(_w in (result or "") for _w in _continue_hint):
+                                _ts2 = getattr(_agent, "_todo_store", None)
+                                if _ts2 is not None and _ts2.has_items():
+                                    _all_t = [t for t in _ts2.read() if isinstance(t, dict)]
+                                    _open = [t for t in _all_t
+                                             if str(t.get("status") or "pending") not in ("completed", "cancelled")]
+                                    # 不管 agent 有没有逐项勾完，交付即整单清理（清单就是 task_plan）
+                                    if _all_t:
+                                        if _open:
+                                            _close = [dict(t, status="completed") for t in _all_t]
+                                            _ts2.write(_close, merge=True)   # 未完成项按完成落账留痕
+                                        _ts2.write([], merge=False)          # 整单清理
+                                        _sync_session_todos(_session, [], persist=True)
+                                        _session_emit(_session, {"type": "todos_update", "todos": [],
+                                            "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
+                                        logger.info("[MemOmics] 任务交付 → 待办已收尾并清理（共 %d 项，其中 %d 项未勾）",
+                                                    len(_all_t), len(_open))
+                                        _session_emit(_session, {"type": "info",
+                                            "content": "📝 任务已交付：%d 项待办已收尾并清理" % len(_all_t),
+                                            "session_id": _session["id"]})
+                        except Exception:
+                            pass
                         # 2026-08-22 产物终检（一次性，回合末）：本回合有真实执行 + 模型声称完成 →
                         # 检查结果目录是否有新产物且非空（存在+大小>0），不满足则提醒模型核实交付。
                         # 设计：不每次执行都查（省 token），只在回合交付前查一次；内容对错靠执行时

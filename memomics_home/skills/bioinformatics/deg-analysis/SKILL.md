@@ -241,6 +241,15 @@ Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正
 | human | skeletal_muscle | exercise+aging | 2026-10-09 | plot_musc_coverage.py | - | - |  |
 | - | - | - | 2026-10-18 | locate_prior_two_group_pipeline | - | - |  |
 | human | skeletal_muscle | aging | 2026-10-18 | aging_vs_t2d_welch_ttest.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | probe_aging_csv_structure | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | 20_aging_deg_descriptive.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | aging_summary_extract | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | 00_inspect_deg_xlsx.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | 00_inspect_deg_xlsx.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | inspect_merged_od_xlsx.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | inspect_merged_xlsx.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | inspect_merged_od_xlsx.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | recon2_columns_OD.py | - | - |  |
 ## 🚨 Critical Pitfalls
 
 ### P1: Pseudobulk per subcluster×condition breaks DESeq2

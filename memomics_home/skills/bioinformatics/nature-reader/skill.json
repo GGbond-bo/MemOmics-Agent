@@ -3,7 +3,7 @@
  "name": "Full-Paper Markdown Reader — Router",
  "category": "general",
  "language": "Python",
- "description": "全文中英对照精读器：PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要；触发词：读论文、精读论文、论文翻译、文献阅读、帮我读这篇文章",
+ "description": "全文中英对照精读器：PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要；触发词：读论文、论文翻译、文献阅读、帮我读这篇文章、全文对照（⚠️ 2026-10-24：裸「精读/解读」不再触发本技能——那是要解读，走 paper-summary）",
  "starting_prompt": "使用 Full-Paper Markdown Reader — Router 进行分析",
  "source_dir": "skills/bioinformatics/nature-reader",
  "memomics_module": "",
@@ -14,17 +14,19 @@
  "trigger_level": "RED",
  "trigger_keywords": [
   "读论文",
-  "精读论文",
   "论文翻译",
   "文献翻译",
   "文献阅读",
   "帮我读这篇文章",
-  "翻译这篇paper",
+  "帮我读这篇",
+  "读一下这篇",
+  "翻译这篇",
   "全文对照",
+  "中英对照",
+  "双语对照",
   "paper translation",
   "read this paper",
-  "deep reading",
-  "paper reading"
+  "deep reading"
  ],
  "when_to_use": "全文中英对照精读:PDF/DOI/arXiv/HTML/粘贴文本 → 双语对照 Markdown（图表/公式感知、源锚定、术语表），绝不降级为摘要"
 }
