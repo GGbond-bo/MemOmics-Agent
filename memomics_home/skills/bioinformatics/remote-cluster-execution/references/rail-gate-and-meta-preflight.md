@@ -1,6 +1,6 @@
 # rail_review(pre) 本地口径拦截集群作业 + 元数据 levels 前置核查（2026-10-09 实测）
 
-两条都在同一次 ssh23 DEG 投递里踩到，都是「不报错但会毁掉整批结果」的类型。
+两条都在同一次 node4 DEG 投递里踩到，都是「不报错但会毁掉整批结果」的类型。
 
 ---
 
@@ -33,7 +33,7 @@
 
 ```
 rail_review(phase="pre", module_id="deg", method_name="...", skill_name="...",
-            location="cluster", node="ssh23", env="R4.41",
+            location="cluster", node="node4", env="R4.41",
             required_packages=["Seurat","edgeR","RUVSeq","MAST","lme4"])
 ```
 
@@ -42,10 +42,10 @@ rail_review(phase="pre", module_id="deg", method_name="...", skill_name="...",
 | 写法 | 回执关键字段 | 结果 |
 |---|---|---|
 | 不传 `location` | `missing_packages:["RUVSeq"]` | ❌ 被拦 → 被迫装本地包 |
-| `location="cluster", node="ssh23", env="R4.41"` | `location_line: 集群 ssh23/R4.41 —— 显式指定（节点上的 R 包清单，694 个包，缓存命中）`；`should_proceed:true` | ✅ **零本地安装** |
+| `location="cluster", node="node4", env="R4.41"` | `location_line: 集群 node4/R4.41 —— 显式指定（节点上的 R 包清单，694 个包，缓存命中）`；`should_proceed:true` | ✅ **零本地安装** |
 
 - **显式传 `location` 才有硬拦效力**；`location_source:"inferred"`（自动推断出来的位置）报出的问题**只警告、不拦执行**。
-- **本地缺 ≠ 集群缺**，反之亦然（`ssh23/R4.41` 里 RUVSeq / MAST / lme4 / edgeR 都在）。
+- **本地缺 ≠ 集群缺**，反之亦然（`node4/R4.41` 里 RUVSeq / MAST / lme4 / edgeR 都在）。
 - 正确顺序：**先带 location 试 pre-review → 只有它仍报缺包，才走下面的补包三步。**
 - ⛔ 仍不要少报 `required_packages` —— 只是把审查口径从「本机」换到「执行位置」，不是取消审查。
 

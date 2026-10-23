@@ -74,6 +74,29 @@ ADAPTIVE_EFFORT_MAP = {
     "minimal": "low",
 }
 
+
+# ── MemOmics 思考强度滑块（2026-10-21）─────────────────────────────────
+def _resolve_memomics_slide_effort(model: str) -> "str | None":
+    """读 MemOmics 滑块配置：config.yaml → llm.model_efforts.<model_id> > llm.reasoning_effort。
+
+    只回传显式档位（low/medium/high/max 之一；off/未设置 → None，保持原有默认行为）。
+    供 Anthropic 线（Kimi Coding Plan、Claude 端点）把滑块接入 thinking 参数。
+    """
+    try:
+        from hermes_cli.config import load_config as _load_cfg
+        cfg = _load_cfg() or {}
+    except Exception:
+        return None
+    llm = cfg.get("llm") if isinstance(cfg.get("llm"), dict) else {}
+    mid = str(model or "").strip()
+    per = llm.get("model_efforts") if isinstance(llm.get("model_efforts"), dict) else {}
+    if mid and isinstance(per.get(mid), str) and per[mid].strip().lower() in ("low", "medium", "high", "max"):
+        return per[mid].strip().lower()
+    glob = str(llm.get("reasoning_effort") or "").strip().lower()
+    if glob in ("low", "medium", "high", "max"):
+        return glob
+    return None
+
 # ── Anthropic thinking-mode classification ────────────────────────────
 # Claude 4.6 replaced budget-based extended thinking with *adaptive* thinking,
 # and 4.7 additionally forbids the manual ``thinking`` block entirely and drops
@@ -2656,6 +2679,11 @@ def build_anthropic_kwargs(
     # silently hides reasoning text that Hermes surfaces in its CLI. We
     # request "summarized" so the reasoning blocks stay populated — matching
     # 4.6 behavior and preserving the activity-feed UX during long tool runs.
+    # 2026-10-21：MemOmics 思考强度滑块接入 Anthropic 线 —— llm.* 显式档位
+    # 覆盖 hermes agent.* 的 reasoning_config（用户明确动作优先）。
+    _slide_effort = _resolve_memomics_slide_effort(model)
+    if _slide_effort:
+        reasoning_config = {"enabled": True, "effort": _slide_effort}
     if reasoning_config and isinstance(reasoning_config, dict):
         if reasoning_config.get("enabled") is not False and "haiku" not in model.lower():
             effort = str(reasoning_config.get("effort", "medium")).lower()

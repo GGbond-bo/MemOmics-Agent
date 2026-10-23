@@ -145,14 +145,20 @@ check("M2: 未武装 + 用户消息 → 放行（调用方负责 arm）",
 run_gate.arm(rd3, by="user_message")
 check("M2: 重新武装后自动唤醒放行",
       run_gate.check_gate(rd3, is_auto_wake=True)[0] == "run")
-# 旧版文件（升级前）无 armed 字段 → 视为未授权
+# 2026-10-18 语义迁移：许可改为"进程内"（借鉴 DSH goal）——
+# 旧文件（armed=False 且无 paused 标记）应迁移为 armed，不再永久冻结。
 with open(run_gate._state_path(rd3), "w", encoding="utf-8") as _f:
-    _json3.dump({"state": "running", "reason": "legacy"}, _f)
-check("M2: 旧文件无 armed 字段 → 视为未武装", run_gate.is_armed(rd3) is False)
-check("M2: 旧文件未武装 → 自动唤醒被拦",
-      run_gate.check_gate(rd3, is_auto_wake=True)[0] == "stop")
-check("M2: disarm 不清状态机 phase",
-      run_gate.load_state(rd3)["state"] == "running" and not run_gate.load_state(rd3)["armed"])
+    _json3.dump({"state": "running", "reason": "legacy", "armed": False}, _f)
+check("M2: 旧文件（armed=False 无暂停标记）→ 迁移为武装",
+      run_gate.is_armed(rd3) is True)
+check("M2: 旧文件迁移后自动唤醒放行（进程内许可）",
+      run_gate.check_gate(rd3, is_auto_wake=True)[0] == "run")
+# 显式暂停：只改许可，不改状态机 phase
+run_gate.disarm(rd3, "user stop")
+check("M2: 显式暂停只改许可、不改 phase",
+      run_gate.load_state(rd3)["state"] == "running"
+      and run_gate.load_state(rd3)["activation"] == "paused"
+      and run_gate.is_paused(rd3) is True)
 run_gate.arm(rd3, by="user_message")
 check("M2: arm 记录 by/at", run_gate.load_state(rd3)["armed_by"] == "user_message" and
       run_gate.load_state(rd3)["armed_at"] > 0)

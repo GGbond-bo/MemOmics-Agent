@@ -5116,7 +5116,7 @@ _PLATFORMS = [
         "vars": [
             {
                 "name": "BLUEBUBBLES_SERVER_URL",
-                "prompt": "BlueBubbles server URL (e.g. http://192.168.1.10:1234)",
+                "prompt": "BlueBubbles server URL (e.g. http://10.0.0.1:1234)",
                 "password": False,
                 "help": "The URL shown in BlueBubbles Settings → API.",
             },

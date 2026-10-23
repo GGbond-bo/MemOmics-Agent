@@ -39,6 +39,11 @@ Step 1: 提取 PDF 文本（双栏期刊必须重排，不能直接用默认块�
   ├── 剔除图注块（`Fig. N |` / `Extended Data Fig. N |` 开头）与图内碎片（裸数字串/化学符号）
   ├── 图内标签乱码（Type3 子集字体）= 字符码定值偏移，可暴力解码（Nature 语料为 +29）
   ├── 出图：由 caption 顶部反推图区矩形 + get_pixmap(clip=..., dpi≥500) 渲染，别裁正文
+  ├── 现成脚本（直接跑，别每轮手写）：`scripts/pdf_2col_extract.py`（双栏阅读顺序还原 → 逐页 txt + 结构表）
+  │     └── `python scripts/pdf_2col_extract.py <pdf> results/<sid>/data/pdf_text2`
+  ├── `scripts/crop_figures_by_caption.py`（caption 锚点批量裁图，自动匹配 `Figure N.` / `Figure S1:` / `Fig. N |`，
+  │     └── `python scripts/crop_figures_by_caption.py <pdf> results/<sid>/figures/<主题> --pages 3,6,8,10`
+  │     报告里 anchor=FALLBACK 的行必须复核——缺锚点说明该页 caption 在**下一页**，别当成裁好了）
   └── 完整配方含代码：references/pdf-layout-recovery.md
 
 Step 2: 判断文章类型
@@ -134,3 +139,6 @@ Step 3: 按输出模板生成编辑视角解读
 - **裁剪图后必须抽查**：用 `vision_describe` 看一张主图，确认 OCR 出来的只有图内标签、没有正文段落；混入正文说明矩形画错了。
 - **长解读文件分块写**：双语长文（paper.md 级）用 append 分 3–4 次写，单次全量易超长/超时；每块主题要明确不同，避免形态相似的分块触发系统循环检测提示。
 - **只输出对话不落文件 = 交付不完整**：完整精读应交付 `paper.md` + `source_map.json` + `translation_notes.md` + `figures/`，收尾前校验（`**Original:**` 与 `**中文:**` 块对数量一致、图片链接全部真实存在）。
+- **⛔ 不要用「y 分桶」排序块**：`sorted(blocks, key=lambda b: (round(b[1]/30), b[0]))` 看起来是个合理的近似，**实际会把左右栏交错**，且静默——文本非空、脚本成功、段落就是错的（实测：Cell 双栏论文 p4 变成两句不相干的话交替）。正确做法是 **x-中心 vs 页中线分栏 + 宽块（>0.72×W）单独按 y 归并**，见 `scripts/pdf_2col_extract.py`。**先抽 1–2 页验阅读顺序再批量**，接缝处应能跨页续读半句话。
+- **caption 前缀不止一种，补充图 caption 常在下一页**：Nature 是 `Fig. N |`，Cell 正文是 `Figure N.`，**Cell 补充图是 `Figure S1:`（冒号，不是句点）**。只匹配 `^Figure\s+S?\d+\.` 会漏掉**全部**补充图 → 裁剪静默回退到"页底 −120pt"估值，可能把 caption 散文裁进图里或把多面板图裁残。判据：裁图报告的 `anchor=FALLBACK` / `captionsplit=False` 若多于 0 行就是漏了，去**下一页**取 caption 重裁；正则在 `scripts/crop_figures_by_caption.py` 里已做全前缀匹配。
+- **超长论文（70+ 页、20 万字符级）先交付"看得见的东西"，全文中英对照另起一轮**：这种体量做全篇双语 `paper.md` 是几十万字符，一轮硬做既超时也容易触发系统的循环检测干预。推荐顺序：**① 双栏文本提取 → 逐页 txt（可核查）② caption 裁图（用户立刻能看图）③ 专业解读 md（硬数字 + 图表索引 + 数据获取号 + 局限）④ 收尾把"全文中英对照"作为可选下一步问用户**。用户说"解读文献"时，解读就是主交付物——交付解读**不算**降级为摘要；只有全文对照才算精读交付，所以要点名提供，让用户选。

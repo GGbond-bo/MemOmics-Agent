@@ -41,7 +41,7 @@ metadata:
 | 产物（图/表/日志） | `ls /cluster/share/user/...` | ✅ | 工作盘 NFS **三节点共享** |
 | R/python 进程 | `ps -ef \| grep Rscript` | ⚠️ **仅运行期间** | 作业结束进程即消失；同账号进程全局可见（无需 sudo） |
 | SGE 队列 | `qstat` | ⚠️ 取决于 qmaster 可解析 | qstat 失败 → 工具判 `scheduler=none` → 走 **setsid 后台进程** → **队列里根本没有它**，只能靠 `ps` 看 |
-| 工具账本 | `~/memomics_jobs/` | ❌ **跨节点看不到** | `/home` **不跨节点共享**（node1=`10.53.22.9:/vol_1t_sas_3`；ssh23=`10.53.20.27:/export/home`，独立卷）→ 账本只在本节点可见 |
+| 工具账本 | `~/memomics_jobs/` | ❌ **跨节点看不到** | `/home` **不跨节点共享**（node1=`10.53.22.9:/vol_1t_sas_3`；node4=`10.53.20.27:/export/home`，独立卷）→ 账本只在本节点可见 |
 | Agent 思考/会话/审查 | — | ❌ | 全在 MemOmics 本机侧，集群上没有任何痕迹 |
 
 **由此定下的两条操作要求**：
@@ -55,13 +55,13 @@ metadata:
 
 **2026-10-08 二轮实测补充（htop 可见性实弹取证 + SGE 实况）**
 
-- `ssh23` **已装 htop**（`/usr/bin/htop`）；htop 默认只列**当前用户**进程 → 用 `user` 登录即可看到 MemOmics 作业。
+- `node4` **已装 htop**（`/usr/bin/htop`）；htop 默认只列**当前用户**进程 → 用 `user` 登录即可看到 MemOmics 作业。
 - **实弹证据**：`submit` 一个 300 秒占位作业 → `ps -u user` 看到完整链路
   `bash …/memomics_jobs/scripts/<job>.sh`（PPID=**1**，已脱离 SSH → 断连不死）→ 子进程本体；
   同期同表还看到**用户自己的两个 `htop`**（`pts/0` 子进程）→ 直接证明"同用户、同机、运行期间"三条件齐备即可见。
 - ⚠️ **`submit` 会返回 `exit=124 / Command timed out after 20s` 的 error，但作业其实已经起来了**
   （工具 20s 等待窗口太短）。见到这个 error **不要判失败**，先 `ps` / `action="status"` 核实。
-- 🔴 **SGE 在本集群不可用，且不是 DNS 小毛病**：qmaster `10.54.31.75:536` 从 ssh23 **TCP 不可达**
+- 🔴 **SGE 在本集群不可用，且不是 DNS 小毛病**：qmaster `10.54.31.75:536` 从 node4 **TCP 不可达**
   （`/dev/tcp` 探测 `TCP536_FAIL`）+ `/etc/hosts` 缺 `login-host` 条目（node1 有）；
   **`HOSTALIASES` 免 root 补解析实测无效**。→ 无 root/网络开通修不了；
   因此 `scheduler=none` + **setsid 是被迫的正确路径，不是降级**，且正好满足"htop 可见"的诉求。
@@ -126,7 +126,7 @@ source <conda_root>/bin/activate <env>      # 推荐
 
 ```
 rail_review(phase="pre", module_id=..., method_name=..., skill_name=...,
-            location="cluster", node="ssh23", env="R4.41",
+            location="cluster", node="node4", env="R4.41",
             required_packages=[...])
 ```
 
@@ -135,11 +135,11 @@ rail_review(phase="pre", module_id=..., method_name=..., skill_name=...,
 | 写法 | 回执 | 结果 |
 |---|---|---|
 | 不传 `location` | 查本机包 → `missing_packages:["RUVSeq"]` | ❌ 被拦 → 被迫装本地包（用户会质问「集群不是有自己的环境吗」） |
-| `location="cluster", node="ssh23", env="R4.41"` | `location_line: 集群 ssh23/R4.41 —— 显式指定（节点上的 R 包清单，694 个包，缓存命中）` | ✅ `should_proceed:true`，**零本地安装** |
+| `location="cluster", node="node4", env="R4.41"` | `location_line: 集群 node4/R4.41 —— 显式指定（节点上的 R 包清单，694 个包，缓存命中）` | ✅ `should_proceed:true`，**零本地安装** |
 
 要点：
 - **显式传 `location` 才有硬拦效力**；`location_source:"inferred"`（自动推断）报出的问题**只警告、不拦执行**。
-- **本地缺 ≠ 集群缺**，反之亦然（`ssh23/R4.41` 里 `RUVSeq`/`MAST`/`lme4`/`edgeR` 都在）。
+- **本地缺 ≠ 集群缺**，反之亦然（`node4/R4.41` 里 `RUVSeq`/`MAST`/`lme4`/`edgeR` 都在）。
 - 因此正确顺序是：**先带 location 试一次 pre-review → 只有它仍报缺包，才走上面三步补包。**
   巡例先把本地包装上属于白装。
 - 同理 **`rail_review(post)` 的 `output_dir` 必须是「本机可读路径」**：喂集群绝对路径会报
@@ -182,7 +182,7 @@ rail_review(phase="pre", module_id=..., method_name=..., skill_name=...,
 
 ### ⛔ 铁规 6.1：`submit` 回执 + 首次 `ps` 存活 ≠ 任务会跑完 —— 投递后做**一次**早期失败核对，然后停手（2026-10-09 实测）
 
-- 事故原样：MuSC RUVr+MAST 全量作业 **15:08:54 投递、15:13 我按 `ps` 汇报"在跑"**，**实际 15:10:37 就 `Execution halted` 退出了**（只跑了 1 分 43 秒，死在第一个亚群第一个迭代单元的 `cpm` dispatch 错误）；用户 15:13 来问「**我在这个节点 ssh23 上没看到任务**」才发现。顺带暴露：wrapper 打 `rc=0`（**不接 Rscript 真退出码**）→ 日志尾部看着像正常结束。
+- 事故原样：MuSC RUVr+MAST 全量作业 **15:08:54 投递、15:13 我按 `ps` 汇报"在跑"**，**实际 15:10:37 就 `Execution halted` 退出了**（只跑了 1 分 43 秒，死在第一个亚群第一个迭代单元的 `cpm` dispatch 错误）；用户 15:13 来问「**我在这个节点 node4 上没看到任务**」才发现。顺带暴露：wrapper 打 `rc=0`（**不接 Rscript 真退出码**）→ 日志尾部看着像正常结束。
 - 根因：**R/Python 脚本常在第一个迭代单元内就崩**（首行报错 → 整脚本退出），"进程还活着"只在最初几十秒成立。所以 `ps` 有 pid 只证明"起过"，不证明"跑得完"。
 - 做法：投递后**第一次**核对要**一次拿全三样并读日志尾部**（不能只看 `ps`）：
   ```bash
@@ -215,6 +215,69 @@ rail_review(phase="pre", module_id=..., method_name=..., skill_name=...,
 **边界要如实讲**（别粉饰）：本机 watchdog 绑在 MemOmics 服务进程上，**服务重启即死**；集群 `setsid` 作业（PPID=1）不受影响，但重启后必须重挂。⛔ **不许拿"我已经挂了监控"当免检牌**。
 **恢复轮纪律**：任何"继续/跑完没"的续跑轮，先读 `logs/watchdog.log` + alerts 文件，再决定说什么 —— 而不是重新跑一遍监控命令（会被判循环失控，见铁规 6）。
 
+### ⛔ 铁规 6.3：**一次阻塞等待**是正解，但**连发两次**照样被判循环（2026-10-18 实测）
+
+长作业（读 23.5 GB rds，约 6–10 分钟）盯进度时，**别用「隔一会儿发一条 poll」**——那就落进铁规 6 的坑。
+正解是**在一条 `run` 里做阻塞等待**，命令在作业结束时立刻返回，一次调用同时拿到「跑完了 + 结果」：
+
+```bash
+for i in $(seq 1 55); do
+  if ! ps -p <PID> > /dev/null 2>&1; then echo "=== PROCESS ENDED at $(date) ==="; break; fi
+  sleep 5
+done
+echo "=== STATUS ==="; ps -p <PID> -o pid,etime,pcpu,rss 2>/dev/null || echo "not running"
+echo "=== LOG ===";    tail -80 <工作盘>/<日志>          # 🔴 日志必须与等待同一条命令，别分轮再查
+```
+
+**但实测教训**：我把这条阻塞等待**连发了两次**（第一次返回「还在跑」→ 立刻又发一遍同样的），
+系统照样按「连续相似监控命令」判定循环失控并强制干预。所以：
+
+- **阻塞等待本身就算一次监控命令** —— 「换了写法」不等于「不是重复」。判据是**命令文本相似度**，不是有没有 `sleep`。
+- 纪律：**一次阻塞等待 → 拿全状态 → 回报告诉用户 → 停手**。不要「等完觉得没信息再等一轮」。
+  - 等待超时返回且仍 `not running` 缺失 → 先用 `tail` 把**日志尾部**打出来（往往已有进度行），据此汇报；
+  - 真需要再等 → 等**用户问起**时再发第二次，不要自己连发。
+- 等待里**一定要带 `tail`/`ls 产物目录`**：只等不取 = 白等一次，下次还得再发一条命令（= 又一条监控命令）。
+- 作业刚起时日志**只有表头**（大 rds 还在读，`ps` 的 RSS 在涨）——别据此判失败；
+  用 `ps -o etime,pcpu,rss` 证明它在推进（实测：读 23.5 GB 期间 RSS 10 GB → 61 GB，耗时 6–10 分钟）。
+- ⚠️ 被判定循环后**不要在正文里辩解/重试**：直接把已有信息整理成交付（多半已经够了），
+  需要补的细节**本地解析已 pull 回的日志**（`execute_code` 切块），而不是再 ssh 一趟。
+
+**2026-10-18 二次实测补充（`plot_L2_umap.R` 出图作业 —— 产物已生成仍被判循环）**
+
+- **触发形态变了**：这次不是「等完再等一轮」，而是**产物已经出齐**（`ls` 看到 PNG 带合理体积、`ps` 已空）
+  之后，仍在**跨唤醒轮**重复发近似探针 → 照样被判循环失控并注入强制干预。判据始终是
+  **命令相似度 × 轮次**，与作业是否跑完无关；「命令短」「换了写法」都不豁免。
+- 🔴 **产物存在 = 终态**：目标文件体积合理（PNG >100KB / 表 >1KB / 脚本/RDS 非 0）**且** `ps` 无进程
+  ⇒ 立即判完成，**禁止**再补 ps/日志/tail 二次确认。`ps` 返回空本身就是终态证据。
+- 🔴 **`pull` 是交付动作，不是验证动作**：产物齐了之后的下一步是 `action="pull"`（落到本机
+  `results/<sid>/`），不是再 ssh 一趟。拉回后**每图只 `vision_describe` 一次**（查空白 + 标题/图例 OCR）
+  即报，不回头复核。
+- **汇报压到 2-3 句 + 产物路径表**，然后结束本轮；不要再把「下一轮再核查」写进正文。
+- **跨唤醒轮把探针合成一条命令**（`ls -la <产物目录>` + `ps -ef | grep "[脚]本名"` + `tail -30 <日志>`），
+  轮间靠 task_plan/会话锚点对齐，不重复 ssh。
+- 完整规程（含与唤醒纪律、与 `vision_describe` 体检的衔接）→
+  `skill_view("wakeup-progress-check", "references/polling-loop-detection.md")`
+
+### ⛔ 铁规 6.4：投递成功必须**当轮**回报（PID + 输出目录 + 日志路径）；产物目录带日期后缀时按脚本 `OUT` 找（2026-10-19 实测）
+
+- **回合被截断 = 用户以为任务停了**：本次 `submit` 已成功（PID 20027 在跑），但我先去核对、回报还没发出回合就断了
+  → 用户下一轮直接质问「**怎么又断了？任务没完成，结果就停了，什么原因？？？？**」。
+  纪律：`submit` / `session_start` 返回后**当轮**就把「PID · 节点 · 输出目录 · 日志绝对路径 · 预计耗时」写进回复，
+  再去补细节；**不要把"在跑"这件事留到下一轮**（用户看到的只是"没动静"）。
+- 🔴 **巡检前先认准产物目录**：产物目录常带日期/版本后缀，凭记忆列目录会**误判"还没完成"**。
+  实测：标注版图落在 `L2_umap_label_20261019/`，我一直在旧目录 `L2_umap_20261018/` 里 `ls`
+  → **连判两轮"还没完成"**，用户追问两次「还没完成吗？」。
+  做法：① `grep -n 'OUT <-\|outdir\|setwd' <脚本>` 取脚本自己声明的输出目录，或读 task_plan / 会话锚点里登记的路径；
+  ② 判"没完成"之前，把候选目录**列全**（换目录再找一次几乎零成本）；
+  ③ 找不到就问用户，不要连续两轮给同一个「还没完成」。
+- **解释器路径沿用上一轮跑通的，不要重新探测**：上一条壳脚本里已有 `RSCRIPT=` 行
+  （实例：`grep -n RSCRIPT results/<sid>/*/scripts/run_*.sh` → `/cluster/share/user/envs/R4.4.1_zb/bin/Rscript`），
+  直接复用即可；重新探测既慢又容易撞上 env 名不匹配。
+- `rail_review(location="cluster", env="R4.41")` 若回「**节点 node1 上没找到可用的 Rscript（env=R4.41）**」——
+  该节点真实 env 名是 `R4.4.1_zb`，`<roots>/envs/<env>/bin/Rscript` 的默认探测对不上：
+  **显式传 `rscript=<绝对路径>`** 就能定位。这只是**警告、不拦执行**，⛔ 别据此判「集群没这个包」，
+  ⛔ 更别回头去装本地包（那是铁规 3.1 已被取代的老路）。
+
 ## 🔴 铁规 7：**用户锁定的环境映射是"持久声明"，不是探针缓存**（2026-10-08）
 
 用户说"把环境信息补充到环境管理，以后新会话都能调用/补充/更新"时，落点**只有一个**：
@@ -226,19 +289,19 @@ rail_review(phase="pre", module_id=..., method_name=..., skill_name=...,
 - 改这份声明**只改指定项**，别顺手重排/润色别段（它是本机环境真源，`scripts/validate_env.py` 读它）。
 - 机制细节（段 schema、`declared_env()`/`save_declared()`、WebUI 填写入口）见 `references/environment-declaration.md`。
 
-## 🔴 铁规 8：三个登录口 ≠ 三个算力池；装包只有 `ssh0` 能上网（2026-10-08 实测）
+## 🔴 铁规 8：三个登录口 ≠ 三个算力池；装包只有 `node3` 能上网（2026-10-08 实测）
 
 | 节点 | 角色 | 规格 | 外网 |
 |---|---|---|---|
 | `node1` | **default_node** / 大内存 | 144 核 / 3.0 TB | ❌ |
-| `ssh23` | 计算节点（常空，重活首选） | 112 核 / 503 GB（本地 `/tmp` **仅 24G**） | ❌ |
-| `ssh0` | **安装节点** | 8 核 / 15.5 GB | ✅（唯一） |
+| `node4` | 计算节点（常空，重活首选） | 112 核 / 503 GB（本地 `/tmp` **仅 24G**） | ❌ |
+| `node3` | **安装节点** | 8 核 / 15.5 GB | ✅（唯一） |
 
 - 三节点挂**同一份 NFS**（`cluster.login-host:/share → /cluster/share`，120T / 余 24T / 81% 已用）+ **同一套 SGE 8.1.9**，工作路径 realpath 均 `/cluster/share/user`，可见环境一字不差 → **真决定跑在哪台的是调度器，不是登录口**：别按登录口分配任务、别跨节点搬文件。
-- 🔴 装包 / 下数据 / 下参考基因组**只能在 `ssh0`**（其余节点无外网，`pip install`、下载会卡死超时）；装到共享盘后 `node1`/`ssh23` 立即可读。
+- 🔴 装包 / 下数据 / 下参考基因组**只能在 `node3`**（其余节点无外网，`pip install`、下载会卡死超时）；装到共享盘后 `node1`/`node4` 立即可读。
 - 中间文件写工作盘 `/cluster/...`，**别用 `/tmp`**。
 - 全表（含主机名、选点行为 `default_node=node1` / `node_policy=ask`）、工作/装包环境分工、改 `environment.json` 后的验证三件套 → `references/three-node-cluster-facts.md`。
-- ⚠️ **节点上的 `python` 是 Python 2.7.5（ssh23 没有 python3）**：远端任何 `python -c "..."` 一句话都要 **py2/py3 双兼容** —— 不许用 `print(...)` 当表达式（`[print(x) for x in xs]` 在 py2 直接 SyntaxError）、不许 f-string。实测事故（2026-10-09）：`pull`/`locate` 带通配符时远端 glob 助手写成了 `[print(...)]`，整条路报「远端没找到」，看着像路径错，其实是脚本没跑起来。修法：`sys.stdout.write("\n".join([...]))`，先试 `python3` 再退 `python`。
+- ⚠️ **节点上的 `python` 是 Python 2.7.5（node4 没有 python3）**：远端任何 `python -c "..."` 一句话都要 **py2/py3 双兼容** —— 不许用 `print(...)` 当表达式（`[print(x) for x in xs]` 在 py2 直接 SyntaxError）、不许 f-string。实测事故（2026-10-09）：`pull`/`locate` 带通配符时远端 glob 助手写成了 `[print(...)]`，整条路报「远端没找到」，看着像路径错，其实是脚本没跑起来。修法：`sys.stdout.write("\n".join([...]))`，先试 `python3` 再退 `python`。
 
 ## 🔴 铁规 9：长任务 = **一个作业跑完整链 + 检查点**，不要拆成一堆小作业（2026-10-08 用户拍板方案 A）
 
@@ -279,6 +342,31 @@ rail_review(phase="pre", module_id=..., method_name=..., skill_name=...,
 ≥100MB 且 `cache_markers` 账本里没有它的 active 远端标记 → **返回 `status=needs_persist`，命令不执行**。
 过闸就是下面三步；纯巡检行（`ls/stat/du/head` 开头）不触发；`scan --remote` 走内部 `scan_only` 通道不触发。
 **答不出"违反了哪一步会拦住我"的时代结束：会被 run/submit 拦住。**
+
+### ⚠️ 巡检命令的写法：**别把 ≥100MB 文件的绝对路径写进命令行**（2026-10-18 实测）
+
+只想 `ls -la` 看一眼输入文件有没有更新？——把**完整路径**写进命令 = **照样被硬闸拦下**。实测原样回执：
+
+```
+status: needs_persist   big_inputs: [{path: "…/Muscle_exercise_clean_annotation_umap.rds", size_h: "7195MB"}]
+"命令要读 1 个 ≥100MB 的远端大输入，但它们还没落任务标记（铁规 10）——本次 run/submit 已被拦下"
+```
+
+被拦的命令是 `date; echo …; ls -la <大文件目录>/; ls -la <大文件路径>; ps -o …` —— 里面**没有任何\"读数据\"动作**。
+「纯巡检行不触发」的豁免是**按命令段开头**判的：`date; echo …; ls -la <大文件>` 这类**多段拼接**里，
+点名大文件的那一段**不满足豁免条件**。修法（一条就过，实测第二次即通过）：
+
+- **用目录 `ls` 代替文件路径**：`ls -la <目录>/`（体积/时间戳/产物是否落地，从列表里一样看得见），
+  ⛔ 不要 `ls -la <大文件>`；需要挑体积就 `ls -la <目录>/ | head -20`。
+- **顺手拿参照物**：目录内 `ls -lhL *.rds`（**glob，不是单个完整路径**，2026-10-18 实测第二次即通过）——
+  一眼看到**同目录其他对象的体积**，用来判「正在写盘的新产物走到多少了」：`saveRDS` 阶段日志完全静默，
+  只能靠**体积增长 + 原对象体积**估 ETA。配套实测见 `hierarchical-annotation-rollup` 铁律 7。
+- 确实要按路径点名 → 走豁免通道 `python -m memomics.bio_tools.large_cache scan --remote --node <节点> <路径> --json`；
+- 非要原命令 → 先按三步过闸（`scan` → `ask_user` 弹窗 → `mark --remote`）再**原样重发**；
+  或者干脆 `action="session_start" input=<路径>`（会话自己落标记，之后一直用内存对象，不再回读文件）。
+
+拦下时的回执自带 `flow` 字段（三条出路 + 现成的 scan/mark 命令行）——**照抄即可**，不必自己另想办法、
+更不要就此判定\"路径不对/文件不存在\"。
 
 ### 流程（固定三步，不许跳）
 
@@ -346,7 +434,7 @@ cell 输入框。实现要点：
 - 边界（如实说）：秒级轮询、不是字节流；正在跑的 cell **不能中断**（打断=丢内存对象，要停就
   `session_stop`）；本地 `execute_r`/`execute_python` 的变量与图不在这张面板里（它看的是集群常驻会话）。
 
-**实测验收（2026-10-09，ssh23，`MuSC_exercise_clean_dele_cluster_umap.rds` 661.8MB）**：
+**实测验收（2026-10-09，node4，`MuSC_exercise_clean_dele_cluster_umap.rds` 661.8MB）**：
 `readRDS` 16.3s 灌进内存（01:41:06）→ `RunUMAP(harmony 1:30)` 38.9s、对象 2GB、进程 RSS 2.5→3.0GB
 → **约 7 分钟后**（01:54:10）跑 `FindMarkers(lpMuSC vs dMuSC)`：3.6s、20,266 行、1,323 个显著
 （上调 874）、CSV 1.25MB 落 `out/`；**全程同一个 pid=109595、`readrds_calls` 始终 = 1**（没有回读文件）。
@@ -370,6 +458,87 @@ cell 输入框。实现要点：
 - 工作环境/装包环境的分工不变：会话默认用 zhangxiao6 的 `R4.41`（只读，⛔ 不装包）；缺包在
   `user/envs/R4.4.1_zb` 装好后从会话里 `.libPaths()` / `PATH` 引用。
 
+## 🔴 铁规 12：远端对象「身份核对」——先盘点、读一次、别下载（2026-10-18 实测）
+
+用户丢一个集群目录 + 一段口头描述（「示例组织 snRNA、**60 万细胞**、**23 个注释**、不是 ATAC」）要你确认是哪个文件时：
+**不要** brainstorm 文件名、**不要** `pull` 回本机、**更不要**逐个 `readRDS` 试读。
+
+1. **盘点**（一条 `run`，别拆多轮）：
+   ```bash
+   find <DIR> -maxdepth 2 -type f \( -name "*.rds" -o -name "*.csv" -o -name "*.txt" \) \
+     -printf "%10s  %TY-%Tm-%Td  %p\n" | sort -k3
+   echo "---- dirs ----"; ls -la <DIR>/<子目录>/ 2>&1 | head -60
+   ```
+2. **估选**（算，不是猜）：`nnz ≈ 细胞数 × 2000~3000`、~16 B/nnz、rds 再压 2–3×
+   → **60 万细胞 ≈ 7–12 GB**（实测 604,244 细胞 = 7.07 GB）；20–25 GB 对应 150–200 万。
+   文件名只作参考（`Muscle_All`/`MF`/`seRNA` 都可能指"全量"）。
+3. **读一次、一直用**：`session_start(input="<最可能的 rds>", object=…, env="R4.4.1_zb",
+   rscript="/cluster/share/user/envs/R4.4.1_zb/bin/Rscript")` → 回报里的
+   `维度/类型: 51227 x 604244  Seurat` 就是细胞数（实测 7.07 GB / **225.2 秒**，会话 RSS 37 GB）；
+   随后 `session_exec` 跑 **`scripts/probe_rds_meta.R`** 打全元数据列基数 → 注释列与类目数一眼可见。
+4. **用户描述的元数据可能对不上 —— 如实报差异，别硬套**。实测：细胞数对上（604,244）但注释只有
+   `Annotation` 10 类 / `celltype` 11 / `Annotation_Level1` 6 / `leiden_1` 18 簇，**没有任何一列是 23 类**。
+   正确交付 = 「匹配了什么 / 缺了什么 / 未读候选表（文件+大小+日期）/ 问用户点哪个」，
+   **不要**自己接着把剩余 40 GB 全读一遍。
+5. 核对完问一句要不要 `session_stop`（7 GB 对象 → RSS 37 GB）。
+
+⚠️ **连接瞬断先重试再下结论**：本次首轮三入口全 `timed out`（proxy-jump banner），用户说"再试试"后
+`action="nodes"` + `action="locate"` 一次即全通 —— 抖动/跳板瞬断很常见，**不要**据此宣告"集群连不上、
+需要你手动修"，重试一次再报。
+
+完整实测（候选清单、体积估算口径、Muscle 目录对照、交付骨架）→ `references/rds-object-identity-triage.md`。
+
+### ⛔ 铁规 12.1：问「这堆文件里哪个满足 X」→ 跑**一次普查作业**，不要逐个读（2026-10-18 实测）
+
+- 触发：候选 **≥3 个**（本次 20 个 rds、合计 ~60 GB），要核的是**每个文件的细胞数 + 每个 meta 列的类目数**。
+- 做法：写**一个**自发现清单的探针脚本 → `push` → `submit` 成后台作业（`Rscript --vanilla census_rds_meta.R <目录> > census.log 2>&1`）
+  → 跑完 `pull` 回 `results/<sid>/results/` → **本机解析**（`execute_code` 正则切块，只把紧凑表打进上下文；
+  54 KB 日志整份读进来会白吃一大截上下文）。成品脚本：`scripts/census_rds_meta.R`。
+- **文件清单必须自发现**：手写路径数组会**静默漏文件** —— 本次手写的 20 条清单漏掉了目录里最大的 `MF.rds`
+  （23.5 GB，恰恰是剩余最可能的候选），而且日志里**毫无痕迹**。改用
+  `list.files(base, pattern="\\.rds$", full.names=TRUE)` + 子目录，并**在开头打印全量清单（路径 + GB）**，漏没漏一眼可见。
+- 解析三步（省上下文，顺序别反）：① `tail -c 1500` 确认收尾有 `==== ALL DONE ====`（证明跑完，不是中途被杀）；
+  ② `grep -n 'n=2[0-9]'` 先捞「类目数落在目标区间」的列（本次一眼捞出免疫子集那种 21 类注释）；
+  ③ 再整表解析 + 交叉核对细胞数。
+- 何时仍用 `session_start`（铁规 12 主路径）：**只核 1–2 个文件、且后续还要接着分析**时（读一次一直用）。
+  纯清点（只问「有没有」）用普查作业更省事：覆盖全目录、不占节点常驻内存、跑完自动留日志。
+- 交付口径同铁规 12 第 4 条：**匹配了什么 / 缺了什么 / 未读候选表 / 问用户点哪个**，不要自己把剩下几十 GB 全读一遍。
+
+### ⛔ 铁规 12.2：同一个脚本里有的 rds 读成功、有的报 `unable to find required package 'Seurat'` —— **不是文件坏了**
+
+实测：20 个文件里 15 个正常读出维度，5 个（`EC.rds` / `Immune.rds` / `0326·FAP_process.rds` / `0326·Immune.rds` /
+`Merge·Merge_MuSC.rds`）全部报 `ERROR: unable to find required package 'Seurat'` —— **同时**那个 60 万细胞的 v5 对象
+读得好好的，看着像那 5 个文件损坏 / 权限不对。真正原因是**版本差，不是环境缺包**：
+
+- **Seurat v5 对象**的 `Seurat` 类定义在 **SeuratObject** 包 → 不 `library(Seurat)` 也能 `readRDS`；
+- **Seurat v4 对象**的类定义在 **Seurat** 包 → 不加载就报这句话。
+→ 同一批数据里 v4/v5 混放 = **差异式失败**（一半成一半败），最容易被误判成「文件坏了 / 要转格式 / 得 pull 回本机试」。
+
+修法（凡是读 Seurat rds 的脚本**开头一律加**，别等报错再补）：
+```r
+if (requireNamespace("Seurat", quietly = TRUE)) {
+  suppressPackageStartupMessages(library(Seurat))
+  cat("Seurat version:", as.character(packageVersion("Seurat")), "\n")
+}
+```
+⛔ 不要据此下「这批文件读不了」的结论、不要 list 成"损坏文件"、不要为此 `pull` 回本机重试。
+
+### ⛔ 铁规 12.3：提交节点 SSH 变慢/超时 → **换兄弟节点查同一份 NFS**，别在原地重试（2026-10-18 实测）
+
+事故原样：在 `node1` 上 `submit` 了读 23.5 GB rds 的普查作业后，随后两条**只读**状态查询
+（`qstat` + `tail 日志` + `ls 产物目录`）分别 **60s / 180s 超时**；在同一节点再试仍超时。
+
+- 根因：**大作业在跑时提交节点的登录通道会变慢**（本地 I/O 与 sshd 争用），与你要查的东西无关。
+  这**不是**「集群挂了」，也**不是**「节点连不上」。
+- 正确动作：**换一个兄弟节点**跑**同一条**只读命令 —— 三节点挂**同一份 NFS**（铁规 8），
+  路径与产物完全一致。实测 `node4` 一次（90s 预算）即拿到结果：
+  `ls 产物目录` + `tail -25 日志`，并看到 `meta_main.csv` 已 360 MB → 证明作业在正常推进。
+- ⚠️ **与铁规 6「跨节点校验也算重复」的边界**：铁规 6 禁的是**冗余比对**（A 节点查一遍、
+  再在 B 节点把同一套探针重跑一遍）。本条规定的是**故障转移** —— 第一个节点**已经不可用**，
+  为了拿到「本来就要的那一条信息」而换节点。判据：**上一条命令是否因超时/无响应而失败**。
+- 顺手**一次拿全**（铁规 6）：`ls 产物目录` + `tail 日志` + `qstat` 拼进**同一条**命令，别分轮。
+- 交代口径：主动说明「作业提交在 node1、我在 node4 上查的同一份 NFS」，否则用户以为换了机器。
+
 ## 探查/执行速查
 
 | 目的 | 动作 |
@@ -381,6 +550,10 @@ cell 输入框。实现要点：
 | 长任务投递（读一次+检查点） | `scripts/run_cluster_job.sh <INPUT> <WORKDIR>` → `action="submit"` |
 | 标记管账/清理 | `large_cache list|verify|clean [--yes]` |
 | 盯 `submit` 起的长作业进度 | `action="run"` 一条命令拿全：`ps -ef \| grep <脚本名> \| grep -v grep`（数进程）+ `tail -40 <工作盘>/<out>.log` + `ls <产物目录> \| wc -l`；**日志必须落 `/cluster/...` 工作盘**（`~/memomics_jobs/logs` 跨节点不可见 → 用户 MobaXterm 里看不到） |
+| **提交节点查询超时/变慢** | **换兄弟节点**跑**同一条**只读命令（三节点共享同一份 NFS）；一次拿全 `ls 产物目录` + `tail 日志` + `qstat`；**不要在原节点反复重试**（铁规 12.3） |
+| 一堆 rds 里哪个是用户要的 + 顺手做层级注释对账 | 见 skill `hierarchical-annotation-rollup`（父对象频数表当基准 → 六级对账：计数/barcode 交集/反向覆盖/闭合/中间层交叉/加和 → L2 列名实测映射 + 标签清单）；探针直接用其 `scripts/check_annotation_hierarchy.R` |
+| 一堆大 rds 里哪个是用户要的（按细胞数/注释数核对） | 盘点一条 `find -printf` → `session_start(input="<rds>")` 读一次 → `session_exec` 跑 `scripts/probe_rds_meta.R`（见铁规 12） |
+| 同上但候选 **≥3 个**（只清点，不接着分析） | `push` + `submit` 跑 `scripts/census_rds_meta.R <目录> [子目录…]` → `pull` 日志 → 本机 `execute_code` 解析（见铁规 12.1） |
 | 数据在哪儿 | `action="locate" path="<用户原话路径>"` |
 | 节点连通/负载 | `action="nodes"` |
 | 跑重活 | `action="submit"`（先 `action="check"` 摸调度器/资源） |
@@ -391,10 +564,12 @@ cell 输入框。实现要点：
 
 - `references/node1-user-inventory.md` — node1（CNGB 深圳超算，SGE 8.1.9）环境实测清单：R4.41 / R4.3.3 / ARCHR / sc-analysis / scenic 等，含每个环境的真实包内容与推荐映射。
 - `references/environment-declaration.md` — 环境声明的机制：`environment.json` 的 `cluster` 段 schema、`declared_env()` / `save_declared()`、WebUI「🧩 环境管理」填写入口与 `POST /api/env/declared`。
-- `references/three-node-cluster-facts.md` — 三节点（`node1`/`ssh0`/`ssh23`）规格与外网矩阵、共享 NFS + 同一套 SGE 队列、**工作环境 vs 装包环境分工**、推荐安装链、以及改 `environment.json` 后的**验证三件套**（JSON 断言 / `validate_env.py` / 全量 offline pytest）。
+- `references/three-node-cluster-facts.md` — 三节点（`node1`/`node3`/`node4`）规格与外网矩阵、共享 NFS + 同一套 SGE 队列、**工作环境 vs 装包环境分工**、推荐安装链、以及改 `environment.json` 后的**验证三件套**（JSON 断言 / `validate_env.py` / 全量 offline pytest）。
 - `references/observability-from-cluster-side.md` — **用户在 MobaXterm 里能核对到什么**（铁规 11 的实测底稿）：账号 `user`、工作盘共享 vs `/home` 不共享、`ps`/`qstat`/账本三层可见性、`qstat` 失败 → 退化为 setsid 的因果链、以及回答这类问题的固定骨架。
 - `references/rail-gate-and-meta-preflight.md` — **铁规 3.1 的实测底稿**：`rail_review(pre)` 本地口径拦截集群 `submit` 的死锁，**首选解 `location="cluster"`+`node`+`env`（实测零本地安装）**、旧的三步补包解绑、以及两者的对照回执；分组列 levels 不一致导致「整批静默跳过、退出码 0」的前置核查；`dplyr::recode` 未命中值**原样保留不产生 NA** 所以 `anyNA()` 守卫抓不到漏映射（守卫要写 `%in%` 集合判定）；**第 4 节：`rail_review(post)` 在集群产物上的两连误判（`Output directory not found` / `figure_count=0`）与「先 pull 再复审」的正确顺序**；以及可复用的集群投递命令骨架。
 - `references/big-input-inventory.md` — **大输入清单 + `large_cache` 的真实边界**（铁规 10 的底稿）：`scan` 只认本机路径（无 `--remote`，喂集群路径返回 `exists:false` 不报错）、`mark --remote` 的必要性、`Muscle_96_38/Umap/` 实测 6 个 0.48–1.76 GB RDS 清单、以及复查用的三条只读命令。
+- `references/rds-object-identity-triage.md` — **铁规 12 的实测底稿**：集群目录里一堆多 GB Seurat rds，如何按用户口述（细胞数/注释数）定位是哪个文件 —— `find -printf` 盘点、`nnz` 体积估算口径与实测锚点（604,244 细胞 = 7.07 GB / 225 秒）、`session_start`+`scripts/probe_rds_meta.R` 核对元数据列基数、**描述对不上时如何如实交付**（匹配/缺失/未读候选表）、以及连接瞬断的重试纪律。
+- `references/rds-directory-census.md` — **铁规 12.1 / 12.2 的实测底稿**：几十个候选 rds 的目录普查（`scripts/census_rds_meta.R` + 提交/回收骨架 + 本机解析步骤）、手写文件清单静默漏掉 23.5 GB 候选的实录、`unable to find required package 'Seurat'` 的 v4/v5 差异式失败与修法、20 个文件的普查结论表与体积估算锚点。
 - `references/persistent-r-session.md` — **常驻 R 会话的协议与实测**（2026-10-09 落地）：文件队列（`staging`→`queue` 原子 mv）为什么必须有、`state.txt`/`done/*.res.txt`/`ckpt/` 格式、`setsid -f` 不可用与 busybox `ps` 的兼容处理、MuSC 验收全过程（16.3s 读入 → 38.9s UMAP → 6 分钟后 FindMarkers 仍 `readrds_calls=1`）、4 个实测踩坑，以及**第二批的抓图/Notebook 总端**（`plots/` + `---PLOTS---` 分段 + 逐表达式 `dev.off()` 的原因 + `session_cells`/`session_plot` 读侧 + bounded_capture 截断陷阱）。
 
 **node1 已锁定映射（用户 2026-10-08 拍板，声明在 `environment.json.cluster.policy`）**：
@@ -417,7 +592,7 @@ cell 输入框。实现要点：
 用户原话：「真正工作的是 RNA→R4.41 / ATAC→R4.3.3；`R4.4.1_zb` 这个只是用来装一些包的，**以后装包可以在这里装，然后调用**。因为真正工作的环境是 zhangxiao6 的，**我不能随便在他这里安装包**。正常工作在 zhangxiao 这里，缺少了一些分析包，**在我自己这里安装**。」
 
 ⚠️ 本 skill 旧版把 `R4.4.1_zb` 记成「不在映射内，默认不用」——**该说法已作废**：它是**装包落点**，缺包时的指定去处（config.yaml 的 node1 note 指向它，不是与 policy 冲突，是分工）。
-装包链：**必须走 `ssh0`（三节点唯一有外网）** → 落到自有 env/库 → 共享 NFS，`node1`/`ssh23` 立即可用。
+装包链：**必须走 `node3`（三节点唯一有外网）** → 落到自有 env/库 → 共享 NFS，`node1`/`node4` 立即可用。
 
 ## Proven Scripts
 
@@ -453,7 +628,18 @@ cell 输入框。实现要点：
 | human | skeletal_muscle | exercise | 2026-10-08 | musc_umap_prop_node1.R | - | - |  |
 | human | skeletal_muscle | exercise | 2026-10-09 | r_session_daemon.R（常驻会话：MuSC 读一次 → RunUMAP 38.9s → 6 分钟后 FindMarkers，readrds_calls=1） | - | - |  |
 | - | - | - | 2026-10-09 | test_cluster_session.py（19 用例） | - | - |  |
-| human | skeletal_muscle | exercise+aging | 2026-10-09 | large_cache list + ssh23 env probe | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-09 | large_cache list + node4 env probe | - | - |  |
 | human | skeletal_muscle | exercise+aging | 2026-10-09 | probe_musc_meta.R | - | - |  |
 | human | skeletal_muscle | exercise+aging | 2026-10-09 | large_cache list（开工前查大输入标记） | - | - |  |
 | human | skeletal_muscle | exercise+aging | 2026-10-09 | muscle_RUV_MAST_MuSC.R | - | - |  |
+| human | skeletal_muscle | exercise | 2026-10-18 | large_cache_scan_L2_mapback_inputs | - | - |  |
+| human | skeletal_muscle | exercise | 2026-10-18 | merge_L2_annotation.R (push+pre-review) | - | - |  |
+| human | skeletal_muscle | exercise | 2026-10-18 | node1_env_precheck_L2_mapback | - | - |  |
+| human | skeletal_muscle | exercise | 2026-10-18 | submit_L2_mapback_node1 | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-18 | L2_mapback_status_check | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-18 | L2_mapback_status_check | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-18 | merge_L2_annotation.R | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-18 | merge_L2_annotation.R | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-18 | merge_L2_annotation.R | - | - |  |
+| - | - | - | 2026-10-18 | ls_L2_mapback_dir.sh | - | - |  |
+| - | - | - | 2026-10-18 | submit_L2_umap_node1.sh | - | - |  |

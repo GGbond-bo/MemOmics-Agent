@@ -1,4 +1,4 @@
-# node1 / ssh0 / ssh23 —— 三节点规格、外网、环境分工（实测 2026-10-08）
+# node1 / node3 / node4 —— 三节点规格、外网、环境分工（实测 2026-10-08）
 
 > 唯一真源：`<安装目录>/environment.json` 的 `cluster` 段（用户锁定，持久声明、**不被探针重扫覆盖**）。
 > 本文件是它的人读版 + 探针原始证据、安装链与验证配方；两者冲突以 `environment.json` 为准。
@@ -9,11 +9,11 @@
 | name | host | 角色 | 核 | 内存 | 外网 | 备注 |
 |---|---|---|---|---|---|---|
 | `node1` | `login-host.login-host` | **default_node** / 大内存 | 144 | 3.0 TB | ❌ | 超大内存任务（10x 全量、ArchR、大矩阵） |
-| `ssh23` | `compute-node.login-host` | 计算节点 | 112 | 503 GB（MemTotal 528,067,776 kB ≈ 503.6 GiB，可用 495 GiB） | ❌ | Xeon E7-4830 v4 @2.0GHz（主频低 → 单线程弱，适合多核并行）；本地 `/` 407G（余 379G）、`/tmp` **仅 24G**、`/home` 1.0T（共享，已用 667G） |
-| `ssh0` | `cngb-software-0-1.login-host` | **安装节点** | 8 | 15.5 GB | ✅ | 唯一能上外网；只用来装包 / 下载 / 轻量脚本，⛔ 不跑重计算 |
+| `node4` | `compute-node.login-host` | 计算节点 | 112 | 503 GB（MemTotal 528,067,776 kB ≈ 503.6 GiB，可用 495 GiB） | ❌ | Xeon E7-4830 v4 @2.0GHz（主频低 → 单线程弱，适合多核并行）；本地 `/` 407G（余 379G）、`/tmp` **仅 24G**、`/home` 1.0T（共享，已用 667G） |
+| `node3` | `login-host.login-host` | **安装节点** | 8 | 15.5 GB | ✅ | 唯一能上外网；只用来装包 / 下载 / 轻量脚本，⛔ 不跑重计算 |
 
 共用：user=`user`、port=22、home=`/home/user`、workdir=`/cluster/share/user`（**三节点 realpath 一致**）。
-config.yaml 里 ssh23 的 note 写「小内存节点」是相对 node1 的 3TB 而言，503 GB 实测并不小。
+config.yaml 里 node4 的 note 写「小内存节点」是相对 node1 的 3TB 而言，503 GB 实测并不小。
 
 ## 2. 共享存储 / 队列 / 选点行为
 
@@ -24,13 +24,13 @@ config.yaml 里 ssh23 的 note 写「小内存节点」是相对 node1 的 3TB �
 
 ## 3. 外网实测
 
-| 目标 | ssh0 | node1 | ssh23 |
+| 目标 | node3 | node1 | node4 |
 |---|:--:|:--:|:--:|
 | baidu | 200 | 无响应 | 无响应 |
 | pypi | 200 | — | — |
 | codeload.github.com | 301 | — | — |
 
-🔴 装包 / 下载数据 / 下参考基因组 **只能在 ssh0**；在 node1/ssh23 上 `pip install`、下载会直接卡死超时。
+🔴 装包 / 下载数据 / 下参考基因组 **只能在 node3**；在 node1/node4 上 `pip install`、下载会直接卡死超时。
 
 ## 4. 环境可见性 + 工作/装包分工（用户 2026-10-08 澄清）
 
@@ -46,14 +46,14 @@ config.yaml 里 ssh23 的 note 写「小内存节点」是相对 node1 的 3TB �
 
 用户原话：「真正工作的是 RNA→R4.41 / ATAC→R4.3.3；`R4.4.1_zb` 这个只是用来装一些包的，以后装包可以在这里装，然后调用。因为真正工作的环境是 zhangxiao6 的，我不能随便在他这里安装包。正常工作在 zhangxiao 这里，缺少了一些分析包，在我自己这里安装。」
 
-**安装链**：ssh0（有外网）装 → 落自有 env/库（在共享盘上） → node1/ssh23 立即可用。
+**安装链**：node3（有外网）装 → 落自有 env/库（在共享盘上） → node1/node4 立即可用。
 
 ## 5. 其它已验证的坑
 
 - 三节点系统 PATH **都没有 `Rscript` / `python3`**（`which` 全 no），登录节点也无 module 系统 → 作业必须绝对路径调用或先 `activate`，否则 `command not found`。
 - 环境名不可信：`envs/cellchat` 里没有 CellChat、`envs/monocle3` 里没有 monocle3（真包在 `R4.41`）→ 用前必须 `find.package()` / `find_spec()` 实测。
 - `qstat` 在登录节点可能卡死（实测 3 分钟无响应）→ 别死等，加 timeout + 报实情。
-- 中间文件写工作盘 `/cluster/...`，**别用 `/tmp`**（ssh23 只有 24G）。
+- 中间文件写工作盘 `/cluster/...`，**别用 `/tmp`**（node4 只有 24G）。
 
 ## 6. 改 `environment.json` 后怎么验（三件套）
 

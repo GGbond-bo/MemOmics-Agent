@@ -183,7 +183,7 @@ OSC over LAN works out-of-the-box. For multi-TD-instance sync (e.g., projection 
 
 - One TD acts as **master**, broadcasts `/sync/...` over OSC
 - Worker TDs run `oscinCHOP` listening on the same port
-- Use UDP **broadcast address** (e.g., `192.168.1.255`) on the master's `oscoutCHOP.par.netaddress` to hit all peers
+- Use UDP **broadcast address** (e.g., `10.0.0.1`) on the master's `oscoutCHOP.par.netaddress` to hit all peers
 
 For reliability over WAN, use `webserverDAT` or `websocketDAT` with an external relay instead — UDP loss is invisible.
 

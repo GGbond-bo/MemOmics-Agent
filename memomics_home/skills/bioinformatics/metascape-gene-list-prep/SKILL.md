@@ -165,6 +165,36 @@ merged = pd.concat([df1, df2], ignore_index=True)  # axis=0 纵向
 - 不需要 p-value / log2FC 列（示例分析 只需基因列表）
 - 列数不限，每列独立分析
 
+## 基因集（signature）宽表重排与交付（2026-10-21 实战）
+
+用户给一张宽表 xlsx（一行一个 signature，如 `pathway_score_CLEAN_v3.xlsx`）说"内容随便排的，
+按分类所属排列、去掉那两个、改名叫 X"时，按这套走：
+
+- ⛔ **"分类"必须先确认是哪一套**（本会话建立的功能轴 / 原表 `Class` 列 / 别的），确认口径后再动手；
+  把口径写成脚本顶部常量 `AXES = [(轴中文名, 轴英文名, 归类依据, [成员...]), ...]`，并加三条 assert
+  （删掉的集不能还在轴定义 / 不能有集没归轴 / 行数 == 弹窗承诺行数）。
+- ⛔ **宽表列位真相：基因列 = 4..max_column**。第 1 个基因写在 `Genes` **表头底下**，
+  写成 `r[4:]` 会让 200 基因的集少读 1 个。（本次实读基因数与分类表 `n_genes` 逐集相等 → 反证未截断。）
+- ⛔ **验收脚本的列位偏移**：派生表前置 `Axis` 列后所有列位右移 1。忘同步的症状是 `KeyError` 的键为
+  **分类名**（Muscle/Metabolism/Diabete/…）而非签名名 —— 这时是**验收件错、不是产物错**；
+  同轮若已出现"轴序 PASS"就证明产物没问题，**改验收件、不要重跑产物**。
+- **校验 6 项**（读回磁盘）：轴序+行数 / 被删集不在 / 基因**集合**相等 / 基因**顺序**逐位相等
+  （集合相等 ≠ 顺序相等，两条都要）/ `Class`+`Annotation` 未改 / 与分类表 `n_genes` 交叉对齐；
+  再加 **源表 mtime 未变** 证明只读。
+- **不在功能轴体系内的集另立轴，不硬塞进最像的轴**：本次 4 个肌纤维型打分（Type I/II/IIA/IIX）
+  按 fibertype 脚本已写死的口径"身份打分 vs 功能程序轴语义层级不同 → 另立一轴，不并入 Contractile"，
+  另立"肌纤维身份轴"置顶。**凡本会话自己定过的口径优先于现场直觉 —— 先翻既有脚本的注释/常量。**
+- **轴名用哪一套要避开"悬空改名"**：图上 EN 轴名可能处于"用户已定但未落脚本"状态
+  （本次 `Sarcopenia / Inflammaging`）→ 交付表改用分类文件的**中文轴名**可避免表↔图不一致，
+  同时在回复里给出"要不要一次同步两边"的一句话选项。
+- **交付形态**：主 sheet `Axis | Class | Signature | Annotation | Genes…`（原列全保留、`Axis` 插最前、
+  `freeze_panes='D3'`）+ 附 `Axis_legend` 表（轴名/EN 名/n_members/成员/归类依据/参考文献）；
+  源表**只读不动**，新表另存到用户指定路径。
+- **回复形态**：产物路径 + 字节数 + `行×列` + 轴×集数×成员表 + 校验 PASS 清单 + 判断说明。
+  用户会核对文件大小与行数，不要只回"已完成"。
+
+脚本：`scripts/verify_gene_score_table.py`（参数化 6 项校验，可直接跑）
+
 ## 脚本模板
 
 - `scripts/示例分析结果.py` — 单表构建：输入校验 + 手动 CSV writer + 验证输出
@@ -183,3 +213,19 @@ merged = pd.concat([df1, df2], ignore_index=True)  # axis=0 纵向
 | 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
 |------|------|------|------|------|------|------|----|
 | human | skeletal_muscle | exercise+aging | 2026-09-30 | 23_build_metascape_5groups.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-21 | build_gene_score_table.py | - | - |  |
+
+
+| human | skeletal_muscle | aging | 2026-10-21 | verify_gene_score_table.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-21 | verify_gene_score_table.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-21 | build_gene_score_table.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-21 | build_gene_score_table.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-21 | build_gene_score_table.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-21 | build_gene_score_table.py | - | - |  |
+## Common Issues
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| PermissionError: [Errno 13] Permission denied: 'E: | Windows 下 openpyxl save 直接以 'wb' 打开目标路径， | 先探测文件占用（open(...,'a') 写权限测试），确认被 Excel/WPS 占用后：若确认 |
+| KeyError: 'Muscle'; 剩余 5 | 验收脚本新增 Axis 列后未同步列位，仍按源表 Class/Signature | load() 增加 new 开关：新表前面多一列 Axis，列位右移 1（sig=o+1, cls= |
+

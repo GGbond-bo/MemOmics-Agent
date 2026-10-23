@@ -221,6 +221,9 @@ results/<模块>/<方法>/
 | human | skeletal_muscle | aging | 2026-09-24 | 03_compare_eval.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-24 | 05_robustness.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-24 | 06_final_verdict.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-18 | check_annotation_levels.R | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-18 | check_annotation_levels.R | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-18 | meta_main_frequency_audit.sh | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

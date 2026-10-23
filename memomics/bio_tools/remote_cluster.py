@@ -2442,7 +2442,7 @@ def _glob_local(raw: str, root: Path) -> list:
 
 
 # 远端展开通配符用的 python 一句话：**必须 py2/py3 双兼容**。
-# 实测踩坑（2026-10-09，ssh23）：节点上只有 /usr/bin/python = Python 2.7.5，没有 python3；
+# 实测踩坑（2026-10-09，node4）：节点上只有 /usr/bin/python = Python 2.7.5，没有 python3；
 # 原来的 `[print(...) for p in ps]` 在 py2 里是语法错误（print 是语句），整条 pull/locate 通配符
 # 直接报 SyntaxError「远端没找到」。所以：不用 print()、不用 f-string，只留两边都合法的写法。
 _REMOTE_GLOB_PY = ('import glob,sys,os;ps=[];'
@@ -2455,7 +2455,7 @@ _REMOTE_GLOB_PY = ('import glob,sys,os;ps=[];'
 def _locate_remote_glob(conn, cands: list, out: dict) -> dict:
     """远端通配符：借节点上的 python 展开（shell 里带引号的 glob 不会自己展开）。
 
-    先试 python3 再退 python —— 有些节点（ssh23）只有 Python 2.7.5，所以脚本本身要 py2 也能跑。
+    先试 python3 再退 python —— 有些节点（node4）只有 Python 2.7.5，所以脚本本身要 py2 也能跑。
     """
     pats = " ".join(shlex.quote(c) for c in cands if c)
     cmd = ("for PY in python3 python; do command -v $PY >/dev/null 2>&1 || continue; "
@@ -3011,7 +3011,7 @@ def _action_session_plot(cfg: dict, args: dict) -> str:
 # R 包清单（按节点 + env）—— 「按执行位置审查」的集群半边（2026-10-09）
 #
 # 用户实测事故：rail_review(pre) 只查**本机** R 包清单，本地缺 RUVSeq 就把**集群投递**硬拦了
-# （"Missing packages: RUVSeq"），而 ssh23 的 R4.41 里其实装着。于是：
+# （"Missing packages: RUVSeq"），而 node4 的 R4.41 里其实装着。于是：
 #   本地的任务查本地包、集群的任务查集群包、云平台单独标"没法在本地核实"。
 # 这里负责集群侧的事实来源：一次 ssh 读全量包清单 → 本地缓存（默认 12h）→
 # env_check(scope="cluster") 与 rail_review(location="cluster") 都吃它。
@@ -3376,7 +3376,7 @@ SCHEMA = {
         "（缓存 12 小时，refresh=true 强制重读），给了 packages=[...] 就报 installed/missing。"
         "用途：决定「这个包集群上有没有」、以及 rail_review(location='cluster') 的包审查依据。"
         "**别拿本机包清单去判集群任务**（本地缺 ≠ 集群缺——实测本地缺 RUVSeq 曾把投递硬拦，"
-        "而 ssh23 的 R4.41 里是有的）。\n"
+        "而 node4 的 R4.41 里是有的）。\n"
         "  • nodes  —— 列配置里的所有节点，逐个探连通性 + 负载（谁空着、谁连不上）；"
         "不指定节点也能调用。\n"
         "【用哪个节点】config 的 remote.nodes 里配了多个命名节点（如 node1/node2）时，"

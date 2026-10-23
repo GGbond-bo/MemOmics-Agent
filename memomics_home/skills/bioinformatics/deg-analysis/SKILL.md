@@ -239,6 +239,8 @@ Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正
 | human | skeletal_muscle | aging+exercise | 2026-10-04 | hsp_extended_scope_sensitivity.py | - | - |  |
 | human | skeletal_muscle | exercise+aging | 2026-10-09 | stat_musc_cells.R | - | - |  |
 | human | skeletal_muscle | exercise+aging | 2026-10-09 | plot_musc_coverage.py | - | - |  |
+| - | - | - | 2026-10-18 | locate_prior_two_group_pipeline | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-18 | aging_vs_t2d_welch_ttest.py | - | - |  |
 ## 🚨 Critical Pitfalls
 
 ### P1: Pseudobulk per subcluster×condition breaks DESeq2

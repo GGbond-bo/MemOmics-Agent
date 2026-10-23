@@ -3,9 +3,9 @@
 > 配套 SKILL.md 铁规 11。用户问的是**行为**（"我能在 mobaX 对应节点看到吗"），
 > 所以答案必须是**实测的可见性矩阵**，不是推断；并且要给出"登哪个节点 + 敲什么命令"。
 
-## 1. 实测原始证据（ssh23 = compute-node / node1 = login-host）
+## 1. 实测原始证据（node4 = compute-node / node1 = login-host）
 
-| 探针 | ssh23 结果 | node1 结果 |
+| 探针 | node4 结果 | node1 结果 |
 |---|---|---|
 | `whoami; id` | `user` `uid=1003064` gid=2906(ST_PRECISION) | `user`（同账号） |
 | `hostname` | `compute-node.login-host` | `login-host.login-host` |

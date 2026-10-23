@@ -896,7 +896,7 @@ terminal 完成 → _pending_record = True
 ## 参考
 
 > 📋 **SOUL-detail.md**：场景触发表、19领域一览、分析流程、长任务追踪规则 12-21、task_plan.md 模板、心跳/error_scanner 部署、后台进程模式决策树、HTML 报告规则、目录策略
-> 📚 **SKILLS_INDEX.md**：457 个生信技能索引（由系统按意图动态注入）
+> 📚 **SKILLS_INDEX.md**：459 个生信技能索引（由系统按意图动态注入）
 > 🔧 **environment.json**：`<安装目录>/environment.json` 全局环境文件
 
 | "代谢组学" / "metabolomics" / "LC-MS" / "GC-MS" / "峰表" / "peak table" / "差异代谢物" / "代谢通路富集" / "代谢组" / "lc-ms" / "gc-ms" / "火山图" / "热图" / "volcano" / "heatmap" / "代谢物差异" | `skill_view("metabolomics-full-pipeline")` |
@@ -909,3 +909,33 @@ terminal 完成 → _pending_record = True
 | "CLI-Anything" / "cli-hub" / "操控" / "软件自动化" / "批量控制桌面软件" / "agent-native CLI" / "harness" / "做个CLI" / "做个命令行" / "包装成CLI" / "批量改" / "统一字号" / "inkscape" / "矢量图批量" / "批处理软件" / "Illustrator自动化" | `skill_view("cli-anything")` |
 | "Illustrator" / "操控AI" / "操作AI" / "AI里" / "AI文件" / "AI画板" / "画板" / "ExtendScript" / "JSX脚本" | `skill_view("adobe-illustrator")` → AI 全链路操控手册（21 命令 + 画→导出→看图→调整闭环 + 面板导入配方 + 版本沉淀；2026-10-04 建） |
 <!-- AUTO_SKILL_INSERT_MARKER -->
+
+## 🔴 铁律 36 — 大数据集持久化（用户 2026-10-18 明确要求）
+
+- **阈值**：任何 **>100MB** 的数据（尤其集群/HPC 远程数据、7G 级别的 h5ad/rds/矩阵）读入后，
+  **必须**先落盘到会话目录并登记：`dataset_cache(action="register", path=..., source=..., note=...)`。
+- **先查后读**：新任务开工前先看系统提示里的「数据集缓存」清单；已有且有效 → **直接用本地路径**，
+  禁止重新下载/重新读取一遍。
+- **不确定就问**：遇到大数据但没有缓存时，先问用户「要持久化到本地缓存吗？」再决定。
+- **失效处理**：清单里标 `[已失效]` 的条目说明文件被移动/删改，需重新获取后再次登记。
+
+## 🖥 集群计算环境（实测路径，2026-10-18 核对 — 别再猜）
+
+**先读 `memomics_home/cluster_envs.json`**（结构化记录），要点：
+
+- 节点：`node1 = login-host`（跳板 `user@login-host`，登录用户 `user`）
+- 环境根：`/cluster/share/zhangxiao6/software/miniconda3`
+- **RNA 分析 → `envs/R4.41`**：R 4.4.1 · Seurat 5.3.0 · SeuratObject 5.1.0 · anndata(R) 0.8.0 ·
+  python 3.13.2 + pandas 2.2.3 + anndata 0.11.4（**无 scanpy**）。
+  用途：Seurat `.rds` ↔ AnnData `.h5ad` 读写互转。
+- **ATAC 分析 → `envs/R4.3.3`**：R 4.3.3 · ArchR 1.0.3（scATAC-seq 全流程）。
+- 调用方式：`export PATH=<env>/bin:$PATH` 后用 `Rscript`/`python`；或直接绝对路径（更稳）。
+- ⛔ 不要再使用 `user/envs/R4.4.1_zb`（那是另一个人的环境，Python 侧无 pandas）。
+
+## 答复匹配（qid 优先，2026-10-20）
+
+用户提交表单答复时，消息里会带 `qid=<form_id>`。这是**该轮问题的唯一标识**：
+- 看到 `qid=` → 直接按该 form_id 找对应问题，**不要靠"最近一条问题"猜**
+- 同一轮里问过多个问题时，按各自的 qid 分别匹配，不要张冠李戴
+- 没带 qid（用户直接打字回答）→ 才回退到"最近一条未答复的提问"
+- 答复里 `选中：` 是勾选的选项，`补充：` 是"其他"里填的自由文本

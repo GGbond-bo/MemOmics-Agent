@@ -2,7 +2,7 @@
 name: paper-structured-extraction
 description: "源文本锚定的论文结构化提取：把一篇或多篇论文（PDF 已抽出的纯文本 / 粘贴文本 / 文献库论文）提炼成固定节的中文结构化摘要，每篇独立分节。核心是「禁止编造：所有数字必须来自原文」的硬纪律——逐条回溯原文、未报告项写'原文未报告'、图轴读出的数字标注'建议核对原图'。触发词：深度结构化提取、关键信息提取、结构化摘要、每篇独立分节、论文关键信息整理。"
 when_to_use: "[paper-structured-extraction] 论文结构化提取。触发场景：用户要求'深度结构化提取某几篇论文的关键信息'、'输出中文结构化摘要（每篇独立分节）'，或带反编造硬约束（如'禁止编造：所有数字必须来自原文'）。与 literature-full-summary 的差别：本 skill 是自定义固定节、可多篇、可来自任意纯文本源、可交付到任意路径文件；literature-full-summary 是文献库内 9 项 + summarize_paper 工具。"
-trigger_keywords: ["深度结构化提取", "结构化摘要", "关键信息提取", "论文关键信息", "每篇独立分节", "禁止编造", "所有数字必须来自原文", "structured extraction of papers", "source-grounded summary"]
+trigger_keywords: ["深度结构化提取", "结构化摘要", "关键信息提取", "论文关键信息", "每篇独立分节", "禁止编造", "所有数字必须来自原文", "structured extraction of papers", "source-grounded summary", "精读报告", "精读文献", "逐篇精读", "质控参数", "QC 阈值", "含精确质控参数", "空间转录组", "scRNA-seq 精读", "带英文原文引用"]
 trigger_level: YEL 讨论触发
 ---
 
@@ -43,9 +43,21 @@ trigger_level: YEL 讨论触发
 
 完整模板（含每节要点与变体：AI-agent 方法论文 vs 实验论文 vs 综述）见 `references/deep-structured-extraction.md`。
 
+**变体：组学论文精读报告（scRNA-seq / 空间转录组，QC 参数为重点）** —— 当用户要求「精读 N 篇文献 / 逐篇产出中文
+结构化精读报告」且对象是组学论文（scRNA-seq / snRNA-seq / Stereo-seq / Visium / 多组学），并带「含精确质控参数」
+「务必带英文原文引用作为证据」这类要求时，改用 **7 节模板**（研究问题与结论 / 样本与数据规模 / 生信分析全流程 /
+**质控参数（重点）** / 细胞类型注释与 marker / 下游分析 / 数据与代码可用性）+ 末尾「两篇对比表」与
+「空间 QC vs scRNA QC 差异」专节。该文件含 scRNA 与空间各自的 **QC 参数抽取清单**、QC 关键词机械核验 grep、
+空间/scRNA QC 差异知识库，以及 Stereo-seq / Visium 平台 QC 指纹。见 `references/omics-qc-reading-report.md`。
+
 ## 三、执行流程
 
 1. **定位源文本**：先 `search_files(target=files)` 或 `wc -c` 确认文件与体量；大文件（数万~十几万字符）**不要一次读完**。
+   - **源文本还没落盘时（用户直接丢来 PDF）**：先做出版级版式恢复再谈提取——双栏期刊用
+     `professional-paper-interpretation/scripts/pdf_2col_extract.py`（按 x-中心分栏，逐页 txt + 结构表），
+     caption 锚点裁图用同目录 `scripts/crop_figures_by_caption.py`；配方与坑见该 skill 的
+     `references/pdf-layout-recovery.md`。**别用 y 分桶排序**（会把左右栏静默交错），
+     也别写只匹配 `^Figure\s+S?\d+\.` 的 caption 正则（Cell 补充图是 `Figure S1:` 冒号，会全漏）。
 2. **分块精读**：用 `read_file` 带 `offset`/`limit`（每次 400–500 行）逐段读完全文，**含 Methods / Appendix / 参考文献后的附录**——关键的数字（容差、轮次、数据集 counts）常藏在 Methods 和 Appendix。
 3. **验证关键串**：对要写进摘要的核心断言，用 `search_files(target=content)` 复核确实出现在原文。
 4. **起草**：按第二节 10 节模板逐篇写。
@@ -65,6 +77,17 @@ trigger_level: YEL 讨论触发
 - **别默认题名就是原文名**：见 §一 规则 7。一次任务两篇论文的**用户给定标题都与原文实际标题不同**（简称/描述性 vs 正式题名）。元信息里两个都写并标差异。
 - **回复给全文，别只给文件路径**：本类任务交付物 = 摘要本体。**同时**做两件——回复里给出完整结构化摘要、并落盘成文件且末尾给路径。只给路径 = 交付不完整。
 - **交付里没写行号 = 可核查性降级**：能用行号就用（见 §一 规则 6）。行号是"禁止编造"从承诺变成机械事实的最便宜手段。
+
+- **组学论文的关键 QC 阈值几乎只在 STAR Methods / Methods，且排在参考文献之后**：漏读文末 = 漏掉全部 QC 阈值，
+  这是组学精读最常见的失败模式。必须 read_file 分块读到**文件末尾**再动笔（详见 references/omics-qc-reading-report.md）。
+- **空间转录组的「原文未报告」是常态，不是你没找到**：空间 QC 阈值 / 过滤比例 / spot 总数经常整节缺失。
+  先用 QC 关键词 grep（spot|percent.mt|min_gene|min_cells|MAPQ|bin50|retained|excluded）核验，
+  再写「原文未报告」，并在交付里说明「grep 后确认原文未报告」——让「未报告」也是可核查结论。
+  **不要**用平台默认值（如 Visium 55 µm spot、默认过滤）填空冒充原文报告值。
+- **过滤比例多为自算**：原文常只给过滤前/后数量。自算的百分比必须标注「据原文数字计算，原文未直接给出百分比」，
+  不要与原文字段混排。
+- **组学精读的交付形态**：落盘 markdown 报告（results/<sid>/data/<数据集>/reports/<主题>_N篇_结构化精读报告.md），
+  **同时**回复里给报告本体 + 一段「核心质控发现」浓缩段（含关键阈值数字）+ 文件路径。
 
 ## 五、与相邻 skill 的分工
 

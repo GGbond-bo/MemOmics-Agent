@@ -481,6 +481,36 @@ def build_extras(session) -> dict:
     return {"requirements": req, "scripts": scripts, "global_memory": gm}
 
 
+def prune_tool_results(messages, keep_recent: int = 6, max_chars: int = 800):
+    """把较早的工具结果压成占位符（借鉴 DSH 的 compaction-tool-result-pruner）。
+
+    只动 role=="tool" 的文本内容：最近 keep_recent 条原样保留（模型正在用），
+    更早的长输出换成"已剪枝 + 前 max_chars 字符"。原文仍在 state.db / spill 目录里，
+    模型需要时可用 session_search / read_file 回查 —— 剪的是**重放上下文**，不是证据。
+    """
+    if not messages:
+        return messages
+    idxs = [i for i, m in enumerate(messages)
+            if isinstance(m, dict) and m.get("role") == "tool"]
+    if len(idxs) <= keep_recent:
+        return messages
+    stale = set(idxs[: len(idxs) - keep_recent])
+    out = []
+    for i, m in enumerate(messages):
+        if i not in stale or not isinstance(m, dict):
+            out.append(m)
+            continue
+        c = m.get("content")
+        if isinstance(c, str) and len(c) > max_chars:
+            mm = dict(m)
+            mm["content"] = (f"[历史工具输出已剪枝：原 {len(c)} 字符；全文在 state.db / spill 目录，"
+                             f"需要时用 session_search 或 read_file 回查]\n{c[:max_chars]}")
+            out.append(mm)
+        else:
+            out.append(m)
+    return out
+
+
 def rebuild_context(session, tail_messages, checkpoint_text, extras, caps=None) -> list:
     """P4 分段注入（顺序对齐 MiMo rebuild）：任务→checkpoint→项目→全局→scripts→提醒，再逐字尾窗。"""
     c = dict(REBUILD_CAPS)
@@ -515,6 +545,11 @@ def rebuild_context(session, tail_messages, checkpoint_text, extras, caps=None) 
     tc = int(c.get("recent_tail", 16000))
     while tail and measure(tail) > tc and len(tail) > 1:
         tail = tail[1:]
+    # 2026-10-18：重放前剪枝历史工具结果（最近 6 条不动）
+    try:
+        tail = prune_tool_results(tail, keep_recent=6, max_chars=800)
+    except Exception:
+        pass
     return out + tail
 
 

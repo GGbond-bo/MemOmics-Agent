@@ -77,7 +77,7 @@ _KEYS = {
         "progress_log _ask_form_answers _pending_questions _pipeline_todos plan_path "
         "output_root analysis_dir preview domain intent intent_conf intent_meta lang "
         "lang_locked model_locked triggered message_count _msg_count _first_msg "
-        "_last_msg _messages_loaded"
+        "_last_msg _messages_loaded _late_steer"
     ),
     "llm": "agent model_config running_agent running_task _api_calls _proc_hist",
     "turn": (
@@ -87,7 +87,8 @@ _KEYS = {
         "_stall_noevent_ts _self_check_count _self_check_last_sig _wakeup_retry_n "
         "_saying_wakeup_n _urgent_wakeup _loop_guard _last_event_ts _syslog_dedup "
         "_intent_confirmed _code_edit_asked _dir_created _form_ans_marker "
-        "_title_summary_at_msg _red_hits _task_count _partial_text"
+        "_title_summary_at_msg _red_hits _task_count _partial_text "
+        "_self_check_total _artifact_sig_last _artifact_stall"
     ),
     "transport": "ws_ref ws_attached loop_ref",
     "domain": (

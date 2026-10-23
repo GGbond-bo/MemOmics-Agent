@@ -227,13 +227,28 @@ _DEADLINE_BUDGETS: dict = {}
 _DEADLINE_LOCK = threading.Lock()
 
 
-def _set_debate_deadline(seconds: float = 0.0) -> float:
-    """开一场辩论时登记截止时间（按会话隔离）。返回 0 表示不限时。"""
-    budget = float(seconds) if seconds and float(seconds) > 0 else _DEBATE_BUDGET_DEFAULT
+def _set_debate_deadline(seconds=None) -> float:
+    """开一场辩论时登记截止时间（按会话隔离）。返回 0 表示不限时。
+
+    seconds=None → 用内置默认预算；seconds<=0 → **不限时**（2026-10-18 用户口径：
+    辩论不要预算上限）。注意 0 与 None 必须区分：旧实现把 0 当"未指定"→ 回退默认 900s，
+    于是配置里写 0 根本关不掉预算。
+    """
+    if seconds is None:
+        budget = _DEBATE_BUDGET_DEFAULT
+    else:
+        try:
+            budget = float(seconds)
+        except (TypeError, ValueError):
+            budget = _DEBATE_BUDGET_DEFAULT
+    sid = get_session_sid() or ""
     if budget <= 0:
+        # 不限时：同时清掉本会话旧登记 —— 否则上一场留下的截止时间会继续生效（最长 2h）
+        with _DEADLINE_LOCK:
+            _DEADLINES.pop(sid, None)
+            _DEADLINE_BUDGETS.pop(sid, None)
         return 0.0
     dl = time.time() + budget
-    sid = get_session_sid() or ""
     with _DEADLINE_LOCK:
         _now = time.time()
         # 顺手清掉两小时前的僵尸登记，别让 dict 无限长
@@ -245,6 +260,27 @@ def _set_debate_deadline(seconds: float = 0.0) -> float:
         # 之前日志一律写 900s，排查时看不懂到底掐在哪）
         _DEADLINE_BUDGETS[sid] = budget
     return dl
+
+
+def _budget_seconds_cfg(cfg_key: str, env_name: str, fallback: float) -> float:
+    """本场时间预算取值：env（显式设置）> config.yaml debate.<cfg_key> > 内置默认。
+
+    0 或负数 = 不限时（用户口径 2026-10-18：辩论不要预算上限）。
+    """
+    _env = os.environ.get(env_name)
+    if _env is not None and str(_env).strip() != "":
+        try:
+            return float(_env)
+        except (TypeError, ValueError):
+            pass
+    try:
+        _cfg = _load_debate_config() or {}
+        v = _cfg.get(cfg_key)
+        if v is not None:
+            return float(v)
+    except Exception:
+        pass
+    return float(fallback)
 
 
 def _deadline_budget() -> float:
@@ -3170,9 +3206,17 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
     # 整场辩论的总预算（2026-09-26）：预算耗尽后 _call_llm_sync 不再发 HTTP，
     # 剩余席位/轮次毫秒级跑完 —— 工具不会再挂 15-20 分钟。
     # 2026-10-12 用户口径：L1 限时 180s（"不要拖延时间"），L2 才用总预算。
-    _budget_used = _L1_BUDGET_DEFAULT if str(level).upper() == "L1" else _DEBATE_BUDGET_DEFAULT
+    _is_l1 = str(level).upper() == "L1"
+    # 2026-10-18 用户口径：辩论不要预算上限 —— 时间预算改为 config 可配，0 = 不限时。
+    # 取值优先级：env（显式设置）> config.yaml debate.budget_seconds / l1_budget_seconds > 内置默认。
+    _budget_used = _budget_seconds_cfg(
+        "l1_budget_seconds" if _is_l1 else "budget_seconds",
+        "MEMOMICS_DEBATE_L1_BUDGET" if _is_l1 else "MEMOMICS_DEBATE_BUDGET",
+        _L1_BUDGET_DEFAULT if _is_l1 else _DEBATE_BUDGET_DEFAULT,
+    )
     _set_debate_deadline(_budget_used)
-    _emit_progress(f"辩论开始（{level} · {rounds} 轮 · 先做场景预判）· 总预算 {int(_budget_used)}s", "pending")
+    _budget_label = ("不限时" if _budget_used <= 0 else f"{int(_budget_used)}s")
+    _emit_progress(f"辩论开始（{level} · {rounds} 轮 · 先做场景预判）· 总预算 {_budget_label}", "pending")
     _hb_scene = _ProgressHeartbeat("场景预判").start()
     try:
         scenario_res = _analyze_scenario(topic, context, cfg)

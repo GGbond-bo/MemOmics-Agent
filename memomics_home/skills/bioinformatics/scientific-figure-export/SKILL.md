@@ -283,6 +283,27 @@ length(grepRaw("/FontFile", raw, all = FALSE)) > 0   # FALSE ⇒ 未嵌入
 实测同一批 5 张图一次改动：**2.8–3.4 MB 无嵌入 → 1.8–2.2 MB 已嵌入**（子集化后反而更小）。
 同族可选设备：`ragg::agg_tiff`、`svglite::svglite`（SVG 记得 `print(p)`）。
 
+🔴 **第五类导出坑：多格式导出链「后段失败」≠ 整任务失败（2026-10-19 集群实测）**
+
+```r
+ggsave("x.png", p, width=24, height=10, dpi=300, limitsize=FALSE)   # ✅ 已写盘
+ggsave("x.pdf", p, width=24, height=10, limitsize=FALSE)            # ✅ 已写盘
+ggsave("x.svg", p, width=24, height=10, limitsize=FALSE)            # ❌ halt
+# Error in dev(...): The package "svglite" is required to save as SVG.
+# Calls: ggsave -> dev -> check_installed  →  Execution halted
+```
+
+- **判据：非零退出 ≠ 无产出。** 换到集群/同事机器跑图时高频出现，但前面的格式在崩之前就已落盘。
+  排查顺序 = `tail` 日志找 `#TASK:PROGRESS` / `#TASK:OUTPUT` 打点 → 列产出目录核对文件 →
+  **按「失败点之前」确认真实交付物**。⛔ 不要报「整任务失败」，也不要含糊说「完成了」。
+- **修法（两条一起做）**：① 每个导出各自兜住，让缺设备包只丢那一个格式 ——
+  `for (fmt in c("png","pdf","svg")) tryCatch(ggsave(f, p, width=24, height=10, device=fmt), error=function(e) message("导出 ", fmt, " 失败: ", conditionMessage(e)))`；
+  ② **提交到集群/新环境前一行预检设备包**（R ≥4 的 `ggsave` 对 SVG 走 `svglite`，
+  PDF 字体嵌入走 `cairo_pdf`）：`cat(requireNamespace("svglite", quietly=TRUE), requireNamespace("ragg", quietly=TRUE))`。
+- 🔴 **设备包缺失 = 环境缺件 ⇒ 装之前先问用户**（铁律 29），不要在集群上擅自 `install.packages`。
+  交付口径：「PNG/PDF 已产出可用；SVG 需装 svglite 后重跑导出那一步（几分钟）」—— 把选择权交给用户，
+  不要因为一个可选格式失败就把整批图判为未交付。
+
 同批另两条导出核验（都是一行代码，别只报文件大小）：
 
 - **SVG「文字可编辑」** = 数 `<text` 元素（本例每图 ~100 个）+ 确认各分类色 hex 出现在文件里（8/8）

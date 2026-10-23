@@ -394,6 +394,40 @@ logger = logging.getLogger("memomics")
 _SKILLS_WARMED = False
 
 @app.on_event("startup")
+async def _start_runtime_maintenance():
+    """启动时挂上「慢循环看门狗」与「SQLite 保养」（2026-10-13）。
+
+    背景：用户反馈会话卡住、暂停不立即生效；实测抓到 /api/sessions（纯内存遍历，正常 0.03s）
+    耗时 33.4s —— 事件循环被同步重活堵住。看门狗把阻塞瞬间（含主线程调用栈）写进
+    log/slow_loop.log；保养把 state.db 的 WAL 及时 checkpoint（实测 1.09GB db + 300MB wal）。
+    两者都在后台，异常一律吞掉，不影响主流程。
+    """
+    try:
+        _rt = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runtime")
+        if _rt not in sys.path:
+            sys.path.insert(0, _rt)
+        import slow_loop_watchdog as _swd
+        import db_maintenance as _dbm
+        _wd = _swd.start_watchdog(MEMOMICS_DIR)
+        globals()["_SLOW_LOOP_WD"] = _wd
+        asyncio.create_task(_slow_loop_heartbeat(_wd))
+        _dbm.run_maintenance_async(os.path.join(MEMOMICS_HOME_DIR, "state.db"), MEMOMICS_DIR)
+        print("[mem] 慢循环看门狗 + 数据库保养已启动", flush=True)
+    except Exception as _e:  # noqa: BLE001
+        print("[mem] 看门狗/保养启动跳过: %r" % (_e,), flush=True)
+
+
+async def _slow_loop_heartbeat(_wd) -> None:
+    """事件循环心跳：0.25s 一次（被同步调用堵住时心跳自然停，看门狗据此判定）。"""
+    while True:
+        try:
+            _wd.heartbeat()
+        except Exception:
+            pass
+        await asyncio.sleep(0.25)
+
+
+@app.on_event("startup")
 async def _warm_skills_snapshot():
     """启动时调用 build_skills_system_prompt() 一次，将 355 个 SKILL.md 的
     元数据快照写入 memomics_home/.skills_prompt_snapshot.json。
@@ -502,6 +536,15 @@ async def _seed_self_check_startup():
                 _active = _task_plan_active(_rd) or _session_has_active_work(s)
                 if not _active:
                     continue
+                # 2026-10-18（DSH 语义）：重启后许可已失效(paused) → 不播种自检，等用户消息。
+                # 实测问题：播种直接 _schedule_self_check，等于绕过"重启不自动续跑"的闸门。
+                try:
+                    from webui.runtime.run_gate import is_armed as _is_armed_seed
+                    if _rd and not _is_armed_seed(_rd):
+                        print(f"[MemOmics] 跳过播种（许可未武装，等用户消息）: {sid[:12]}", flush=True)
+                        continue
+                except Exception:
+                    pass
                 _agent = s.get("agent")
                 if _agent is None:
                     try:
@@ -526,6 +569,27 @@ async def _seed_self_check_startup():
     _threading.Thread(target=_seed_worker, daemon=True, name="self-check-seed").start()
 
 
+def _ack_delegation_delivery(evt: dict) -> None:
+    """委派回执被消费后落 ack（delivery_state='delivered'）。
+
+    2026-10-18 取证（用户反馈"任务跑到一半就不跑了"）：webui 侧的 poller 只把回执
+    注入会话、从不 ack，而 process_registry 启动时会调
+    ``restore_undelivered_completions()`` 把所有 delivery_state='pending' 的记录
+    重新入队 —— 于是同一批 deleg_* 每次重启后再次投递（实测 7 天重放 280 次），
+    并发注入还引发同会话多回合 → 流被取代 → 空响应耗尽（51% 的回合这样死掉）。
+    这里补上 ack：投出去一次就终结该条记录的 delivery。
+    """
+    _d = str((evt or {}).get("delegation_id") or "").strip()
+    if not _d or _d == "unknown":
+        return
+    try:
+        from tools.async_delegation import mark_completion_delivered
+        if mark_completion_delivered(_d):
+            print(f"[MemOmics] 委派回执已消费并 ack：{_d}", flush=True)
+    except Exception as e:
+        logger.warning("[process-poller] ack 委派回执 %s 失败: %s", _d, e)
+
+
 @app.on_event("startup")
 async def _start_process_completion_poller():
     """notify_on_complete push 链（2026-08-16 修复）。
@@ -543,6 +607,7 @@ async def _start_process_completion_poller():
 
     def _poller():
         from tools.process_registry import process_registry, format_process_notification
+        _dispatched_keys = set()   # 2026-10-18: 进程内去重，同一事件只投一次
         while True:
             try:
                 evt = process_registry.completion_queue.get(timeout=0.5)
@@ -558,7 +623,17 @@ async def _start_process_completion_poller():
                 text = format_process_notification(evt)
                 if not text:
                     continue
-                if _s.get("running_agent") or _s.get("running_task"):
+                # 2026-10-18 取证修复：同一事件只投一次。历史 bug —— 回执消费后不 ack，
+                # 每次重启 restore_undelivered_completions() 都把它重新入队，同一批
+                # deleg_* 反复重放（7 天 280 次），并发注入把会话搞成多回合交错。
+                _akey = str(evt.get("delegation_id") or evt.get("pid") or "")
+                if _akey and _akey in _dispatched_keys:
+                    _ack_delegation_delivery(evt)
+                    continue
+                # 2026-10-18 修复：忙判定补上 _user_turn_active（与自检唤醒 server.py:2734 一致）。
+                # 原来只查 running_agent/running_task → 用户正在说话时也会注入，
+                # 同一 agent 上并发交错流会被截断成空响应。
+                if _s.get("running_agent") or _s.get("running_task") or _s.get("_user_turn_active"):
                     # 会话忙 → 重排回队列，稍后再投递
                     process_registry.completion_queue.put(evt)
                     time.sleep(0.25)
@@ -572,6 +647,11 @@ async def _start_process_completion_poller():
                 _loop.call_soon_threadsafe(
                     lambda _s=_s, _t=text: asyncio.ensure_future(_trigger_agent_turn(_s, _t))
                 )
+                if _akey:
+                    _dispatched_keys.add(_akey)
+                    if len(_dispatched_keys) > 500:
+                        _dispatched_keys.clear()
+                _ack_delegation_delivery(evt)
             except Exception as e:
                 logger.warning("[process-poller] dispatch failed: %s", e)
 
@@ -1797,9 +1877,28 @@ def _build_intent_confirm_prompt(session, user_text, intent):
 # 落地：① 判定"改代码" → 只改不跑（enforcement.code_edit 硬锁，不靠模型自觉）；
 #       ② 记忆里正好有他的数据 → **服务器直接弹窗**问"要不要用这些数据跑一遍验证"；
 #       ③ 答复语义：选"只给代码" → 锁继续；选"用数据验证" → 解锁并允许执行。
-_CODE_EDIT_ENABLED = os.environ.get("MEMOMICS_CODE_EDIT", "1") != "0"
+# 2026-10-21 用户要求：不要这个锁 —— 什么时候跑、什么时候改，按语义判断，不靠锁。
+# 默认关闭；如需恢复旧行为，设环境变量 MEMOMICS_CODE_EDIT=1。
+_CODE_EDIT_ENABLED = os.environ.get("MEMOMICS_CODE_EDIT", "0") == "1"
 
 # 改动动词（用户明确要求"把这东西变一下"）—— 不含 写/编写/生成（那是新做任务，另走 grill/确认）
+# 2026-10-21：区分「改代码」与「改表格/图」——
+# 原判定把「脚本/函数/程序/script/function」当代码信号，导致用户说「把表格的列名改一下，
+# 脚本里那个函数顺手修修」这类话被判成"改代码"。现在改为：
+#   · 强代码信号：文件扩展名 / 代码块 / shebang / library( / rscript / 明确"代码/源码"
+#   · 数据对象：表格 / Excel / CSV / 列名 / 配色 / 字体 / 图例 …（出现且无强信号 → 不锁）
+_STRONG_CODE_HINTS = (
+    ".py", ".r ", ".r\u3000", ".rmd", ".sh", ".ipynb", ".js", ".ts", ".pl", ".cpp", ".sql",
+    "```", "def ", "#!/", "library(", "rscript", "代码块", "代码文件", "源码文件",
+)
+_CODE_EDIT_CODE_NOUNS = (
+    "脚本", "代码", "函数", "程序", "script", "function", "snippet", "notebook",
+)
+_CODE_EDIT_DATA_OBJECTS = (
+    "表格", "excel", "xlsx", "xls", "csv", "tsv", "数据框", "dataframe",
+    "列名", "表头", "行名", "单元格", "数值", "配色", "颜色", "字体", "字号", "图例",
+    "坐标轴", "柱状图", "小提琴图", "热图", "火山图", "图片", "图上", "图中",
+)
 _CODE_EDIT_VERBS = (
     "改一下", "改下", "改改", "改成", "改为", "改一改", "修改", "修一下", "修下", "修好", "修正",
     "优化", "完善", "重构", "重写", "改进", "增强", "补上", "加上", "加个", "增加", "去掉",
@@ -1842,8 +1941,15 @@ def _code_edit_mode(text):
         return ""
     if not any(h in low for h in _CODE_EDIT_HINTS):
         return ""
+    # 2026-10-21：先看"用户自己说要跑"（最高优先：说了跑就不锁）
     if any(r in low for r in _CODE_EDIT_RUN):
         return "verify"
+    # 再看"改的是表格/图"：出现数据对象、没有强代码信号、且**没提脚本/代码/函数**
+    # → 这是"改动表格/图"，不是改代码，不锁
+    if (any(d in low for d in _CODE_EDIT_DATA_OBJECTS)
+            and not any(sig in low for sig in _STRONG_CODE_HINTS)
+            and not any(noun in low for noun in _CODE_EDIT_CODE_NOUNS)):
+        return ""
     return "edit"
 
 
@@ -2537,6 +2643,87 @@ def _task_liveness(session) -> tuple:
             f"任务疑似卡死：PID {sorted(_pids)} | 窗口 {_window}s 内 CPU/IO 零变化 | RSS {_rss_mb:.0f}MB")
 
 
+# 2026-10-18（改 3）：产出物快照 —— 无进展刹车不再用"会自变的进度签名"
+_ARTIFACT_SKIP_DIRS = ("log", "logs", "spill", ".git", "__pycache__", "software_control", "node_modules")
+_ARTIFACT_SKIP_PREFIX = (".task_state", "task_plan", ".wakeup", ".self_check", ".purge")
+
+
+def _artifact_signature(results_dir: str) -> str:
+    """会话产出物快照（排除 log/状态/计划文件）。连续多轮不变 = 真的没有新产出。"""
+    if not results_dir or not os.path.isdir(results_dir):
+        return ""
+    import hashlib as _hl
+    rows = []
+    try:
+        for cur, dirs, files in os.walk(results_dir):
+            dirs[:] = [d for d in dirs if d.lower() not in _ARTIFACT_SKIP_DIRS]
+            for fn in files:
+                low = fn.lower()
+                if low.endswith((".log", ".tmp")) or any(low.startswith(p) for p in _ARTIFACT_SKIP_PREFIX):
+                    continue
+                p = os.path.join(cur, fn)
+                try:
+                    st = os.stat(p)
+                except Exception:
+                    continue
+                rows.append((os.path.relpath(p, results_dir).replace(os.sep, "/"),
+                             st.st_size, int(st.st_mtime_ns)))
+    except Exception:
+        return ""
+    rows.sort()
+    return _hl.sha256(repr(rows[:6000]).encode("utf-8", "replace")).hexdigest()[:16]
+
+
+# 2026-10-18：唤醒回合的"没有活了"表述（命中即退役，不再继续唤醒）
+_NO_PENDING_WORK_RE = __import__("re").compile(
+    r"无未完成待办|没有未完成待办|无待办|没有待办|无 pending|nothing pending|"
+    r"任务已是终态|已是终态|任务已全部完成|已全部完成且无|无未完成项|没有待办事项")
+
+
+def _purge_finished_task_files(results_dir: str, reason: str = "") -> list:
+    """任务完成/退役时**彻底清除**任务残留（用户 2026-10-18 明确要求）。
+
+    清除对象：task_plan.md、task_plan.done.md、以及唤醒/自检留下的临时标记文件。
+    唯一保留的是 log 里一行退出记录（便于事后追溯"这个任务是怎么收尾的"），
+    不保留任何能让调度器再次摸到并唤醒的活文件。
+    返回被删除的文件名列表。
+    """
+    import glob as _glob
+    removed = []
+    if not results_dir or not os.path.isdir(results_dir):
+        return removed
+    targets = [os.path.join(results_dir, "task_plan.md"),
+               os.path.join(results_dir, "task_plan.done.md")]
+    targets += _glob.glob(os.path.join(results_dir, ".wakeup*"))
+    targets += _glob.glob(os.path.join(results_dir, ".self_check*"))
+    for p in targets:
+        try:
+            if os.path.isfile(p):
+                if os.path.basename(p).startswith("task_plan"):
+                    # 留一行记录：标题 + 行数，正文不留
+                    try:
+                        with open(p, "r", encoding="utf-8", errors="replace") as f:
+                            _txt = f.read()
+                        _title = ""
+                        for _ln in _txt.splitlines():
+                            if _ln.strip().startswith("#"):
+                                _title = _ln.strip().lstrip("#").strip()[:80]
+                                break
+                        _log_dir = os.path.join(results_dir, "log")
+                        os.makedirs(_log_dir, exist_ok=True)
+                        with open(os.path.join(_log_dir, "task_purge.log"), "a", encoding="utf-8") as lf:
+                            lf.write(f"[{__import__('datetime').datetime.now():%Y-%m-%d %H:%M:%S}] "
+                                     f"purged {os.path.basename(p)} ({len(_txt)} chars) "
+                                     f"title={_title!r} reason={reason}\n")
+                    except Exception:
+                        pass
+                os.remove(p)
+                removed.append(os.path.basename(p))
+        except Exception:
+            continue
+    return removed
+
+
 def _schedule_self_check(session, agent, loop, trigger="turn_end"):
     """本轮结束后，如果有未完成的主线任务，延迟后自动触发下一轮自检。
     但如果 task_plan 被标记为 cancelled 或 paused，则跳过。
@@ -2557,6 +2744,20 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
     results_dir = session.get("results_dir", "")
     # ── RunGate 退役闸门（P1-A 接线，2026-08-12）：task_state == done/cancelled
     #    → 自动唤醒一律拦截（防"唤醒→写记录→签名变→再唤醒"死循环的最终兜底）──
+    # 2026-10-18（硬闸门，fail-closed）：没有 results_dir / 没有任务状态文件 / 未武装 →
+    # 一律不唤醒。巡检与播种都绕不过这里（实测有两条路径会绕过，靠这道兜底）。
+    if not urgent:
+        if not results_dir:
+            logger.info(f"[SelfCheck] session {session['id'][:12]}: 无 results_dir → 不唤醒")
+            return
+        try:
+            from webui.runtime.run_gate import is_armed as _is_armed_hard
+            if not _is_armed_hard(results_dir):
+                logger.info(f"[SelfCheck] session {session['id'][:12]}: 许可未武装 → 不唤醒（硬闸门）")
+                return
+        except Exception:
+            pass
+
     try:
         from webui.runtime.run_gate import check_gate
         if results_dir:
@@ -2566,6 +2767,79 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
                 return
     except Exception as e:
         logger.warning(f"[SelfCheck] RunGate 检查失败(fail-open): {e}")
+    # ── 2026-10-18 用户口径：「完成了，唤醒就全部关掉，不要再唤醒之前的任务」──
+    # 实测问题：唤醒回合的模型自己已经判定"任务已是终态、无未完成待办"，但调度器照样排下一轮，
+    # 于是每轮都烧一次 token（用户看到的就是"✅ 唤醒 #1 核查完毕…"无限刷）。
+    # 这里直接采信"无待办"结论：退役 + 暂停，不再排下一轮。
+    if trigger == "turn_end" and int(session.get("_self_check_count", 0) or 0) > 0:
+        try:
+            _last_text = ""
+            for _m in reversed(session.get("messages") or []):
+                if not isinstance(_m, dict):
+                    continue
+                if _m.get("role") == "assistant" and str(_m.get("content") or "").strip():
+                    _last_text = str(_m.get("content"))[:6000]
+                    break
+            if _NO_PENDING_WORK_RE.search(_last_text):
+                if results_dir:
+                    try:
+                        from webui.runtime.run_gate import mark_done, disarm, save_state
+                        mark_done(results_dir, "wakeup verdict: no pending work")
+                        disarm(results_dir, "auto-retire: 唤醒判定无待办")
+                    except Exception:
+                        pass
+                session["_self_check_count"] = 0
+                logger.info(f"[SelfCheck] session {session['id'][:12]}: 唤醒回合判定「无未完成待办」→ 退役并停止唤醒")
+                return
+        except Exception:
+            pass
+    # ── D) 硬上限：同一会话累计唤醒次数（签名重置也不放行），防无限循环烧 token ──
+    try:
+        _total_wakes = int(session.get("_self_check_total", 0) or 0)
+        if _total_wakes >= 60 and not urgent:
+            if results_dir:
+                try:
+                    from webui.runtime.run_gate import disarm
+                    disarm(results_dir, f"唤醒累计 {_total_wakes} 次，触发硬上限")
+                except Exception:
+                    pass
+            logger.info(f"[SelfCheck] session {session['id'][:12]}: 累计唤醒 {_total_wakes} 次 → 触发硬上限停止")
+            return
+    except Exception:
+        pass
+    # ── 改 1（2026-10-18，对齐 DSH 事件驱动）：turn_end 不再无条件重排自检 ──
+    # 只有这几类"事件"能产生唤醒：用户消息 / 后台进程 settled(task_done) / 集群状态变化 / urgent。
+    # 回合自然结束且没有未完成待办、也没有活跃外部工作 → 不排下一轮（这就是"完成了还一直唤醒"的根治）。
+    if trigger == "turn_end" and not urgent:
+        _active = False
+        try:
+            _active = bool(_session_has_active_work(session))
+        except Exception:
+            _active = False
+        if not has_todos and not _active:
+            logger.info(f"[SelfCheck] session {session['id'][:12]}: turn_end 无待办且无活跃工作 → 不重排自检（事件驱动）")
+            return
+
+    # ── 改 3（2026-10-18）：无进展刹车改成"产出物快照"，连续 3 轮不变就退役 ──
+    try:
+        _asig = _artifact_signature(results_dir)
+        if _asig and _asig == session.get("_artifact_sig_last"):
+            session["_artifact_stall"] = int(session.get("_artifact_stall", 0) or 0) + 1
+        else:
+            session["_artifact_stall"] = 0
+        session["_artifact_sig_last"] = _asig
+        if int(session.get("_artifact_stall", 0) or 0) >= 3 and not urgent:
+            try:
+                from webui.runtime.run_gate import mark_done, disarm
+                if results_dir:
+                    mark_done(results_dir, "artifact stall: 连续 3 轮产出物无变化")
+                    disarm(results_dir, "artifact stall: 无新产出")
+            except Exception:
+                pass
+            logger.info(f"[SelfCheck] session {session['id'][:12]}: 连续 3 轮产出物无变化 → 退役并停止唤醒")
+            return
+    except Exception:
+        pass
     has_plan = results_dir and os.path.isfile(os.path.join(results_dir, "task_plan.md"))
     if not has_todos and not has_plan:
         # 修复(2026-08-07): task_plan.md 被清/未创建但 batch 批处理仍活跃
@@ -2575,7 +2849,15 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
             return
         # 2026-08-15 制动: 无计划/待办且外部确实无工作(无进程+15分钟无真实产出) → 停止唤醒
         if not urgent and _session_no_live_work(session):
-            logger.info(f"[SelfCheck] session {session['id'][:12]}: 无计划/待办/活跃工作 → 停止唤醒（制动）")
+            # 2026-10-18：之前只 return（下次签名一变又会被唤醒）→ 改为退役，彻底停止
+            try:
+                from webui.runtime.run_gate import mark_done, disarm
+                if results_dir:
+                    mark_done(results_dir, "auto-retire: 无 plan/待办/活跃工作")
+                    disarm(results_dir, "auto-retire: 无活可干")
+            except Exception:
+                pass
+            logger.info(f"[SelfCheck] session {session['id'][:12]}: 无计划/待办/活跃工作 → 退役并停止唤醒")
             return
     # 🔧 任务完成 → 归档 task_plan.md + mark_done，停止自检（心跳随之关闭）
     # 判定：待办全部完成/取消 + 主线区（🏁 唤醒记录区之前）无 in_progress/pending + 出现完成标记。
@@ -2615,11 +2897,11 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
                             mark_done(results_dir, "task completed (self-check)")
                         except Exception:
                             pass
+                        # 2026-10-18 用户口径：「只要完成的任务，彻底清除干净，task plan 也要清除掉」
+                        # 旧行为是归档成 task_plan.done.md —— 文件还在，重启扫描/唤醒仍会摸到它。
+                        # 现在完成即清空：计划文件直接删除，只在 log 里留一行退出记录。
                         try:
-                            _done_path = os.path.join(results_dir, "task_plan.done.md")
-                            if os.path.exists(_done_path):
-                                os.remove(_done_path)
-                            os.rename(_plan_path, _done_path)
+                            _purge_finished_task_files(results_dir, reason="task completed (self-check)")
                         except Exception:
                             try:
                                 os.remove(_plan_path)
@@ -2720,6 +3002,17 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
                 else:
                     s.pop("_wakeup_retry_n", None)
                 return
+            # ── 2026-10-18：唤醒真正记账（此前 rounds 一直是 0，256 轮预算形同虚设）──
+            try:
+                from webui.runtime.run_gate import admit_round
+                _rd_w = s.get("results_dir", "") or ""
+                if _rd_w and not admit_round(_rd_w):
+                    logger.info(f"[SelfCheck] session {sid[:12]}: 轮次预算/退役拦截 → 不注入唤醒")
+                    return
+                s["_self_check_total"] = int(s.get("_self_check_total", 0) or 0) + 1
+            except Exception as _e:
+                logger.warning(f"[SelfCheck] admit_round 失败(fail-open): {_e}")
+
             # ── M1 兜底闸门：外部工作在跑且无新进展 → 不唤醒 LLM，只重排兜底 ──
             # （省 token 的关键：轮询文件系统/进程表，而不是轮询 LLM；
             #   DSH"无产出就不唤醒"的落地）
@@ -3860,7 +4153,8 @@ def _effective_models(p, saved=None):
             if isinstance(m, dict) and m.get("id"):
                 out.append({"id": m["id"], "name": m.get("name") or m["id"],
                             "reasoning": bool(m.get("reasoning")),
-                            "tool_call": bool(m.get("tool_call", True))})
+                            "tool_call": bool(m.get("tool_call", True)),
+                            "usable": m.get("usable")})
             elif isinstance(m, str) and m.strip():
                 out.append({"id": m.strip(), "name": m.strip(),
                             "reasoning": False, "tool_call": True})
@@ -5909,6 +6203,82 @@ def _build_kb_tail_injection(user_text: str, intent: str, is_heavy: bool) -> str
     return ""
 
 
+def _grill_mode() -> str:
+    """grill 前置门禁强度：config.yaml → grill.mode（off|auto|required），默认 auto。
+
+    2026-10-18 用户口径：「每次任务应触发 grill-me 这个 skill，问清楚再动手」，
+    同时要求「执行不繁琐」——所以默认 auto：只对**需求含糊**的任务先问，
+    需求已经明确的直接开干（required 才逢任务必问）。
+    """
+    try:
+        import yaml as _y
+        _p = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
+        if os.path.exists(_p):
+            _d = _y.safe_load(open(_p, encoding="utf-8")) or {}
+            _m = str((_d.get("grill") or {}).get("mode") or "auto").strip().lower()
+            if _m in ("off", "auto", "required"):
+                return _m
+    except Exception:
+        pass
+    return "auto"
+
+
+def _semantic_trigger_block(red_hits, user_text: str, lang: str = "zh") -> str:
+    """RED 命中 → **候选清单 + 意图判定纪律**（替换旧的"立即调用、禁止跳过"）。
+
+    旧行为（2026-10 前）：关键词一命中就注入"最高优先级、必须马上 skill_view、禁止跳过"，
+    等于让词表替模型做判断 —— 用户提到"画图"（其实在讨论统计方法）也会被拖进绘图技能。
+    新行为：命中只说明"可能相关"，模型必须先做语义判定（真实目标 / 命中理由是否成立），
+    判定不成立就明确说明跳过；判定成立再加载技能全文按其执行。
+    """
+    zh = (lang or "zh") == "zh"
+    names = ", ".join(red_hits or [])
+    lines = []
+    if zh:
+        lines += [
+            "【技能触发纪律：语义优先（关键词只是候选，不构成触发）】",
+            f"本次用户消息在词表上命中了：{names}（只是候选，不代表该用）。",
+            "你必须先完成一次**意图判定**，再决定是否加载技能：",
+            "1) 用户真正要做的事是什么（一句话说清目标与产出）；",
+            "2) 该技能解决的问题与用户目标是否同一件事（命中词只是被提到/否定/作比喻？）；",
+            "3) 判定结论：触发（说明理由）或 跳过（说明理由）。",
+            "只有判定为“触发”时才调用 skill_view 加载该技能全文，并按其 Pipeline 执行；",
+            "判定为“跳过”时，用一句话说明为什么跳过，然后按用户真实目标继续，不要为了用而用。",
+            "⛔ 禁止仅凭关键词命中就直接加载技能或开跑任务。",
+        ]
+    else:
+        lines += [
+            "[Skill trigger discipline: semantics first (keywords are candidates, not triggers)]",
+            f"Keyword hits: {names} — candidate only, NOT a mandate.",
+            "First state an intent verdict: (1) what the user actually wants;",
+            "(2) whether the skill solves that same problem (was the keyword merely mentioned/negated/figurative?);",
+            "(3) decision: trigger (why) or skip (why).",
+            "Only load the skill (skill_view) when the verdict is 'trigger'; otherwise say why you skip and proceed.",
+            "Never load a skill or start work based on keyword hits alone.",
+        ]
+    gm = _grill_mode()
+    if gm != "off":
+        if zh:
+            lines += [
+                "",
+                "【开工前置：先问清再动手（grill）】",
+                ("强度=required：每个任务在执行工具前都要先澄清。" if gm == "required"
+                 else "强度=auto：只在需求含糊时才先澄清（目标/输入数据/验收判据有一项说不清就算含糊）。"),
+                "澄清方式：先调用 skill_view(name='grill-me') 取拷问清单，然后用**一次**提问"
+                "把「目标 · 输入数据与位置 · 验收判据/成功标准」问清（≤3 个问题，一次问完，不要挤牙膏）。",
+                "用户答复后（或用户已明确说“直接做/不用问/按默认”），再执行工具；"
+                "纯问答、纯解释、只读查看不需要澄清。",
+            ]
+        else:
+            lines += [
+                "",
+                "[Before starting: clarify first (grill)]",
+                f"mode={gm}. Load skill_view(name='grill-me') when clarification is needed, then ask goal / input data / acceptance criteria in ONE compact question (<=3 items).",
+                "Proceed after the user answers (or when the user explicitly says go ahead). Q&A / read-only lookups need no clarification.",
+            ]
+    return "\n".join(lines) + "\n"
+
+
 def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", user_text: str = "",
                            pinned: list = None, explicit: dict = None) -> str:
     """根据意图+领域构建系统指令（硬注入，LLM无法跳过）
@@ -5951,11 +6321,11 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
             "",
         ]) + "\n"
     if intent == "chat":
-        return explicit_prefix + pinned_prefix + red_prefix
+        return explicit_prefix + pinned_prefix + _semantic_trigger_block(red_hits, user_text, session_lang)
     if intent == "self_intro":
         # 2026-09-26: 不再硬注入"必须逐字输出"的成品文案 —— 改成给模型事实参考 +
         # 语境判断要求，由模型决定怎么答（这才是"结合上下文语境"）。
-        return explicit_prefix + pinned_prefix + red_prefix + (
+        return explicit_prefix + pinned_prefix + _semantic_trigger_block(red_hits, user_text, session_lang) + (
             "【身份问题参考资料 —— 先判断用户在问什么，再决定怎么答】\n"
             "判断规则：\n"
             "1) 用户在问你的身份/能力（你是谁、你能做什么、介绍一下你自己…）：用下面的事实结合当前对话语境自然作答。"
@@ -6200,7 +6570,7 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
                 "5. 生成专利方案后 rail_review(phase='post') 检查专利铁律",
                 "",
             ]
-            return explicit_prefix + pinned_prefix + red_prefix + "\n".join(lines)
+            return explicit_prefix + pinned_prefix + _semantic_trigger_block(red_hits, user_text, session_lang) + "\n".join(lines)
         # Detect paper-writing sub-intent
         lit_text = user_text if zh else user_text.lower()
         paper_write_kw = ["写论文", "写文章", "论文写作", "写一篇", "manuscript", "paper writing",
@@ -6246,7 +6616,7 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
         lines.append("知识库查询。使用 search_knowledge_base 检索已有知识和经验。" if zh else
                      "Knowledge query. Use search_knowledge_base.")
     
-    return explicit_prefix + pinned_prefix + red_prefix + "\n".join(lines)
+    return explicit_prefix + pinned_prefix + _semantic_trigger_block(red_hits, user_text, session_lang) + "\n".join(lines)
 
 
 # Progress text map (moved down from above)
@@ -6706,18 +7076,102 @@ def _load_persisted_sessions():
             _rebuild_weixin_session_map()
         # M2: 重启后重新授权——所有恢复的非退役任务 disarm，自动唤醒必须用户消息恢复
         # （DSH armed 语义：机器不会自己恢复自主权，必须人显式"继续"）
+        # 2026-10-18（借鉴 DSH goal 语义）：许可改为“进程内”生效 —— 机器在跑 = 已授权，
+        #   重启不再把在跑任务统一冻住（旧行为是"重启即 disarm，必须用户发消息"，
+        #   实测 7 天 1293 次自动唤醒被拦，正是"任务跑一半就停"的主因之一）。
+        #   config.yaml → run_gate.auto_arm_on_restart: false 可恢复旧的"重启冻结"行为。
+        #   只对「关机时确实在跑」的任务自动续跑：state=running/blocked 或 rounds_started>0，
+        #   且 .task_state.json 足够新（auto_arm_max_age_hours，默认 12h）——
+        #   老任务仍保持 disarm，避免历史问题"老任务被自动重启"。
         try:
             from webui.runtime.run_gate import disarm as _disarm_gate
             from webui.runtime.run_gate import is_retired as _is_retired_gate
             from webui.runtime.run_gate import is_armed as _is_armed_gate
+            from webui.runtime.run_gate import load_state as _load_gate_state
+            _auto_arm, _auto_age_h = False, 12.0   # 2026-10-18 对齐 DSH：重启后不自动武装（用户消息才恢复）
+            try:
+                from memomics.bio_tools import task_done as _task_done_mod  # noqa: F401  注册 task_done 工具
+                from memomics.bio_tools import dataset_cache as _dataset_cache_mod  # noqa: F401  注册 dataset_cache
+                from memomics.bio_tools import cluster_kernel as _cluster_kernel_mod  # noqa: F401  注册 cluster_kernel
+                from memomics.bio_tools import bundle_tool as _bundle_tool_mod  # noqa: F401  注册 bundle 工具（对话里导出/导入资产包）
+                try:
+                    from memomics.bio_tools import job_watcher as _job_watcher_mod
+                    _watcher_info = _job_watcher_mod.start_watcher()   # 5 分钟常规 + 30 秒首查
+                    print(f"[MemOmics] 作业轮询器已启动: {_watcher_info}", flush=True)
+                except Exception as _we:
+                    print(f"[MemOmics] 作业轮询器启动失败(不影响主流程): {_we}", flush=True)
+            except Exception:
+                pass
+            try:
+                import yaml as _y_arm
+                _cfg_p_arm = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
+                if os.path.exists(_cfg_p_arm):
+                    _d_arm = _y_arm.safe_load(open(_cfg_p_arm, encoding="utf-8")) or {}
+                    _rg_arm = _d_arm.get("run_gate") or {}
+                    _auto_arm = bool(_rg_arm.get("auto_arm_on_restart"))
+                    if _rg_arm.get("auto_arm_max_age_hours") is not None:
+                        _auto_age_h = float(_rg_arm.get("auto_arm_max_age_hours"))
+            except Exception:
+                pass
             _disarmed = 0
+            _keep_armed = 0
             for _sid2, _sess2 in list(_sessions.items()):
                 _rd2 = _sess2.get("results_dir", "") or ""
-                if _rd2 and not _is_retired_gate(_rd2) and _is_armed_gate(_rd2):
-                    _disarm_gate(_rd2, "server restart (re-authorization required)")
+                if not _rd2 or _is_retired_gate(_rd2):
+                    continue
+                _keep = False
+                if _auto_arm:
+                    try:
+                        _st2 = _load_gate_state(_rd2)
+                        _was_running = (str(_st2.get("state") or "") in ("running", "blocked")
+                                        or int(_st2.get("rounds_started", 0) or 0) > 0)
+                        _fresh = True
+                        try:
+                            # 活跃度取多个信号里最新的：.task_state.json 只在状态迁移时写，
+                            # 一路在跑的会话它可能停在几天前（实测某会话状态文件 10-14、
+                            # token_usage.jsonl 10-18 仍在写）→ 只看状态文件会把在跑任务误判成老任务。
+                            _acts = []
+                            for _cand in (os.path.join(_rd2, ".task_state.json"),
+                                          os.path.join(_rd2, "token_usage.jsonl"),
+                                          _rd2):
+                                try:
+                                    _acts.append(os.path.getmtime(_cand))
+                                except Exception:
+                                    pass
+                            if _acts:
+                                _fresh = (time.time() - max(_acts)) <= (_auto_age_h * 3600.0)
+                        except Exception:
+                            _fresh = True
+                        _keep = bool(_was_running and _fresh)
+                    except Exception:
+                        _keep = False
+                # 2026-10-18（DSH 语义）：磁盘归一化 —— 上个进程留下的 armed 落盘纠正为 paused
+                try:
+                    from webui.runtime.run_gate import normalize_proc as _normalize_proc
+                    _normalize_proc(_rd2)
+                except Exception:
+                    pass
+
+                if _keep and _auto_arm:
+                    # 2026-10-18 对齐 DSH：默认不再自动武装（_auto_arm=False），重启后必须
+                    # 用户消息或显式 resume 才恢复。此分支只服务显式开启 auto_arm_on_restart 的部署。
+                    try:
+                        from webui.runtime.run_gate import arm as _arm_gate
+                        _arm_gate(_rd2, by="auto_arm_on_restart")
+                        _keep_armed += 1
+                    except Exception:
+                        pass
+                    continue
+                # 2026-10-18 fix: in-process permit is default; never freeze idle tasks on boot.
+                # Only when the user explicitly sets run_gate.auto_arm_on_restart=false
+                # do we keep the legacy "restart freezes everything" behaviour.
+                if (not _auto_arm) and _is_armed_gate(_rd2):
+                    _disarm_gate(_rd2, "server restart (legacy freeze; auto_arm_on_restart=false)")
                     _disarmed += 1
             if _disarmed:
-                print(f"[MemOmics] M2: {_disarmed} 个任务的自动唤醒已暂停（重启后需用户消息重新授权）", flush=True)
+                print(f"[MemOmics] M2: {_disarmed} 个任务被显式暂停保留中（run_gate.auto_arm_on_restart=false → 旧的重启冻结行为）", flush=True)
+            if _keep_armed:
+                print(f"[MemOmics] M2: {_keep_armed} 个在跑任务持进程内许可 → 会自动续跑（DSH goal 式；失控由 256 轮兜底）", flush=True)
         except Exception:
             pass
         # M4: 启动一致性对账（run_gate 与 task_plan 漂移检测 + 自动修复确定性漂移）
@@ -8251,6 +8705,130 @@ def _env_digest_block() -> str:
         return ""
 
 
+# === 思考强度（reasoning effort，2026-10-18）===
+# 为什么需要：hermes 适配层的 reasoning_effort 只对 Kimi/TokenHub/LM Studio 发送，
+# 自定义 OpenAI 兼容通道（dcs-cloud 等）永远拿不到。实测该端点接受此参数且影响推理深度
+# （low→max 推理 token 均值 294→882）。这里给它一个可控开关，默认 off = 不发送。
+_EFFORT_LEVELS = ("off", "low", "medium", "high", "max")
+
+
+def _effort_cfg_path():
+    return os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
+
+
+def _read_effort() -> dict:
+    try:
+        import yaml
+        d = yaml.safe_load(open(_effort_cfg_path(), encoding="utf-8")) or {}
+        llm = d.get("llm") if isinstance(d.get("llm"), dict) else {}
+        lvl = str(llm.get("reasoning_effort") or "off").strip().lower()
+        per = llm.get("model_efforts") if isinstance(llm.get("model_efforts"), dict) else {}
+        return {"level": lvl if lvl in _EFFORT_LEVELS else "off",
+                "levels": list(_EFFORT_LEVELS),
+                "model_efforts": per,
+                "model": (_current_model or {}).get("model", "")}
+    except Exception as e:
+        return {"level": "off", "levels": list(_EFFORT_LEVELS), "model_efforts": {},
+                "model": "", "error": str(e)}
+
+
+def _write_effort(level: str) -> bool:
+    """行级改写 config.yaml 的 llm.reasoning_effort（不重排整个文件，避免格式爆炸）。"""
+    p = _effort_cfg_path()
+    try:
+        with open(p, "r", encoding="utf-8", newline="") as f:
+            raw = f.read()
+        eol = "\r\n" if "\r\n" in raw else "\n"
+        lines = raw.replace("\r\n", "\n").split("\n")
+        in_llm = False
+        done = False
+        for i, ln in enumerate(lines):
+            if ln.rstrip() == "llm:":
+                in_llm = True
+                continue
+            if in_llm and ln.strip().startswith("reasoning_effort:"):
+                lines[i] = "  reasoning_effort: \"" + level + "\""
+                done = True
+                break
+            if in_llm and ln and not ln.startswith(" "):
+                break
+        if not done:
+            for i, ln in enumerate(lines):
+                if ln.rstrip() == "llm:":
+                    lines.insert(i + 1, "  reasoning_effort: \"" + level + "\"")
+                    done = True
+                    break
+            if not done:
+                lines += ["llm:", "  reasoning_effort: \"" + level + "\""]
+        out = "\n".join(lines)
+        with open(p, "w", encoding="utf-8", newline="") as f:
+            f.write(out.replace("\n", eol) if eol != "\n" else out)
+        return True
+    except Exception as e:
+        logger.warning(f"[reasoning] 写入失败: {e}")
+        return False
+
+
+@app.get("/api/model/reasoning_effort")
+async def get_reasoning_effort():
+    """当前思考强度（全局 + 每模型覆盖）。"""
+    return _read_effort()
+
+
+@app.post("/api/model/reasoning_effort")
+async def set_reasoning_effort(request: Request):
+    """设置思考强度：{"level": "off|low|medium|high|max", "model": "<可选，按模型覆盖>"}"""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    level = str(body.get("level") or "").strip().lower()
+    if level not in _EFFORT_LEVELS:
+        return {"ok": False, "error": f"level 必须是 {'/'.join(_EFFORT_LEVELS)}"}
+    model_id = str(body.get("model") or "").strip()
+    if model_id:
+        # 按模型覆盖：写 config.yaml 的 llm.model_efforts.<model_id>
+        # 2026-10-21 修复：原实现 io 未导入 + 写了垃圾占位文件 + 只改第一处 model_efforts
+        # （config 里存在重复 llm 段时 yaml 末段生效，覆盖写丢了）。现在：无 io 依赖、
+        # 不写占位文件、所有 model_efforts 段同步替换、缺失时插到每个 llm 段开头。
+        try:
+            import yaml
+            p = _effort_cfg_path()
+            d = yaml.safe_load(open(p, encoding="utf-8")) or {}
+            llm = d.get("llm") if isinstance(d.get("llm"), dict) else {}
+            effs = llm.get("model_efforts") if isinstance(llm.get("model_efforts"), dict) else {}
+            if level == "off":
+                effs.pop(model_id, None)
+            else:
+                effs[model_id] = level
+            new_block = "  model_efforts:\n" + "".join(
+                f"    {k}: {v}\n" for k, v in effs.items()) if effs else "  model_efforts: {}\n"
+            with open(p, "r", encoding="utf-8", newline="") as f:
+                raw = f.read()
+            eol2 = "\r\n" if "\r\n" in raw else "\n"
+            txt = raw.replace("\r\n", "\n")
+            import re as _re
+            # 2026-10-21 关键修复：llm 段内历史残留的多个 model_efforts 键（内联 {} 与
+            # 块形式都有）必须先全部清掉再插唯一规范块 —— yaml 重复键「后者生效」，
+            # 不先清的话新写入会被后面的 {} 影子覆盖（实测写 high 读回 {}）。
+            txt = _re.sub(r"(?m)^  model_efforts: \{\}[ \t]*\n", "", txt)
+            txt = _re.sub(r"(?m)^  model_efforts:[ \t]*\n(?:    [^\n]*\n)+", "", txt)
+            _idx = txt.rfind("llm:\n")
+            if _idx < 0:
+                txt = txt.rstrip("\n") + "\nllm:\n" + new_block
+            else:
+                txt = txt[:_idx] + "llm:\n" + new_block + txt[_idx + 5:]
+            with open(p, "w", encoding="utf-8", newline="") as f:
+                f.write(txt.replace("\n", eol2) if eol2 != "\n" else txt)
+            return {"ok": True, "level": llm.get("reasoning_effort") or "off",
+                    "model": model_id, "model_effort": level}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+    ok = _write_effort(level)
+    logger.info(f"[reasoning] 思考强度设为 {level}（off=不发送）")
+    return {"ok": bool(ok), "level": level}
+
+
 def _create_agent(model_config=None, session_id=None, session=None):
     """创建新的 AIAgent 实例 (每次会话独立)
     
@@ -9108,6 +9686,71 @@ def _public_model_config() -> dict:
     return cfg
 
 
+def _ctx_window_target(cfg) -> tuple:
+    """模型配置 → (provider, base_url, model)，供上下文窗口解析与「窗口上限」写入使用。"""
+    cfg = cfg if isinstance(cfg, dict) else {}
+    provider = str(cfg.get("provider") or "").strip()
+    base_url = str(cfg.get("base_url") or cfg.get("api_base") or "").strip()
+    model = str(cfg.get("model") or "").strip()
+    return provider, base_url, model
+
+
+def _ctx_provider_name(base_url: str) -> str:
+    """按 base_url 反查通道显示名（会话里的 provider 常是 openai，名字要按端点找）。"""
+    target = str(base_url or "").rstrip("/").lower()
+    if not target:
+        return ""
+    try:
+        for _p in (_PROVIDERS_INDEX or {}).values():
+            if str((_p or {}).get("api") or "").rstrip("/").lower() == target:
+                return str((_p or {}).get("name") or "")
+    except Exception:
+        pass
+    return ""
+
+
+def _ctx_window_info(session, agent=None) -> dict:
+    """上下文窗口信息：effective（生效窗口）/ override（config 覆盖值）/ source（来源）。
+
+    2026-10-17：同一模型在不同通道解析出的窗口可能差很多（例如 deepseek-flash 在
+    DCS Cloud 是 1M、在 OpenCode Go 是 128k、端点换过地址后落 128k 兜底值）。
+    面板原来只显示一个数字，用户分不清「模型真小」还是「解析兜底」。这里把来源也带出来：
+      config = config.yaml 里钉住的 context_length（用户指定，最可靠）
+      agent  = 运行中实例压缩器的实际窗口
+      auto   = 现场自动探测（可能落兜底值）
+    """
+    provider, base_url, model = _ctx_window_target((session or {}).get("model_config") or _current_model)
+    custom = None
+    try:
+        from hermes_cli.config import get_compatible_custom_providers
+        custom = get_compatible_custom_providers()
+    except Exception:
+        custom = None
+    override = None
+    try:
+        from hermes_cli.config import get_custom_provider_context_length
+        override = get_custom_provider_context_length(model=model, base_url=base_url, custom_providers=custom)
+    except Exception:
+        override = None
+    effective = 0
+    source = "auto"
+    try:
+        comp = getattr(agent, "context_compressor", None) if agent is not None else None
+        effective = int(getattr(comp, "context_length", 0) or 0) if comp is not None else 0
+        if effective > 0:
+            source = "config" if override else "agent"
+        else:
+            from agent.model_metadata import get_model_context_length
+            effective = int(get_model_context_length(
+                model, base_url=base_url, provider=provider, custom_providers=custom) or 0)
+            source = "config" if override else "auto"
+    except Exception:
+        effective = int(override or 0)
+    return {"effective": effective, "override": override, "source": source,
+            "provider": provider, "provider_name": _ctx_provider_name(base_url),
+            "base_url": base_url, "model": model}
+
+
 @app.get("/api/models")
 async def list_models(session_id: str = ""):
     """列出预设模型 + 当前模型
@@ -9171,7 +9814,10 @@ async def switch_model(payload: dict):
                 continue
             if _prov_hint and _pid != _prov_hint:
                 continue
-            for _m in _p.get("models", []):
+            # 2026-10-22：改走 _effective_models —— 原来只查目录预设（_p["models"]），
+            # 于是「拉取到的模型」（如 opencode-go 的 36 个）一律查不到 → 报
+            # 「模型 'xxx' 未配置 API Key」，而用户明明刚保存过 key。用户实测踩到过。
+            for _m in _effective_models(_p, _saved):
                 if _m["id"] == model:
                     base_url = _p["api"]
                     api_key = _saved["api_key"]
@@ -9256,6 +9902,110 @@ async def switch_model(payload: dict):
     except Exception:
         pass
     return {"ok": True, "current": _public_model_config()}
+
+
+@app.post("/api/context/window")
+async def set_context_window(payload: dict):
+    """设置/清除「窗口上限」——写 config.yaml 里该（通道, 模型）的 context_length 覆盖。
+
+    2026-10-17：用户反馈「上下文只能看不能调，而且同一模型有时变 128k」。
+    事实是：deepseek-flash 在 DCS Cloud 解析为 1M、在 OpenCode Go 是 128k、端点换过地址
+    或缓存丢失时会落 128k 兜底值。底座的官方覆盖字段是 custom_providers[].models.<model>.context_length
+    （agent_init / get_model_context_length 的 step 0 都优先读它），这里把它接到 UI 上：
+      - context_length = 正整数 → 钉住该窗口（含兜底场景）
+      - 留空 / 0 / null      → 清除覆盖，回到自动探测
+    写入后立即热更新运行中的 agent（不必重启）。
+    """
+    sid = str(payload.get("session_id") or "").strip()
+    raw = payload.get("context_length", None)
+    clear = raw in (None, "", 0, "0", "null")
+    value = None
+    if not clear:
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            return JSONResponse({"error": "context_length 必须是整数（留空=恢复自动）"},
+                                status_code=400)
+        if value < 16384:
+            return JSONResponse({"error": "context_length 太小（至少 16384；想恢复自动请留空）"},
+                                status_code=400)
+    s = _sessions.get(sid) or {}
+    provider, base_url, model = _ctx_window_target(s.get("model_config") or _current_model)
+    if not base_url or not model:
+        return JSONResponse({"error": "当前会话没有可用的通道/模型信息"}, status_code=400)
+    target = base_url.rstrip("/").lower()
+    try:
+        from hermes_cli.config import read_raw_config, atomic_config_write, get_config_path
+        cfg = read_raw_config() or {}
+    except Exception as e:
+        return JSONResponse({"error": f"读取 config.yaml 失败: {e}"}, status_code=500)
+
+    hit = None
+    for c in cfg.get("custom_providers") or []:
+        if not isinstance(c, dict):
+            continue
+        for field in ("base_url", "api_base"):
+            if str(c.get(field) or "").rstrip("/").lower() == target:
+                hit = c
+                break
+        if hit is not None:
+            break
+    if hit is None:
+        return JSONResponse({"error": f"config.yaml 里没有这个通道（{base_url}）：先到「设置 → 通道」里加好它"},
+                            status_code=400)
+
+    models = hit.get("models")
+    entry = None
+    if isinstance(models, dict):
+        entry = models.get(model)
+        if not isinstance(entry, dict):
+            entry = {}
+            models[model] = entry
+    elif isinstance(models, list):
+        for m in models:
+            if isinstance(m, dict) and str(m.get("id") or "") == model:
+                entry = m
+                break
+        if entry is None:
+            entry = {"id": model}
+            models.append(entry)
+    else:
+        return JSONResponse({"error": "该通道的 models 结构无法识别，未改动"}, status_code=400)
+
+    if clear:
+        entry.pop("context_length", None)
+    else:
+        entry["context_length"] = value
+    try:
+        atomic_config_write(get_config_path(), cfg)
+    except Exception as e:
+        return JSONResponse({"error": f"写入 config.yaml 失败: {e}"}, status_code=500)
+
+    # 立即生效：运行中的 agent 直接换窗口（不动会话其它状态）
+    try:
+        ag = s.get("agent")
+        if ag is not None:
+            ag._config_context_length = None if clear else value
+            from agent.model_metadata import get_model_context_length
+            from hermes_cli.config import get_compatible_custom_providers
+            _new = get_model_context_length(
+                model, base_url=base_url, provider=provider,
+                config_context_length=(None if clear else value),
+                custom_providers=get_compatible_custom_providers())
+            comp = getattr(ag, "context_compressor", None)
+            if comp is not None and _new:
+                comp.context_length = int(_new)
+    except Exception as e:
+        print(f"[WARN] 窗口上限已写盘，但热更新运行中 agent 失败: {e}")
+
+    info = _ctx_window_info(s, s.get("agent"))
+    print(f"[MemOmics] 上下文窗口上限更新：{model} @ {base_url} → "
+          f"{'恢复自动' if clear else value}（effective={info['effective']} source={info['source']}）",
+          flush=True)
+    return {"ok": True, "cleared": clear, "context_length": value,
+            "effective": info["effective"], "source": info["source"],
+            "provider_name": info.get("provider_name") or "", "model": model,
+            "base_url": base_url}
 
 
 # --- Provider 列表 (国内 + 国际热门) ---
@@ -9388,30 +10138,71 @@ async def save_imagegen_config(body: dict):
         return JSONResponse({"error": f"保存图像生成配置失败: {exc}"}, status_code=400)
 
 
-def _pull_provider_models(pid, p, api_key, timeout=15.0):
-    """向 provider 端点拉取模型列表并保存（保存 key 自动拉取 / 手动刷新共用）。"""
+def _pull_provider_models(pid, p, api_key, timeout=10.0):
+    """向 provider 端点拉取模型列表并保存（保存 key 自动拉取 / 手动刷新共用）。
+
+    两种「拉取不到」的兜底（2026-10-22 用户实测反馈）：
+
+    1) **端点没有 /models（或该端点挂死）**：云平台网关常见。实测 DCS Cloud 的
+       unified 网关 /models 等 60 秒都不响应（ReadTimeout），但同一把 key 的
+       /chat/completions 是好的（deepseek-flash / glm-5.2 等实测 200）。这种情况
+       直接报「拉取失败」会让用户以为「云平台不能用」——改用**目录预设清单**顶上，
+       带上 note 说明，后面的自动检测再逐个验证真实可用性。
+    2) **已有检测结论**：拉回来的清单立刻按上次结论剪一遍，否则重新拉取会把
+       之前过滤掉的不可用模型又写回来（用户报「没有过滤掉」就是这个原因）。
+    """
     try:
         from memomics.coding_plans import fetch_plan_models
     except Exception as exc:
         return {"ok": False, "error": f"拉取模块加载失败: {exc}"}
+    catalog = p.get("models") if isinstance(p.get("models"), list) else []
     res = fetch_plan_models({
         "id": pid, "api": p.get("api", ""),
         "models_url": p.get("models_url"),
         "extra_headers": p.get("extra_headers"),
     }, api_key, timeout=timeout)
+    fallback = False
+    note = ""
     if not res.get("ok"):
-        return {"ok": False, "error": res.get("error", "拉取失败"),
-                "tried": res.get("tried", [])}
-    models = res.get("models") or []
+        if not catalog:
+            return {"ok": False, "error": res.get("error", "拉取失败"),
+                    "tried": res.get("tried", [])}
+        models = [{"id": m.get("id"), "name": m.get("name") or m.get("id"),
+                   "reasoning": bool(m.get("reasoning")), "tool_call": bool(m.get("tool_call", True))}
+                  for m in catalog if isinstance(m, dict) and m.get("id")]
+        fallback = True
+        note = ("该端点没有可用的 /models 接口（或它不响应）——已改用内置清单，"
+                "保存后会逐个检测真实可用性，连不上的不会出现在选择器里")
+        url_used = "catalog-fallback"
+        print(f"[MemOmics] provider {pid} 的 /models 不可用（{res.get('error', '')[:80]}）"
+              f"→ 回退内置清单 {len(models)} 个", flush=True)
+    else:
+        models = res.get("models") or []
+        url_used = res.get("url_used", "")
     saved = _provider_keys.setdefault(pid, {})
     saved["models"] = models
-    saved["models_source"] = res.get("url_used", "")
+    saved["models_source"] = url_used
+    saved["models_origin"] = "catalog-fallback" if fallback else "endpoint"
     saved["models_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # 0) 把本次拉到的模型并入「见过的模型」记忆（检测面只增不缩）
+    try:
+        _known_ids_add(pid, [str(m.get("id") if isinstance(m, dict) else m) for m in models])
+    except Exception as _ke:
+        print(f"[WARN] known_ids 写入失败（不阻塞）: {_ke}", flush=True)
+    # ① 立刻按已有检测结论剪一遍（重新拉取不再把不可用的写回来）
+    try:
+        _prev_results = (_probe_get(pid).get("results") or {})
+        pruned = _prune_models_from_saved(pid, _prev_results) if _prev_results else []
+    except Exception as _pe:
+        pruned = []
+        print(f"[WARN] 拉取后剪除失败（不阻塞）: {_pe}", flush=True)
     _save_provider_keys()
     _sync_custom_providers_to_memomics(pid)
-    print(f"[MemOmics] provider {pid} 已拉取 {len(models)} 个模型（{res.get('url_used', '')}）", flush=True)
+    print(f"[MemOmics] provider {pid} 已拉取 {len(models)} 个模型（{url_used}）"
+          + (f"，按上次结论过滤 {len(pruned)} 个" if pruned else ""), flush=True)
     return {"ok": True, "provider": pid, "count": len(models), "models": models,
-            "url_used": res.get("url_used", "")}
+            "url_used": url_used, "fallback": fallback, "note": note,
+            "pruned_by_last_probe": pruned}
 
 
 @app.get("/api/providers/{pid}/models")
@@ -9421,18 +10212,35 @@ async def get_provider_models(pid: str):
     if not p:
         return JSONResponse({"error": f"Provider '{pid}' not found"}, status_code=404)
     saved = _provider_keys.get(pid) or {}
+    probe_rows = (_probe_get(pid).get("results") or {})
+    # 2026-10-22：有检测结论时，**实测不可用的模型不进选择器**（用户反馈：设置里的
+    # 「模型(选择默认)」下拉拉的是目录预设 36 个，把已过滤的也列出来了，看起来像
+    # 「明明可用却标不可用」）。这里统一口径：不可用的直接不下发。
+    _with_probe = len((saved.get("models") or [])) > 0 and bool(probe_rows)
     models = []
     for m in _effective_models(p, saved):
-        models.append({
+        if _with_probe and (probe_rows.get(str(m["id"])) or {}).get("usable") is False:
+            continue
+        row = {
             "id": m["id"], "name": m["name"],
             "reasoning": m.get("reasoning", False),
             "tool_call": m.get("tool_call", False),
-        })
+        }
+        # 2026-10-22：带上探针结论（usable/error），前端给不可用模型打标 ⚠️，
+        # 避免用户选中一个「拉得到、但协议/套餐不让用」的模型才吃报错。
+        entry = probe_rows.get(str(m["id"]))
+        if isinstance(entry, dict):
+            row["usable"] = bool(entry.get("usable"))
+            row["probe_error"] = entry.get("error", "")
+            row["probe_ms"] = entry.get("ms", 0)
+        models.append(row)
     return {"provider": pid, "models": models, "base_url": p["api"],
             "source": saved.get("models_source") or "catalog",
             "updated_at": saved.get("models_updated_at") or "",
             "auto_pull": bool(p.get("auto_pull")),
-            "note": p.get("note", ""), "key_hint": p.get("key_hint", "")}
+            "note": p.get("note", ""), "key_hint": p.get("key_hint", ""),
+            "probe": _probe_snapshot(pid),
+            "pruned": (_probe_get(pid).get("pruned") or {}).get("ids") or []}
 
 
 @app.post("/api/providers/{pid}/models/refresh")
@@ -9446,11 +10254,478 @@ async def refresh_provider_models(pid: str):
     if not _is_valid_api_key(api_key) and not saved.get("local"):
         return JSONResponse({"error": "请先保存该 provider 的 API Key，再拉取模型"},
                             status_code=400)
-    result = _pull_provider_models(pid, p, api_key)
+    result = _pull_provider_models(pid, p, api_key, timeout=10.0)
     if not result.get("ok"):
         return JSONResponse({"error": result.get("error", "拉取失败"),
                              "tried": result.get("tried", [])}, status_code=400)
     return result
+
+
+def _probe_env_int(name, default):
+    """读取探针并发/超时环境变量（坏值不炸，回默认）。"""
+    try:
+        return max(1, int(str(os.environ.get(name, "")).strip()))
+    except Exception:
+        return default
+
+
+_PROBE_JOBS = {}          # pid -> {total, done, results, started_at, finished_at, error, running}
+_PROBE_LOCK = _threading.Lock()
+_PROBE_MAX_WORKERS = _probe_env_int("MEMOMICS_MODEL_PROBE_WORKERS", 3)
+_PROBE_TIMEOUT = float(_probe_env_int("MEMOMICS_MODEL_PROBE_TIMEOUT", 45))
+
+
+def _probe_get(pid):
+    """取该 provider 已持久化的探针结论（provider_keys.json 的 probe 字段）。"""
+    saved = _provider_keys.get(pid) or {}
+    d = saved.get("probe")
+    return d if isinstance(d, dict) else {}
+
+
+def _known_ids_get(pid):
+    """该 provider 见过的全部模型 id（顺带把目录预设并进来）。"""
+    saved = _provider_keys.get(pid) or {}
+    out = [str(x) for x in ((_probe_get(pid).get("known_ids") or [])) if x]
+    for m in (saved.get("models") or []):
+        mid = str(m.get("id") if isinstance(m, dict) else m)
+        if mid and mid not in out:
+            out.append(mid)
+    for m in (_PROVIDERS_INDEX.get(pid, {}).get("models") or []):
+        mid = str(m.get("id") if isinstance(m, dict) else m)
+        if mid and mid not in out:
+            out.append(mid)
+    return out
+
+
+def _model_usable(pid, model_id):
+    """模型可用性（三态）：True 可用 / False 实测不可用 / None 未测。
+
+    只对「拉取到清单」上的模型可信；目录预设模型没测过 → None（界面不标）。
+    """
+    res = (_probe_get(pid).get("results") or {}).get(str(model_id))
+    if isinstance(res, dict) and "usable" in res:
+        return bool(res.get("usable"))
+    return None
+
+
+def _probe_snapshot(pid):
+    """给前端的一行汇总（未检测过返回 None）。"""
+    probe = _probe_get(pid)
+    if not probe.get("results"):
+        return None
+    return {"tested": probe.get("tested", 0),
+            "usable": probe.get("usable", 0),
+            "failed": probe.get("failed", 0),
+            "updated_at": probe.get("updated_at", "")}
+
+
+def _run_model_probe(pid, p, api_key, model_ids, drop_failed=False):
+    """后台线程：逐个真发最小请求，把结论写回 provider_keys.json。
+
+    并发小（默认 3）：聚合网关对同 key 并发敏感，且要避免把限流误判成「模型不可用」。
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from memomics.coding_plans import probe_chat_model
+
+    def _one(mid):
+        try:
+            return probe_chat_model(p, api_key, mid, timeout=_PROBE_TIMEOUT)
+        except Exception as exc:  # 探针本身出问题也要有结论，不能让整个任务挂掉
+            return {"id": mid, "usable": False, "status": 0,
+                    "error": f"探针异常：{type(exc).__name__}: {exc}"[:200], "ms": 0}
+
+    results = {}
+    usable = failed = 0
+    workers = max(1, min(_PROBE_MAX_WORKERS, len(model_ids) or 1))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for res in pool.map(_one, model_ids):
+            mid = str(res.get("id") or "")
+            if not mid:
+                continue
+            results[mid] = res
+            if res.get("usable"):
+                usable += 1
+            else:
+                failed += 1
+            with _PROBE_LOCK:
+                job = _PROBE_JOBS.get(pid)
+                if job is not None:
+                    job["done"] = len(results)
+                    job["usable"] = usable
+                    job["failed"] = failed
+                    job["results"] = results
+    saved = _provider_keys.setdefault(pid, {})
+    _prev_known = list((saved.get("probe") or {}).get("known_ids") or [])
+    for _r in results.values():
+        _rid = str(_r.get("id") or "")
+        if _rid and _rid not in _prev_known:
+            _prev_known.append(_rid)
+    saved["probe"] = {
+        "results": results,
+        "tested": len(results),
+        "usable": usable,
+        "failed": failed,
+        "models_source": saved.get("models_source", ""),
+        # 见过的全部模型 id（含已被剪除的）：下次检测按并集测，避免检测面越缩越小
+        "known_ids": sorted(set(list(_prev_known) + [str(r.get("id")) for r in results.values() if r.get("id")])),
+        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    # 2026-10-22（用户要求）：「保存并拉取模型」后自动检测，只保留联通的模型 ——
+    # 实测不可用的直接从清单里摘掉（不放进模型选择器）。摘掉的记进 probe.pruned，
+    # 可用 /models/prune?restore=1 一键恢复。
+    if drop_failed:
+        _removed = _prune_models_from_saved(pid, results)
+        if _removed:
+            print(f"[MemOmics] provider {pid} 已自动过滤 {len(_removed)} 个实测不可用的模型："
+                  f"{', '.join(_removed[:8])}{'…' if len(_removed) > 8 else ''}", flush=True)
+    _save_provider_keys()
+    with _PROBE_LOCK:
+        job = _PROBE_JOBS.get(pid)
+        if job is not None:
+            job.update({"running": False, "results": results,
+                        "finished_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+    print(f"[MemOmics] provider {pid} 模型可用性检测完成：{usable} 可用 / {failed} 不可用（共 {len(results)}）",
+          flush=True)
+
+
+_KNOWN_IDS_CAP = 500          # known_ids 上限（防无限膨胀）
+
+
+def _known_ids_add(pid, ids):
+    """把模型 id 并进 probe.known_ids（只增不缩）。
+
+    2026-10-22 用户需求链路的第三次修正：剪除会把不可用模型从 models 清单拿掉，
+    如果检测面只看「当前清单」，就会越测越窄、上游恢复的模型永远回不来。
+    所以这里维护一份「见过的全部模型」记忆：拉取时写入、检测时全测。
+    """
+    saved = _provider_keys.get(pid) or {}
+    probe = saved.get("probe") if isinstance(saved.get("probe"), dict) else {}
+    known = [str(x) for x in (probe.get("known_ids") or []) if x]
+    have = set(known)
+    for mid in ids or []:
+        mid = str(mid or "")
+        if mid and mid not in have:
+            known.append(mid)
+            have.add(mid)
+    if len(known) > _KNOWN_IDS_CAP:
+        # 超限：保留「当前清单里还有的」+ 最近的，其余丢弃
+        cur = {str(m.get("id") if isinstance(m, dict) else m)
+               for m in (saved.get("models") or [])}
+        keep = [x for x in known if x in cur] + [x for x in known if x not in cur]
+        known = keep[:_KNOWN_IDS_CAP]
+    probe["known_ids"] = known
+    saved["probe"] = probe
+    _provider_keys[pid] = saved
+    return known
+
+
+def _prune_models_from_saved(pid, results):
+    """把实测不可用的模型从保存的模型清单里摘掉，并把摘除记录写进 probe.pruned。
+
+    返回被摘掉的模型 id 列表（空列表 = 本次没有可摘的）。只动 provider_keys.json，
+    想恢复就调 /api/providers/{pid}/models/prune?restore=1（或重新拉取）。
+    """
+    saved = _provider_keys.get(pid) or {}
+    models = saved.get("models")
+    if not isinstance(models, list) or not models:
+        return []
+    bad = {str(k) for k, v in (results or {}).items()
+           if isinstance(v, dict) and v.get("usable") is False}
+    good_now = {str(k) for k, v in (results or {}).items()
+                if isinstance(v, dict) and v.get("usable") is True}
+    # 2026-10-22：复检后翻正的模型必须从 pruned 记录里剔除 —— 否则界面会一直说「已去掉 N 个」
+    # 而其中有的已经能用了（本轮离线回归抓到的真 bug）。
+    if good_now:
+        _probe0 = saved.get("probe") if isinstance(saved.get("probe"), dict) else {}
+        _pr0 = _probe0.get("pruned") if isinstance(_probe0.get("pruned"), dict) else None
+        if _pr0 and _pr0.get("ids"):
+            _kept = [x for x in _pr0["ids"] if str(x) not in good_now]
+            if _kept:
+                _pr0["ids"] = _kept
+                _probe0["pruned"] = _pr0
+                saved["probe"] = _probe0
+                _provider_keys[pid] = saved
+            else:
+                _probe0.pop("pruned", None)
+                saved["probe"] = _probe0
+                _provider_keys[pid] = saved
+    if not bad:
+        return []
+    kept, removed = [], []
+    for m in models:
+        mid = str(m.get("id") if isinstance(m, dict) else m)
+        if mid in bad:
+            removed.append(mid)
+        else:
+            kept.append(m)
+    if not removed:
+        # 2026-10-22：本轮没有从清单里摘到东西，但「已知不可用且早已不在清单」的模型
+        # 仍然要记进 pruned —— 否则上一次剪除过的模型丢了标记，弹窗里的「↩ 恢复」入口
+        # 就再也看不到（用户要的就是「知道哪些被拿掉了」）。
+        known = [str(x) for x in ((saved.get("probe") or {}).get("known_ids") or [])]
+        present = {str(m.get("id") if isinstance(m, dict) else m) for m in models}
+        missing = [mid for mid in known if mid in bad and mid not in present]
+        if missing:
+            probe = saved.get("probe") if isinstance(saved.get("probe"), dict) else {}
+            pr = probe.get("pruned") if isinstance(probe.get("pruned"), dict) else {}
+            pr["ids"] = sorted(set(list(pr.get("ids") or []) + missing))
+            pr["at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            probe["pruned"] = pr
+            saved["probe"] = probe
+            _provider_keys[pid] = saved
+            return missing
+        return []
+    saved["models"] = kept
+    probe = saved.get("probe") if isinstance(saved.get("probe"), dict) else {}
+    pruned = probe.get("pruned") if isinstance(probe.get("pruned"), dict) else {}
+    pruned["ids"] = sorted(set(list(pruned.get("ids") or []) + removed))
+    pruned["at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    probe["pruned"] = pruned
+    saved["probe"] = probe
+    _provider_keys[pid] = saved
+    return removed
+
+
+def _restore_pruned_models(pid):
+    """把之前自动摘掉的模型恢复回清单（按 probe.results 里的名字重建）。"""
+    saved = _provider_keys.get(pid) or {}
+    probe = saved.get("probe") if isinstance(saved.get("probe"), dict) else {}
+    pruned = (probe.get("pruned") or {}).get("ids") or []
+    if not pruned:
+        return []
+    results = probe.get("results") or {}
+    models = saved.get("models") if isinstance(saved.get("models"), list) else []
+    have = {str(m.get("id") if isinstance(m, dict) else m) for m in models}
+    restored = []
+    for mid in pruned:
+        if mid in have:
+            continue
+        models.append({"id": mid, "name": mid, "reasoning": False, "tool_call": True,
+                       "_restored": True,
+                       "_last_probe_error": (results.get(mid) or {}).get("error", "")})
+        restored.append(mid)
+    saved["models"] = models
+    probe.pop("pruned", None)
+    saved["probe"] = probe
+    _provider_keys[pid] = saved
+    return restored
+
+
+def _start_model_probe(pid, p, api_key, drop_failed=False):
+    """启动（或复用正在跑的）模型可用性检测。返回 (是否新启动, 任务快照)。
+
+    drop_failed=True 时，检测完成后自动把实测不可用的模型从该 provider 的模型清单里
+    摘掉（用户的诉求：「保存和拉取模型的时候就只保留联通的模型」）。
+    """
+    saved = _provider_keys.get(pid) or {}
+    models = _effective_models(p, saved)
+    model_ids = [str(m.get("id")) for m in models if isinstance(m, dict) and m.get("id")]
+    # 2026-10-22：检测列表取「见过的全部模型」（known_ids 累积式，只增不缩）——
+    # 光用当前清单会越测越窄（剪除后只剩可用的），上游恢复的模型永远回不来。
+    model_ids = list(dict.fromkeys(list(_probe_get(pid).get("known_ids") or []) + model_ids))
+    if not model_ids:
+        return False, {"error": "该 provider 还没有模型清单：先点「保存并拉取模型」"}
+    with _PROBE_LOCK:
+        job = _PROBE_JOBS.get(pid)
+        if isinstance(job, dict) and job.get("running"):
+            return False, dict(job)
+        job = {
+            "pid": pid, "total": len(model_ids), "done": 0,
+            "usable": 0, "failed": 0, "results": {}, "running": True,
+            "started_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "finished_at": "", "error": "",
+        }
+        _PROBE_JOBS[pid] = job
+    # 2026-10-22：探针必须带上网关要求的额外请求头。目录（_CHINA_PROVIDERS）里没有
+    # extra_headers —— opencode.ai 网关的 x-opencode-session 只存在 config.yaml 的
+    # custom_providers[] 里（同步时写入）。不合并就一律 400 MissingSessionID，
+    # 会把整家 provider 的模型误判成「不可用」。
+    try:
+        _extra = _provider_extra_headers_for(p.get("api", ""))
+    except Exception:
+        _extra = {}
+    if _extra:
+        p = dict(p)
+        _merged = dict(p.get("extra_headers") or {})
+        for _k, _v in _extra.items():
+            if _v:
+                _merged[str(_k)] = str(_v)
+        p["extra_headers"] = _merged
+    _threading.Thread(target=_run_model_probe, args=(pid, dict(p), api_key, model_ids, bool(drop_failed)),
+                      daemon=True, name=f"model-probe-{pid}").start()
+    print(f"[MemOmics] provider {pid} 开始模型可用性检测：共 {len(model_ids)} 个模型"
+          f"（并发 {_PROBE_MAX_WORKERS}，单模型超时 {_PROBE_TIMEOUT:.0f}s）", flush=True)
+    return True, dict(job)
+
+
+@app.post("/api/providers/{pid}/models/probe")
+async def probe_provider_models(pid: str, body: dict = None):
+    """真发一条最小请求，逐个验证「拉取到的模型」现在能不能用（后台跑，前端轮询进度）。
+
+    与 /models/refresh 的区别：那是列目录，这是逐个试点火。发现的不可用模型
+    会落进 provider_keys.json 的 probe 字段。
+
+    请求体 {"drop_failed": true}：检测完成后自动把不可用的模型从清单里摘掉
+    （用户要求「只保留联通的模型」）——「保存并拉取模型」流程默认走这个模式。
+    """
+    p = _PROVIDERS_INDEX.get(pid)
+    if not p:
+        return JSONResponse({"error": f"Provider '{pid}' not found"}, status_code=404)
+    saved = _provider_keys.get(pid) or {}
+    api_key = saved.get("api_key") or ""
+    if not _is_valid_api_key(api_key) and not saved.get("local"):
+        return JSONResponse({"error": "请先保存该 provider 的 API Key，再检测模型可用性"},
+                            status_code=400)
+    drop_failed = bool((body or {}).get("drop_failed"))
+    started, job = _start_model_probe(pid, p, api_key, drop_failed=drop_failed)
+    if job.get("error"):
+        return JSONResponse(job, status_code=400)
+    return {"ok": True, "provider": pid, "started": started, "total": job.get("total", 0),
+            "done": job.get("done", 0), "running": bool(job.get("running")),
+            "usable": job.get("usable", 0), "failed": job.get("failed", 0),
+            "note": ("正在检测中（并发 %d，单模型超时 %.0fs）——可关掉弹窗，进度会保留"
+                     % (_PROBE_MAX_WORKERS, _PROBE_TIMEOUT)) if started else "已在检测中，直接查看进度"}
+
+
+def _recheck_model_job_state(pid):
+    with _PROBE_LOCK:
+        j = _PROBE_JOBS.get(pid)
+        return bool(isinstance(j, dict) and j.get("running"))
+
+
+def _run_model_recheck(pid, p, api_key, ids):
+    """只重测指定模型（用于复检旧结论），成功的清标记，失败的刷新原因。"""
+    from concurrent.futures import ThreadPoolExecutor
+    from memomics.coding_plans import probe_chat_model
+
+    def _one(mid):
+        try:
+            return probe_chat_model(p, api_key, mid, timeout=_PROBE_TIMEOUT)
+        except Exception as exc:
+            return {"id": mid, "usable": False, "status": 0,
+                    "error": f"复检异常：{type(exc).__name__}: {exc}"[:200], "ms": 0}
+
+    workers = max(1, min(_PROBE_MAX_WORKERS, len(ids) or 1))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        results = {str(r.get("id")): r for r in pool.map(_one, ids) if r.get("id")}
+    # 合并进 probe.results
+    saved = _provider_keys.setdefault(pid, {})
+    probe = saved.get("probe") if isinstance(saved.get("probe"), dict) else {}
+    cur = probe.get("results") if isinstance(probe.get("results"), dict) else {}
+    cur.update(results)
+    probe["results"] = cur
+    probe["tested"] = len(cur)
+    probe["usable"] = sum(1 for v in cur.values() if isinstance(v, dict) and v.get("usable"))
+    probe["failed"] = sum(1 for v in cur.values() if isinstance(v, dict) and v.get("usable") is False)
+    probe["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    saved["probe"] = probe
+    # 复检后重新剪除（成功的不再被摘）
+    try:
+        _prune_models_from_saved(pid, cur)
+    except Exception as exc:
+        print(f"[WARN] 复检后剪除失败（不阻塞）: {exc}", flush=True)
+    _save_provider_keys()
+    _sync_custom_providers_to_memomics(pid)
+    ok = [k for k, v in results.items() if isinstance(v, dict) and v.get("usable")]
+    bad = [k for k, v in results.items() if isinstance(v, dict) and v.get("usable") is False]
+    print(f"[MemOmics] provider {pid} 复检 {len(results)} 个：转可用 {len(ok)} 个"
+          f"{('（' + ', '.join(ok[:6]) + '）') if ok else ''}；仍不可用 {len(bad)} 个", flush=True)
+
+
+@app.post("/api/providers/{pid}/models/recheck")
+async def recheck_provider_models(pid: str):
+    """复检「上次判定失败」的模型（最多 20 个）：可用性可能有变化（换 key / 上游恢复）。
+
+    返回 {"rechecked": n, "now_usable": [...], "still_failed": [...]}；没有待复检的
+    模型时返回 rechecked=0 —— 界面据此显示「上次结论仍然有效」。
+    """
+    p = _PROVIDERS_INDEX.get(pid)
+    if not p:
+        return JSONResponse({"error": f"Provider '{pid}' not found"}, status_code=404)
+    saved = _provider_keys.get(pid) or {}
+    api_key = saved.get("api_key") or ""
+    if not _is_valid_api_key(api_key) and not saved.get("local"):
+        return JSONResponse({"error": "请先保存该 provider 的 API Key"}, status_code=400)
+    if _recheck_model_job_state(pid):
+        return {"ok": True, "rechecked": 0, "note": "整组检测正在跑，复检跳过"}
+    results = (_probe_get(pid).get("results") or {})
+    failed = [str(k) for k, v in results.items()
+              if isinstance(v, dict) and v.get("usable") is False]
+    if not failed:
+        return {"ok": True, "rechecked": 0, "note": "没有需要复检的模型"}
+    failed = failed[:20]
+    # 复检也要带上网关要求的额外头（同 _start_model_probe）
+    try:
+        _extra = _provider_extra_headers_for(p.get("api", ""))
+    except Exception:
+        _extra = {}
+    if _extra:
+        p = dict(p)
+        _merged = dict(p.get("extra_headers") or {})
+        for _k, _v in _extra.items():
+            if _v:
+                _merged[str(_k)] = str(_v)
+        p["extra_headers"] = _merged
+    _threading.Thread(target=_run_model_recheck,
+                      args=(pid, dict(p), api_key, failed),
+                      daemon=True, name=f"model-recheck-{pid}").start()
+    return {"ok": True, "provider": pid, "rechecked": len(failed), "ids": failed,
+            "note": "正在复检上次判失败的模型，几秒后看下拉标记"}
+
+
+@app.post("/api/providers/{pid}/models/prune")
+async def prune_provider_models(pid: str, payload: dict = None):
+    """手动剪除实测不可用的模型；body {"restore": true} 则恢复之前被剪除的模型。
+
+    自动流程（保存并拉取模型 → 检测 → 剪除）用不上它；这里是给「想手动清一次」
+    和「误删了要捞回来」留的出口。剪除只动 provider_keys.json 的模型清单。
+    """
+    p = _PROVIDERS_INDEX.get(pid)
+    if not p:
+        return JSONResponse({"error": f"Provider '{pid}' not found"}, status_code=404)
+    body = payload if isinstance(payload, dict) else {}
+    if body.get("restore"):
+        restored = _restore_pruned_models(pid)
+        _save_provider_keys()
+        _sync_custom_providers_to_memomics(pid)
+        return {"ok": True, "provider": pid, "restored": restored, "count": len(restored)}
+    results = (_probe_get(pid).get("results") or {})
+    if not results:
+        return JSONResponse({"error": "该 provider 还没有检测结论：先点「🧪 测可用性」或保存并拉取模型"},
+                            status_code=400)
+    removed = _prune_models_from_saved(pid, results)
+    _save_provider_keys()
+    _sync_custom_providers_to_memomics(pid)
+    return {"ok": True, "provider": pid, "removed": removed, "count": len(removed),
+            "remaining": len((_provider_keys.get(pid) or {}).get("models") or [])}
+
+
+@app.get("/api/providers/{pid}/models/probe/status")
+async def probe_provider_models_status(pid: str):
+    """模型可用性检测进度 + 结论（进程内存里的实时任务 + provider_keys.json 的历史结论）。"""
+    job = None
+    with _PROBE_LOCK:
+        cur = _PROBE_JOBS.get(pid)
+        if isinstance(cur, dict):
+            job = dict(cur)
+            job["results"] = dict(cur.get("results") or {})
+    snapshot = _probe_snapshot(pid)
+    if job is None and snapshot is None:
+        return {"ok": True, "provider": pid, "running": False, "tested": 0, "total": 0,
+                "usable": 0, "failed": 0, "results": {}, "updated_at": "", "never_tested": True}
+    return {"ok": True, "provider": pid,
+            "running": bool(job.get("running")) if job else False,
+            "total": (job or {}).get("total", (snapshot or {}).get("tested", 0)),
+            "tested": len((job or {}).get("results") or {}) if job else (snapshot or {}).get("tested", 0),
+            "usable": (job or {}).get("usable", (snapshot or {}).get("usable", 0)),
+            "failed": (job or {}).get("failed", (snapshot or {}).get("failed", 0)),
+            "results": (job or {}).get("results") or {},
+            "started_at": (job or {}).get("started_at", ""),
+            "finished_at": (job or {}).get("finished_at", ""),
+            "pruned": (_probe_get(pid).get("pruned") or {}).get("ids") or [],
+            "updated_at": (snapshot or {}).get("updated_at", "") or (job or {}).get("finished_at", "")}
+
+
 
 
 _OPENCODE_SESSION_HOST = "opencode.ai"
@@ -9487,6 +10762,49 @@ def _provider_extra_headers_for(base_url):
     return {}
 
 
+def _merge_model_extras(new_models, prev_models):
+    """把旧条目里每个模型的附加字段（context_length 等）保留到重建后的模型列表上。
+
+    2026-10-17（用户反馈"上下文窗口突然只有 128k，而且设了也留不住"）：
+    同步 custom_providers 时原来把 models 整个重建（只带 id/name/reasoning/tool_call），
+    于是任何写进 per-model 的 context_length 都会被静默抹掉 —— 模型窗口退回自动探测，
+    缓存丢失/换端点时就落回 128k 兜底值。这里按模型 id 合并旧字段，未知字段一律保留。
+    """
+    if not new_models or not prev_models:
+        return new_models
+    pmap = {}
+    if isinstance(prev_models, list):
+        for e in prev_models:
+            if isinstance(e, dict) and e.get("id"):
+                pmap[str(e["id"])] = e
+    elif isinstance(prev_models, dict):
+        for k, v in prev_models.items():
+            if isinstance(v, dict):
+                pmap[str(k)] = v
+    if not pmap:
+        return new_models
+    _core = ("id", "name", "reasoning", "tool_call")
+
+    def _merge_one(entry, mid):
+        prev = pmap.get(mid)
+        if not isinstance(prev, dict):
+            return
+        for k, v in prev.items():
+            if k in _core or k in entry or v is None:
+                continue
+            entry[k] = v
+
+    if isinstance(new_models, list):
+        for e in new_models:
+            if isinstance(e, dict) and e.get("id"):
+                _merge_one(e, str(e["id"]))
+    elif isinstance(new_models, dict):
+        for mid, e in new_models.items():
+            if isinstance(e, dict):
+                _merge_one(e, str(mid))
+    return new_models
+
+
 def _build_memomics_provider_entry(pid, name, api_base, api_key, models, prev=None):
     """构造写入 MemOmics config.yaml 的 custom_providers 条目（2026-09-10 修复）。
 
@@ -9501,6 +10819,9 @@ def _build_memomics_provider_entry(pid, name, api_base, api_key, models, prev=No
        路由/缓存亲和，生成一次后随 config 持久化、稳定复用。
     """
     entry = dict(prev) if isinstance(prev, dict) else {}
+    # 2026-10-17：重建 models 前先把旧条目里每个模型的附加字段（context_length 等）合并回来，
+    # 否则同步一次就把用户钉住的窗口抹掉（表现为"窗口突然变 128k 且设不住"）。
+    models = _merge_model_extras(models, entry.get("models"))
     entry.update({
         "id": pid,
         "name": name,
@@ -9578,13 +10899,30 @@ def _sync_custom_providers_to_memomics(pid=None):
 
 @app.post("/api/providers/{pid}/key")
 async def save_provider_key(pid: str, payload: dict):
-    """保存指定 provider 的 API Key（同时同步 MemOmics config.yaml custom_providers）"""
+    """保存指定 provider 的 API Key（同时同步 MemOmics config.yaml custom_providers）。
+
+    2026-10-22（用户诉求「key 应该像 DSH 那样绑在每家 provider 上，之后随时能拉当前
+    可用模型、不可用就自己剔除，别再让我重输 key」）：
+      · 传了 api_key → 更新绑定并同步到底座；
+      · **不传 api_key（空）且这家已绑定过** → 不动 key，直接用它拉一次模型（纯刷新）；
+      · 空 key 且从未绑定 → 明确提示"这家还没绑定 Key"。
+    """
     if pid not in _PROVIDERS_INDEX:
         return JSONResponse({"error": f"Provider '{pid}' not found"}, status_code=404)
     key = (payload.get("api_key") or "").strip()
-    if not key:
-        return JSONResponse({"error": "api_key is required"}, status_code=400)
     _prev_saved = _provider_keys.get(pid) or {}
+    kept_existing = False
+    if not key:
+        _bound = str(_prev_saved.get("api_key") or "")
+        if _is_valid_api_key(_bound) or _prev_saved.get("local"):
+            key = _bound
+            kept_existing = True
+            print(f"[MemOmics] provider {pid}：未传新 key，用已绑定的 key 刷新模型列表", flush=True)
+        else:
+            return JSONResponse(
+                {"error": f"「{_PROVIDERS_INDEX[pid].get('name') or pid}」还没有绑定 API Key："
+                          f"填入 Key 保存一次即可（之后拉取模型不用再输）",
+                 "need_key": True}, status_code=400)
     _provider_keys[pid] = {"api_key": key, "base_url": _PROVIDERS_INDEX[pid]["api"]}
     if _prev_saved.get("models"):
         # 换 key 不清空已拉取的模型列表（下次拉取会覆盖）
@@ -9909,7 +11247,14 @@ async def list_available_models(session_id: str = ""):
             continue
         is_current = (cur_cfg.get("api_key") == saved.get("api_key") and
                       cur_cfg.get("base_url") == p["api"])
+        # 2026-10-22：实测不可用的模型不进「快速切换」列表 —— 会话模型下拉、
+        # 「已连接的模型」都读这里。之前只过滤了 provider 级清单，这里漏了，
+        # 造成「清单 25 个、下拉仍列 36 个」的错位（用户反馈的核心现象）。
+        _probe_rows = (_probe_get(pid).get("results") or {})
+        _has_pulled = len((saved.get("models") or [])) > 0
         for m in _effective_models(p, saved):
+            if _has_pulled and (_probe_rows.get(str(m["id"])) or {}).get("usable") is False:
+                continue
             models.append({
                 "id": m["id"], "name": m["name"],
                 "provider_id": pid, "provider_name": p["name"].split("(")[0].strip(),
@@ -12121,6 +13466,16 @@ def _apply_overlay(extract_root: str, tops: list) -> int:
 
 @app.get("/api/update/check")
 async def update_check():
+    """检查更新（2026-10-13：同步网络/IO 下放到线程池）。
+
+    实测：这条链路里的 HTTP + SSL 上下文构建曾在事件循环线程里跑 4~33 秒，
+    把整个 WebUI 堵住（看门狗 log/slow_loop.log 有栈）。现在统一在线程池里跑。
+    """
+    import asyncio as _aio
+    return await _aio.get_running_loop().run_in_executor(None, _update_check_sync)
+
+
+def _update_check_sync():
     """检查更新：本地 VERSION vs GitHub 最新 release（含平台资产信息）。
 
     返回:
@@ -13236,6 +14591,38 @@ def _loop_check(session, agent, event: str, tool_name: str = None, args=None, de
         return False
 
 
+# 2026-10-19（K2）：系统干预段标记——_loop_inject_steer（循环检测）与
+# enforcement._inject_agent_hint（门禁提示）都经 _pending_steer 通道注入。
+# 新回合清空残留 steer 槽时，系统段作废、用户插话段抢救（chat 入口处调用）。
+_STEER_SYSTEM_MARKERS = ("【系统循环检测·强制干预】", "【系统强制提示】")
+
+
+def _salvage_steer_text(raw) -> str:
+    """从 _pending_steer 残留文本里抢救用户插话：系统干预段丢弃，用户内容返回。
+
+    系统干预块以专属标记开头（其后可能跟 1./2./3. 编号步骤行）；残留多数是纯系统段
+    （2026-08-14 的清理场景）或纯用户段（迟到插话场景），混合较少见——按行过滤：
+    标记行与其后续编号行剔除，其余保留。拿不准的内容宁可保留（交给模型判断
+    "是否已过时"），也不错杀用户的话。
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+    if not any(m in text for m in _STEER_SYSTEM_MARKERS):
+        return text
+    kept = []
+    in_sys = False
+    for line in text.split("\n"):
+        if any(m in line for m in _STEER_SYSTEM_MARKERS):
+            in_sys = True
+            continue
+        if in_sys and line.strip()[:2] in ("1.", "2.", "3.", "4.", "5."):
+            continue  # 系统干预的编号步骤行
+        in_sys = False
+        kept.append(line)
+    return "\n".join(kept).strip()
+
+
 def _loop_inject_steer(session, agent, reason: str, detail: str) -> bool:
     """通过 MemOmics 原生 _pending_steer 通道注入强制收尾提示（下一轮 LLM 调用前生效）。"""
     try:
@@ -13471,6 +14858,11 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
         _level = _enf3.detect_analysis_level(text)
         _es = _enf3.get_enforcement(sid)
         _es.analysis_level = _level
+        try:
+            from webui.runtime import risk_tier as _rt_lv
+            _es.risk_tier = _rt_lv.classify(text, es=None)
+        except Exception:
+            _es.risk_tier = "medium"
         _es.topic_hint = text  # P3(2026-10-12): 辩论门控据此判断题目类型（方案/图/统计/生信）
         _es.results_dir = session.get("results_dir", "")
         
@@ -13593,6 +14985,11 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
         for m in session.get("messages", [])[-20:]:
             if m.get("role") in ("user", "assistant"):
                 history.append({"role": m["role"], "content": m.get("content", m.get("text", ""))})
+                # 2026-10-21：短回答自动锚定到上一条提问的具体项
+                try:
+                    text = _answer_anchor(history, text)
+                except Exception:
+                    pass
 
         # === 不限时运行 ===（支持长任务，关机后Agent还在跑）
         def _do_run():
@@ -14786,7 +16183,7 @@ async def kb_coverage_api():
 
 
 @app.get("/api/kb/graph")
-async def kb_graph_api():
+def kb_graph_api():  # 2026-10-21：async→def 下放线程池——纯同步 IO（rglob+open+yaml），曾在事件循环上堵 16.1s（slow_loop.log 12:28 现行）
     """知识库图谱：路径层级节点（物种/组织/方向/分类/文件）+ auto_trigger 内容关联边（只读）"""
     try:
         import yaml
@@ -14911,7 +16308,7 @@ async def kb_graph_api():
 # --- Skill 浏览 ---
 
 @app.get("/api/skills")
-async def list_skills():
+def list_skills():  # 2026-10-21：async→def 下放线程池——纯同步目录扫描，任务运行期间不再堵事件循环（用户反馈：跑任务时 Skill库一直"加载中"）
     """列出所有 skill, 按类型分类"""
     # category 字段值 -> 显示分类名 的映射
     JSON_CATEGORY_MAP = {
@@ -15211,7 +16608,7 @@ async def bulk_toggle_skills(request: Request):
     disabled = _read_disabled_skills()
     if category_filter:
         # Get all skills in this category
-        skills_data = await list_skills()
+        skills_data = await asyncio.to_thread(list_skills)  # list_skills 2026-10-21 起为同步（线程池）
         names = [s["name"] for s in skills_data["skills"] if s["category"] == category_filter]
     if action == "disable":
         disabled.update(names)
@@ -15237,10 +16634,10 @@ async def list_enabled_skills():
 
 
 @app.get("/api/skills/catalog")
-async def skills_catalog(q: str = "", category: str = "", limit: int = 0):
+def skills_catalog(q: str = "", category: str = "", limit: int = 0):  # 2026-10-21：async→def 下放线程池
     """P8: 置顶选择器用的 skill 清单（含触发等级/触发词/适用场景/禁用状态）"""
     try:
-        base = await list_skills()
+        base = list_skills()
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
     disabled = _read_disabled_skills()
@@ -15478,7 +16875,11 @@ language: {req.language}
 
 @app.get("/api/results/{sid}")
 @app.get("/api/results/{sid}")
-async def list_results(sid: str, path: str = "", sort: str = "time_desc", lang: str = "zh"):
+async def list_results(sid: str, path: str = "", sort: str = "time_desc", lang: str = "zh"):  # 函数体零 await；另行包装见下
+    return await asyncio.to_thread(_list_results_sync, sid, path, sort, lang)
+
+
+def _list_results_sync(sid: str, path: str = "", sort: str = "time_desc", lang: str = "zh"):  # 2026-10-21：原 list_results 整体下放线程池（任务期间结果面板轮询曾堵事件循环，slow_loop.log 今日现行）
     """列出会话分析结果目录（每次实时扫描磁盘，不用缓存）
 
     sort（P5 2026-09-22 / P5.1 修订）：
@@ -16794,7 +18195,11 @@ async def latest_debate(sid: str):
 
 
 @app.get("/api/results/{sid}/figures")
-async def list_figures(sid: str, sort: str = "time_desc"):
+async def list_figures(sid: str, sort: str = "time_desc"):  # 函数体零 await；另行包装见下
+    return await asyncio.to_thread(_list_figures_sync, sid, sort)
+
+
+def _list_figures_sync(sid: str, sort: str = "time_desc"):  # 2026-10-21：原 list_figures 整体下放线程池（同上，slow_loop.log 今日现行）
     """列出会话所有 figures（递归扫描 png/jpg/svg/pdf）
 
     sort（P5 2026-09-22）：time_desc（默认，最新出的图排最上面）/ time_asc（旧行为）/ name
@@ -16948,11 +18353,21 @@ async def ask_form_answer(req: AskFormAnswerRequest):
             _ans_all = (" ".join(sel) + " " + other).strip()
             _ans_low = _ans_all.lower()
             # 英文按钮可能首字母大写（"Run a verification…"），英文关键词一律大小写无关
-            _want_run = (any(w in _ans_all for w in ("验证", "跑", "测试", "执行", "试一下", "试下"))
-                         or any(w in _ans_low for w in ("run", "test", "verify", "execute")))
+            # 2026-10-21 修：只认"跑/执行/验证"太窄 —— 用户回「重出」「继续」「可以」其实是同意执行，
+            # 却仍被判"只改代码"，导致代码修改模式锁不解除、执行工具反复被拦（2274ab75 拦了 6 次）
+            _want_run = (any(w in _ans_all for w in (
+                "验证", "跑", "测试", "执行", "试一下", "试下",
+                "重出", "重画", "出图", "重新出图", "绘图", "画图", "重做",
+                "继续", "开始", "接着", "继续做", "继续跑", "往下做",
+                "可以", "好的", "没问题", "来吧", "干吧", "做吧", "就这样", "直接跑",
+            ))
+            or any(w in _ans_low for w in (
+                "run", "test", "verify", "execute", "go ahead", "proceed",
+                "continue", "yes", "render", "replot", "ok")))
             # 中英都要认：英文按钮 "Code only, do not run" 里带 run，若不认这些否定词会被误判成「要跑」
             _want_no = (any(w in _ans_all for w in
-                            ("先别", "不要跑", "别跑", "不跑", "只给", "只看", "不执行", "先给"))
+                            ("先别", "不要跑", "别跑", "不跑", "不要执行", "别执行", "不用跑", "先不要",
+"只给", "只看", "不执行", "先给"))
                         or any(w in _ans_low for w in
                                ("code only", "only the code", "only code", "just the code",
                                 "just give me the code", "do not run", "don't run", "dont run",
@@ -18605,6 +20020,16 @@ async def ws_endpoint(ws: WebSocket):
             session = _get_or_create_session(sid)
             current_sid = session["id"]
 
+            # 2026-10-19（steer 落空归一化）：会话当前没有可引导的运行中 agent 时，
+            # 把"引导"直接转成普通新消息走 chat 通道（对齐 DSH best-effort 语义：
+            # next-step 窗口已关 → 作为下一条正常轮次处理，不丢）。
+            # 此前这里走 _internal_chat 浏览器回弹，但前端没有该类型处理器 → 静默丢失。
+            if msg_type == "steer":
+                _running_agent = session.get("running_agent")
+                if not (_running_agent is not None and hasattr(_running_agent, "steer")):
+                    msg_type = "chat"
+                    msg["message"] = (msg.get("content") or msg.get("message") or "").strip()
+
             if msg_type == "switch_session":
                 # 前端切换会话 - 不中断旧会话的 agent，也不注销旧会话的 WS。
                 # 同一浏览器连接同时服务多个会话：切走会话的事件继续推送，
@@ -18732,6 +20157,11 @@ async def ws_endpoint(ws: WebSocket):
                 _level = _enf2.detect_analysis_level(user_text)
                 _es = _enf2.get_enforcement(session["id"])
                 _es.analysis_level = _level
+                try:
+                    from webui.runtime import risk_tier as _rt_lv2
+                    _es.risk_tier = _rt_lv2.classify(user_text, es=None)
+                except Exception:
+                    _es.risk_tier = "medium"
                 _es.topic_hint = user_text  # P3(2026-10-12): 辩论门控据此判断题目类型
                 _es.results_dir = session.get("results_dir", "")
                 # 2026-08-16: 用户新消息 = 新指令 → 解除审查硬阻断残留（12G Seurat 案例：
@@ -18772,6 +20202,14 @@ async def ws_endpoint(ws: WebSocket):
                 # 2026-08-27 修复：ask_user 的**否定回答**（"不用了/不需要继续"）不得复活
                 # done 任务——实测：模型 ask_user 问"还要继续吗？"→ 用户答"不用"→ 无条件
                 # 重置 pending+armed → 已完成任务被唤醒链复活 → 模型被反复叫醒重复输出
+                try:
+                    from webui.enforcement import clear_grill as _clear_grill, arm_grill as _arm_grill, should_grill as _should_grill
+                    _es_gr = _enf_c.get_enforcement(session.get("id", ""))
+                    _clear_grill(_es_gr)
+                    if _should_grill(user_text):
+                        _arm_grill(_es_gr, "需求含糊：目标/输入数据/验收判据不完整")
+                except Exception:
+                    pass
                 try:
                     from webui.runtime.run_gate import check_gate, save_state, arm, reset_rounds
                     _rd_g = session.get("results_dir", "") or ""
@@ -18920,15 +20358,48 @@ async def ws_endpoint(ws: WebSocket):
                 # 2026-08-14: 清空上回合残留的循环干预 steer——上一回合注入、
                 # 本回合首个 tool batch 后才送达的"停止重复"提示会干扰正常新任务，
                 # 造成"图已出完还在跑"。新回合开始即作废旧干预。
+                # 2026-10-19 修订（K2）：作废只针对系统干预段；残留的**用户插话**
+                # 不再静默丢弃——抢救出来拼到本轮消息前面一并处理（此前用户 steer
+                # 晚到一步就会被这里的清空误杀，用户毫无感知）。
+                _salvaged_steer = ""
                 try:
                     _st_lock = getattr(agent, "_pending_steer_lock", None)
                     if _st_lock is not None:
                         with _st_lock:
+                            _stale_steer = agent._pending_steer or ""
                             agent._pending_steer = ""
                     else:
+                        _stale_steer = getattr(agent, "_pending_steer", "") or ""
                         agent._pending_steer = ""
+                    _salvaged_steer = _salvage_steer_text(_stale_steer)
                 except Exception:
-                    pass
+                    _salvaged_steer = ""
+                # 上一回合收尾后才到达的插话（_do_run 捕获的 result["pending_steer"]
+                # 兜底）也在这里汇合，一并拼入本轮。两段语义相同，都是"迟到的话"。
+                _late_prev = str(session.pop("_late_steer", "") or "").strip()
+                _merged_steer = "\n".join(x for x in (_salvaged_steer, _late_prev) if x)
+                if _merged_steer:
+                    _run_text = (
+                        "[系统提示] 以下是上一轮进行期间发来、没来得及送达的插话"
+                        "（现在送达；仍有效请一并处理，已过时则忽略并向用户说明）：\n"
+                        + _merged_steer[:1500]
+                        + "\n\n[本轮新消息]\n" + (_run_text or "")
+                    )
+                    # 槽抢救段此前从未落历史，这里补上（迟到段在回合末已落，不重复）
+                    if _salvaged_steer:
+                        try:
+                            session["messages"].insert(max(0, len(session["messages"]) - 1),
+                                {"role": "user", "content": _salvaged_steer[:1500],
+                                 "time": datetime.now().strftime("%H:%M:%S"), "source": "steer_salvage"})
+                            _db_sv = _get_session_db()
+                            if _db_sv:
+                                _db_sv.append_message(session["id"], "user", _salvaged_steer[:1500])
+                        except Exception as _e_sv:
+                            logger.warning(f"[steer] 抢救插话落历史失败(不阻断): {_e_sv}")
+                    _session_emit(session, {"type": "info",
+                        "content": "↳ 上一轮有未及时送达的插话，已并入本轮处理：" + _merged_steer[:80],
+                        "session_id": session["id"]})
+                    logger.info(f"[steer] session {session['id']}: salvaged leftover steer ({len(_merged_steer)} chars)")
                 session["restored"] = False
                 # 问题2: 不再用环境变量传 sid（进程级变量会串会话），改用 agent 实例属性
                 agent.memomics_sid = session["id"]
@@ -19636,6 +21107,10 @@ async def ws_endpoint(ws: WebSocket):
                             _live_tool = _s.get("_live_tool", "") or ""
                             _live_since = _s.get("_live_tool_ts") or 0
                             _stalled = bool(_live_tool) and (time.time() - _live_since) > 180
+                            # 2026-10-21：区分「执行工具 / 等待模型」相位 —— 用户反馈长时间思考像卡死。
+                            # _live_tool_ts 在工具结束清空时同样刷新为当前时刻，可作本相位起点。
+                            _phase = "tool" if _live_tool else "llm"
+                            _phase_elapsed = int(time.time() - (_live_since or _turn_start))
                             # 2026-08-16: 任务进程 CPU/内存监控（内核 worker/后台进程最新采样）
                             _proc = {}
                             try:
@@ -19652,6 +21127,8 @@ async def ws_endpoint(ws: WebSocket):
                                 "turns": int(_s.get("_turn_count", 0) or 0),
                                 "tool": _live_tool,
                                 "stalled": _stalled,
+                                "phase": _phase,
+                                "phase_elapsed": _phase_elapsed,
                                 "proc": _proc or None,
                                 "ts": datetime.now().strftime("%H:%M:%S"),
                                 "session_id": _s["id"]})
@@ -20043,6 +21520,23 @@ async def ws_endpoint(ws: WebSocket):
                         # 问题1: 如果检测到环境关键词，把真实检测结果作为 system context 注入
                         if _env_ctx:
                             conversation_history.append({"role": "system", "content": _env_ctx})
+                        # 2026-10-18（用户要求：>100MB 数据要持久化、下个任务别重读）：
+                        # 把本会话已登记的数据集清单注入系统提示 —— 模型才知道哪些可以直接复用。
+                        try:
+                            from memomics.bio_tools.dataset_cache import build_cache_hint as _cache_hint
+                            _ch = _cache_hint(session.get("results_dir", "") or "")
+                            if _ch:
+                                conversation_history.append({"role": "system", "content": _ch})
+                        except Exception:
+                            pass
+                        # 2026-10-18：集群作业摘要（跨回合"记得"在跑的任务，几天后回来也对得上）
+                        try:
+                            from memomics.bio_tools.node_state import jobs_summary as _jobs_summary
+                            _jh = _jobs_summary(session.get("id") or "")
+                            if _jh:
+                                conversation_history.append({"role": "system", "content": _jh})
+                        except Exception:
+                            pass
 
                         # 问题11: HTML报告关键词自动触发 skill_view
                         if _html_ctx:
@@ -20225,7 +21719,11 @@ async def ws_endpoint(ws: WebSocket):
                         # 实证：历史里紧邻的旧问答会把模型注意力吸走 → 回答上一个问题。
                         # 把用户本轮消息摘抄到 system 尾部，明确“只回答这一条、以本轮为准”。
                         try:
-                            _focus_text = (user_text or "").strip()
+                            # 2026-10-21：短回答自动锚定（只改这一份 system 文本，不动 user_text）
+                            try:
+                                _focus_text = _answer_anchor(conversation_history or [], (user_text or "").strip())
+                            except Exception:
+                                _focus_text = (user_text or "").strip()
                             if _focus_text:
                                 _turn_focus = (
                                     "【本轮唯一任务 — 最高优先级】下面是用户刚刚发送的消息，"
@@ -20256,6 +21754,18 @@ async def ws_endpoint(ws: WebSocket):
                                 conversation_history=conversation_history if conversation_history else None,
                                 task_id=_session["id"],
                             )
+                            # 2026-10-19（K1 兜底）：回合收尾才到达的插话由 hermes 放在
+                            # result["pending_steer"] 交还调用方。此前这里只取 final_response，
+                            # 交还的插话被静默丢弃（用户看到"已发送引导"，模型却永远没看到）。
+                            # 现在接住 → 存 _session["_late_steer"]，回合末落历史并告知；
+                            # 下一条用户消息在入口处拼入处理（见 chat 入口 steer 抢救段）。
+                            try:
+                                if isinstance(result, dict):
+                                    _late = str(result.get("pending_steer") or "").strip()
+                                    if _late:
+                                        _session["_late_steer"] = _late
+                            except Exception:
+                                pass
                             return result.get("final_response") or "" if isinstance(result, dict) else str(result)
 
                         # research_plan 模式超时保护（CNS级方案 8 分钟）
@@ -20349,6 +21859,27 @@ async def ws_endpoint(ws: WebSocket):
                         # 记录助手回复到 _session（state.db 由 MemOmics 框架 _persist_session 自动写）
                         _session["messages"].append({"role": "assistant", "content": result, "time": datetime.now().strftime("%H:%M:%S")})
                         _session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        # 2026-10-19（K1 兜底落地）：本回合收尾时才送达的插话 →
+                        # 落会话历史 + state.db（刷新可见、审计可查），并明确告知用户；
+                        # 保留 _late_steer  stash，下一条消息在入口处拼入本轮处理。
+                        try:
+                            _late2 = str(_session.get("_late_steer", "") or "").strip()
+                        except Exception:
+                            _late2 = ""
+                        if _late2:
+                            _session["messages"].append({"role": "user", "content": _late2,
+                                                         "time": datetime.now().strftime("%H:%M:%S"),
+                                                         "source": "steer_late"})
+                            try:
+                                _db_lt = _get_session_db()
+                                if _db_lt:
+                                    _db_lt.append_message(_session["id"], "user", _late2)
+                            except Exception as _e_lt:
+                                logger.warning(f"[steer] 迟到插话持久化失败(不阻断): {_e_lt}")
+                            _session_emit(_session, {"type": "info",
+                                "content": "↳ 你刚才的插话在回合结束后才送达，已记入对话历史，将随下一条消息一并处理：" + _late2[:80],
+                                "session_id": _session["id"]})
+                            logger.info(f"[steer] session {_session['id']}: late steer recorded to history ({len(_late2)} chars)")
                         # 尝试提取 todo
                         # P1-1 修正：原代码调 _agent.get_todos()，该方法在 MemOmics 全仓 grep
                         # 0 命中（根本不存在）→ 这个分支恒为 []，等于每轮结束什么都没同步。
@@ -20551,16 +22082,28 @@ async def ws_endpoint(ws: WebSocket):
                 if agent is None:
                     # agent 未初始化（重启/重连后还没发消息）：仍返回 DB 持久化的累计 token，
                     # 让上下文窗口不因 agent 未创建而丢失历史统计
+                    # 2026-10-17：窗口不再回 0（面板会显示"窗口: 未知"，用户反馈"看不到上下文"），
+                    # 改为现场解析一次模型窗口（config 覆盖优先），并把「来源」一并回传，
+                    # 这样 1M / 128k 到底是通道差异还是兜底值，面板里能一眼看清。
                     _ss = _build_session_stats(session["id"])
                     _ss["last_turn"] = _last_turn_stats(session.get("results_dir") or "")
                     _cumulative = (_ss.get("input_tokens", 0) or 0) + (_ss.get("output_tokens", 0) or 0)
+                    _wi = _ctx_window_info(session)
+                    # 没有运行中的 agent 就没有"当前 prompt 大小"这个量：宁可显示 0，
+                    # 也不要把回合聚合的 billed_input_tokens 当上下文占用（会算出 130% 这种假数）。
+                    _used = 0
                     _session_emit(session, {"type": "context_usage", "data": {
                         "categories": [],
-                        "context_max": 0,
-                        "context_used": 0,
+                        "context_max": _wi["effective"],
+                        "context_used": _used,
                         "context_percent": 0,
                         "cumulative_tokens": _cumulative,
-                        "model": (session.get("model_config") or {}).get("model", ""),
+                        "model": _wi["model"] or (session.get("model_config") or {}).get("model", ""),
+                        "window_source": _wi["source"],
+                        "window_override": _wi["override"],
+                        "provider_name": _wi["provider_name"],
+                        "base_url": _wi["base_url"],
+                        "agent_live": False,
                         "session_stats": _ss,
                         "headroom_stats": _get_headroom_stats(),
                     }, "session_id": session["id"]})
@@ -20579,6 +22122,20 @@ async def ws_endpoint(ws: WebSocket):
                         _ss = breakdown["session_stats"]
                         _cumulative = (_ss.get("input_tokens", 0) or 0) + (_ss.get("output_tokens", 0) or 0)
                         breakdown["cumulative_tokens"] = _cumulative
+                        # 2026-10-17：把窗口「来源」带给前端（config 钉住 / 运行实例 / 自动探测）
+                        _wi = _ctx_window_info(session, agent)
+                        breakdown["window_source"] = _wi["source"]
+                        breakdown["window_override"] = _wi["override"]
+                        breakdown["provider_name"] = _wi["provider_name"]
+                        breakdown["base_url"] = _wi["base_url"]
+                        breakdown["agent_live"] = True
+                        # 重启后第一句话之前，压缩器还没有 last_prompt_tokens → 面板会把
+                        # "整段历史估算值"当成占用（可能 >100%）。标出来，前端按"估算"显示。
+                        try:
+                            _comp = getattr(agent, "context_compressor", None)
+                            breakdown["used_is_estimate"] = int(getattr(_comp, "last_prompt_tokens", 0) or 0) <= 0
+                        except Exception:
+                            breakdown["used_is_estimate"] = False
                         _session_emit(session, {"type": "context_usage", "data": breakdown, "session_id": session["id"]})
                     except Exception as e:
                         # 降级：直接从 compressor 获取基础数据
@@ -20669,18 +22226,26 @@ async def ws_endpoint(ws: WebSocket):
                     try:
                         ok = agent_ref.steer(steer_text)
                         _session_emit(session, {"type": "steer_sent", "content": steer_text, "success": bool(ok), "session_id": session["id"]})
+                        # 2026-10-19（K3）：插话落会话历史 + state.db。此前只写进 agent 的
+                        # _pending_steer 内存槽——刷新页面后用户插过的话凭空消失，
+                        # 审计（request_dump / 消息列表）也查不到。
+                        if ok:
+                            try:
+                                session.setdefault("messages", []).append(
+                                    {"role": "user", "content": steer_text,
+                                     "time": datetime.now().strftime("%H:%M:%S"), "source": "steer"})
+                                _db_st = _get_session_db()
+                                if _db_st:
+                                    _db_st.append_message(session["id"], "user", steer_text)
+                            except Exception as _e_st:
+                                logger.warning(f"[steer] 插话落历史失败(不阻断): {_e_st}")
                     except Exception as e:
                         _session_emit(session, {"type": "error", "content": f"引导失败: {e}", "session_id": session["id"]})
                 else:
-                    # Agent 未运行 → 提示改用普通消息，同时自动发起新 turn
+                    # 走到这里只剩竞态（归一化判定之后 agent 刚好跑完）——如实告知，不再静默。
+                    # （空闲态的正常落空已由入口处的 steer→chat 归一化兜住，不会再到这里。）
                     if steer_text:
-                        _session_emit(session, {"type": "info", "content": "Agent 空闲，已自动转为新消息", "session_id": session["id"]})
-                        # 复用现有 chat 处理：通过消息队列自己触发
-                        loop.call_soon_threadsafe(
-                            lambda: asyncio.ensure_future(
-                                ws.send_text(json.dumps({"type": "_internal_chat", "message": steer_text, "session_id": session["id"]}, ensure_ascii=False))
-                            )
-                        )
+                        _session_emit(session, {"type": "info", "content": "Agent 当前不在运行状态，本次引导未送达——请作为新消息直接发送。", "session_id": session["id"]})
                     continue
 
     except WebSocketDisconnect:
@@ -20979,6 +22544,336 @@ def _cluster_write_config(values: dict) -> dict:
     out = _cluster_view()
     out["notes"] = notes
     return out
+
+
+import threading as _threading_fs
+_fs_pick_lock = _threading_fs.Lock()
+
+
+@app.post("/api/fs/pick")
+async def fs_pick(request: Request):
+    """弹出 **Windows 原生「打开」对话框**，返回选中的绝对路径。
+
+    为什么能拿到真实路径：浏览器里的 <input type=file> 受安全限制只给文件名；但
+    MemOmics 的本地服务进程运行在用户交互式桌面会话里（session 1），由它弹原生
+    对话框（tkinter/filedialog），选完把路径回给页面 —— 就是 DSH 那种体验。
+    """
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    mode = str(body.get("mode") or "file").lower()
+    multiple = bool(body.get("multiple", True))
+    title = str(body.get("title") or ("选择文件夹" if mode == "dir" else "选择文件"))
+    if body.get("dry_run"):
+        try:
+            import tkinter  # noqa: F401
+            return {"ok": True, "dry_run": True, "available": True, "mode": mode}
+        except Exception as exc:
+            return {"ok": False, "available": False, "error": f"tkinter 不可用: {exc}"}
+
+    def _run_native():
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            root.attributes("-topmost", True)
+            root.update()
+        except Exception:
+            pass
+        try:
+            if mode == "dir":
+                picked = filedialog.askdirectory(title=title, mustexist=True, parent=root)
+                return {"ok": bool(picked), "paths": [picked] if picked else [], "cancelled": not picked}
+            if multiple:
+                picked = filedialog.askopenfilenames(title=title, parent=root)
+                return {"ok": bool(picked), "paths": list(picked), "cancelled": not picked}
+            one = filedialog.askopenfilename(title=title, parent=root)
+            return {"ok": bool(one), "paths": [one] if one else [], "cancelled": not one}
+        finally:
+            try:
+                root.destroy()
+            except Exception:
+                pass
+
+    if not _fs_pick_lock.acquire(blocking=False):
+        return {"ok": False, "busy": True, "error": "已经有一个文件选择窗口打开了"}
+    try:
+        import asyncio as _aio
+        res = await _aio.to_thread(_run_native)
+    except Exception as exc:
+        res = {"ok": False, "error": f"弹窗失败: {exc}"}
+    finally:
+        _fs_pick_lock.release()
+    if res.get("ok"):
+        logger.info(f"[fs/pick] 用户选择 {len(res.get('paths') or [])} 个路径")
+    return res
+
+
+@app.get("/api/fs/browse")
+async def fs_browse(path: str = ""):
+    """本机文件浏览器（给输入框「+」用）：列出目录，点选后前端把**绝对路径**插进输入框。
+
+    path 为空 → 盘符 + 主目录 + 桌面；path 是文件 → 返回该文件的绝对路径。
+    """
+    import string as _string
+    try:
+        if not path:
+            home = os.path.expanduser("~")
+            items = [{"name": "🏠 主目录", "path": home.replace("\\", "/"), "is_dir": True, "size": 0, "ext": ""}]
+            for sub, label in (("Desktop", "🖥 桌面"), ("Downloads", "⬇ 下载"), ("Documents", "📄 文档")):
+                p2 = os.path.join(home, sub)
+                if os.path.isdir(p2):
+                    items.append({"name": label, "path": p2.replace("\\", "/"), "is_dir": True, "size": 0, "ext": ""})
+            for letter in _string.ascii_uppercase:
+                base = f"{letter}:\\"
+                if os.path.exists(base):
+                    items.append({"name": f"💽 {letter}:", "path": base.replace("\\", "/"),
+                                  "is_dir": True, "size": 0, "ext": ""})
+            return {"path": "", "parent": "", "items": items}
+        p = os.path.realpath(path)
+        if os.path.isfile(p):
+            return {"path": p.replace("\\", "/"), "is_file": True, "abs_path": p}
+        if not os.path.isdir(p):
+            return {"error": f"路径不存在: {path}"}
+        items = []
+        for it in sorted(Path(p).iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
+            if it.name.startswith(".") or it.name == "__pycache__":
+                continue
+            try:
+                st = it.stat()
+            except Exception:
+                continue
+            items.append({"name": it.name, "path": str(it).replace("\\", "/"),
+                          "is_dir": it.is_dir(),
+                          "size": st.st_size if it.is_file() else 0,
+                          "ext": it.suffix.lower()})
+        return {"path": p.replace("\\", "/"),
+                "parent": str(Path(p).parent).replace("\\", "/"),
+                "items": items[:800]}
+    except Exception as exc:
+        return {"error": f"读取失败: {exc}"}
+
+
+# ===== 短回答自动锚定（2026-10-21）=====
+# 用户只回一个编号时，把「在回答哪一条提问的第几项」写进消息本身（纯机制，不依赖模型自觉）。
+_NUM_ANSWER_RE = re.compile(r"^\s*(?:选项\s*)?[#（(]?\s*(\d{1,2})\s*[.、)）]?\s*$")
+_NUM_ITEM_RE = re.compile(r"(?m)^\s*(?:选项\s*)?(\d{1,2})\s*[.、)）]\s*(\S[^\n]{0,150})$")
+
+
+def _answer_anchor(prev_msgs, user_text):
+    t = (user_text or "").strip()
+    if not t:
+        return user_text
+    m = _NUM_ANSWER_RE.match(t)
+    if not m:
+        return user_text
+    n = int(m.group(1))
+    for msg in reversed(prev_msgs or []):
+        if msg.get("role") != "assistant":
+            continue
+        content = str(msg.get("content") or "")
+        items = {}
+        for mm in _NUM_ITEM_RE.finditer(content):
+            items[int(mm.group(1))] = mm.group(2).strip()
+        if n in items:
+            return (f"{t}（= 在回答你上一条提问的第 {n} 项：{items[n][:140]}）")
+        return user_text
+    return user_text
+
+
+_UI_PREFS_PATH = os.path.join(MEMOMICS_HOME_DIR, "ui_prefs.json")
+
+
+@app.get("/api/ui/prefs")
+async def ui_prefs_get():
+    """读取界面偏好（配色主题/背景），localStorage 失效时的兜底。"""
+    try:
+        with open(_UI_PREFS_PATH, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        return {"ok": True, "theme": d.get("theme", ""), "bg": d.get("bg", "")}
+    except Exception:
+        return {"ok": True, "theme": "", "bg": ""}
+
+
+@app.post("/api/ui/prefs")
+async def ui_prefs_set(request: Request):
+    """保存界面偏好到 memomics_home/ui_prefs.json（刷新/重开浏览器都不丢）。"""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    cur = {}
+    try:
+        with open(_UI_PREFS_PATH, "r", encoding="utf-8") as f:
+            cur = json.load(f) or {}
+    except Exception:
+        cur = {}
+    for k in ("theme", "bg"):
+        v = body.get(k)
+        if isinstance(v, str) and v.strip():
+            cur[k] = v.strip()[:40]
+    try:
+        os.makedirs(os.path.dirname(_UI_PREFS_PATH), exist_ok=True)
+        with open(_UI_PREFS_PATH, "w", encoding="utf-8") as f:
+            json.dump(cur, f, ensure_ascii=False)
+        return {"ok": True, **cur}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@app.post("/api/bundle/export")
+async def bundle_export(request: Request):
+    """导出资产包（记忆 jsonl / 知识库 / 技能），默认脱敏。"""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    from memomics import bundle as _bundle
+    scopes = body.get("scopes") or ["kb", "skills", "memory"]
+    out_dir = body.get("out") or os.path.join(MEMOMICS_HOME_DIR, "exports")
+    try:
+        res = _bundle.export_bundle(scopes, out_dir, topic=body.get("topic") or None,
+                                    redact=bool(body.get("redact", True)))
+    except Exception as exc:
+        return {"ok": False, "error": f"导出失败: {exc}"}
+    if res.get("ok"):
+        man = res.get("manifest") or {}
+        res["manifest"] = {k: v for k, v in man.items() if k != "files"}   # 别把 4000+ 文件明细丢给前端
+        logger.info(f"[bundle] 导出 {res.get('path')} counts={res.get('counts')}")
+    return res
+
+
+@app.post("/api/bundle/preview")
+async def bundle_preview(request: Request):
+    """预览包：版本 / 冲突 / 疑似密钥（不改任何文件）。"""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    zp = str(body.get("path") or "").strip()
+    if not zp:
+        return {"ok": False, "error": "需要 path"}
+    from memomics import bundle as _bundle
+    try:
+        res = _bundle.preview_bundle(zp)
+    except Exception as exc:
+        return {"ok": False, "error": f"预览失败: {exc}"}
+    if res.get("ok"):
+        res["new_files"] = (res.get("new_files") or [])[:300]
+        res["conflicts"] = (res.get("conflicts") or [])[:300]
+    return res
+
+
+@app.post("/api/bundle/import")
+async def bundle_import(request: Request):
+    """导入（默认 skip 冲突；overrides 里列出的路径才覆盖），导入后自动激活。"""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    zp = str(body.get("path") or "").strip()
+    if not zp:
+        return {"ok": False, "error": "需要 path"}
+    from memomics import bundle as _bundle
+    ov = body.get("overrides") or {}
+    try:
+        res = _bundle.import_bundle(zp, overrides=ov,
+                                    backup=bool(body.get("backup", True)),
+                                    activate_after=bool(body.get("activate", True)))
+    except Exception as exc:
+        return {"ok": False, "error": f"导入失败: {exc}"}
+    if res.get("ok"):
+        logger.info(f"[bundle] 导入 {os.path.basename(zp)} 写入 {len(res.get('written') or [])} "
+                    f"跳过 {len(res.get('skipped') or [])} 记忆+{res.get('memory_added')}")
+    return res
+
+
+@app.post("/api/bundle/activate")
+async def bundle_activate(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    from memomics import bundle as _bundle
+    try:
+        return _bundle.activate(scopes=body.get("scopes") or ["kb", "skills", "memory"])
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@app.get("/api/bundle/list")
+async def bundle_list(out: str = ""):
+    from memomics import bundle as _bundle
+    try:
+        return {"ok": True, "bundles": _bundle.list_bundles(out or None),
+                "default_dir": out or os.path.join(MEMOMICS_HOME_DIR, "exports")}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@app.post("/api/cluster/node/delete")
+async def cluster_node_delete(request: Request):
+    """删除 remote.nodes 下的一个节点（2026-10-18 用户要求：能加就该能删）。
+
+    行级删除：只摘掉 `  nodes:` 里以 `    <name>:` 开头的那个子块，其余配置一字不动
+    （避免 yaml.dump 重排整份 config 造成的格式噪音）。
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    name = str(body.get("name") or "").strip()
+    if not name or not name.replace("-", "").replace("_", "").replace(".", "").isalnum():
+        return {"ok": False, "error": "节点名不合法"}
+    p = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
+    try:
+        with open(p, "r", encoding="utf-8", newline="") as f:
+            raw = f.read()
+    except Exception as exc:
+        return {"ok": False, "error": f"读配置失败: {exc}"}
+    eol2 = "\r\n" if "\r\n" in raw else "\n"
+    lines = raw.replace("\r\n", "\n").split("\n")
+    in_nodes = False
+    removed = []
+    out = []
+    skip_indent = None
+    for ln in lines:
+        if ln.rstrip() == "  nodes:":
+            in_nodes = True
+            out.append(ln)
+            continue
+        if in_nodes:
+            # 退出 nodes 段：出现比 4 空格浅的顶层键
+            if ln and not ln.startswith("    ") and not ln.startswith("      "):
+                in_nodes = False
+                skip_indent = None
+                out.append(ln)
+                continue
+            if ln.startswith("    ") and ln.strip().startswith(name + ":"):
+                skip_indent = len(ln) - len(ln.lstrip())
+                removed.append(ln.strip())
+                continue
+            if skip_indent is not None:
+                cur = len(ln) - len(ln.lstrip()) if ln.strip() else 999
+                if ln.strip() and cur > skip_indent:
+                    continue      # 该节点的子键（host/note/proxy_jump…）一起删
+                skip_indent = None
+        out.append(ln)
+    if not removed:
+        return {"ok": False, "error": f"没有这个节点: {name}"}
+    new_text = "\n".join(out)
+    try:
+        with open(p, "w", encoding="utf-8", newline="") as f:
+            f.write(new_text.replace("\n", eol2) if eol2 != "\n" else new_text)
+        from memomics.bio_tools import remote_cluster as _rc
+        _rc._load_remote_config(force=True)   # 清缓存，立即生效
+    except Exception as exc:
+        return {"ok": False, "error": f"写配置失败: {exc}"}
+    logger.info(f"[cluster] 删除节点 {name}")
+    return {"ok": True, "deleted": name, "note": "已从 config.yaml 的 remote.nodes 移除"}
 
 
 @app.get("/api/cluster/status")

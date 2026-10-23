@@ -52,7 +52,7 @@ metadata:
 | L1 轻量采样 | 同上 `_debate_l1_lightweight()` | 同模型 + 温度池 |
 | 知识库证据铁轨 | `memomics/bio_tools/save_knowledge.py` | 工具层拒绝写入 |
 | 技能路由 / 注册表 | `webui/skills_registry.py` + `memomics_home/SKILLS_INDEX.md` | RED/YEL/GRN 触发级别 |
-| 执行门禁（意图确认） | `webui/enforcement.py::arm_intent_confirm` / `set_awaiting_form` | 服务器层硬拦 |
+| 执行门禁（意图确认） | `webui/enforcement.py::arm_intent_confirm` / `set_awaiting_form` | 服务器层硬拦；**工具层另有钩子**（大文件登记）会拦下 `ask_user` 本身 → 见 §3.4 |
 | 自进化运行账本 | `skill_evolution` → `results/<sid>/log/run_record_*.json` | 原脚本永不修改 |
 | 长任务包装器 | `memomics/bio_tools/task_run.py` | 面板可见 / 可取消 |
 | 远端集群（SSH） | `memomics/bio_tools/remote_cluster.py`（继承 `hermes-agent/tools/environments/ssh.py::SSHEnvironment`） | 多节点命名 / 调度器 submit / push-pull 产物回传 |
@@ -102,6 +102,36 @@ search_files(target="files", pattern="debate_*.json")
 
 > 报数字时必须区分**口径**：索引登记条数 ≠ 磁盘文件数 ≠ 经真人验证的数。
 > 例：索引 388 条 vs 磁盘 476 个 SKILL.md —— 两个数字都对，但含义不同，要说清。
+
+### 3.4 执行门禁（意图确认）实测行为（2026-10-21）
+
+`arm_intent_confirm` 置位后，**执行类与产物类工具一律硬拦，取证类工具照常可用**：
+
+| 被硬拦 | 仍放行 |
+|---|---|
+| `terminal`（**连 `ls`/`cat` 只读也拦**）、`execute_r`/`execute_python`/`execute_code`/`run_script`、`generate_report`/`add_figure`、`save_knowledge`/`knowledge_write`/`conclusion_save`、`remote_cluster` 的 `run`/`submit` | `read_file`、`search_files`、`skill_view`、`session_search`/`search_history`、`memory`、**经 `tool_call` 调用的 `ask_user`**、`remote_cluster` 的 `status`/`check`/`pull` |
+
+三条实测要点：
+
+- **用户答复过表单后门禁可能仍 armed**（系统判「目标/交付物/参数仍未对齐」）→ 用**一张**新表单把剩下
+  没问清的（数据路径 / 分析目标 / 交付物 / 关键参数 / 规模与去处）**一次问完并结束回合**；
+  已答过的不要重问，被拦的工具**不要重试**（重试只会重复吃门禁文案）。
+- **terminal 被拦时用 `search_files(path=…, pattern="*", target="files")` 当路径探针**：目录不存在返回
+  `{"total_count":0,"error":"Path not found: …"}`。**用户答话里的路径 ≠ 磁盘事实**（实测用户答复"数据在
+  `<数据目录>/raw`"，实查该目录不存在）→ 路径失效时不许猜、不许挑相近目录顶替，
+  把**实查到的候选清单**写成确认表单选项让用户选。
+  另：`target="files"` 的通配符写在 **`pattern`**（`*.rds`）；`file_glob` 只属 content 搜索，传了会被**静默忽略**。
+- **大文件登记钩子会拦下 `ask_user` 本身**（返回「⚠️ 检测到 N 个未登记的大文件…要持久化吗」而不是弹表单）
+  → 把这条问话**并进同一张表单**（加一条「登记为数据集缓存（推荐）」勾选项）重发即成功拿到 `form_id`。
+- 同类探针（列各种扩展名）**批量放进同一个 turn**；一轮一个扩展名地连发会被判"循环失控"强插停手指令。
+- **`ask_user` 不在主工具表里**（deferred plugin 工具）→ 必须 `tool_search` → `tool_describe` → `tool_call`
+  三步发现后调用；可与只读检索（`search_knowledge`/`search_files`）在**同一轮批量**发出，选项即有据、表单立即送出。
+- **表单 `question` 正文要"事实锚定"**：先实查用户给的入口（数据目录 / 已有结果文件清单），把已核实事实写进问题
+  （本次实查发现用户要的对比不在已有 5 个对比里 → 正文写明"没有 X vs Y、需新算"），并一次写清**默认交付与默认阈值**
+  （"要改请在'其他'里写"）→ 同时消灭"基于错误前提作答"和"二次提问啰嗦"。
+
+📖 完整命令、实测原文与五节实测（含 `ask_user` 三步发现、表单事实锚定、SKILL.md 超限的维护注记）
+→ `platform-execution-pitfalls/references/intent-gate-and-tool-availability.md`
 
 ## 四、诚实边界（必须主动说，别等用户抓）
 

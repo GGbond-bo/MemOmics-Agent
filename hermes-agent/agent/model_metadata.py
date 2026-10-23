@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import ssl
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -717,6 +718,26 @@ def _localhost_to_ipv4(url: str) -> str:
     )
 
 
+_SSL_CONTEXT_CACHE = None
+
+
+def _cached_ssl_context():
+    """复用 SSLContext（2026-10-13）。
+
+    httpx 每次构造 Client 都会 create_default_context + 加载 certifi CA 包；实测在带杀毒/
+    慢盘的 Windows 上这一步要 ~4 秒，而它常常发生在**事件循环线程**里（vision 需求检查、
+    本地模型探测），直接把 WebUI 堵住（看门狗抓到 4.7s 阻塞即此）。这里只建一次并复用。
+    """
+    global _SSL_CONTEXT_CACHE
+    if _SSL_CONTEXT_CACHE is None:
+        try:
+            import certifi
+            _SSL_CONTEXT_CACHE = ssl.create_default_context(cafile=certifi.where())
+        except Exception:
+            _SSL_CONTEXT_CACHE = ssl.create_default_context()
+    return _SSL_CONTEXT_CACHE
+
+
 def detect_local_server_type(base_url: str, api_key: str = "") -> Optional[str]:
     """Detect which local server is running at base_url by probing known endpoints.
 
@@ -748,7 +769,7 @@ def detect_local_server_type(base_url: str, api_key: str = "") -> Optional[str]:
 
     result: Optional[str] = None
     try:
-        with httpx.Client(timeout=2.0, headers=headers) as client:
+        with httpx.Client(timeout=2.0, headers=headers, verify=_cached_ssl_context()) as client:
             # LM Studio exposes /api/v1/models — check first (most specific)
             try:
                 r = client.get(f"{lmstudio_url}/api/v1/models")
@@ -1518,7 +1539,7 @@ def query_ollama_num_ctx(model: str, base_url: str, api_key: str = "") -> Option
     headers = _auth_headers(api_key)
 
     try:
-        with httpx.Client(timeout=3.0, headers=headers) as client:
+        with httpx.Client(timeout=3.0, headers=headers, verify=_cached_ssl_context()) as client:
             resp = client.post(f"{server_url}/api/show", json={"name": bare_model})
             if resp.status_code != 200:
                 return None
@@ -1572,7 +1593,7 @@ def query_ollama_supports_vision(model: str, base_url: str, api_key: str = "") -
     headers = _auth_headers(api_key)
 
     try:
-        with httpx.Client(timeout=3.0, headers=headers) as client:
+        with httpx.Client(timeout=3.0, headers=headers, verify=_cached_ssl_context()) as client:
             resp = client.post(f"{server_url}/api/show", json={"name": bare_model})
             if resp.status_code != 200:
                 return None
@@ -1774,7 +1795,7 @@ def _query_local_context_length_uncached(model: str, base_url: str, api_key: str
         server_type = None
 
     try:
-        with httpx.Client(timeout=3.0, headers=headers) as client:
+        with httpx.Client(timeout=3.0, headers=headers, verify=_cached_ssl_context()) as client:
             # Ollama: /api/show returns model details with context info
             if server_type == "ollama":
                 resp = client.post(f"{server_url}/api/show", json={"name": model})

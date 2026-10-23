@@ -5,12 +5,17 @@ description: >-
   `.doc`（read_file 直接拒读）。图片/扫描页走 RapidOCR（rapidocr_onnxruntime，ONNX
   模型随 pip wheel 打包，零联网）；旧版 `.doc` 走 antiword；`.docx` 走 read_file。
   含整册扫描 PDF 的批量 OCR 循环（scripts/ocr_scanned_pdf.py）。
-  用于：用户上传图问"能识图吗"/"read this image"、PDF 抽文字返回空、用户给一批
-  学校/单位下发的 .doc 或扫描件原件要求整理标注。
+  🔴 含**纯文本模型的读图三级降级链**：L1 `vision_describe` 本地像素事实 →
+  L2 文本抽取（RapidOCR/antiword）→ L3 多模态模型语义实读（DashScope `qwen3-vl-plus`，
+  scripts/read_image_via_qwen_vl.py）。用户问"你能看懂这张图吗"时走 L1→L3，**不许回"我看不了"**。
+  用于：用户上传图问"能识图吗"/"能看懂这张图吗"/"描述一下这张图"/"read this image"、
+  PDF 抽文字返回空、用户给一批 学校/单位下发的 .doc 或扫描件原件要求整理标注。
 category: General Utility
 trigger:
   when:
     - User uploads image and asks "能识图吗" / "can you read this image" / "看看这个图"
+    - 用户上传图问"你能看懂这张图吗" / "描述一下这张图" / "这张图是什么" / "describe this image"（要语义，不是要文字）
+    - Current session model is text-only (deepseek-flash / *-flash) and the image has no text at all → 走 L1 vision_describe + L3 qwen3-vl-plus
     - PDF text extraction returns empty (scanned/image-based PDF)
     - Model lacks vision_analyze tool and has no native vision
     - read_file 报 "Cannot read binary file '...doc'"（旧版 .doc 原件）
@@ -26,13 +31,22 @@ trigger:
   `vision_analyze` tool is exposed
 - PDF is scanned/image-based → pymupdf text extraction returns empty
 
-## ⚠️ Honest Capability Boundary (tell the user)
+## 🚦 读图三级降级链（先判图，再选路 —— 别一上来就说"我读不了"）
 
-OCR extracts **text only** (tables, captions, PPT text pages, code screenshots).
-It CANNOT interpret figures, photos, heatmaps, UMAPs, or graphs.
-- If the image is a chart/photo → suggest a vision-capable model session or ask
-  the user to describe the content.
-- If the image is text → RapidOCR below will restore most content.
+本平台有**两条真实可用的读图通道**（不止 OCR）。用户问"你能看懂这张图吗 / 描述一下这张图"时，
+按 L1 → L3 走，**不要回"我看不了，请找有视觉的模型"**：
+
+| 层级 | 手段 | 拿到什么 | 适用 |
+|:--:|---|---|---|
+| **L1** | `tool_call vision_describe(image_path=<绝对路径>)` | 纯本地像素管道：OCR 文本 + 主色/HSV + 柱状/坐标轴/网格检测 + ASCII 亮度图。免费、不联网、不调外部模型 | **任何图先跑这个**拿客观事实（等价手写探针：`scripts/image_pixel_probe.py`） |
+| **L2** | `read_file`（`.docx`）/ RapidOCR（图片、扫描 PDF） | 逐字文本 + 坐标 + 置信度 | 文字类图：截图 / 表格 / PPT 页 / 扫描件 |
+| **L3** | **多模态模型实读**：DashScope `qwen3-vl-plus`（见下节 + `scripts/read_image_via_qwen_vl.py`） | 语义：主体是什么、在做什么、风格、配色、背景、有无文字 | 需要"看懂"图：照片 / 插画 / 角色 / 场景 / 表情包；或 L1 只给出像素事实时 |
+
+- **L1 的 OCR 为空 ≠ 图有问题**：纯图形图本来就没字 —— 这本身是一条证据（"图中无文字"由 L1 与 L3 双证）。
+- **汇报口径（重要）**：L3 的语义描述必须**说明来源**（"由外部多模态模型 qwen3-vl-plus 读取"），
+  不得声称"我看到了图片"—— 纯文本模型没有视觉，铁律 32。把 L1 像素事实与 L3 语义**互相印证**后再下结论，
+  单靠 L3 一段话作答 = 单一来源。
+- 出图/图表类图（UMAP / 箱线 / 热图）语义问题 → 先 L1，再按 `cns-visualization` 那一侧的口径看数据本身。
 
 ## Verified Pipeline (2026-07, Windows + miniconda3)
 
@@ -125,6 +139,36 @@ done
 适用对象（`【硕】/【博】/【通】`）、约束强度（`🔴硬性` / `⚪可选`）、来源条款号 + 章节骨架 + 自查清单。
 学位论文/校内规范这类场景 → `cn-degree-thesis-writing` skill。
 
+## L3 · 多模态模型语义读图（DashScope Qwen-VL，实测 2026-10 可用）
+
+**平台自己就有 key，不要另配、不要问用户要 key**（`qwen-image-3.0` 图像生成用的是同一个 key）：
+
+| 项 | 值 |
+|---|---|
+| Endpoint | `https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions`（OpenAI 兼容模式） |
+| Key | `memomics_home/image_gen_config.json` → `dashscope.api_key`（备选：env `DASHSCOPE_API_KEY`） |
+| **可用模型** | **`qwen3-vl-plus`** —— 目前唯一实测通过的 |
+| 传图 | base64 **data URI**，`data:image/webp;base64,<...>`；**webp 可直接传，无需先转 png** |
+| 脚本 | `scripts/read_image_via_qwen_vl.py` → `python scripts/read_image_via_qwen_vl.py <图片绝对路径>` |
+
+**同一 key 下不可用的模型名（别在这上面反复试，一次失败就直接换 qwen3-vl-plus）**：
+
+| 模型名 | 返回 |
+|---|---|
+| `qwen-vl-max` / `qwen-vl-max-latest` / `qwen-vl-plus` | 404 `model_not_found` |
+| `qwen2.5-vl-7b-instruct` | 403 `access_denied` |
+| `qwen-image-3.0` | 404 `model_not_supported`（图像生成模型不支持 OpenAI 兼容的 chat 模式） |
+
+要点：
+
+- **提示词写死两条约束**："只描述你确实看到的，不要联想或编造" + "有无文字（若有请逐字抄出）"——
+  这是防止 L3 幻觉、也是让 L3 能与 L1 的"OCR 空"对账的关键。
+- **key 只从 json 读、只 print 模型回复**：不要把 key 写进日志/回复/交付文件。
+- **隐私闸门**：L3 会把原图发到外部 API。图里若是未发表数据、病人信息、涉密材料 → **先问用户能不能外发**，
+  不能就只走 L1（本地像素事实）+ L2（本地 OCR）。
+- 输出渲染：把 L3 回复整理成「文件 / 主体 / 结构或服装 / 背景 / 风格 / 配色 / 文字」表 + 关键过程 ≤3 行
+  （写明 L1 与 L3 在哪几条结论上互证），再给 1-2 条后续可选项（局部放大、判定是否 AI 生成、写图注/英文说明）。
+
 ## Failure Chain (do not re-try these)
 
 | Tool | Why it fails here | Verdict |
@@ -147,4 +191,13 @@ state what the image contains and confirm whether it matches expected content.
 | ModuleNotFoundError: easyocr/rapidocr | installed under different python | find via `pip show <pkg> \| grep Location`, use that interpreter |
 | ValueError: Unknown format code 'f' | conf is str | `conf={conf}` not `conf={conf:.2f}` |
 | easyocr hangs at model download | slow network, ~100MB model | don't wait — switch to RapidOCR |
-| OCR returns nothing | pure-graphics image (chart/photo) | tell user: text-only tool; need vision model or description |
+| OCR returns nothing | pure-graphics image (chart/photo) —— **这不是故障** | 走 L1 `vision_describe`（或 `scripts/image_pixel_probe.py`）拿像素事实 → L3 `scripts/read_image_via_qwen_vl.py` 拿语义；"图中无文字"由 L1+L3 双证后再告知用户，别回"读不了" |
+| 多模态模型 404 model_not_found / 403 access_denied | 换错模型名或该模型未开通 | 固定用 `qwen3-vl-plus`（见 L3 节） |
+
+## 附带脚本（都在本 skill 的 scripts/ 下，直接执行）
+
+| 脚本 | 作用 | 用法 |
+|---|---|---|
+| `scripts/image_pixel_probe.py` | **L1** 本地像素事实：主色板/HSV、饱和度亮度、纹理梯度、唯一色数、3×3 分区、ASCII 亮度图 | `python scripts/image_pixel_probe.py <图>` |
+| `scripts/read_image_via_qwen_vl.py` | **L3** 多模态语义实读（DashScope `qwen3-vl-plus`，key 自动从 image_gen_config.json 读，不打印） | `python scripts/read_image_via_qwen_vl.py <图> [模型名]` |
+| `scripts/ocr_scanned_pdf.py` | **L2** 整册扫描 PDF 批量 OCR | 见上文批量 OCR 节 |

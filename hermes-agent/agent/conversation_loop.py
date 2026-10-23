@@ -5677,6 +5677,43 @@ def run_conversation(
                     final_response = None
                     continue
 
+                # 2026-10-19（MemOmics 中途引导收口）：最终答复出口前再收一次插话。
+                # 最后一次 API 调用期间到达的 steer 没有下一批工具结果可附着，
+                # 此前只能漏给 turn_finalizer 的 result["pending_steer"] 交还调用方
+                # （调用方没接 = 静默丢失）。这里按 kanban nudge 的既定模式把它
+                # 追加为真实 user 消息并继续当前轮（steer 延续本轮，与 DSH
+                # "steering 延续轮次"语义一致）。预算/轮次将尽时不取——留在槽里
+                # 交 finalizer 的 leftover 通道兜底。
+                _exit_steer = ""
+                try:
+                    if (api_call_count < agent.max_iterations - 1
+                            and getattr(agent.iteration_budget, "remaining", 0) > 0):
+                        _exit_steer = agent._drain_pending_steer() or ""
+                except Exception:
+                    _exit_steer = ""
+                if _exit_steer:
+                    from agent.prompt_builder import format_steer_marker as _fmt_exit_steer
+                    messages.append(final_msg)
+                    messages.append({
+                        "role": "user",
+                        "content": _fmt_exit_steer(_exit_steer).strip(),
+                        "_steer_continuation": True,
+                    })
+                    agent._session_messages = messages
+                    agent._emit_status("💬 收到运行中的插话，本轮继续处理…")
+                    logger.info(
+                        "steer continuation: appended mid-turn steer as user message (session=%s)",
+                        agent.session_id or "-",
+                    )
+                    # 与 kanban nudge 同契约：已 append 的完整答复作为兜底候选，
+                    # 续跑若耗尽预算，finalizer 仍能拿它交付。
+                    _pending_verification_response = final_response
+                    _pending_verification_response_previewed = (
+                        agent._interim_content_was_streamed(final_response or "")
+                    )
+                    final_response = None
+                    continue
+
                 messages.append(final_msg)
                 
                 _turn_exit_reason = f"text_response(finish_reason={finish_reason})"

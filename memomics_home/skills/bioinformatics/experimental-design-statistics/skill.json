@@ -41,5 +41,15 @@
   "统计方法",
   "统计检验"
  ],
- "trigger_level": "RED"
+ "trigger_level": "RED",
+ "debate_verdicts": [
+  {
+   "topic": "",
+   "verdict": "",
+   "recommended_params": "",
+   "confidence": 0.6,
+   "evidence": "debate_analysis L2 (scenario=stats_design) 裁决 modify/confidence=medium。裁决依据：正方挂 MDES=1.796、power=0.198、CI 上界 3.220>MDES 证明 naive p=0.215 不能作阴性；反方指出事后分层未预注册、缺批次元数据，故分层 p<1e-6 亦不能作确认阳性。rubrics: power_error_control=9, data_integrity=8, effect_robustness=7, multiplicity_grading=7, confounding_structure=",
+   "date": "2026-10-18 19:30:31"
+  }
+ ]
 }

@@ -2,7 +2,7 @@
 
 > 用户固定复用的一支脚本（`muscle_RUV_MAST.R`）：**每亚群 × 每比较组 独立跑一轮**，
 > 样本级 pseudobulk 估 RUVr 因子 → 当协变量进细胞级 MAST。MF 已跑通（10 亚群 × 5 对比 = 50 csv 先例），
-> 2026-10-09 复用到 MuSC（6 亚群 × 5 对比 = 30 轮，投 ssh23）。
+> 2026-10-09 复用到 MuSC（6 亚群 × 5 对比 = 30 轮，投 node4）。
 > 脚本留档：`results/<sid>/scripts/muscle_RUV_MAST_MuSC.R`（全量）+ `smoke_MuSC.R`（冒烟）。
 
 ## 一、流程骨架（每轮 8 步）
@@ -64,7 +64,7 @@ print(table(md$type))                         # 映射表必须进日志
 | K4 | 显著基因数随 FDR 口径漂移 | 主结果 `$fdr` 只对进入 `main` 的基因做 BH，D 组件另做一次 | **不跨对比合并后 p.adjust**；族口径（亚群内×对比内×组件内）跟用户确认后固定 |
 | K5 | 反复落盘拖慢 | 每亚群 `saveRDS` | 一次 `readRDS` 后用内存对象；集群侧走"一个作业跑完整链"或常驻会话 |
 
-## 四、集群投递（本例 ssh23 · 2026-10-09）
+## 四、集群投递（本例 node4 · 2026-10-09）
 
 - 解释器**写死**进作业（⛔ 不要靠 PATH 默认）：
   `export PATH=/cluster/share/zhangxiao6/software/miniconda3/envs/R4.41/bin:$PATH && Rscript <脚本>`
@@ -76,7 +76,7 @@ print(table(md$type))                         # 映射表必须进日志
 - 大输入（本例 662MB rds）走 `large_cache` 账本 + 持久化问询（`remote-cluster-execution` 铁规 10）。
 - 🔴 **投递后做一次早期失败核对**（`ps` + `tail -30 日志` + `ls 产物目录`），**然后停手** ——
   实测全量作业 15:08:54 投递、**15:10:37 就死在第一轮的 `cpm` 行**，而按 `ps` 汇报"在跑"导致用户
-  15:13 来问「我在 ssh23 上没看到任务」。见 `remote-cluster-execution` 铁规 6.1。
+  15:13 来问「我在 node4 上没看到任务」。见 `remote-cluster-execution` 铁规 6.1。
 
 ## 五、先跑冒烟版，再放全量（本类脚本的固定做法）
 

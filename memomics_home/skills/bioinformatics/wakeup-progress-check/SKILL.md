@@ -7,7 +7,11 @@ description: 系统唤醒/进度询问时的任务状态核查规程。定位活
 
 ## 何时触发
 
-- 🔴 **连续零 delta tick ≥5 轮 → 自行暂停 LoopX，不等用户抱怨（2026-10-13 memomics-be17649b 实测，第 10 轮）**：判定门槛 = 三源逐项同值（产物 md5 同值 + 交付物**字节与 mtime** 全同 + 无晚于 plan 的新产出）**且**唯一挂起项必须用户供给（DOI / 二选一决策）⇒ 机器无法产出，继续 tick 纯烧 token。动作 = `results/<sid>/.loopx/registry.json` 里 goal `status` **和** `adapter.status` 双改 `paused` + `quota.compute: 0` + 写 `pause_reason`，task_plan 只记一行并注明「可一句话恢复」，汇报里给出恢复路径。**可逆 ⇒ 不必等点头**；⛔ 但仍有 in_progress / 后台进程 / 未核销回执时不可暂停。配方（`search_files` 找不到隐藏目录 `.loopx/`，必须 `find`）+ task_plan 用 patch 的**缩进漂移坑**（会把 `**Status:**` 顶出首列、越修越歪 → 改前读全整份再 `write_file`）→ `references/loopx-noop-tick-escalation.md` · 🔴 **暂停后还有两件收尾**：① **验根** —— 读回 JSON ≠ 停成（`waiting`/`cleared` 会被放行），必须跑一次 `LoopXBridge.should_run()`，为 False 即判「暂停有效」（§3-b）；唤醒头 `📊 LoopX 状态` 块写 `goal: active`、或暂停后仍收到 tick，**都不是「没停成」的证据**（头字段是注入的渲染摘要）⇒ 回读 registry 复核即可，⛔ 不重复暂停；② **报告骨架里的 `【仍挂起】` 行已删除** —— 照它写就必然踩 `delegation-orchestration` 4-b 的「挂起项重列 + 邀约句」违规（本会话实测照此发出），待决项只进 `notes.md`，发前跑 `replay_reply_lint.py --ledger`
+- 🔴 **挂起项先「前提证伪」再追问**：登记「待用户给 DOI/篇名/路径」前先在本地确定性找一遍——有 PDF 时 `pymupdf` 读 `doc.metadata`（Springer 的 DOI 在 `subject`）即可自证；证伪后**仍禁**在回复里重列待决项；串扫描是**语义**规则不是词表（`等你一句话`/`二选一` 同属违规）。→ `references/pending-item-premise-audit.md`
+  · ⛔ **证伪须「绑定校验」**：ID 要回绑到**目标条目本人**才算「输入已备」——只 grep 到一个 ID 就登记「已备」，会拿别的文档的 ID 冒充（实测把主论文 DOI 误记成缺件 DOI，错判存活 6+ 轮）。判据：「凭什么说这 ID 是它的？」→ §1-b
+  · 🔴 **「第 N 个缺件」先反解编号**：`n` 常是池子列表位置 ⇒ 用**全部已确认条目**做「位置↔ID」校验，反解真身 + 判体裁（无 abstract/type、oa=N ⇒ 新闻稿，不做卡）+ 输出未做件全清单，把「补不补第 N 张」升级为「补哪几篇」。→ §5
+- 🔴 **零 delta tick ≥5 轮 → 自行暂停 LoopX**（同值判据 + registry 双改 `paused`+`quota.compute:0`；可逆不必等点头；⛔ 有 in_progress/后台进程/未核销回执不可停；`.loopx/` 须 `find`；task_plan 改前读全防缩进漂移）→ `references/loopx-noop-tick-escalation.md` · 🔴 **暂停后还有两件收尾**：① **验根** —— 读回 JSON ≠ 停成（`waiting`/`cleared` 会被放行），必须跑一次 `LoopXBridge.should_run()`，为 False 即判「暂停有效」（§3-b）；唤醒头 `📊 LoopX 状态` 块写 `goal: active`、或暂停后仍收到 tick，**都不是「没停成」的证据**（头字段是注入的渲染摘要）⇒ 回读 registry 复核即可，⛔ 不重复暂停；② **报告骨架里的 `【仍挂起】` 行已删除** —— 照它写就必然踩 `delegation-orchestration` 4-b 的「挂起项重列 + 邀约句」违规（本会话实测照此发出），待决项只进 `notes.md`，发前跑 `python scripts/replay_reply_lint.py --text-file <草稿>`（**脚本已落地**——此前 tick#22/#24/#27 三轮违规的根因之一就是 SKILL 写着要跑它、它却不存在）
+- ⛔ **零 delta 轮回复：发前禁串扫描（tick#24 同型违规第 2 次）**——结论末尾命中 `待你决定`/`待决定`/`请提供`/`说一句`/`即可恢复`/`仍挂起` 任一 ⇒ **删整段**（禁改写＝换个说法继续邀约）；只留三行核验表 + 「无待办」，待决项仅进 `notes.md`，用户主动问起才列 → `references/zero-delta-reply-discipline.md`
 - 🔴 **零 delta 轮次的回复纪律（2026-10-14 tick#22 亲历：规则明明写着，仍照旧犯）**：三条硬约束 ——
   ① **task_plan 每轮只写 ≤1 行**（`#N 第 N 次同值 → 零写入`）；本轮的结构性发现 / 逐条数字 / 证据指纹**全部进 `notes.md`**，
      否则 plan 被审计文字淹没（§4 坑 B 的自我放大，本轮实测又违反了：往 plan 写了 6 行）；
@@ -674,6 +678,7 @@ mid-run 唤醒发现**进程已死**（heartbeat `rscript=` 为空 / tasklist �
 | human | skeletal_muscle | aging | 2026-10-01 | wakeup_three_source_check_v8.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-10-01 | wakeup_check_memomics-afd2d418_v8 | - | - |  |
 | - | - | - | 2026-10-13 | wakeup_check_memomics-be17649b_replay15 | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-19 | wakeup_check_memomics-490515fc | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

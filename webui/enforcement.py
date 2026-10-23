@@ -431,6 +431,19 @@ def debate_gate(es: "EnforcementState", stage: str = "conclusion",
     level = DEBATE_L0
     force = False
 
+    # 2026-10-18（风险分级降时延）：小规模/低风险任务直接 L0，不辩论。
+    # 实测背景：一场自动辩论曾吃掉 550s（judge 反复 ReadTimeout + 回退链），
+    # 而真正的分析只用了 0.45s —— 这正是用户感知的"卡住/繁琐"。
+    try:
+        from webui.runtime import risk_tier as _rt
+        _tier = _rt.current_tier(es)
+        if _rt.max_debate_level(_tier) == 0:
+            return DEBATE_L0, [
+                f"风险分级={_tier}（{_rt.describe(_tier)}）：本任务不触发辩论。"
+                "需要对抗审查时显式调用 debate_analysis 即可。"], False
+    except Exception:
+        pass
+
     if es.analysis_level in ("chat", "lightweight"):
         return DEBATE_L0, ["chat/lightweight 级：无分析对象，跳过辩论"], force
 
@@ -504,8 +517,11 @@ def debate_gate(es: "EnforcementState", stage: str = "conclusion",
             level = DEBATE_L1
             reasons.append("存在分歧/不确定性：L1 轻量辩论")
 
-    # ⑦ 预算护栏：非强制时**真停**（用户口径：一个会话不要辩几十场；旧实现只降 L2→L1 等于没停）
-    if not force and level >= DEBATE_L1 and es.debate_count >= es.debate_budget:
+    # ⑦ 预算护栏：非强制时**真停**（一个会话不要辩几十场）
+    # 2026-10-18 用户口径「辩论不要预算上限」：budget <= 0 = 不限场次（跳过本节），
+    # 不再把"停止辩论"写进 reasons（否则用户看到的就是「预算护栏：已辩论 N 次 ≥ budget=M」）。
+    if (not force and level >= DEBATE_L1 and es.debate_budget > 0
+            and es.debate_count >= es.debate_budget):
         level = DEBATE_L0
         reasons.append(f"预算护栏：本会话已辩论 {es.debate_count} 次 ≥ budget={es.debate_budget}，"
                        "停止辩论（非强制场次不再降级续辩）")
@@ -549,6 +565,11 @@ class EnforcementState:
         self.awaiting_form_id: str = ""       # 正在等用户答复的表单 id
         self.awaiting_form_question: str = ""  # 表单问题（用于拦截提示）
         self.awaiting_form_ts: float = 0.0
+        # 2026-10-18：grill 前置门禁状态（开工前先澄清；强度见 config grill.mode）
+        self.grill_done: bool = False
+        self.grill_ts: float = 0.0
+        self.grill_armed: bool = False
+        self.grill_reason: str = ""
         # P3(2026-09-22) 预置意图确认门禁：高代价任务第一轮就置位（不依赖模型自觉），
         # 模型调 ask_user 弹表单（或用户直接回消息）即解除。
         self.intent_confirm: bool = False
@@ -568,6 +589,8 @@ class EnforcementState:
         self.token_budget: int = 0  # C3: token 预算上限（config debate.token_budget，0=不限）
         self._pending_high_impact: bool = False  # P2: 高影响工具已调用，待门控消费
         self.analysis_level: str = "chat"
+        # 2026-10-18 风险分级：trivial|low|medium|high（决定本回合是否上重审查）
+        self.risk_tier: str = ""
         self._pending_record: bool = False  # 上一步 terminal 完成后还没 record
         self._pending_record_warned: bool = False  # 2026-08-22: execute 门禁软拦截已提醒一次（不卡死）
         self._exec_error_hist: dict = {}  # 2026-08-22: 每个命令的报错指纹历史 {cmd_key: [fp,...]}
@@ -685,6 +708,107 @@ def clear_hard_block(session_id: str) -> bool:
     return was
 
 
+def _grill_cfg() -> str:
+    """grill 强度：config.yaml grill.mode（off|auto|required），默认 auto。"""
+    try:
+        import yaml as _y
+        _p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "memomics_home", "config.yaml")
+        if os.path.exists(_p):
+            _d = _y.safe_load(open(_p, encoding="utf-8")) or {}
+            _m = str((_d.get("grill") or {}).get("mode") or "auto").strip().lower()
+            if _m in ("off", "auto", "required"):
+                return _m
+    except Exception:
+        pass
+    return "auto"
+
+
+_GRILL_SKIP_WORDS = ("直接做", "不用问", "别问", "按默认", "你自己定", "别废话", "just do it", "go ahead")
+_GRILL_TASK_VERBS = ("分析", "跑", "画", "优化", "筛选", "统计", "写", "生成", "做", "比对",
+                     "预测", "注释", "降维", "聚类", "差异", "富集", "预处理", "建模")
+# 具体线索 = 路径分隔符 / 盘符 / 数字（阈值、样本量等）。中文泛称（"那个数据"）不算，
+# 否则"帮我分析一下那个数据"会被当成交代清楚而不澄清 —— 实测踩过。
+_GRILL_SPECIFICS = (os.sep, "/", ":", "：")
+
+
+def should_grill(user_text: str) -> bool:
+    """auto 强度下是否该先澄清：像任务 + 没说清输入/判据 + 用户没让直接做。
+
+    刻意保守（宁可不问）：只在“确实是任务动词”且“完全没给具体线索”时才武装门禁，
+    这样日常问答/明确指令不会被拖慢 —— 对应「执行不繁琐」这条目标。
+    """
+    t = (user_text or "").strip()
+    if len(t) < 4:
+        return False
+    low = t.lower()
+    if any(w in low for w in _GRILL_SKIP_WORDS):
+        return False
+    if not any(v in t for v in _GRILL_TASK_VERBS):
+        return False
+    # 给了路径/数字等具体线索 → 视为已交代，不打扰（数字：阈值/样本量/分组数）
+    if any(s in t for s in _GRILL_SPECIFICS) or any(ch.isdigit() for ch in t):
+        return False
+    # 纯提问句式（怎么/为什么/是什么/能不能）不强制澄清
+    if t.rstrip().endswith(("?", "？")) and not any(v in t for v in ("帮我", "给我", "跑", "做")):
+        return False
+    return True
+
+
+def arm_grill(es: "EnforcementState", reason: str = "") -> None:
+    """武装 grill 门禁：下一个执行类工具必须先澄清。"""
+    es.grill_armed = True
+    es.grill_done = False
+    es.grill_ts = time.time()
+    es.grill_reason = str(reason or "")[:200]
+
+
+def clear_grill(es: "EnforcementState") -> None:
+    """新用户消息 → 清空上一轮的 grill 状态（然后按需重新武装）。"""
+    es.grill_armed = False
+    es.grill_done = False
+    es.grill_ts = 0.0
+    es.grill_reason = ""
+
+
+def note_grill_activity(es: "EnforcementState", tool_name: str, args) -> None:
+    """模型已澄清的证据：加载 grill-me 技能 / 用 ask_user、clarify 发问。"""
+    try:
+        name = str(tool_name or "").lower()
+        blob = str(args or "").lower()
+        if "grill" in blob or "grill" in name:
+            es.grill_done = True
+            return
+        if name in ("ask_user", "ask_user_question", "clarify"):
+            es.grill_done = True
+    except Exception:
+        pass
+
+
+def grill_gate(es: "EnforcementState", tool_name: str, args):
+    """执行类工具的前置 grill 门禁。返回 block dict 或 None（放行）。"""
+    try:
+        mode = _grill_cfg()
+    except Exception:
+        mode = "auto"
+    if mode == "off":
+        return None
+    if not _is_exec_call(tool_name, args):
+        return None
+    if getattr(es, "grill_done", False):
+        return None
+    if mode == "auto" and not getattr(es, "grill_armed", False):
+        return None
+    if mode == "required" and not getattr(es, "grill_armed", False):
+        # required：逢任务必问 —— 首个执行类工具就武装
+        arm_grill(es, "required：每个任务开工前先澄清")
+    _why = getattr(es, "grill_reason", "") or "需求还不够清楚"
+    return {"blocked": True,
+            "message": ("⛔ 开工前置未完成：先澄清再执行（%s）。\n"
+                        "正确做法：① skill_view(name='grill-me') 取拷问清单；② 用**一次**提问把"
+                        "「目标 · 输入数据与位置 · 验收判据」问清（≤3 问）；③ 用户答复后再执行工具。\n"
+                        "若用户已明确“直接做/不用问”，可忽略本提示并在回复里说明依据。" % _why)}
+
+
 def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list = None):
     """
     创建强制执行回调，注入到 AIAgent。
@@ -707,8 +831,10 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
         _cfg_p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "memomics_home", "config.yaml")
         if os.path.exists(_cfg_p):
             _d = _y.safe_load(open(_cfg_p, encoding="utf-8")) or {}
-            _b = ((_d.get("debate") or {}).get("budget")) or None
-            if isinstance(_b, int) and _b > 0:
+            # 2026-10-18（用户口径：辩论不要预算上限）：budget <= 0 = 不限场次。
+            # 旧实现只认正数 → 写 0 被静默忽略并回退默认 3，用户仍会被"预算护栏"停掉。
+            _b = (_d.get("debate") or {}).get("budget")
+            if isinstance(_b, int):
                 es.debate_budget = _b
             # P2(2026-09-22): 裁决 blocks 是否硬约束（默认开；可 config 关掉）
             _eb = ((_d.get("debate") or {}).get("enforce_blocks"))
@@ -764,6 +890,18 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
         """
         es.tool_history.append({"tool": tool_name, "args": str(args)[:200], "time": time.time(), "phase": "start"})
 
+        # 2026-10-18（借鉴 DSH permission-presets）：权限档位门禁 —— 统一在这里强制，
+        # read-only 拦写/执行；workspace-write 只允许写会话工作区。默认 danger-full-access = 不拦。
+        try:
+            from webui.runtime import permission_presets as _pp
+            _p_ok, _p_why = _pp.check(tool_name, args, session)
+            if not _p_ok:
+                _emit("enforcement", action="blocked", message="⛔ " + _p_why,
+                      permission_mode=_pp.get_mode())
+                return {"blocked": True, "message": "⛔ " + _p_why}
+        except Exception:
+            pass
+
         # P0-1: es.blocked 置位（rail_review pre/post 未通过）→ 拦截执行类工具
         # 修复类工具不在 _DEBATE_EXEC_TOOLS，天然放行。
         if es.blocked and _is_exec_call(tool_name, args):
@@ -781,6 +919,45 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                                "解绑后执行工具才会放行；反复被拦请检查 rail_review 的参数。"))
             return {"blocked": True,
                     "message": _base + f"（已连续拦截 {es._blocked_attempts} 次）" + _hint}
+
+        # 2026-10-18（用户决策1）：>100MB 数据/产物 → 先问用户要不要持久化（硬门禁）
+        try:
+            import re as _re, os as _os
+            _blob = str(args or "")
+            _paths = _re.findall(r"([A-Za-z]:[\\/][^\s\"'\,;]+)", _blob)
+            if _paths:
+                from memomics.bio_tools import dataset_cache as _dc
+                _rd = getattr(es, "results_dir", "") or ""
+                _big = []
+                for _p in _paths[:20]:
+                    try:
+                        if _os.path.isfile(_p) and _os.path.getsize(_p) >= _dc.ASK_THRESHOLD_MB * 1024 * 1024:
+                            _big.append({"path": _p,
+                                         "size": _os.path.getsize(_p),
+                                         "mb": round(_os.path.getsize(_p) / (1024.0 * 1024.0), 1)})
+                    except Exception:
+                        continue
+                if _big:
+                    _known = {_os.path.normcase(_os.path.abspath(it.get("path", "")))
+                              for it in (_dc._load(_rd).get("datasets") or [])} if _rd else set()
+                    _todo = [b for b in _big if _os.path.normcase(_os.path.abspath(b["path"])) not in _known]
+                    if _todo and not getattr(es, "_bigdata_asked", False):
+                        es._bigdata_asked = True
+                        _msg = _dc.build_ask_message(_todo)
+                        _emit("enforcement", action="blocked", message=_msg, bigdata=True)
+                        return {"blocked": True, "message": _msg}
+        except Exception:
+            pass
+
+        # 2026-10-18（用户口径：先问清再动手）：grill 前置门禁
+        try:
+            note_grill_activity(es, tool_name, args)
+            _gb = grill_gate(es, tool_name, args)
+            if _gb:
+                _emit("enforcement", action="blocked", message=_gb["message"], grill=True)
+                return _gb
+        except Exception:
+            pass
 
         # 2026-10-09：执行位置 vs 审查位置对不上 → 软提醒（只提醒一次，不拦）
         _lm = _location_mismatch(es, tool_name, args)
@@ -1053,7 +1230,21 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                         should_proceed = r.get("should_proceed", True)
                         if not should_proceed:
                             issues = r.get("issues", [])
-                            es.blocked = True  # P0-1: 硬阻断接线 — 后续执行类工具被拦
+                            # 2026-10-18（风险分级）：低风险小规模任务，rail(pre) 的问题不硬阻断，
+                            # 只记录+提示 —— 否则跑个 12 行数据的均值也要先过重审查，用户嫌"繁琐"。
+                            _skip_block = False
+                            try:
+                                from webui.runtime import risk_tier as _rt2
+                                _skip_block = not _rt2.rail_block_allowed(_rt2.current_tier(es))
+                            except Exception:
+                                _skip_block = False
+                            if _skip_block:
+                                _emit("enforcement", action="notice",
+                                      message=("🛡️ 风险分级：低风险小规模任务，rail_review(pre) 的问题记为提示"
+                                               "（不硬阻断）：" + "; ".join(str(x) for x in issues[:3])))
+                                es.rail_pre_done = True
+                                es.blocked = False
+                            es.blocked = es.blocked if _skip_block else True  # P0-1: 硬阻断接线 — 后续执行类工具被拦
                             es._block_kind = "rail_pre"
                             es._block_reason = (f"🛡️ rail_review(pre) 发现问题: {'; '.join(issues[:3])}。"
                                                 "请修复后重新 rail_review(phase='pre') 通过再执行。")
@@ -1489,6 +1680,8 @@ _CODE_EDIT_GATED_TOOLS = {"execute_r", "execute_python", "execute_code", "run_sc
 
 
 def arm_code_edit(es: EnforcementState, reason: str = "", data=None) -> bool:
+    # 2026-10-21 用户要求：不再用"代码修改模式"锁 —— 按语义判断即可。
+    return False
     """进入代码修改模式：只改不跑。data=记忆里可供验证的数据路径（可空）。"""
     es.code_edit = True
     es.code_edit_verify = False          # 新一轮请求 = 重新决策（不沿用上次的同意）
@@ -1526,6 +1719,8 @@ def clear_code_edit(es: EnforcementState, grant_exec: bool = False) -> bool:
 
 
 def code_edit_gate(es: EnforcementState, tool_name: str, args=None):
+    # 2026-10-21 用户要求：去掉该锁，一律放行
+    return None
     """代码修改模式：拦执行类工具（None=放行）。"""
     if not code_edit_pending(es):
         return None

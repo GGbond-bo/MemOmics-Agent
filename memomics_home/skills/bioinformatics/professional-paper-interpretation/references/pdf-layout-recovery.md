@@ -50,6 +50,41 @@ def reorder(pg, split_x=200):
 **关键参数**（A4/Letter 双栏期刊实测）：左栏 x0 ≈ **39.7**，右栏 x0 ≈ **306.1** → 分栏阈值取 200 即可。
 不同刊/不同版式请先打印首页块坐标确认，**不要照抄**。
 
+### 1b. 通用分栏（不硬编码 x 阈值）——跨刊页宽也成立
+
+x 阈值只能用在探测过的刊上。换刊（Cell/Elsevier 页宽 **602.99 pt**、A4 595 pt、Letter 612 pt）时改用
+**"x-中心 vs 页中线" + 宽块检测**，同一份代码通用：
+
+```python
+def order_page(page):
+    W = page.rect.width
+    mid = W / 2.0
+    left, right, wide = [], [], []
+    for b in page.get_text("blocks"):
+        if not b[4].strip():
+            continue
+        x0, y0, x1 = b[0], b[1], b[2]
+        if (x1 - x0) > 0.72 * W:          # 跨栏块：标题 / 通栏图注 / 通栏脚注
+            wide.append(b)
+        elif (x0 + x1) / 2.0 < mid:       # 用中心而非左边界，避开缩进/悬挂标点
+            left.append(b)
+        else:
+            right.append(b)
+    left.sort(key=lambda b: b[1]); right.sort(key=lambda b: b[1]); wide.sort(key=lambda b: b[1])
+    # 归并：宽块若高于两栏头部就先出；否则先读完起点更高的那一栏（左优先）到下一个宽块顶部
+    ...
+```
+
+完整可运行版本（含归并循环、逐页写 txt、结构表输出）见 `../scripts/pdf_2col_extract.py`。
+
+> ⛔ **反面写法**：`sorted(blocks, key=lambda b: (round(b[1]/30), b[0]))`——按 y 分 30pt 桶再按 x 排序。
+> 看似合理，实际**把左右栏逐行交错**，且完全静默（文本非空、脚本 exit 0、顺序就是错的）。
+> 实测：Cell 双栏论文 p4 变成"…responses from enforced protocols"与"teomics on four muscles…"交替出现。
+
+**换刊时的验收动作**（每篇 PDF 必做一次，30 秒）：抽一页正文页 `head page_0NN.txt`，
+看首块是否**续读上一页的半句话**（如 `teomics on four muscles. Because leg muscles exhibited the strongest…`
+承接上页 `proteomics on four muscles` 的断词）→ 是则顺序正确；若相邻块在无关话题间跳 = 栏判错。
+
 ### 验收：语义连续性，而不是"排序规则对不对"
 
 ```python
@@ -136,6 +171,29 @@ pix.save(out_png)
 
 - 期望看到：`Phase I`、`BO`、`Principal component 1`、`Back-up selection`、`~60% success rate` 之类
 - 看到整句散文（"...we trained interpretable ML models..."）= **矩形错了**，把正文裁进来了，回去收紧 y/x
+
+### 4b. caption 前缀按刊不同，且补充图 caption 常在**下一页**
+
+上面第 1) 步的 `startswith(("Fig. ", "Extended Data Fig"))` 只覆盖 Nature 家族。换刊必须放宽前缀，
+否则**锚点全部丢失、裁剪静默回退到页底估值**（把 caption 散文裁进图里，或把多面板图裁残）：
+
+| 出版方 | 正文 caption | 补充 caption |
+|---|---|---|
+| Nature | `Fig. 1 \|` | `Extended Data Fig. 3 \|` |
+| **Cell / Elsevier** | `Figure 1.` | **`Figure S1:`（冒号！）** |
+| 通用 | `Table 1.` | `Supplementary Figure 2:` |
+
+```python
+CAP = re.compile(r"^(?:Supplementary\s+)?(?:Extended\s+Data\s+)?(?:Figure|Fig\.?|Table)\s+S?\d+\s*[:.|]", re.I)
+```
+
+**跨页续排**：补充图的多面板 caption 常从图页溢出到**下一页**（图页只有 `Figure S1:` + 前两个面板说明，
+`(D)` 起在次页）。这类页用"本页无 caption → 页底 −120pt"的兜底，产出可能包含 caption 文字或切掉底面板。
+处理：脚本里给每张图打印 `anchor=caption|FALLBACK`，**凡 FALLBACK 一律回看 p+1 取 caption 顶部重裁**；
+不要因为"文件生成了、字节数不小"就当作裁好了。可运行版本见 `../scripts/crop_figures_by_caption.py`。
+
+**整图页（无 caption、几乎无文本）**：补充材料里常有整页一张大图、字符数 < 10 的页（实测 p54/p58/p67 只有页码）。
+这类页直接按 image bbox 留边距渲染，别套 caption 规则。
 
 ---
 

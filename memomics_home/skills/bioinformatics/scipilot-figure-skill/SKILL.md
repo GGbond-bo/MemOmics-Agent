@@ -366,6 +366,7 @@ python_packages 声明：pandas, numpy, matplotlib, matplotlib.pyplot, matplotli
 | human | skeletal_muscle | - | 2026-09-21 | inspect_FeaturePlot_args.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-28 | fig_A2_5effects_v5_rawp.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-29 | 24_updown_8sub_combined_bigfig.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-15 | fig_A2_5effects_drop2_dz.R | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

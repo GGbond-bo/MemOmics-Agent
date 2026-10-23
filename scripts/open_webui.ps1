@@ -17,19 +17,30 @@ $url = "http://127.0.0.1:$Port"
 $ready = $false
 $deadline = (Get-Date).AddSeconds($TimeoutSec)
 while ((Get-Date) -lt $deadline) {
+    # 2026-10-17: 先确认端口在 LISTENING 再发健康请求。本机对"没有监听的端口"建连要空等约
+    # 2 秒（安全软件静默丢包），旧版每轮都白等 2 秒 → 浏览器明显要拖很久才弹出来。
+    $listening = $true
     try {
-        $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 "$url/api/health"
-        if ($r.StatusCode -eq 200 -and ($r.Content -match 'MemOmics')) {
-            # 更新场景：旧进程还在跑（health 带 restart_required=true）时不能算就绪，
-            # 否则打开的是"正在被替换的旧界面"。等它切到新代码再开。
-            if ($r.Content -match '"restart_required"\s*:\s*true') {
-                Start-Sleep -Milliseconds 700
-                continue
-            }
-            $ready = $true
-            break
+        $listening = $false
+        foreach ($line in (& netstat -ano)) {
+            if (($line -match '^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING') -and ([int]$Matches[1] -eq $Port)) { $listening = $true; break }
         }
-    } catch { }
+    } catch { $listening = $true }
+    if ($listening) {
+        try {
+            $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 "$url/api/health"
+            if ($r.StatusCode -eq 200 -and ($r.Content -match 'MemOmics')) {
+                # 更新场景：旧进程还在跑（health 带 restart_required=true）时不能算就绪，
+                # 否则打开的是"正在被替换的旧界面"。等它切到新代码再开。
+                if ($r.Content -match '"restart_required"\s*:\s*true') {
+                    Start-Sleep -Milliseconds 700
+                    continue
+                }
+                $ready = $true
+                break
+            }
+        } catch { }
+    }
     Start-Sleep -Milliseconds 700
 }
 

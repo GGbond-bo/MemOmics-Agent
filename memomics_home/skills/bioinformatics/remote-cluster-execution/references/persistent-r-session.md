@@ -74,7 +74,7 @@ rds，而不是重新读取。」
 
 - 输入：`/cluster/share/user/Muscle_96_38/Umap/MuSC_exercise_clean_dele_cluster_umap.rds`
   （661.8MB；与 `light.rds$src` 和 `musc_umap_prop_node1.R` 用的是**同一个文件**）；
-- 节点：`ssh23`（compute-node，503GB 内存、余量 495GB；小节点也够）；
+- 节点：`node4`（compute-node，503GB 内存、余量 495GB；小节点也够）；
 - 会话：`s-20261009-014300-vq48`，pid **109595**，R 4.4.1（`R4.41` env），daemon 脚本
   `memomics_cache/bin/r_session_daemon.R`。
 
@@ -92,7 +92,7 @@ objects=19 / rss_h=3.0GB`，`done/` 下 8 个结果文件，`out/` 下 `umap_ver
 
 ## 6. 实测踩坑（改代码前必读）
 
-1. **`setsid -f` 不是到处都有**：ssh23 的 setsid 不支持 `-f`（报 `invalid option -- 'f'`，直接死在启动）。
+1. **`setsid -f` 不是到处都有**：node4 的 setsid 不支持 `-f`（报 `invalid option -- 'f'`，直接死在启动）。
    现方案：`setsid -f` 可用就用，否则 `setsid`，再否则 `nohup`；配合 `>> session.log 2>&1 < /dev/null`。
 2. **`ps -o pid=,rss=` 在这种 ps 上会被吃掉**（procps-ng 3.3.10 实测：`-o pid=,rss=` → `,rss=`，pid 列丢失）。
    用 `-o pid,rss,etime,stat,args | tail -n +2`。

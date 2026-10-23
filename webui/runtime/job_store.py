@@ -21,7 +21,7 @@ class JobStore:
 
     LIVE_STATES = frozenset({"running", "cancelling"})
 
-    def __init__(self, path: str | Path, *, history_limit: int = 1000) -> None:
+    def __init__(self, path: str | Path, *, history_limit: int = 300) -> None:
         self.path = Path(path)
         self.history_limit = max(10, int(history_limit))
         self._lock = RLock()
