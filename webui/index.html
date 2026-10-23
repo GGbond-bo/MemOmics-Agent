@@ -20699,9 +20699,28 @@ async function applyUpdate() {
       _updateApplying = false;
       return;
     }
-    body.innerHTML = '<div style="color:var(--success);font-weight:600;">✅ 更新成功</div>' +
+    // 2026-10-23：覆盖层级事故的可见化——版本号没对上 / 覆盖里有失败/跳过，都要显式告知
+    var _verMismatch = (d.version_matches_remote === false);
+    var _ov = d.overlay || {};
+    var _ovWarn = (Number(_ov.failed || 0) > 0);
+    var _ovInfo = (Number(_ov.skipped || 0) > 0);
+    var _head = _verMismatch
+      ? '<div style="color:var(--danger);font-weight:600;">⚠️ 覆盖完成，但版本号没有对上</div>'
+      : '<div style="color:var(--success);font-weight:600;">✅ 更新成功</div>';
+    var _ovBox = '';
+    if (_verMismatch || _ovWarn || _ovInfo) {
+      var _lines = [];
+      if (_ov.copied !== undefined) _lines.push('覆盖文件：成功 ' + _ov.copied + ' / 跳过 ' + (_ov.skipped || 0) + ' / 失败 ' + (_ov.failed || 0));
+      if (_ovWarn && _ov.errors && _ov.errors.length) _lines.push('失败样例：' + _ov.errors.join('；'));
+      if (_verMismatch) _lines.push('磁盘版本仍为旧版——说明包内文件没有正确落到安装目录（不是"没下载"）。请把下面这段信息反馈给开发者，或手动解压更新包覆盖安装目录。');
+      _ovBox = '<div style="margin-top:8px;padding:8px 10px;border:1px solid var(--danger);border-radius:8px;color:var(--text);font-size:12px;">' +
+        escapeHtml(_lines.join('\n')).replace(/\n/g, '<br>') + '</div>' +
+        '<div style="margin-top:6px;font-size:12px;color:var(--text-light);">安装目录：<code>' + escapeHtml(d.install_dir || '?') + '</code></div>';
+    }
+    body.innerHTML = _head +
       '<div style="margin-top:6px;">' + escapeHtml(d.message || '代码已覆盖') + '</div>' +
       '<div style="margin-top:6px;">新版本：<code>' + escapeHtml(d.new_version || '?') + '</code></div>' +
+      _ovBox +
       (d.fix_log ? '<div style="margin-top:6px;color:var(--text-light);">迁移：' + escapeHtml(d.fix_log.slice(0, 200)) + '</div>' : '') +
       '<div id="mm-restart-box" style="margin-top:12px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;">' +
         '<div id="mm-restart-msg" style="color:var(--warning);font-weight:600;">⚠️ 需要重启 MemOmics 使更新生效</div>' +

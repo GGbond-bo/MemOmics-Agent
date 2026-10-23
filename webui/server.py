@@ -13258,6 +13258,12 @@ def _is_keep_path(rel: str, allow_skills: bool = True, allow_version: bool = Tru
     parts = [p for p in rel.split("/") if p and p != "."]  # 忽略空段和 ./ 段
     if not parts:
         return True
+    # 2026-10-23 事故修复：VERSION 与启动器必须允许覆盖（update 包要能刷版本号），
+    # 且要放在所有 keep 判定之前——否则被 _KEEP_FILES 里的 "VERSION" 提前拦掉。
+    if parts[-1] in ("VERSION", "启动.bat", "start.bat", "start.sh"):
+        return False
+    if parts[0] in ("MemOmics", "MemOmics-Windows") and parts[-1] == "VERSION":
+        return False
     top = parts[0]
     if top in _KEEP_TOP_LEVEL:
         # 例外 1: memomics_home/skills 技能库随版本更新
@@ -13416,6 +13422,9 @@ def _apply_overlay(extract_root: str, tops: list) -> int:
     import shutil as _sh
     _UPDATE_TASK["stage"] = "apply"
     copied = 0
+    skipped = 0
+    failed = 0
+    errors = []
     # 若 extract_root 本身就是某个 top 的内容目录，直接覆盖根
     base_name = os.path.basename(extract_root.rstrip(os.sep))
     roots = []
@@ -13454,14 +13463,27 @@ def _apply_overlay(extract_root: str, tops: list) -> int:
                     continue
                 s = os.path.join(root, fn)
                 d = os.path.join(dst_dir, rel_sub, fn)
+                # 2026-10-23：源与目标同一文件时跳过（多套一层的自覆盖会让计数虚高）
+                try:
+                    if os.path.exists(d) and os.path.samefile(s, d):
+                        skipped += 1
+                        continue
+                except OSError:
+                    pass
                 try:
                     os.makedirs(os.path.dirname(d), exist_ok=True)
                     _sh.copy2(s, d)
                     copied += 1
-                except Exception:
-                    # 单个文件失败不阻断（运行中占用等），记录继续
-                    pass
-    return copied
+                except Exception as _ce:
+                    # 单个文件失败不阻断（运行中占用等），但要记下来给用户看
+                    failed += 1
+                    if len(errors) < 20:
+                        errors.append("%s: %s" % (rel, _ce.__class__.__name__))
+    if failed and not copied:
+        # 全军覆没 = 明显异常（例如把内容根当成了新目录），直接报错而不是"成功"
+        raise RuntimeError("覆盖失败：%d 个文件全部无法写入（%s）"
+                           % (failed, "; ".join(errors[:3])))
+    return {"copied": copied, "skipped": skipped, "failed": failed, "errors": errors}
 
 
 @app.get("/api/update/check")
@@ -13751,14 +13773,37 @@ async def update_apply(payload: dict):
         tops = _safe_extract(archive, extract, is_tar=is_tar)
         if not tops:
             raise RuntimeError("安装包为空或解压失败")
-        # 解压后内容可能在顶层子目录（如 MemOmics-Windows/）
+        # 解压后内容通常在顶层子目录里（MemOmics/ / MemOmics-Windows/ 等）。
+        # 2026-10-23 事故修复：原来只认 start.bat / start.sh，而我们的包根只有
+        # 启动.bat / update_*.bat → 识别失败会把 MemOmics/ 当成"要新建的子目录"，
+        # 结果整包被覆盖到 <安装目录>/MemOmics/（多套一层），安装目录本身没变。
+        # 现在按「启动器名（含中文）」+「结构特征（webui/server.py 或 VERSION）」双重识别。
+        _ROOT_MARKERS = ("webui/server.py", "webui/index.html", "VERSION", "memomics/__init__.py")
+        _LAUNCHER_NAMES = ("start.bat", "start.sh", "启动.bat", "launch.bat",
+                           "update_windows.bat", "update_macos_linux.sh")
         extract_root = extract
         for t in tops:
             cand = os.path.join(extract, t)
-            if os.path.isdir(cand) and (os.path.isfile(os.path.join(cand, "start.bat")) or
-                                        os.path.isfile(os.path.join(cand, "start.sh"))):
+            if not os.path.isdir(cand):
+                continue
+            has_launcher = any(os.path.isfile(os.path.join(cand, n)) for n in _LAUNCHER_NAMES)
+            # 结构特征：必须真的像 MemOmics（webui/server.py 或 VERSION 在根）
+            has_signature = (os.path.isfile(os.path.join(cand, "webui", "server.py"))
+                             or (os.path.isfile(os.path.join(cand, "VERSION"))
+                                 and os.path.isdir(os.path.join(cand, "memomics"))))
+            if has_launcher or has_signature:
                 extract_root = cand
+                print("[MemOmics] 更新：识别包根 = %s（launcher=%s signature=%s）"
+                      % (t, has_launcher, has_signature), flush=True)
                 break
+            for m in _ROOT_MARKERS:  # 兜底：任意标记文件命中也算（如 strays）
+                if os.path.isfile(os.path.join(cand, m)):
+                    extract_root = cand
+                    print("[MemOmics] 更新：识别包根 = %s（marker=%s）" % (t, m), flush=True)
+                    break
+            else:
+                continue
+            break
         # 2.5 覆盖前先检测并迁掉老数据目录（2026-10-08 改名；老安装升级场景）
         _hmig = "noop"
         try:
@@ -13768,7 +13813,13 @@ async def update_apply(payload: dict):
         except Exception as _hme:
             _hmig = "error:%r" % (_hme,)
         # 3. 差异覆盖（保留用户数据）
-        copied = _apply_overlay(extract_root, tops)
+        _ov = _apply_overlay(extract_root, tops)
+        copied = _ov["copied"]
+        if _ov.get("failed") or _ov.get("skipped"):
+            print("[MemOmics] 更新覆盖：成功 %d / 跳过 %d / 失败 %d%s"
+                  % (copied, _ov.get("skipped", 0), _ov.get("failed", 0),
+                     ("；失败样例: " + ", ".join(_ov.get("errors", [])[:5])) if _ov.get("errors") else ""),
+                  flush=True)
         # 4. 应用文件级迁移
         fix_log = ""
         try:
@@ -13787,8 +13838,16 @@ async def update_apply(payload: dict):
         _msg = f"已覆盖 {copied} 个代码文件到 {MEMOMICS_DIR}" + ("" if os.path.basename(os.path.normpath(extract_root)) == os.path.basename(os.path.normpath(MEMOMICS_DIR)) else f"（安装目录名 {os.path.basename(os.path.normpath(MEMOMICS_DIR))} 与包内目录名不同，已按实际运行目录覆盖，不用改名）")
         if _hmig.startswith(("renamed", "merged")):
             _msg += "；检测到覆盖升级，已自动迁移旧数据目录（hermes_home→memomics_home）"
+        _ver_ok = (new_local.get("version") or "").strip() == (remote.get("tag") or "").strip()
+        if not _ver_ok:
+            # 2026-10-23：覆盖后版本号没变 = 有问题（例如覆盖层级不对），必须让用户看见
+            _msg += "；⚠️ 覆盖后版本号仍为 %s（预期 %s），请查看服务端日志" % (
+                new_local.get("version"), remote.get("tag"))
         return {"ok": True, "message": _msg, "fix_log": fix_log,
                 "new_version": new_local.get("version"), "restart_required": True,
+                "overlay": {"copied": copied, "skipped": _ov.get("skipped", 0),
+                            "failed": _ov.get("failed", 0), "errors": _ov.get("errors", [])[:5]},
+                "version_matches_remote": _ver_ok,
                 "install_dir": MEMOMICS_DIR, "asset_size_mb": remote.get("asset_size_mb")}
     except RuntimeError as e:
         _UPDATE_TASK["running"] = False
