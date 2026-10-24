@@ -125,6 +125,7 @@
   "/api/sessions/{sid}/todos/item": "session",
   "/api/sessions/{sid}/wakeup": "session",
   "/api/setup/config": "public",
+  "/api/setup/dismiss": "public",
   "/api/setup/status": "public",
   "/api/skills": "public",
   "/api/skills/bulk-toggle": "public",

@@ -68,9 +68,13 @@ class TestNoKeyGuidance(unittest.TestCase):
         self.assertIn("还没有配置 API Key（或 Key 无效）", self.src)
 
     def test_frontend_reopens_setup_modal(self):
+        """2026-10-24 改版：不再是「重开向导」，而是给一个「去设置」小按钮。
+        欢迎界面为一次性（welcome_shown），未配置只提示 + 一处入口。"""
         h = io.open(INDEX, encoding="utf-8").read()
         self.assertIn("msg.need_setup", h)
-        self.assertIn("memomics_setup_dismissed", h)
+        self.assertIn("function showNeedSetupAction", h)
+        body = h[h.find("function showNeedSetupAction()"):h.find("function showNeedSetupAction()") + 900]
+        self.assertIn("去设置", body)
 
 
 if __name__ == "__main__":

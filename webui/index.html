@@ -4508,11 +4508,10 @@ function handleMessage(msg) {
     document.getElementById('steer-hint').style.display = 'none';
     refreshResults();  // 出错也可能已有部分产出,顺带刷一下结果面板
     _scheduleResultsRefresh(2500);   // 2026-10-12：出错/中断后同样宽限轮询，别让最后落盘的图漏掉
-    // 2026-10-24：还没配 API Key 就发消息 → 后端回 need_setup，这里把配置向导自动弹回来
-    // （此前只显示 hermes-agent 的原始报错，用户不知道去哪配）
+    // 2026-10-24：还没配 API Key 就发消息 → 后端回 need_setup。
+    // 不做引导：只在报错气泡下方给一个直达「设置」的小按钮（何时去填由用户决定）。
     if (msg.need_setup) {
-      try { localStorage.removeItem('memomics_setup_dismissed'); } catch (e) {}
-      if (typeof showSetupModal === 'function' && !document.getElementById('setup-modal')) showSetupModal();
+      try { showNeedSetupAction(); } catch (e) {}
     }
   } else if (msg.type === 'todos') {
     renderTodos(msg.todos);
@@ -18086,153 +18085,65 @@ async function ensureFreshUI() {
 
 async function checkFirstRun() {
   await ensureFreshUI();
+  // 2026-10-24（用户最终口径）：欢迎界面只在安装后第一次打开出现一次，之后不再出现。
+  // 不做任何 API 配置引导 —— 用户自己去「设置」里填 Key。
   try {
     var r = await fetch('/api/setup/status');
     var d = await r.json();
-    if (d.needs_config) {
-      // 2026-10-12：用户反馈「刷新一次就弹一次，要求重填 API Key」。
-      // 后端已在 /api/setup/status 里做了自愈（provider_keys 里有 key 就不算未配置），
-      // 这里再保一层：手动关过一次的，本次构建内刷新不再弹（换版本/换配置才会再问）。
-      var dismissed = '';
-      var build = '';
-      try { dismissed = localStorage.getItem('memomics_setup_dismissed') || ''; } catch(e) {}
-      try { build = localStorage.getItem('memomics_ui_build') || ''; } catch(e) {}
-      if (dismissed && dismissed === build) return;
-      showSetupModal();
-    }
+    if (d.welcome_shown) return;   // 已经看过：永不再弹
+    showWelcome();
+    markWelcomeShown();           // 弹出即记账（本次记下，之后不再出现）
   } catch(e) { /* 忽略 */ }
 }
 
-function dismissSetup() {
-  try { localStorage.setItem('memomics_setup_dismissed', localStorage.getItem('memomics_ui_build') || ''); } catch(e) {}
+// 标记「欢迎界面已展示」——服务端持久化，跨刷新/跨版本都只出现一次
+function markWelcomeShown() {
+  try { localStorage.setItem('memomics_welcome_shown', '1'); } catch(e) {}
+  try {
+    fetch('/api/setup/dismiss', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ dismissed: true })
+    });
+  } catch(e) {}
+}
+
+// 关闭欢迎界面（纯本地操作，无需再记账）
+function closeWelcome() {
   var el = document.getElementById('setup-modal');
   if (el) el.remove();
 }
 
-function showSetupModal() {
+// 简单欢迎界面：一句欢迎 + 关闭。不含任何 API / 配置引导。
+function showWelcome() {
+  if (document.getElementById('setup-modal')) return;
   var modal = document.createElement('div');
   modal.id = 'setup-modal';
-  modal.innerHTML = '<div class="setup-box">' +
-    '<h2>' + T('🧬 欢迎使用 MemOmics') + '</h2>' +
-    '<p>' + T('首次使用，请选择 API 提供商并配置 Key。') + '</p>' +
-    '<label>' + T('API 提供商') + '</label>' +
-    '<select id="setup-provider-select" onchange="onSetupProviderSelect()" style="width:100%;"></select>' +
-    '<label>' + T('模型') + '</label>' +
-    '<select id="setup-model" style="width:100%;"></select>' +
-    '<label>' + T('API Base URL (自动填充)') + '</label>' +
-    '<input id="setup-baseurl" placeholder="' + T('自动填充') + '" readonly />' +
-    '<label>API Key</label>' +
-    '<input id="setup-apikey" type="password" placeholder="sk-..." autocomplete="off" />' +
-    '<div id="setup-hint" style="font-size:11px;color:#888;margin-top:2px;"></div>' +
-    '<div class="setup-err" id="setup-err"></div>' +
-    '<button class="setup-btn" onclick="submitSetup()">' + T('🚀 开始使用') + '</button>' +
-    '<div style="margin-top:8px;text-align:right;"><span style="cursor:pointer;font-size:11px;color:#888;text-decoration:underline;" onclick="dismissSetup()">' + T('稍后配置（本次不再提示）') + '</span></div>' +
+  modal.innerHTML = '<div class="setup-box" style="text-align:center;">' +
+    '<h2 style="margin-bottom:14px;">' + T('🧬 欢迎使用 MemOmics') + '</h2>' +
+    '<p style="margin-bottom:22px;">' + T('本机组学分析 Agent 已就绪，祝分析顺利。') + '</p>' +
+    '<button class="setup-btn" onclick="closeWelcome()">' + T('开始使用') + '</button>' +
     '</div>';
   document.body.appendChild(modal);
-  loadSetupProviders();
 }
 
-var _setupProviders = [];
-var _setupModels = [];
-async function loadSetupProviders() {
-  try {
-    var r = await fetch('/api/providers');
-    var d = await r.json();
-    _setupProviders = d.providers || [];
-    var sel = document.getElementById('setup-provider-select');
-    if (!sel) return;
-    var groups = {};
-    _setupProviders.forEach(function(p) {
-      var g = p.group || '其他';
-      if (!groups[g]) groups[g] = [];
-      groups[g].push(p);
-    });
-    function renderGroup(gName) {
-      if (!groups[gName]) return '';
-      var h = '<optgroup label="' + escapeHtml(gName) + '">';
-      groups[gName].forEach(function(p) {
-        h += '<option value="' + p.id + '">' + escapeHtml(p.name) + ' (' + p.model_count + ' 模型)</option>';
-      });
-      return h + '</optgroup>';
-    }
-    var html = '';
-    html += renderGroup('★ DCS Cloud (推荐)');
-    html += renderGroup('国内服务');
-    html += renderGroup('国际大厂');
-    delete groups['★ DCS Cloud (推荐)']; delete groups['国内服务']; delete groups['国际大厂'];
-    Object.keys(groups).sort().forEach(function(g) { html += renderGroup(g); });
-    sel.innerHTML = html;
-    sel.value = 'dcs-cloud';
-    await onSetupProviderSelect();
-  } catch(e) {
-    console.error('loadSetupProviders error', e);
-  }
+// 未配置 Key 时的小行动按钮（2026-10-24）：报错气泡下方一个「⚙️ 去设置」。
+// 刻意不做引导流程——只给一处入口，配不配由用户自己决定。
+function showNeedSetupAction() {
+  if (document.getElementById('need-setup-action')) return;
+  var box = document.createElement('div');
+  box.id = 'need-setup-action';
+  box.style.cssText = 'margin:10px 0;padding:9px 12px;border:1px solid var(--border,#ddd);border-radius:8px;'
+    + 'background:var(--panel,#fafafa);font-size:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
+  box.innerHTML = '<button onclick="switchView(\'settings\');this.parentNode.remove()" style="padding:5px 12px;border:none;'
+    + 'border-radius:6px;background:var(--primary,#4a6cf7);color:#fff;cursor:pointer;font-size:12.5px;">'
+    + T('⚙️ 去设置') + '</button>';
+  var host = document.getElementById('messages') || document.body;
+  host.appendChild(box);
+  try { box.scrollIntoView({behavior: 'smooth', block: 'nearest'}); } catch(e) {}
 }
 
-async function onSetupProviderSelect() {
-  var pid = document.getElementById('setup-provider-select').value;
-  if (!pid) return;
-  var provider = _setupProviders.find(function(p) { return p.id === pid; });
-  if (!provider) return;
-  document.getElementById('setup-baseurl').value = provider.api || '';
-  var hint = document.getElementById('setup-hint');
-  if (hint) {
-    if (provider.env_var && provider.id === 'dcs-cloud') {
-      hint.textContent = '💡 DCS Cloud 一个 key 通吃所有模型（DeepSeek/GLM/Kimi/通义等）';
-    } else if (provider.env_var) {
-      hint.textContent = '环境变量: ' + provider.env_var;
-    } else { hint.textContent = ''; }
-  }
-  try {
-    var r = await fetch('/api/providers/' + encodeURIComponent(pid) + '/models');
-    var d = await r.json();
-    _setupModels = d.models || [];
-    var sel = document.getElementById('setup-model');
-    sel.innerHTML = _setupModels.map(function(m) {
-      var label = m.name;
-      if (m.reasoning) label += ' [推理]';
-      if (m.tool_call) label += ' [工具]';
-      return '<option value="' + m.id + '">' + label + '</option>';
-    }).join('');
-    if (_setupModels.length) sel.value = _setupModels[0].id;
-  } catch(e) {
-    document.getElementById('setup-model').innerHTML = '<option value="">' + T('(无法加载模型)') + '</option>';
-  }
-}
-
-async function submitSetup() {
-  var pid = document.getElementById('setup-provider-select').value;
-  var model = document.getElementById('setup-model').value;
-  var base_url = document.getElementById('setup-baseurl').value.trim();
-  var api_key = document.getElementById('setup-apikey').value.trim();
-  var provider = 'openai';
-  var err = document.getElementById('setup-err');
-  err.style.display = 'none';
-  if (!base_url || !api_key || !model) {
-    err.textContent = '请填写所有字段'; err.style.display = 'block'; return;
-  }
-  try {
-    // 先保存 provider key (让交互框下拉框有模型)
-    await fetch('/api/providers/' + encodeURIComponent(pid) + '/key', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ api_key: api_key })
-    });
-    var r = await fetch('/api/setup/config', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({provider: provider, base_url: base_url, api_key: api_key, model: model})
-    });
-    var d = await r.json();
-    if (d.ok) {
-      document.getElementById('setup-modal').remove();
-      loadModels();
-      refreshModelUI();
-    } else {
-      err.textContent = d.error || '保存失败'; err.style.display = 'block';
-    }
-  } catch(e) {
-    err.textContent = '网络错误: ' + e.message; err.style.display = 'block';
-  }
-}
+// 兼容旧引用（不再被调用）
+function dismissSetup() { closeWelcome(); }
 
 // === 环境管理（env_inventory，2026-09-22）===
 // 数据源：GET /api/env/inventory（只读缓存、秒回；refresh=1 只踢后台线程，前端轮询 state.status）

@@ -9907,6 +9907,20 @@ async def switch_model(payload: dict):
         if provider:
             new_cfg["provider"] = provider
         s["model_config"] = new_cfg
+        # 2026-10-24（用户反馈「切模型后又被要求配置 API」）：会话级切换只改会话配置，
+        # 全局 _current_model 可能还停在"未配置"状态 → /api/setup/status 判 needs_config
+        # 成立 → 欢迎窗反复弹。这里把会话里的有效配置同步到全局。
+        try:
+            if _is_valid_api_key(new_cfg.get("api_key")):
+                _changed = False
+                for _k in ("provider", "base_url", "api_key", "model"):
+                    if new_cfg.get(_k) and _current_model.get(_k) != new_cfg.get(_k):
+                        _current_model[_k] = new_cfg[_k]
+                        _changed = True
+                if _changed:
+                    _save_model_config()
+        except Exception as _se:
+            print(f"[MemOmics] 同步全局模型配置失败: {_se}", flush=True)
         # 2026-08-08：切换模型 = 用户活跃操作 → 更新 last_active，
         # 让该会话在 /api/sessions 列表排到最前（刷新后 autoSelectLatestSession
         # 选中的是它，而不是某个空配置的自检/新会话 → 下拉框显示切过的模型）。
@@ -13932,6 +13946,42 @@ async def update_apply(payload: dict):
 
 # === 首次启动 / 环境检测 ===
 
+def _welcome_shown_get() -> bool:
+    """欢迎界面是否已经展示过（服务端持久化，2026-10-24）。
+
+    用户口径：欢迎界面只在安装后第一次打开出现一次，之后不再出现。
+    存 memomics_home/ui_prefs.json —— update 包不会覆盖 memomics_home/，
+    所以这个"只一次"跨版本升级依然有效。
+    """
+    try:
+        if os.path.exists(_UI_PREFS_PATH):
+            with open(_UI_PREFS_PATH, "r", encoding="utf-8") as f:
+                _d = json.load(f) or {}
+                return bool(_d.get("welcome_shown") or _d.get("setup_dismissed"))
+    except Exception:
+        pass
+    return False
+
+
+def _welcome_shown_set(flag: bool = True) -> bool:
+    try:
+        data = {}
+        if os.path.exists(_UI_PREFS_PATH):
+            try:
+                with open(_UI_PREFS_PATH, "r", encoding="utf-8") as f:
+                    data = json.load(f) or {}
+            except Exception:
+                data = {}
+        data["welcome_shown"] = bool(flag)
+        os.makedirs(os.path.dirname(_UI_PREFS_PATH), exist_ok=True)
+        with open(_UI_PREFS_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        print(f"[WARN] 保存 setup_dismissed 失败: {e}", flush=True)
+        return False
+
+
 @app.get("/api/setup/status")
 async def setup_status():
     """检查是否需要首次配置
@@ -13942,11 +13992,23 @@ async def setup_status():
     """
     healed = _heal_current_model_from_provider_keys()
     _has_valid_key = _is_valid_api_key(_current_model.get("api_key"))
-    needs_config = (not _has_valid_key
-                    or not _current_model.get("base_url")
-                    or not _current_model.get("model"))
+    # 2026-10-24（用户反馈「切模型后又被要求配置」）：判据收窄。
+    # 旧判据把「缺 base_url / 缺 model」也算未配置 —— 用户明明在向导或设置里存过 Key，
+    # 只要全局 _current_model 有一项没同步上，就仍判 needs_config → 欢迎窗反复弹。
+    # 新判据：只有"真的一条可用 Key 都没有"才算未配置（此时才需要引导去设置）。
+    _any_saved_key = any(_is_valid_api_key((v or {}).get("api_key"))
+                         for v in (globals().get("_provider_keys") or {}).values())
+    _model_ready = (_has_valid_key
+                    and _current_model.get("base_url")
+                    and _current_model.get("model"))
+    needs_config = (not _model_ready) and (not _any_saved_key)
+    # 2026-10-24（用户最终口径）：欢迎界面只在"安装后第一次打开"出现一次，之后永不再弹。
+    # 与是否需要配置 API 无关——用户自己去设置里填 Key，不再有引导。
+    _welcome_shown = _welcome_shown_get()
     return {
         "needs_config": needs_config,
+        "welcome_shown": _welcome_shown,
+        "should_welcome": (not _welcome_shown),
         "healed": healed,
         "current": {
             "provider": _current_model.get("provider", "openai"),
@@ -13955,6 +14017,21 @@ async def setup_status():
             "has_key": _has_valid_key,
         }
     }
+
+
+@app.post("/api/setup/dismiss")
+async def setup_dismiss(req: Request):
+    """标记欢迎界面已展示（前端一弹出就调，2026-10-24）。
+
+    保留该端点名以兼容旧页面；语义 = welcome_shown。
+    """
+    try:
+        data = await req.json()
+    except Exception:
+        data = {}
+    flag = bool(data.get("dismissed", True))
+    _welcome_shown_set(flag)
+    return {"ok": True, "welcome_shown": flag}
 
 
 @app.post("/api/setup/config")
@@ -14773,50 +14850,50 @@ def _salvage_steer_text(raw) -> str:
     return "\n".join(kept).strip()
 
 
-# 2026-10-23：阶段小结缺失提醒（用户实测会话 memomics-fd497d3a：10 个中间回合 content=0、reasoning 662–3400 字 —— 模型把过程全写进思考通道，交互框里既没有小结也没有可折叠内容）。
-def _maybe_narration_nudge(session) -> bool:
-    """上一轮正文为空（内容都写进了思考/reasoning）→ 提醒把阶段小结写进正文。
-
-    经 _pending_steer 通道注入（下一轮 LLM 调用前生效）；非首轮才提醒、同一回合最多 2 次。
-    """
-    try:
-        if session is None:
-            return False
-        st = session.setdefault("_narration", {"round_chars": 0, "nudges": 0, "tools": 0})
-        _chars = st.get("round_chars", 0)
-        st["tools"] = st.get("tools", 0) + 1
-        st["round_chars"] = 0        # 新一轮开始，正文长度重新计
-        if _chars >= 25:              # 上一轮有正文 → 无需提醒
-            return False
-        if st["tools"] <= 1:         # 第一轮不给压力（模型可能直接开工）
-            return False
-        if st.get("nudges", 0) >= 2:
-            return False
-        agent = session.get("running_agent")
-        if agent is None:
-            return False
-        _steer = (
-            "【系统强制提示】上一轮正文为空——内容只写进了思考/thinking 通道，用户在交互框里看不到。\n"
-            "按回复规范：**阶段小结要写在正式回复的正文里**。\n"
-            "请在本轮调用工具之前，先用 2–4 句把这一阶段的【为什么 / 怎么做 / 结果 / 下一步】写进正文，再继续调工具。"
-        )
-        _lock = getattr(agent, "_pending_steer_lock", None)
-        if _lock is not None:
-            with _lock:
-                agent._pending_steer = (agent._pending_steer + "\n" + _steer) if agent._pending_steer else _steer
-        else:
-            _cur = getattr(agent, "_pending_steer", "") or ""
-            agent._pending_steer = (_cur + "\n" + _steer) if _cur else _steer
-        st["nudges"] = st.get("nudges", 0) + 1
-        try:
-            _session_emit(session, {"type": "info",
-                "content": "💬 上一轮正文为空（内容写进了思考）——已提醒把阶段小结写进正文，交互框不再空着。",
-                "session_id": session["id"]})
-        except Exception:
-            pass
-        return True
-    except Exception:
-        return False
+# 2026-10-23：阶段小结缺失提醒（用户实测会话 memomics-fd497d3a：10 个中间回合 content=0、reasoning 662–3400 字 —— 模型把过程全写进思考通道，交互框里既没有小结也没有可折叠内容）。
+def _maybe_narration_nudge(session) -> bool:
+    """上一轮正文为空（内容都写进了思考/reasoning）→ 提醒把阶段小结写进正文。
+
+    经 _pending_steer 通道注入（下一轮 LLM 调用前生效）；非首轮才提醒、同一回合最多 2 次。
+    """
+    try:
+        if session is None:
+            return False
+        st = session.setdefault("_narration", {"round_chars": 0, "nudges": 0, "tools": 0})
+        _chars = st.get("round_chars", 0)
+        st["tools"] = st.get("tools", 0) + 1
+        st["round_chars"] = 0        # 新一轮开始，正文长度重新计
+        if _chars >= 25:              # 上一轮有正文 → 无需提醒
+            return False
+        if st["tools"] <= 1:         # 第一轮不给压力（模型可能直接开工）
+            return False
+        if st.get("nudges", 0) >= 2:
+            return False
+        agent = session.get("running_agent")
+        if agent is None:
+            return False
+        _steer = (
+            "【系统强制提示】上一轮正文为空——内容只写进了思考/thinking 通道，用户在交互框里看不到。\n"
+            "按回复规范：**阶段小结要写在正式回复的正文里**。\n"
+            "请在本轮调用工具之前，先用 2–4 句把这一阶段的【为什么 / 怎么做 / 结果 / 下一步】写进正文，再继续调工具。"
+        )
+        _lock = getattr(agent, "_pending_steer_lock", None)
+        if _lock is not None:
+            with _lock:
+                agent._pending_steer = (agent._pending_steer + "\n" + _steer) if agent._pending_steer else _steer
+        else:
+            _cur = getattr(agent, "_pending_steer", "") or ""
+            agent._pending_steer = (_cur + "\n" + _steer) if _cur else _steer
+        st["nudges"] = st.get("nudges", 0) + 1
+        try:
+            _session_emit(session, {"type": "info",
+                "content": "💬 上一轮正文为空（内容写进了思考）——已提醒把阶段小结写进正文，交互框不再空着。",
+                "session_id": session["id"]})
+        except Exception:
+            pass
+        return True
+    except Exception:
+        return False
 
 
 def _loop_inject_steer(session, agent, reason: str, detail: str) -> bool:
