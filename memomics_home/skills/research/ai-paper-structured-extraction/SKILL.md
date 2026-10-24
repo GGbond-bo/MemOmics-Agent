@@ -27,6 +27,34 @@ metadata:
 - **professional-paper-interpretation**：编辑视角叙事逻辑解读（人看的方向，Mermaid 框架图 + 写作策略）。
 - **本 skill**：**忠实抽取型**——不做叙事美化，只做「可溯源的事实结构化」。交付常是独立 `.md`（放 `results/<session>/data/` 或用户桌面），不写文献库。
 
+### 输入是 PDF 时：先落地全文，再按本 skill 读（2026-10-24 新增）
+
+本 skill 的输入默认是 `.txt`；用户直接丢 PDF 时**先提取成文本**，不要硬啃 PDF：
+
+```bash
+OUT="results/<sid>/data/<paper>"; mkdir -p "$OUT"
+.venv/Scripts/python.exe memomics_home/skills/bioinformatics/paper-summary/scripts/run.py \
+  extract --tier1 --pdf "<pdf路径>" --out "$OUT"
+```
+
+产出 `fulltext.txt` / `metadata.json` / `figures/`（实测 31 页 bioRxiv 预印本 → 99,245 字符 + 3 图，约 2 秒；依赖 pymupdf，`import fitz` 的 deprecation warning 可忽略）。
+
+**长论文（>20 页 / bioRxiv 预印本）三件事**：
+
+1. **先建章节地图，再读**：
+   `grep -n -E "^[0-9]+\.?[0-9]*\s*[A-Z][a-zA-Z]+|^Abstract|^Introduction|^Results|^Discussion|^References" fulltext.txt`；附录另用 `grep -n "^A\.[0-9]"`。
+   ⚠️ **单次 grep 会误命中**：实测把第 5 节误报成 `422:Methods`（真正结果节从 393 行起）、把正文引用的 "Table 1" 当成文末结果表（真正数值表在 1648 行）。→ 必须 `read_file` 落在该行附近核对内容，**别据一次 grep 定结构或找表**。bioRxiv 页脚的版权/DOI 行会反复插入、占掉大量行号，别当正文。
+2. **分块读，400–450 行一块**（`read_file` 单次 ~100K 字符会截断）。顺序：摘要/引言 → 框架与方法 → 结果 → Discussion → **附录 Extended Methods** → 最后单独取表数值。
+3. **参数只在附录**：迭代预算、重试上限、每步上限、包版本、评分 rubric 正文通常一个字不提（实例见下）。
+
+### 数字双来源核对（表 ↔ 正文叙述）
+
+结构化数字常**分两处**，只读一处必错：
+
+- **主结果表**（多在文末 Supplementary）+ **正文叙述的幅度/p 值** → 分别读、核对一致后再写进摘要；口径写清（micro vs macro、相对哪个基线）。
+- p 值 / n / 样本量**逐字引用**，不四舍五入、不概括。
+- CellVoyager 完整实例（表值 + 正文 + 三案例评分 + 附录参数）：`references/pdf-preprint-extraction-recipe.md`
+
 ### 读取流程（必须先读原文）
 1. **先列文件、确认存在**，再逐段读。
    - 用 `read_file(path, offset, limit)` 分块读；两篇独立 → **并行读**（同一回合发多个 read_file）。
@@ -67,6 +95,11 @@ metadata:
 - 把「图表里能看到但正文没写」的数字当正文结论 → 标注来源图号。
 - 交付只发在对话里 → 用户常要落成 `.md` 文件（放 `results/<session>/data/`），写文件后再校验字节数/头部。
 - 两篇以上时必须**每篇独立分节**（用户明确要求），不要合并成一篇写。
+- **用户点名了结构就按用户的结构答**：用户问「背景 / 思路 / 实验内容（步骤+结果）/ 结论」→ 就答这四块；上面的 10 节模板是**兜底不是枷锁**，硬套会被视为答非所问（2026-10-24 CellVoyager 实测）。
+- **流程/架构类论文在「思路」节配 `mermaid flowchart TD`**：节点名**照抄原文 Algorithm / pipeline 的步骤名**（如 PLAN→REFLECT→CODE→EXECUTE→FIXCODE→VLM 解读→REPLAN→REPORT），参数内嵌节点文本（`≤8 步`、`修 bug 3 次`）；图**不替代文字**，每步原理与参数仍要完整展开。
+- **交付双轨**：对话里给**自成一体的完整解读**（用户只看对话，禁止只回「已落盘，路径在 X」）+ 同一份 `.md` 落盘供转发；交付物放 `results/<sid>/results/`，原始提取物（fulltext/figures/metadata）放 `results/<sid>/data/<paper>/`，并在回复里如实列出两条路径。
+- **阶段小结写在回复正文里**：长解读要跨多轮调工具时，每轮正文开头先写 2–4 句「为什么 / 怎么做 / 结果 / 下一步」；只写在 thinking 通道用户看不到（实测被系统连纠两次）。
 
 ### 参考
 - `references/worked-examples-chemcrow-sciencebuddy.md`：本次两篇（ChemCrow / ScienceBuddy）的实际 10 节输出骨架，可作模板复用。
+- `references/pdf-preprint-extraction-recipe.md`：**PDF 长预印本提取配方** —— 落地命令、章节地图与误命中实例（`422:Methods` / `Table 1` 首条误命中）、分块读行号、数字双来源核对（CellVoyager 全量数值：CellBench 50 篇/483 分析、65.89/68.74 vs 基线 49.89/55.25、80% 假设值得深入、p=0.001 / r=0.047）、附录参数清单、四块输出骨架、交付目录分工。

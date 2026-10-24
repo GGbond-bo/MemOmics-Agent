@@ -480,6 +480,10 @@ _URL_TO_PROVIDER: Dict[str, str] = {
     "generativelanguage.googleapis.com": "gemini",
     "inference-api.nousresearch.com": "nous",
     "api.deepseek.com": "deepseek",
+    # 2026-10-25: DCS Cloud（GenPilot）聚合网关。不登记时 _infer_provider_from_url
+    # 返回 None → 跳过 models.dev 权威查询 → 落硬编码家族兜底
+    # （实测：deepseek-flash 被报 128K，而 models.dev 对同一 slug 是 1M）。
+    "dcsapi.dcs.cloud": "deepseek",
     "api.githubcopilot.com": "copilot",
     # Enterprise Copilot endpoints look like api.enterprise.githubcopilot.com,
     # api.business.githubcopilot.com, etc.  Match the suffix so context-window
@@ -2405,6 +2409,35 @@ def get_model_context_length(
             # DEFAULT_CONTEXT_LENGTHS (e.g. "claude-opus-4-8" → 1M).
             # Without this, the early return here short-circuits the catalog
             # lookup at step 8 and silently caps context at 256K.
+            #
+            # 2026-10-25: 先给 models.dev 一次机会 —— 旧写法只用硬编码目录，
+            # 会把「网关别名」按家族兜底砸小（实测 DCS Cloud 的 deepseek-flash
+            # 被砸成 128K，而 models.dev 对同一 slug 是 1M）。这里复用
+            # get_model_context_length 的完整链路（含 MiniMax-M3 的防低估保护），
+            # 只在拿到 >0 的值时采用；查不到仍走下面的目录/兜底。
+            _ctx_prov = str(provider or "").strip()
+            if not _ctx_prov or _ctx_prov in {"openrouter", "custom", "openai"}:
+                try:
+                    _ctx_prov = _infer_provider_from_url(base_url or "") or _ctx_prov
+                except Exception:
+                    pass
+            if _ctx_prov:
+                try:
+                    _known_ctx = get_model_context_length(
+                        model,
+                        base_url=base_url or "",
+                        provider=_ctx_prov,
+                    )
+                    if isinstance(_known_ctx, int) and _known_ctx > 0:
+                        logger.info(
+                            "Using models.dev/provider-aware context %s for model %r "
+                            "(custom endpoint, provider=%r)",
+                            f"{_known_ctx:,}", model, _ctx_prov,
+                        )
+                        return _known_ctx
+                except Exception:
+                    logger.debug("provider-aware context lookup failed for %r", model,
+                                 exc_info=True)
             model_lower = model.lower()
             for default_model, length in sorted(
                 DEFAULT_CONTEXT_LENGTHS.items(),
@@ -2436,7 +2469,16 @@ def get_model_context_length(
     # (e.g. claude-opus-4.6 is 1M on Anthropic but 128K on GitHub Copilot).
     # If provider is generic (openrouter/custom/empty), try to infer from URL.
     effective_provider = provider
-    if not effective_provider or effective_provider in {"openrouter", "custom"}:
+    # 2026-10-25: include the literal "openai" — it is the TRANSPORT label
+    # ("OpenAI-compatible endpoint") for every custom provider in MemOmics,
+    # not proof the model lives on api.openai.com.  Without this, a gateway
+    # base_url (e.g. DCS Cloud) kept effective_provider="openai", so the
+    # models.dev lookup ran under the wrong namespace and always missed —
+    # then the hardcoded family catalog capped the window
+    # (measured: `deepseek-flash` → 128K, while models.dev says 1M).
+    # The URL inference below is a no-op for genuine OpenAI endpoints, so
+    # real api.openai.com traffic resolves exactly as before.
+    if not effective_provider or effective_provider in {"openrouter", "custom", "openai"}:
         if base_url:
             inferred = _infer_provider_from_url(base_url)
             if inferred:

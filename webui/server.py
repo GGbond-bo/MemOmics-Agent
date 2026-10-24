@@ -1433,7 +1433,7 @@ def _auto_create_task_plan(session, plan_path):
             text = m.get("content", "")
             if isinstance(text, str) and len(text) > 3:
                 goal = text[:80].replace("\n", " ")
-                # 尝试提取用户指定的路径（如 F:/CellBender_v2）
+                # 尝试提取用户指定的路径（如 /data/CellBender_v2）
                 import re
                 _path_match = re.search(r"([A-Za-z]:[/\\][^\s,，。]+)", text)
                 if _path_match:
@@ -2386,6 +2386,11 @@ def _session_no_live_work(session):
 #   (b) Tier B 编号计划承诺：回复尾部出现 ①②③… 计划 + 计划动词且无完成叙述 →
 #       视为"宣布多步计划却停手"（与是否已执行过工具无关）
 def _detect_action_promise(result: str, tool_call_log: list) -> bool:
+    # 2026-10-25（用户要求）：关闭「说而不做」自动唤醒 —— 实测误触多（模型只是
+    # 叙述下一步/总结计划就被判定"承诺未执行"），反复打断反而添乱。
+    # 词表与判定逻辑整体保留（便于日后需要时一键恢复），这里只做关断；
+    # 返回 False 即不再触发"立即自唤醒/强制重跑"，也不再发那条 ⚠️ 提示。
+    return False
     if not result or not result.strip():
         return False
     # 2026-10-24 误报修复（用户反馈：门禁卡住执行任务时连环误报）：
@@ -7428,6 +7433,7 @@ _REPLY_STYLE = """
 ## 回复排版（可读性铁律 · 严格执行）
 
 ### 中间回合（接下来还要调工具的回合）
+- **每轮正文以 `**阶段小结**：` 开头**（就这一个固定标记，别换词、别省）——系统靠它把这段识别为「阶段小结」收进折叠层；最终回答里禁止出现「阶段小结」字样。
 - ⚠️ **这段小结必须写在「正式回复的正文」里**：写进思考 / thinking（reasoning）通道用户看不到，等于没写（自检：你在思考里打的草稿，要能在正文里更精炼地写出来）。「禁止过程与结论混杂」只约束最终回答 —— 中间回合的正文本来就该是过程小结，不要因为怕「过程污染」而整轮不写正文。
 - 协议块照旧输出（铁律 -3 的 `🏷INTENT:` 前导码、铁律 0 的「🔍 触发检查」清单 —— 系统要消费），但它们**不算小结**：紧跟其后必须再用 2–4 句写**说人话**的阶段小结。
 - **小结要写成研究者能直接看懂的话**：讲清「在做什么 / 为什么这么做 / 这一步得到什么 / 接下来做什么」。
@@ -7454,7 +7460,8 @@ _REPLY_STYLE = """
 - 禁止过程与结论混杂：不在结论里夹流水账，不把"我打算/我去查/接下来"写进最终回答。
 - 禁止重复：中间播报说过的细节，最终回答只提炼引用，不整段复制。
 - 禁止半截交付：最终回答必须自成一体——用户只看最后这一条也能完全看懂结果。
-- 禁止「整轮正文为空」：中间回合不写正文 = 用户看不到任何进度（思考通道不显示），也拿不到「关键过程」折叠层；每轮至少 2–3 句阶段小结。
+- 禁止「整轮正文为空」：中间回合不写正文 = 用户看不到任何进度（思考通道不显示），也拿不到「阶段小结」折叠层；每轮至少 2–3 句阶段小结。
+- 最终回答**以结论开头**，不要带「阶段小结」标记、也不要出现「阶段小结」字样；**交付最终结论后不要再调用工具**（要落盘 / 归档 / 记录就放在交付之前），避免「结论后面又补一句收尾话」把真正的结论挤成过程。
 """
 
 
@@ -8299,7 +8306,7 @@ def _extract_and_store_requirements(session, text):
             if any(_m in _s for _m in _META_WORDS):
                 continue  # (用户纠错) 含"取消/改成/不用记"等元指令的句子是操作不是新要求
             # 2026-08-31 极端评测修复：系统命令输出/服务器命令回显不是要求
-            # （实测 "df -h /hwfssz3/… Filesystem Size Used Avail Use%" 被入库）。
+            # （实测 "df -h /cluster/… Filesystem Size Used Avail Use%" 被入库）。
             # 注意：命令必须"命令+参数"组合（df -/du /ls /cat …），
             # 裸"conda 环境在 E:/envs"是环境陈述必须放行（回归教训）。
             if re.search(r"^\s*(df\s+-|du\s+\S|ls\s+-|cat\s+\S|head\s+-|tail\s+-|free\s+-|nvidia-smi\b|pip\s+install)", _s) \
@@ -9383,6 +9390,114 @@ def _last_tool_of(sid):
         return ""
 
 
+# 2026-10-24：给「截断续写」打标（用户实测 memomics-d3bd77da）——回复被输出长度上限截断时，
+# 后端把同一条回复存成两条 assistant（前一条 finish_reason='length'）。前端历史回放按
+# 「除最后一条外都算过程小结」折叠，于是结论的前半段被折进「关键过程」。这里读库时标 cont=True，
+# 前端据此并回同一段（历史数据同样生效，不依赖新写入）。
+def _mark_continuations(normalized, sid) -> list:
+    # ① 消息本身就带 finish_reason 时直接判（纯函数路径：可单测，也让未来不必读库）
+    if any(_m.get("finish_reason") for _m in normalized):
+        _last_fr0 = None
+        for _m in normalized:
+            _r0 = _m.get("role")
+            if _r0 == "assistant":
+                if _last_fr0 == "length":
+                    _m["cont"] = True
+                _last_fr0 = _m.get("finish_reason")
+            elif _r0 == "user":
+                _last_fr0 = None
+        return normalized
+    try:
+        import sqlite3 as _sq
+        _db = os.path.join(MEMOMICS_HOME_DIR, "state.db")
+        if not os.path.isfile(_db):
+            return normalized
+        _conn = _sq.connect(f"file:{_db}?mode=ro", uri=True, timeout=10)
+        try:
+            _rows = _conn.execute(
+                "SELECT role, content, finish_reason FROM messages WHERE session_id=? ORDER BY id",
+                (sid,)).fetchall()
+        finally:
+            _conn.close()
+        _cont = set()
+        _last_fr = None
+        for _role, _content, _fr in _rows:
+            if _role not in ("user", "assistant"):
+                continue
+            _c = _content or ""
+            if not _c:
+                continue
+            if _c.lstrip().startswith(_INJECT_PREFIXES):
+                continue                      # 注入的续写提示不打断链
+            if _role == "assistant":
+                if _last_fr == "length":
+                    _cont.add(_c)
+                _last_fr = _fr
+            else:
+                _last_fr = None               # 新的用户提问 → 断链
+        if not _cont:
+            return normalized
+        for _m in normalized:
+            if _m.get("role") == "assistant" and (_m.get("content") or "") in _cont:
+                _m["cont"] = True
+    except Exception:
+        pass
+    return normalized
+
+
+# 2026-10-24：显式角色标记（用户口径：分清楚阶段小结 / 结论 / 最终结论）。
+# 前端不再靠「除最后一条外都算过程」的启发式，而是按这里的 phase 渲染：
+#   process    = 阶段小结（进「阶段小结」折叠层）
+#   conclusion = 最终结论（正文突出；它的截断续写已并进同一逻辑单元）
+def _mark_phases(normalized) -> list:
+    def _unit_text(unit):
+        return "".join(( _m.get("content") or "") for _m in unit).strip()
+
+    def _is_stage_summary(unit):
+        _t = _unit_text(unit).lstrip()
+        for _p in ("**阶段小结**", "阶段小结**", "阶段小结：", "**阶段小结：**", "阶段小结"):
+            if _t.startswith(_p):
+                return True
+        return False
+
+    try:
+        _by_turn = {}
+        for _m in normalized or []:
+            if _m.get("role") != "assistant":
+                continue
+            _c = (_m.get("content") or "").strip()
+            if not _c or _c == "(empty)":
+                continue
+            _by_turn.setdefault(_m.get("turn"), []).append(_m)
+        for _t, _msgs in _by_turn.items():
+            _units = []
+            for _m in _msgs:                       # ① 续写链并成逻辑单元
+                if _m.get("cont") and _units:
+                    _units[-1].append(_m)
+                else:
+                    _units.append([_m])
+            if not _units:
+                continue
+            _concl = _units[-1]
+            if _is_stage_summary(_concl):          # ② 末单元带阶段小结标记 → 回退找实质结论
+                for _u in reversed(_units[:-1]):
+                    if (not _is_stage_summary(_u)) and len(_unit_text(_u)) >= 300:
+                        _concl = _u
+                        break
+                else:
+                    # 2026-10-25（用户反馈）：整轮只有阶段小结、没有实质结论时，
+                    # 不要再"硬挑"一条小结冒充最终结论（实测：「阶段小结：审查已通过…」
+                    # 被标成最终结论）。改判该末单元为 process，本轮不设 conclusion。
+                    _concl = None
+            for _u in _units:
+                _ph = "conclusion" if (_concl is not None and _u is _concl) else "process"
+                for _m in _u:
+                    _m["phase"] = _ph
+    except Exception:
+        pass
+    return normalized
+
+
 @app.get("/api/sessions/{sid}/messages")
 async def get_messages(sid: str, limit: int = 100):
     """获取会话历史消息 — 默认只返回最近100条，防止大会话卡顿。
@@ -9434,6 +9549,7 @@ async def get_messages(sid: str, limit: int = 100):
         _stats, _meta = _session_display_stats(sid, start_ua=_ua_before)
     except Exception:
         pass
+    _mark_continuations(normalized, sid)   # 2026-10-24：截断续写标记（供前端并段）
     _mi = 0
     _turn = 0
     # P1-4: 每条消息带上轮次号（一条用户提问 = 一轮，它之后的回答都归这一轮），
@@ -9448,6 +9564,7 @@ async def get_messages(sid: str, limit: int = 100):
                 m["tool_count"] = _meta[_mi].get("tool_count", 0)
                 m["tool_names"] = _meta[_mi].get("tool_names", [])
             _mi += 1
+    _mark_phases(normalized)   # 2026-10-24：阶段小结/最终结论显式标记（turn 赋号后）
     # 2026-09-18: 给前端一个「窗口起点在整段对话里的绝对序号」，
     # 辩论时间线据此把每场辩论插回它真正发生的位置（shown_total = 对话流消息总数）
     try:
@@ -14885,12 +15002,8 @@ def _maybe_narration_nudge(session) -> bool:
             _cur = getattr(agent, "_pending_steer", "") or ""
             agent._pending_steer = (_cur + "\n" + _steer) if _cur else _steer
         st["nudges"] = st.get("nudges", 0) + 1
-        try:
-            _session_emit(session, {"type": "info",
-                "content": "💬 上一轮正文为空（内容写进了思考）——已提醒把阶段小结写进正文，交互框不再空着。",
-                "session_id": session["id"]})
-        except Exception:
-            pass
+        # 2026-10-25（用户要求）：这类"提醒小结"内部提示不再冒到输出栏 —— 后端提示照发
+        # （上面的 _pending_steer 注入让模型把阶段小结写进正文），但不再发用户可见的 info 事件。
         return True
     except Exception:
         return False
@@ -21526,7 +21639,7 @@ async def ws_endpoint(ws: WebSocket):
                                 try:
                                     _recent_files = []
                                     _scan_dirs = []
-                                    # 用户指定的分析目录（如 F:/CellBender_v2）
+                                    # 用户指定的分析目录（如 /data/CellBender_v2）
                                     _analysis_dir = _s.get("analysis_dir", "")
                                     if _analysis_dir and os.path.isdir(_analysis_dir):
                                         _scan_dirs.append(_analysis_dir)

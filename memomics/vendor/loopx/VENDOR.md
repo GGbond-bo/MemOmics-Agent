@@ -28,7 +28,7 @@
 其余 257 个文件与上游 `v0.4.1` **逐字节相同**（含换行符），可直接对照上游阅读。
 `LICENSE` 为上游许可证的本地副本（上游对应文件路径为仓库根 `LICENSE`）。
 
-生成方式：`python tools/loopx_vendor_audit.py`（按 git blob 与文本两种口径比对，
+生成方式：`python <发布目录>\_loopx_vendor_audit.py`（按 git blob 与文本两种口径比对，
 换行符差异不计为改动）。
 
 ---

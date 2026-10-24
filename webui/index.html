@@ -430,6 +430,9 @@ body { font-family:'Segoe UI','Microsoft YaHei',sans-serif; background:var(--bg)
    被辩论卡片等截断分出去的旧气泡整格瘦身（.msg-process），视觉上退为过程记录。 */
 .message.assistant.msg-process .bubble { font-size:12px; padding:8px 14px 24px; opacity:0.78; border-style:dashed; }
 .message.assistant.msg-process .role { font-size:10px; opacity:0.8; }
+/* 2026-10-25（用户要求）：取消「✅ 最终结论」显式标签 —— 结论正常展示，阶段小结与结论
+   的区分交给后端 phase（process 进折叠层 / conclusion 留正文）；样式保留待用但不再渲染。 */
+.message.assistant .concl-tag { display:none; }
 .proc-block { margin:0 0 8px; border:1px dashed var(--border); border-radius:8px; background:rgba(128,128,128,0.05); font-size:12px; }
 .proc-block > summary { padding:4px 12px; cursor:pointer; color:var(--text-light); font-size:11px; user-select:none; list-style:none; }
 .proc-block > summary::-webkit-details-marker { display:none; }
@@ -996,7 +999,7 @@ html[data-theme="dark"] .ev-chain .ev-t, #kb-node-modal .ev-chain .ev-t { color:
 .chat-input.drop-active textarea { border-color:var(--primary); border-style:dashed; }
 
 /* === 右侧面板 === */
-.info-panel { width:clamp(360px, 520px, 72vw); background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; transition:background 0.3s; overflow:hidden; }
+.info-panel { width:340px; background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; transition:background 0.3s; overflow:hidden; }
 /* 右侧栏拖拽分隔条（2026-08-08 从 8-06 版恢复：可左右拖动，双击还原默认 380px） */
 .info-panel-resizer { width:6px; flex-shrink:0; cursor:ew-resize; background:linear-gradient(90deg, transparent 2px, rgba(149,165,166,0.45) 2px, rgba(149,165,166,0.45) 4px, transparent 4px); transition:background 0.15s; position:relative; z-index:20; }
 .info-panel-resizer:hover { background:linear-gradient(90deg, transparent 1px, var(--primary) 1px, var(--primary) 5px, transparent 5px); }
@@ -1979,7 +1982,7 @@ var I18N = {
      'rv_col':'列 {0}','rv_sort_col_title':'点击按此列排序','rv_rows_note':'显示 {0} / {1} 行{2}　（点表头排序）','rv_cols_n':' · {0} 列',
      'rv_nb_empty':'空 notebook','rv_nb_no_cells':'没有单元格。','rv_out_err':'❌ 报错','rv_out_img':'🖼️ 图片输出','rv_out':'▶ 输出',
      'rv_nb_cells':'共 {0} 个单元格{1}','rv_truncated':'（已截断）',
-     'proc_block':'📋 关键过程 · {0} 个阶段{1}（点击展开/收起）',
+     'proc_block':'📋 阶段小结（关键过程）· {0} 个阶段{1}（点击展开/收起）',
       'proc_elapsed':'用时',
       'rs_badge_new':'有 {0} 个新分析结果，点击查看',
     'af_kind_intent':'开工前意图确认',
@@ -2075,7 +2078,7 @@ var I18N = {
      'rv_col':'Col {0}','rv_sort_col_title':'Click to sort by this column','rv_rows_note':'Showing {0} / {1} rows{2}　(click a header to sort)','rv_cols_n':' · {0} cols',
      'rv_nb_empty':'Empty notebook','rv_nb_no_cells':'No cells.','rv_out_err':'❌ Error','rv_out_img':'🖼️ Image output','rv_out':'▶ Output',
      'rv_nb_cells':'{0} cells{1}','rv_truncated':' (truncated)',
-     'proc_block':'📋 Key steps · {0} stages{1} (click to expand/collapse)',
+     'proc_block':'📋 Stage summaries (key steps) · {0} stages{1} (click to expand/collapse)',
       'proc_elapsed':'elapsed',
       'rs_badge_new':'{0} new analysis result(s) — click to view',
     'af_kind_intent':'Confirm intent before starting',
@@ -2368,6 +2371,7 @@ var I18N_DYN = {
 '✅ 已提炼':'✅ Distilled',
 '✅ 已是最新版本':'✅ Already Up to Date',
 '✅ 更新成功':'✅ Update Successful',
+'✅ 最终结论':'✅ Final Conclusion',
 '✅ 正方（支持）':'✅ Pro (supports)',
 '✅ 结构化':'✅ Structured',
 '✓ 导出成功':'✓ Export Successful',
@@ -2432,7 +2436,7 @@ var I18N_DYN = {
 '会话大纲':'Session Outline',
 '会话自检：pid/内存/对象/readRDS/图':'Session self-check: pid/memory/objects/readRDS/plots',
 '你':'You',
-'例 ssh3；填了它，说「用集群」就走它，想换就点名':'Example: ssh3; once set, saying Use Cluster goes there; to switch, name another one',
+'例 node1；填了它，说「用集群」就走它，想换就点名':'Example: node1; once set, saying Use Cluster goes there; to switch, name another one',
 '例如 deg-analysis；留空 = 全部导出':'Example: deg-analysis; leave empty = export everything',
 '依据':'Basis',
 '依据里含 PMID/DOI/KB/数据 锚点':'Basis contains PMID/DOI/KB/data anchors',
@@ -2560,8 +2564,8 @@ var I18N_DYN = {
 '大小：':'Size:',
 '失效边界':'Failure Boundary',
 '失败详情':'Failure Details',
-'如 cngb-supermem-a15-3 或公网 IP':'e.g. cngb-supermem-a15-3 or a public IP',
-'如 ssh3（字母/数字/._-，会进入作业名）':'e.g. ssh3 (letters / digits / . _ -; it becomes part of the job name)',
+'如 login-host 或公网 IP':'e.g. login-host or a public IP',
+'如 node1（字母/数字/._-，会进入作业名）':'e.g. node1 (letters / digits / . _ -; it becomes part of the job name)',
 '如: custom-heatmap':'e.g. custom-heatmap',
 '如: heatmap.R, utils.R':'e.g. heatmap.R, utils.R',
 '如: 当用户需要绘制热图时触发':'e.g. Triggered when the user needs to draw a heatmap',
@@ -2871,7 +2875,7 @@ var I18N_DYN = {
 '自检后自动同步到环境管理':'Sync to Environment Manager automatically after self-check',
 '自检成功后，自动把节点环境（核数/内存/调度器/R·Python 版本）沉淀到 🧩 环境管理；你手填的声明字段不会被覆盖':'After a successful self-check, the node environment (cores / memory / scheduler / R and Python versions) is saved into 🧩 Environment Manager automatically; declaration fields you filled in by hand are never overwritten',
 '节点名':'Node Name',
-'节点名 如 ssh3':'Node name, e.g. ssh3',
+'节点名 如 node1':'Node name, e.g. node1',
 '节点地址':'Node Address',
 '补全失败':'Completion failed',
 '表格加宽 200px（超宽时左右滚动）':'Widen the table by 200px (scroll left and right when it is too wide)',
@@ -5412,6 +5416,8 @@ function addAssistantMsg(text, meta) {
       stats: { steps: meta.procSegs.length,
                elapsed: (meta.elapsed !== undefined && meta.elapsed !== null) ? _fmtDur(meta.elapsed) : '' }
     }) : '';
+  // 2026-10-25（用户要求）：去掉「✅ 最终结论」显式标签 —— 最终结论正常展示即可，
+  // 阶段小结与结论的区分由后端 phase（process→折叠层 / conclusion→正文）承担，前端不再打标。
   div.innerHTML = '<div class="role"><span>🧬 MemOmics</span></div><div class="bubble">' + procHtml + _citeWrapHtml(renderMarkdown(text)) + foot + '<button class="copy-btn" onclick="copyMessage(this)" title="' + T('复制此消息') + '">' + T('📋 复制') + '</button></div>';
   document.getElementById('messages').appendChild(div);
   // P1-4: 回答归到当前轮次（历史回放用后端给的 turn，实时消息用当前轮）
@@ -5505,7 +5511,9 @@ function updateLiveStatus(elapsed, apiCalls, tool, stalled, turns, phase, phaseE
   // debate_analysis 15-21 分钟）期间聊天区一个字都不新增，用户分不清是在跑还是死了。
   // 这里把"静默了多久"直接写在状态条上（状态条 sticky 在消息区顶部，一定看得见）。
   if (silent >= 60) parts.push('⏳ 已 ' + silent + ' 秒无新输出');
-  if (stalled) parts.push('⚠️ 同一工具超过 3 分钟 — 可能卡住，可直接输入引导');
+  // 2026-10-25（用户要求）：去掉「⚠️ 同一工具超过 3 分钟 — 可能卡住」文案 ——
+  // 辩论/长脚本（debate_analysis 实测 4–7 分钟）必超 3 分钟，属实报噪音。
+  // 后端心跳仍照常计算 stalled（其它消费点不受影响），只是不再往状态条上打这句。
   el.textContent = parts.join(' · ');
 }
 
@@ -8937,10 +8945,27 @@ function _renderHistoryFlow(msgs) {
     });
     var el = null;
     if (segs.length) {
-      // 2026-10-14 过程/结论分层：一轮多段时，前面的段 = 中间过程（折叠块），
-      // 最后一段 = 结论（正文突出）。单段则与旧行为一致（整段即正文）。
-      var text = segs[segs.length - 1];
-      var procSegs = segs.length >= 2 ? segs.slice(0, -1) : null;
+      // 2026-10-24 显式角色（服务端 phase：process=阶段小结 / conclusion=最终结论）：
+      // 有标记就按标记分层 —— 不再猜「最后一段就是结论」（结论被截断续写、收尾又补一句时，
+      // 旧启发式会把真正的结论折进折叠层；用户实测 memomics-d3bd77da）。
+      // 无标记（旧数据 / 实时缓存）→ 保留原启发式。
+      var _phProc = [], _phConcl = [], _phUn = [];
+      group.items.forEach(function(m) {
+        var _s = String(m.content == null ? '' : m.content);
+        if (!_s.trim() || _s.trim() === '(empty)') return;
+        if (m.phase === 'process') _phProc.push(_s);
+        else if (m.phase === 'conclusion') _phConcl.push(_s);
+        else _phUn.push(_s);
+      });
+      var text, procSegs;
+      if (_phConcl.length) {
+        text = _phConcl.join('\n\n');
+        var _foldSegs = _phProc.concat(_phUn);
+        procSegs = _foldSegs.length ? _foldSegs : null;
+      } else {
+        text = segs[segs.length - 1];
+        procSegs = segs.length >= 2 ? segs.slice(0, -1) : null;
+      }
       el = addAssistantMsg(text, {
         turn: group.turn,
         elapsed: hasElapsed ? Math.round(elapsed * 10) / 10 : undefined,
@@ -8963,7 +8988,18 @@ function _renderHistoryFlow(msgs) {
       return;
     }
     var t = (m.turn === undefined || m.turn === null) ? 0 : m.turn;
-    if (group && group.turn === t) { group.items.push(m); group.idx.push(i); return; }
+    if (group && group.turn === t) {
+      // 2026-10-24：截断续写（服务端标 cont）→ 并回上一段，别让结论的前半段被当成过程小结折掉
+      // （用户实测 memomics-d3bd77da：finish_reason=length 的前半段结论被折进「关键过程」，
+      //   而真正可见的"结尾"只是它的续写）。
+      if (m.cont && group.items.length) {
+        var _prevItem = group.items[group.items.length - 1];
+        _prevItem.content = String(_prevItem.content == null ? '' : _prevItem.content) +
+                            String(m.content == null ? '' : m.content);
+        m = Object.assign({}, m, { content: '' });   // 正文已并入上一段；耗时/工具数仍计入本轮
+      }
+      group.items.push(m); group.idx.push(i); return;
+    }
     flushGroup();
     group = { turn: t, items: [m], idx: [i] };
   });
@@ -15345,6 +15381,19 @@ function initInfoPanelResizer() {
   if (!rz || !panel || rz._bound) return;
   rz._bound = true;
   var MIN_W = 340;  // 右侧面板最小宽度（2026-09-22：380→340，配合默认 520 的文件预览）
+  // 2026-10-25（用户要求）：右栏默认就是最小宽度（340px），用户往左拉可任意加宽；
+  // 窗口缩小时只做上限保护（不反向撑宽用户拖出来的宽度），刷新回到默认最小宽度。
+  function fitPanelWidth() {
+    if (panel.style.width && Math.abs(panel.offsetWidth - parseFloat(panel.style.width)) > 1) {
+      panel.style.width = panel.offsetWidth + 'px';
+    }
+    var sb = document.querySelector('.sidebar');
+    var sbW = sb ? sb.offsetWidth : 300;
+    var cap = Math.max(MIN_W, window.innerWidth - sbW - 380);
+    if (panel.offsetWidth > cap) panel.style.width = cap + 'px';
+  }
+  window.addEventListener('resize', function() { setTimeout(fitPanelWidth, 0); });
+  window._fitInfoPanelWidth = fitPanelWidth;
   function recenterGraph() {
     if (window._kbCy) {
       _kbCy.resize();
@@ -18064,7 +18113,10 @@ connect();
 // === 首次启动配置检测 ===
 async function ensureFreshUI() {
   // 2026-10-11：更新/重装后，浏览器里留的旧界面状态（主题/背景/片头/集群命令历史/上次会话）
-  // 会让"全新安装"看起来像"还带着旧缓存"。这里按后端构建指纹清一次，换过版本才自动刷新一次。
+  // 会让"全新安装"看起来像"还带着旧缓存"。这里按后端构建指纹清一次。
+  // 2026-10-24 修订（用户反馈「整页闪一下」）：**不再 location.reload()**。
+  // 以前换版本会整页刷新一次 —— 刷新时页面重载、欢迎界面跟着冒出来，用户看到"闪一下"。
+  // 现在就地完成：清缓存键 → 主题/背景重置为默认 → 记下新指纹。视觉上无闪烁。
   try {
     var r = await fetch('/api/version');
     var d = await r.json();
@@ -18079,7 +18131,10 @@ async function ensureFreshUI() {
                 'memomics.resultsUnreadOnly', 'memomics_ui_lang', 'dgsize'];
     for (var i = 0; i < wipe.length; i++) { try { localStorage.removeItem(wipe[i]); } catch(e) {} }
     try { localStorage.setItem('memomics_ui_build', build); } catch(e) {}
-    if (seen) { location.reload(); }   // 首次访问（seen 为空）不刷；换版本才刷一次
+    // 就地重应用（替代原来的整页刷新）
+    try { if (typeof setTheme === 'function') setTheme('light'); } catch(e) {}
+    try { if (typeof setBackground === 'function') setBackground('none'); } catch(e) {}
+    try { if (typeof syncBgArtBox === 'function') syncBgArtBox(); } catch(e) {}
   } catch(e) { /* 忽略 */ }
 }
 
@@ -18121,8 +18176,11 @@ function closeWelcome() {
 }
 
 // 简单欢迎界面：一句欢迎 + 关闭。不含任何 API / 配置引导。
+var _welcomeShownThisLoad = false;   // 2026-10-24：同一页面会话内只允许弹一次
 function showWelcome() {
+  if (_welcomeShownThisLoad) return;
   if (document.getElementById('setup-modal')) return;
+  _welcomeShownThisLoad = true;
   var modal = document.createElement('div');
   modal.id = 'setup-modal';
   modal.innerHTML = '<div class="setup-box" style="text-align:center;">' +
@@ -18647,7 +18705,7 @@ function emDeclEdit() {
   var dec = (cl.declared && cl.declared.cluster) ? { cluster: cl.declared.cluster } : {};
   box.style.display = 'block';
   box.innerHTML = '<div class="em-form">' +
-    emRow(emT('em_decl_node'), emDeclInput('em-d-node', 'ssh3')) +
+    emRow(emT('em_decl_node'), emDeclInput('em-d-node', 'node1')) +
     emRow(emT('em_decl_host'), emDeclInput('em-d-host', 'login.hpc.example.edu')) +
     emRow(emT('em_decl_user'), emDeclInput('em-d-user', 'myaccount')) +
     emRow(emT('em_decl_workdir'), emDeclInput('em-d-workdir', '/data/proj')) +
@@ -18760,7 +18818,7 @@ var CLUSTER_MODES = {
   check:  { opt: 'check · 自检',      ph: '（不用输入，直接点执行）', hint: 'check：连通性 / 调度器 / CPU·内存 / 工作目录 / 已装工具自检。第一次连集群先跑这个。' },
   nodes:  { opt: 'nodes · 节点体检',  ph: '（不用输入；上面的节点选一个就只查那一个）', hint: 'nodes：列出配置里的所有节点，逐个探连通性 + CPU核数 + 负载 + 工作目录剩余空间，用来判断「现在哪台空着」。' },
   jobs:   { opt: 'jobs · 作业列表',   ph: '（不用输入，直接点执行）', hint: 'jobs：队列 + 最近作业历史（sacct）+ 本工具提交过的作业记录。' },
-  session_start:   { opt: '🧠 会话 · 开常驻', ph: '要读一次的大文件（可留空 = 空会话）  例：/hwfssz3/PS_JLU/zhangbo/Muscle_96_38/Umap/musc_annotation_umap_clean.rds', hint: 'session_start：在节点上起一个常驻 R 进程（setsid，ps 里看得见），带大文件就先同步读进内存——之后 FindMarkers / CellChat / 参数扫描都复用这个对象，不再回读。大文件（≥100MB）会自动落任务标记。' },
+  session_start:   { opt: '🧠 会话 · 开常驻', ph: '要读一次的大文件（可留空 = 空会话）  例：/cluster/share/user/Muscle_96_38/Umap/musc_annotation_umap_clean.rds', hint: 'session_start：在节点上起一个常驻 R 进程（setsid，ps 里看得见），带大文件就先同步读进内存——之后 FindMarkers / CellChat / 参数扫描都复用这个对象，不再回读。大文件（≥100MB）会自动落任务标记。' },
   session_exec:    { opt: '🧠 会话 · 投代码', ph: 'R 代码（多行；同一个进程里接着跑）  例：\nDimPlot(musc, reduction = "umap")\nFindMarkers(musc, ident.1 = "MuSC", only.pos = TRUE)', hint: 'session_exec：把 R 代码投给常驻会话（同一个 globalenv）。留空 = 看状态。跑得久的命令（FindMarkers 几分钟）建议走 agent 用 async=true，或先投再点「看状态」。' },
   session_status:  { opt: '🧠 会话 · 看状态', ph: '会话号（留空 = 最近一个）', hint: 'session_status：pid 活没活 / busy 在跑什么 / 内存 RSS / 对象数 / readRDS 审计 / 队列 / 检查点 / 日志尾巴。' },
   session_save:    { opt: '🧠 会话 · 存检查点', ph: '会话号 [检查点名]（会话号可留空）', hint: 'session_save：把会话对象落成 ckpt/<名>.rds（默认全部会话对象 + 时间戳名）。大对象会慢，但进程死了/换节点就靠它恢复。' },
@@ -18925,7 +18983,7 @@ function clusterNodeRow(spec, eff, isDefault) {
   function inh(v, dflt) { return (v == null || v === '') ? (dflt == null ? '空' : dflt) : v; }
   var hasAdv = !!(spec.port || spec.user || spec.key || spec.workdir || spec.scheduler);
   row.innerHTML =
-    '<input class="cc-node-name" placeholder="' + T('节点名 如 ssh3') + '" value="' + ccAttr(spec.name) + '">' +
+    '<input class="cc-node-name" placeholder="' + T('节点名 如 node1') + '" value="' + ccAttr(spec.name) + '">' +
     '<input class="cc-node-host" placeholder="' + T('host：节点地址') + '" value="' + ccAttr(spec.host) + '">' +
     '<input class="cc-node-proxy_jump" placeholder="' + T('跳板机（可空；经登录口再跳填 user@IP）') + '" value="' + ccAttr(spec.proxy_jump) + '">' +
     '<input class="cc-node-note" placeholder="' + T('备注（可空，中文写这里）') + '" value="' + ccAttr(spec.note) + '">' +
@@ -19178,7 +19236,7 @@ function cwValidateStep1() {
   var ok = true;
   var name = (document.getElementById('cw-name').value || '').trim();
   var host = (document.getElementById('cw-host').value || '').trim();
-  if (!name) { ok = cwFieldErr('cw-name', '必填：节点名是选机器用的名字（如 ssh3）') && ok; }
+  if (!name) { ok = cwFieldErr('cw-name', '必填：节点名是选机器用的名字（如 node1）') && ok; }
   else if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,47}$/.test(name)) { ok = cwFieldErr('cw-name', '只能用字母/数字/点/下划线/短横线（≤48 字符）') && ok; }
   else {
     var dup = ((_clusterCfg || {}).nodes || []).some(function (n) { return String(n.name).toLowerCase() === name.toLowerCase(); });
@@ -19187,7 +19245,7 @@ function cwValidateStep1() {
   ok = cwFieldErr('cw-host', host ? '' : '必填：节点的地址（主机名或 IP）') && ok;
   var jump = document.querySelector('input[name="cw-jump"]:checked');
   var jumpVal = (document.getElementById('cw-jumpval').value || '').trim();
-  if (jump && jump.value === 'jump') { ok = cwFieldErr('cw-jumpval', jumpVal ? '' : '必填：跳板 = 登录口地址，形如 user@192.168.61.11') && ok; }
+  if (jump && jump.value === 'jump') { ok = cwFieldErr('cw-jumpval', jumpVal ? '' : '必填：跳板 = 登录口地址，形如 user@10.0.0.1') && ok; }
   else { cwFieldErr('cw-jumpval', ''); }
   return ok;
 }
@@ -22577,7 +22635,7 @@ async function saveUpdateConfig(mode) {
       <label>登录节点 host<input id="cc-host" placeholder="cluster.example.edu"></label>
       <label>端口<input id="cc-port" placeholder="22"></label>
       <label>用户名<input id="cc-user" placeholder="yourname"></label>
-      <label>私钥路径<input id="cc-key" placeholder="C:/Users/you/.ssh/id_ed25519"></label>
+      <label>私钥路径<input id="cc-key" placeholder="<用户目录>/.ssh/id_ed25519"></label>
       <label>远端工作目录<input id="cc-workdir" placeholder="/home/you/project"></label>
       <label>调度器<select id="cc-scheduler">
         <option value="auto">auto（自动探测）</option>
@@ -22591,7 +22649,7 @@ async function saveUpdateConfig(mode) {
       <label>本地根目录<input id="cc-local-root" placeholder="E:/data"></label>
       <label>远端根目录<input id="cc-remote-root" placeholder="/home/you/data"></label>
       <label>超时秒<input id="cc-timeout" placeholder="300"></label>
-      <label>默认节点 default_node<input id="cc-default-node" placeholder="例 ssh3；填了它，说「用集群」就走它，想换就点名"></label>
+      <label>默认节点 default_node<input id="cc-default-node" placeholder="例 node1；填了它，说「用集群」就走它，想换就点名"></label>
       <label>没指定节点时<select id="cc-node-policy">
         <option value="ask">ask（多个节点时先问清用哪个）</option>
         <option value="auto">auto（暂未实现，按 ask 处理）</option>
@@ -22677,12 +22735,12 @@ async function saveUpdateConfig(mode) {
       <div id="cw-step1">
         <div class="cw-field" id="cw-f-name">
           <label>节点名 <b class="cw-req">*</b></label>
-          <input id="cw-name" type="text" placeholder="如 ssh3（字母/数字/._-，会进入作业名）" onkeydown="if(event.key==='Enter')cwNext()">
+          <input id="cw-name" type="text" placeholder="如 node1（字母/数字/._-，会进入作业名）" onkeydown="if(event.key==='Enter')cwNext()">
           <div class="cw-err" id="cw-name-err"></div>
         </div>
         <div class="cw-field" id="cw-f-host">
           <label>节点地址 <b class="cw-req">*</b></label>
-          <input id="cw-host" type="text" placeholder="如 cngb-supermem-a15-3 或公网 IP" onkeydown="if(event.key==='Enter')cwNext()">
+          <input id="cw-host" type="text" placeholder="如 login-host 或公网 IP" onkeydown="if(event.key==='Enter')cwNext()">
           <div class="cw-err" id="cw-host-err"></div>
         </div>
         <div class="cw-field">

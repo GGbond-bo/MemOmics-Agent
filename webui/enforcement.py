@@ -281,12 +281,14 @@ _DEBATE_KIND_DESIGN = "design"
 _DEBATE_KIND_FIGURE = "figure"
 _DEBATE_KIND_STATS = "stats"
 _DEBATE_KIND_BIOINFO = "bioinfo"
+_DEBATE_KIND_LITERATURE = "literature"   # 2026-10-25：文献阅读/总结类（用户口径：不辩论）
 _DEBATE_KIND_OTHER = "other"
 _DEBATE_KIND_LABELS = {
     _DEBATE_KIND_DESIGN: "方案/脚本/设计",
     _DEBATE_KIND_FIGURE: "图/绘图/配色",
     _DEBATE_KIND_STATS: "统计分析",
     _DEBATE_KIND_BIOINFO: "生信分析",
+    _DEBATE_KIND_LITERATURE: "文献阅读/总结",
     _DEBATE_KIND_OTHER: "其它",
 }
 
@@ -303,6 +305,12 @@ _KIND_BIOINFO_RE = re.compile(
     r"生信|测序|snrna|scrna|单细胞|atac|deg|差异表达|差异基因|比对|比对率|注释|富集|"
     r"聚类|降维|拟时序|变异|甲基化|grn|细胞类型|marker|表达矩阵|counts?|归一化|批次校正|"
     r"h5ad|seurat|scanpy|star|cellranger|featurecounts|deseq|edger|limma", re.I)
+# 2026-10-25（用户反馈）：文献阅读类不辩（"读一篇文献找结论"不是分析，更不是要对抗的结论）。
+# 放在 design/bioinfo 之前判定：论文正文里常出现"方案/统计/测序"等词，先判文献类避免误入生信/统计线。
+_KIND_LITERATURE_RE = re.compile(
+    r"文献|论文|paper|文献库|综述|精读|阅读|读全文|全文对照|摘要|abstract|preprint|"
+    r"bibliograph|literature|reference|citation|引文|读完|读一下|帮我读|读这|解读|"
+    r"总结这篇|提炼这篇|paper_reading|nature-reader|paper-summary|paper_download", re.I)
 
 
 def classify_topic_kind(text: str) -> str:
@@ -316,6 +324,9 @@ def classify_topic_kind(text: str) -> str:
         return _DEBATE_KIND_OTHER
     if _KIND_FIGURE_RE.search(t):
         return _DEBATE_KIND_FIGURE
+    # 2026-10-25：文献类优先于设计/统计/生信（读文献场景误触辩论的主修点）
+    if _KIND_LITERATURE_RE.search(t):
+        return _DEBATE_KIND_LITERATURE
     if _KIND_DESIGN_RE.search(t):
         return _DEBATE_KIND_DESIGN
     if _KIND_STATS_RE.search(t):
@@ -452,7 +463,9 @@ def debate_gate(es: "EnforcementState", stage: str = "conclusion",
         signals.get("topic") or signals.get("cmd") or signals.get("text")
         or getattr(es, "topic_hint", ""))
     dev = str(signals.get("deviation") or "").strip()
-    if not dev:
+    # 2026-10-25：文献阅读类不做"结果离谱"扫描 —— 读文献时 _last_terminal_result 就是论文
+    # 正文/摘要，"unexpected/矛盾/inconsistent" 几乎必出现，会假触发 L2 多角色辩论。
+    if not dev and kind != _DEBATE_KIND_LITERATURE:
         _scan = " ".join([str(getattr(es, "_last_terminal_result", "") or ""),
                           str(getattr(es, "topic_hint", "") or "")])
         dev = looks_absurd(_scan)
@@ -465,8 +478,10 @@ def debate_gate(es: "EnforcementState", stage: str = "conclusion",
     _fork = bool(signals.get("has_fork")) or (isinstance(_opts, (list, tuple, set)) and len(_opts) >= 2)
     _hard = impact or failures >= 2 or conflict
 
-    # ② 方案/脚本/设计、图/绘图/配色 —— 永不辩（用户原话："这些不需要辩论，意义不大"）
-    if kind in (_DEBATE_KIND_DESIGN, _DEBATE_KIND_FIGURE):
+    # ② 方案/脚本/设计、图/绘图/配色、文献阅读/总结 —— 永不辩
+    #    （用户原话："这些不需要辩论，意义不大"；2026-10-25 追加文献类：
+    #     "读一篇文献找结论也要辩论吗？这个触发场景不对"）
+    if kind in (_DEBATE_KIND_DESIGN, _DEBATE_KIND_FIGURE, _DEBATE_KIND_LITERATURE):
         return DEBATE_L0, [
             f"{_DEBATE_KIND_LABELS[kind]}类不辩论（用户口径：辩论=找证据链，这类辩不出证据）"], force
 

@@ -31,6 +31,13 @@ prerequisites:
 
 - ⛔ 不要"先做双语再说解读"，也不要"解读里顺带贴英文原文"——用户要的是解读，不是翻译。
 - ✅ 中文精读解读的完整骨架、抽取步骤与踩坑：`references/deep-reading-cn-mode.md`
+- ✅ **解读之后的必然后续问**：「**他们是通过哪些方法和手段去获得这些证据的？**（比如 snRNA 聚类 →
+  算比例 → 得到细胞组成差异，类似这样帮我整理一下）」= 要「**证据 ← 手段**」对照表
+  （样本 → 平台 → 上游处理 → 统计判据 → 结论 五段式）。做法、主表列定义、四级递进 Mermaid 骨架、
+  以及文本层检索陷阱，见 `bioinformatics-fact-retrieval` 的
+  `references/evidence-to-method-mapping.md`。⚠️ 两个配套动作：**顺手把 PDF 各主图裁成 PNG**
+  （本 skill 的 `scripts/crop_fullpage_figures.py`），并在交付里给"图号 ↔ 文件"对照表；
+  **全面核验每个工具名/参数确实出现在原文**（见 `references/pdf-layout-recovery.md` 与上条 reference 的 §4）
 - ✅ 整页图版论文（Cell/Science 式，图独占一页）批量裁主图：`scripts/crop_fullpage_figures.py`
   ```bash
   python scripts/crop_fullpage_figures.py <pdf> results/<sid>/figures --pages 3,6,8,10,13,16,17 --dpi 200

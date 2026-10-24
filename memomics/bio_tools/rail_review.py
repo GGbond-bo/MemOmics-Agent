@@ -1,6 +1,7 @@
 """Rail review tool — pre/post analysis review (铁轨审查)."""
 import json
 import os
+import re
 import logging
 
 logger = logging.getLogger(__name__)
@@ -435,8 +436,15 @@ def _post_review(module_id, method_name, output_dir, code_executed, required_pac
 
     passed = len(issues) == 0
     # 强化提醒：有参数或结论时必须辩论
+    # 2026-10-25（用户反馈）：文献阅读/总结类步骤不发辩论提醒 —— "读一篇文献找结论"
+    # 不是分析步骤，代码里出现 conclusion/result/marker 是读取/抽取文本，不是"结论对不上"。
+    _lit_re = re.compile(
+        r"read|literature|paper|review|summary|summar|translate|精读|文献|论文|阅读|摘要|解读",
+        re.I)
+    _is_lit_step = bool(_lit_re.search(str(module_id or "")) or
+                        _lit_re.search(str(method_name or "")))
     debate_reminder = ""
-    if passed and code_executed:
+    if passed and code_executed and not _is_lit_step:
         # 检测代码中是否有参数选择或结论输出
         has_params = any(kw in code_executed.lower() for kw in ['resolution', 'min_', 'max_', 'threshold', 'dims', 'pcs', 'alpha', 'lambda', 'penalty', 'n_neighbors', 'perplexity'])
         has_conclusions = any(kw in code_executed.lower() for kw in ['conclusion', 'finding', 'result', 'significant', 'pvalue', 'p.value', 'enriched', 'marker'])

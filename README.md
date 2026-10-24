@@ -11,7 +11,7 @@
 
 ## 它是什么
 
-MemOmics-Agent 是一个以 [Hermes](https://github.com/NousResearch/hermes-agent) Agent 框架的工具层为底座、专为组学数据分析打造的自主科研 Agent。你只需要给出**数据路径 + 科学问题**，它会自主完成：
+MemOmics-Agent 是一个以 [Hermes](https://github.com/NousResearch/hermes-agent) Agent 框架的工具层为底座、专为组学数据分析打造的自主科研 Agent（Hermes 官方页面：<https://hermes-agent.nousresearch.com/>，[官网](https://hermes-agent.nousresearch.com/) · [文档](https://hermes-agent.nousresearch.com/docs/)）。你只需要给出**数据路径 + 科学问题**，它会自主完成：
 
 ```
 加载技能 → 环境校验 → 执行前审查 →（必要时）多角色辩论
@@ -128,7 +128,7 @@ MemOmics-Agent/
 
 ## 技术栈与致谢
 
-- [Hermes](https://github.com/NousResearch/hermes-agent) Agent 框架（MIT，© Nous Research）：MemOmics 借用其**工具层**（工具执行器 / 持久内核 / 会话与记忆原语），源码 vendor 于 `hermes-agent/`，其 LICENSE 保留在该目录。WebUI、运行逻辑（审轨/看门狗/长任务托管）与生信工具链为 MemOmics 自研。
+- [Hermes](https://github.com/NousResearch/hermes-agent) Agent 框架（MIT，© Nous Research）：官方页面 <https://hermes-agent.nousresearch.com/>（[官网](https://hermes-agent.nousresearch.com/) · [文档](https://hermes-agent.nousresearch.com/docs/) · [GitHub](https://github.com/NousResearch/hermes-agent)）。MemOmics 借用其**工具层**（工具执行器 / 持久内核 / 会话与记忆原语），源码 vendor 于 `hermes-agent/`，其 LICENSE 保留在该目录。WebUI、运行逻辑（审轨/看门狗/长任务托管）与生信工具链为 MemOmics 自研。
 - [LoopX](https://github.com/loopx-project/loopx) 控制平面（MIT，vendor 于 `memomics/vendor/loopx`；对应上游 [`v0.4.1`](https://github.com/loopx-project/loopx/tree/v0.4.1)，含少量本地补丁，补丁清单见 [`VENDOR.md`](memomics/vendor/loopx/VENDOR.md)）
 - Seurat / Scanpy / ArchR / data.table 等社区生信生态
 

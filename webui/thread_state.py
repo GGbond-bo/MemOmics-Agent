@@ -86,7 +86,7 @@ _KEYS = {
         "_live_tool_warned _stall_notice_last _stall_diag _stall_wake_active "
         "_stall_noevent_ts _self_check_count _self_check_last_sig _wakeup_retry_n "
         "_saying_wakeup_n _urgent_wakeup _loop_guard _last_event_ts _syslog_dedup "
-        "_narration "
+        "_narration _todo_overrides "
         "_intent_confirmed _code_edit_asked _dir_created _form_ans_marker "
         "_title_summary_at_msg _red_hits _task_count _partial_text "
         "_self_check_total _artifact_sig_last _artifact_stall"
