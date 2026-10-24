@@ -7,7 +7,7 @@
 
 用法:
     python probe_excel_numeric_display.py <xlsx路径> [列名 列名 ...]
-    python probe_excel_numeric_display.py <数据目录>/DEG_fdr05_coef025_5contrasts.xlsx fdr p
+    python probe_excel_numeric_display.py D:/我的下载/DEG_fdr05_coef025_5contrasts.xlsx fdr p
 """
 import sys
 

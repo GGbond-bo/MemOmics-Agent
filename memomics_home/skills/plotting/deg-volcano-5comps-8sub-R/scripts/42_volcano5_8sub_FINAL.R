@@ -6,7 +6,7 @@
 #      依据：标签最大宽 "Pure Type IIA" = 1.415 inch @17.1pt(size=6)
 #            8 个色块并排每块 = 1.66 inch > 1.415 inch → 不再重叠
 #   ② 用的数据不对：应使用已过滤表 DEG_fdr05_coef025_5contrasts.xlsx
-#      （新方法 bayesglm+RUV，FDR<0.05 且 |coef|>=0.25；与用户 <数据目录>/ 那份 md5 相同）
+#      （新方法 bayesglm+RUV，FDR<0.05 且 |coef|>=0.25；与用户 D:/我的下载/ 那份 md5 相同）
 #      → 表里不存在 fdr>=0.05 的行，故【不显著(灰)类别整类删除】
 #   ③ 只要最终版五个图
 # 样式：一字不改地复刻用户 notebook（cell#3/#4/#6/#7）
@@ -18,13 +18,13 @@ suppressPackageStartupMessages({
 })
 
 ## ---- 输入：用户指定的已过滤表（优先用户路径，缺失则用会话内同 md5 副本）----
-F1 <- "<数据目录>/DEG_fdr05_coef025_5contrasts.xlsx"
-F2 <- "<安装目录>"
+F1 <- "D:/我的下载/DEG_fdr05_coef025_5contrasts.xlsx"
+F2 <- "<安装目录>/results/memomics-afd2d418/task2/results/DEG_fdr05_coef025_5contrasts.xlsx"
 SRC_FILE <- if (file.exists(F1)) F1 else F2
 cat("#TASK:PARAM 输入表=", SRC_FILE, "\n", sep = "")
 
-OUT <- "<安装目录>"
-SRC <- "<安装目录>"
+OUT <- "<安装目录>/results/memomics-afd2d418/task3/figures"
+SRC <- "<安装目录>/results/memomics-afd2d418/task3/results"
 dir.create(OUT, showWarnings = FALSE, recursive = TRUE)
 dir.create(SRC, showWarnings = FALSE, recursive = TRUE)
 

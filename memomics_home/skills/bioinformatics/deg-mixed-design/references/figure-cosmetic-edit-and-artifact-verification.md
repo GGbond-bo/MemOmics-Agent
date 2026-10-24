@@ -70,7 +70,7 @@
 
 ## 五、操作性小坑
 
-- `patch` 工具用**绝对 Windows 路径**（`<安装目录>
+- `patch` 工具用**绝对 Windows 路径**（`<安装目录>/results/<sid>/scripts/x.R`）可正常命中。
 - `terminal` 里**相对路径可能落在别的 cwd**（本轮 `cp results/...` 全部 `No such file or directory`）
   ⇒ 一律先设变量再拼绝对路径：`R=/e/MemOmics-Agent/results/<sid>`。
 - 出图用**持久内核 `source("脚本")`**（不是 `Rscript` 冷启动）；本例零第三方依赖，1.1s 返回。

@@ -10,7 +10,7 @@ source: https://github.com/ahujasid/blender-mcp
 # Blender MCP. It is a bridge with two halves:
 #   1. This stdio server (uvx blender-mcp), which Hermes launches.
 #   2. An addon (addon.py) running inside Blender that opens a local command
-#      socket on login-host:22. The stdio server relays to it.
+#      socket on 127.0.0.1:9876. The stdio server relays to it.
 # There is nothing to git-clone on the Hermes side — uvx resolves the package —
 # so no install block. The in-Blender addon setup is covered in post_install.
 #
@@ -65,7 +65,7 @@ post_install: |
     2. Blender > Edit > Preferences > Add-ons > Install... > select addon.py,
        then enable "Interface: Blender MCP".
     3. In the 3D viewport press N, open the "BlenderMCP" tab, click
-       "Connect to Claude" (starts the local socket on login-host:22).
+       "Connect to Claude" (starts the local socket on 127.0.0.1:9876).
 
   Blender must be RUNNING with the addon connected before the tools work —
   start Blender first, then your Hermes session. The addon refuses to start

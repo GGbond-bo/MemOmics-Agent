@@ -1,60 +1,27 @@
 {
-  "id": "user-script-figure-optimization",
-  "name": "用户已有绘图脚本的优化（以脚本为基线）",
-  "category": "Visualization",
-  "language": "R+Python",
-  "description": ">-",
-  "starting_prompt": "使用 用户已有绘图脚本的优化（以脚本为基线） 进行分析",
-  "source_dir": "skills/bioinformatics/user-script-figure-optimization",
-  "memomics_module": "",
-  "chains_from": [],
-  "chains_to": [],
-  "tags": [
-    "visualization",
-    "ggplot2",
-    "seurat",
-    "umap",
-    "publication-figure",
-    "user-script",
-    "07_可视化"
-  ],
-  "aliases": [],
-  "trigger_level": "YEL",
-  "trigger_keywords": [
-    "按 nature 优化」「帮我改一下我的脚本"
-  ],
-  "when_to_use": "用户消息里含一段**可运行的绘图代码** + 任何风格/级别/期刊字样",
-  "success_count": 2,
-  "proven_script": "fig_A2_5effects_drop2.R",
-  "proven_params": [
-    {
-      "species": "human",
-      "tissue": "skeletal_muscle",
-      "direction": "aging",
-      "script": "16_deg_updown_en_recolor.py",
-      "params": "{\"old_method_colors\": {\"up\": \"#E8A33D\", \"down\": \"#4EA8A0\"}, \"new_method_colors\": {\"up\": \"#B2182B\", \"down\": \"#2166AC\"}, \"hatch\": \"//\", \"lang\": \"en\", \"font_chain\": \"Arial->Helvetica->DejaVu Sans\", \"data_source\": \"task2/results/new_deg_contrast_overview.csv\"}",
-      "date": "2026-09-29",
-      "score": 9,
-      "auto_score": 0.0,
-      "approved": false,
-      "custom_script": false,
-      "result": "DEG 上下调柱状图重出：老方法换独立配色（琥珀/青绿）+ 斜纹，全部标签改英文；4 图落盘（fig_new_deg_updown_bar / fig_deg_new_vs_old 各 png+pdf），复用既有统计量未重算，像素自检通过"
-    },
-    {
-      "species": "human",
-      "tissue": "skeletal_muscle",
-      "direction": "aging",
-      "script": "fig_A2_5effects_drop2.R",
-      "params": "BASE=FigA2_program_5effects_drop2; 15 程序/5 轴; 画布 16.5x8.4in; CELL=1.0; PANEL_GAP=1.8; 色标 -3~3 RdBu_r; 星号=raw p<.05 (Mann-Whitney U / Wilcoxon); 四格式 PNG/PDF/SVG/TIFF@300dpi; 输出 figures/ + figures/R_version/",
-      "date": "2026-10-14",
-      "score": 9,
-      "auto_score": 0.0,
-      "approved": false,
-      "custom_script": false,
-      "result": "fig_A2_5effects_drop2.R 运行成功（1.1s）：8 文件全部存在且非空。实绘星号 raw p<.05：Aging 77/150、ExOld 27/150、ExYoung 10/150、ExT2D 5/150、T2D 2/150（q<.05 对照：Aging 74、其余全 0）。轴序 Metabolism > Nutrient > Contractile > Inflamm-a"
-    }
-  ],
-  "user_prefs": {
-    "last_used_script": "fig_A2_5effects_drop2.R"
-  }
+ "id": "user-script-figure-optimization",
+ "name": "用户已有绘图脚本的优化（以脚本为基线）",
+ "category": "Visualization",
+ "language": "R+Python",
+ "description": ">-",
+ "starting_prompt": "使用 用户已有绘图脚本的优化（以脚本为基线） 进行分析",
+ "source_dir": "skills/bioinformatics/user-script-figure-optimization",
+ "memomics_module": "",
+ "chains_from": [],
+ "chains_to": [],
+ "tags": [
+  "visualization",
+  "ggplot2",
+  "seurat",
+  "umap",
+  "publication-figure",
+  "user-script",
+  "07_可视化"
+ ],
+ "aliases": [],
+ "trigger_level": "YEL",
+ "trigger_keywords": [
+  "按 nature 优化」「帮我改一下我的脚本"
+ ],
+ "when_to_use": "用户消息里含一段**可运行的绘图代码** + 任何风格/级别/期刊字样"
 }

@@ -134,7 +134,6 @@ Complete workflow for single-cell RNA-seq analysis using Scanpy and the scverse 
 
 **Optional:** Sample metadata (CSV/TSV) with sample IDs, conditions, batches, donor IDs
 
-**Data requirements:** Min 500 cells/sample (1000+ recommended), Human or Mouse, UMI-based or read counts. See [references/qc_guidelines.md](references/qc_guidelines.md) for tissue-specific thresholds.
 
 ## Outputs
 
@@ -193,7 +192,6 @@ Complete workflow for single-cell RNA-seq analysis using Scanpy and the scverse 
 
 🚨 **MANDATORY: USE SCRIPTS EXACTLY AS SHOWN - DO NOT WRITE INLINE CODE** 🚨
 
-**Detailed step-by-step code:** [references/workflow-details.md](references/workflow-details.md)
 
 **CRITICAL - DO NOT:**
 - Write inline analysis code → **STOP: Use the script functions**
@@ -226,7 +224,6 @@ adata = run_scrublet_detection(adata, batch_key="batch")
 adata = filter_by_mad_outliers(adata, remove_doublets=True)
 ```
 
-**DO NOT write inline QC code.** Doublet rate auto-scales per batch (~0.8% per 1,000 cells). Aim for >70% cell retention. For raw data, prepend ambient RNA correction: [references/ambient_rna_correction.md](references/ambient_rna_correction.md)
 
 **✅ VERIFICATION:** `"✓ Data loaded successfully!"` → QC metrics added → filtering summary with retention %.
 
@@ -252,7 +249,6 @@ kbet = compute_kbet(adata, batch_key="batch", cluster_key="leiden_0.8")
 sc.pl.pca_variance_ratio(adata, n_pcs=50, save="_scree.png")
 ```
 
-**DO NOT write inline normalization or integration code.** The integration script auto-detects batch-condition confounding. [Details →](references/integration_methods.md)
 
 **✅ VERIFICATION:**
 - Normalization: `"✓ Normalization complete"`
@@ -281,11 +277,9 @@ annotations = {"0": "CD4 T cells", "1": "CD14+ Monocytes", ...}
 adata = annotate_clusters_manual(adata, annotations, cluster_key="leiden_0.8")
 ```
 
-**DO NOT write inline clustering or annotation code.** CellTypist validates labels post-hoc (flags suspect ILC/HSC, contamination, low-complexity). [Markers →](references/marker_gene_database.md)
 
 **⚠️ n_pcs for neighbor graph:** Default is 30 PCs (standard). Using <15 PCs risks collapsing distinct populations. If you used `suggest_n_pcs()` in Step 2, pass that value here.
 
-For **pseudobulk DE** (multi-sample, ≥2 replicates/condition): [scripts/pseudobulk_de.py](scripts/pseudobulk_de.py). Script blocks with N=1. [Details →](references/pseudobulk_de_guide.md)
 
 **✅ VERIFICATION:**
 - Cluster counts → UMAP plots saved → marker genes identified → cell type annotations added
@@ -315,14 +309,7 @@ Exports: H5AD, expression matrices (raw + normalized CSV), cell metadata, UMAP/P
 
 | Decision | Quick Guide | Reference |
 |----------|-------------|-----------|
-| **Ambient RNA** | Skip for filtered/PBMC. CellBender for raw/high-soup (brain, lung, tumor) | [ambient_rna_correction.md](references/ambient_rna_correction.md) |
-| **QC Strategy** | MAD (multi-batch). Fixed (single batch, tissue-specific) | [qc_guidelines.md](references/qc_guidelines.md) |
-| **Normalization** | Standard (most data). Pearson (heteroscedastic) | [scanpy_best_practices.md](references/scanpy_best_practices.md) |
-| **Integration** | scVI (complex batches). Harmony (fast, simple) | [integration_methods.md](references/integration_methods.md) |
-| **Resolution** | Test 0.4, 0.6, 0.8, 1.0. Choose by biology and stability | [scanpy_best_practices.md](references/scanpy_best_practices.md) |
-| **Annotation** | Manual (accurate). CellTypist (fast). Both (validate) | [marker_gene_database.md](references/marker_gene_database.md) |
 
-**Complete working examples:** [references/common-patterns.md](references/common-patterns.md)
 
 ## Common Issues
 
@@ -350,7 +337,6 @@ Exports: H5AD, expression matrices (raw + normalized CSV), cell metadata, UMAP/P
 | CellTypist labels suspect (ILC, HSC) | Automated misclassification | Cross-check markers. Relabel ILC→NK or HSC→Unassigned. |
 | Multimodal data detected | RNA-only workflow on CITE-seq | Note in reports: "RNA modality only; ADT not analyzed." |
 
-**Detailed troubleshooting:** [references/troubleshooting_guide.md](references/troubleshooting_guide.md)
 
 ## Suggested Next Steps
 
@@ -369,7 +355,6 @@ Exports: H5AD, expression matrices (raw + normalized CSV), cell metadata, UMAP/P
 3. **Pseudobulk DE:** Squair JW, et al. (2021) *Nat Commun*. 12:5692.
 4. **scVI:** Lopez R, et al. (2018) *Nat Methods*. 15:1053-1058.
 
-**Detailed guides:** [workflow-details.md](references/workflow-details.md) | [common-patterns.md](references/common-patterns.md) | [scanpy_best_practices.md](references/scanpy_best_practices.md) | [qc_guidelines.md](references/qc_guidelines.md) | [integration_methods.md](references/integration_methods.md) | [pseudobulk_de_guide.md](references/pseudobulk_de_guide.md) | [marker_gene_database.md](references/marker_gene_database.md) | [troubleshooting_guide.md](references/troubleshooting_guide.md)
 
 **Scripts:** [scripts/](scripts/) | **Evaluation:** [assets/eval/complete_example_analysis.py](assets/eval/complete_example_analysis.py)
 

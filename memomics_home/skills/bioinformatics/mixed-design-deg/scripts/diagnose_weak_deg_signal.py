@@ -33,9 +33,9 @@ TABLES = {
     'Ex_Old':   r'D:/肌肉锻炼/file/Ex_Old.csv',
     'Ex_DM':    r'D:/肌肉锻炼/file/Ex_DM (1).csv',
 }
-META      = r'<数据目录>'   # 无则设 None
+META      = r'<数据目录>/MF_L3_meta_new.csv'   # 无则设 None
 META_SUB  = 'annotation_L3'                       # meta 里的亚群列名
-OUT_MD    = r'<安装目录>'
+OUT_MD    = r'<安装目录>/results/memomics-afd2d418/task2/results/WEAK_SIGNAL_REPORT.md'
 
 # 阳性对照基因面板。⚠️ 只放「与你的活检时相匹配」的基因：
 #    训练后静息活检 -> 别放急性 IEG（FOS/JUN/EGR1/NR4A），它们本就不该升高

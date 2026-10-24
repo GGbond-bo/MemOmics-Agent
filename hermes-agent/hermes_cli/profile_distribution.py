@@ -41,7 +41,7 @@ Manifest format (``distribution.yaml`` at the profile root)::
       - name: GRAPHITI_MCP_URL
         description: "Memory graph URL"
         required: false
-        default: "http://login-host:22/sse"
+        default: "http://127.0.0.1:8000/sse"
     distribution_owned:      # optional; sensible defaults apply
       - SOUL.md
       - skills/

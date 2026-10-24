@@ -407,7 +407,7 @@ python scripts/run.py extract --tier2 --pdf {pdf_path} --out {results_dir}
 
 ## 📄 Non-PDF Input Formats
 
-### CAJ/KDH (CNKI 知网专利/论文)
+### CAJ/KDH (CNKI 知网知识产权/论文)
 
 CNKI `.caj` 文件内部是加密的 KDH 格式。转换方法详见 `references/caj-kdh-conversion.md`。
 
@@ -416,23 +416,23 @@ CNKI `.caj` 文件内部是加密的 KDH 格式。转换方法详见 `references
 2. Python 端用 `KDH_PASSPHRASE` XOR 解密（跳过 254 字节头）
 3. 解密后数据可直接用 pymupdf 打开（无需 mutool！.tmp 文件就是有效 PDF）
 
-### 专利文档解读模式（Patent Mode）
+### 知识产权文档解读模式（Patent Mode）
 
-当输入为**专利文献**（CNKI .caj 专利文件）时，Tier 1 输出模板调整如下：
+当输入为**知识产权文献**（CNKI .caj 知识产权文件）时，Tier 1 输出模板调整如下：
 
-**① 专利基本信息表**
+**① 知识产权基本信息表**
 ```
 | 字段 | 内容 |
 |------|------|
-| 专利名称 | ... |
-| 申请人/专利权人 | ... |
-| 专利号 | CNxxxxxxA/B |
+| 知识产权名称 | ... |
+| 申请人/知识产权权人 | ... |
+| 知识产权号 | CNxxxxxxA/B |
 | 申请日/授权日 | ... |
 | IPC分类号 | G16B... |
 | 法律状态 | 审中/已授权 |
 ```
 
-**② 技术领域与解决的问题** (专利说明书"背景技术"段)
+**② 技术领域与解决的问题** (知识产权说明书"背景技术"段)
 
 **③ 🔥 技术路线图** (Mermaid Flowchart TD — 必须展示 S1→S2→... 步骤流)
 
@@ -445,7 +445,7 @@ CNKI `.caj` 文件内部是加密的 KDH 格式。转换方法详见 `references
 
 **⑤ 创新点与差异化空间**
 
-**⑥ 与你的专利策略关联** — 含规避建议 + 可借鉴要素
+**⑥ 与你的知识产权策略关联** — 含规避建议 + 可借鉴要素
 
 ---
 

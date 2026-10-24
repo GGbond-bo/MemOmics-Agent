@@ -29,11 +29,11 @@ Set Semantic Scholar / NCBI keys via `export` or `.env` file. Elsevier keys are 
 
 ### Proxy (本机必须走代理)
 
-本机（MemOmics 开发机）出口代理是 **http://login-host:22**，lit_bridge / academic_search /
+本机（MemOmics 开发机）出口代理是 **http://127.0.0.1:6478**，lit_bridge / academic_search /
 format-converter 都只认标准代理环境变量（urllib 自动读取）：
 
 ```powershell
-$env:HTTP_PROXY="http://login-host:22"; $env:HTTPS_PROXY="http://login-host:22"
+$env:HTTP_PROXY="http://127.0.0.1:6478"; $env:HTTPS_PROXY="http://127.0.0.1:6478"
 ```
 
 不设代理时，PubMed / Crossref / OpenAlex / arXiv 会以超时或连接被拒的形式失败 —— 这种失败

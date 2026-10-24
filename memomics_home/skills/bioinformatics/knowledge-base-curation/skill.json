@@ -1,21 +1,18 @@
 {
-  "id": "knowledge-base-curation",
-  "name": "knowledge-base-curation",
-  "category": "knowledge",
-  "language": "R+Python",
-  "description": "Auto-generated for knowledge-base-curation",
-  "tags": [],
-  "user_score": 0,
-  "auto_score": 0,
-  "approved": false,
-  "steps": [],
-  "when_to_use": "Auto-generated for knowledge-base-curation",
-  "trigger_keywords": [
-    "knowledge-base-curation",
-    "knowledge base curation",
-    "knowledge",
-    "base",
-    "curation"
-  ],
-  "trigger_level": "YEL"
+ "id": "knowledge-base-curation",
+ "name": "knowledge-base-curation",
+ "category": "knowledge",
+ "language": "R+Python",
+ "description": "Auto-generated for knowledge-base-curation",
+ "tags": [],
+ "steps": [],
+ "when_to_use": "Auto-generated for knowledge-base-curation",
+ "trigger_keywords": [
+  "knowledge-base-curation",
+  "knowledge base curation",
+  "knowledge",
+  "base",
+  "curation"
+ ],
+ "trigger_level": "YEL"
 }

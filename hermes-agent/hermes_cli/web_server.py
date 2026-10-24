@@ -5,7 +5,7 @@ Provides a FastAPI backend serving the Vite/React frontend and REST API
 endpoints for managing configuration, environment variables, and sessions.
 
 Usage:
-    python -m hermes_cli.main web          # Start on http://login-host:22
+    python -m hermes_cli.main web          # Start on http://127.0.0.1:9119
     python -m hermes_cli.main web --port 8080
 """
 
@@ -435,7 +435,7 @@ def _is_accepted_host(host_header: str, bound_host: str) -> bool:
     #   [::1]:9119    — with port
     # Plain hosts/v4:
     #   localhost:9119
-    #   login-host:22
+    #   127.0.0.1:9119
     h = host_header.strip()
     if h.startswith("["):
         # IPv6 bracketed — port (if any) follows "]:"
@@ -7597,7 +7597,7 @@ _PLATFORM_ORDER: tuple[str, ...] = (
 # falls back here so the UI can still render a friendly label.
 _MESSAGING_ENV_FALLBACKS: dict[str, dict[str, Any]] = {
     "SIGNAL_HTTP_URL": {
-        "description": "signal-cli REST API base URL, e.g. http://login-host:22",
+        "description": "signal-cli REST API base URL, e.g. http://127.0.0.1:8080",
         "prompt": "Signal bridge URL",
         "url": "https://github.com/bbernhard/signal-cli-rest-api",
     },

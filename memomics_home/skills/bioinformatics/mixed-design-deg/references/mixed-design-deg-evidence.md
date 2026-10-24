@@ -43,7 +43,7 @@
 - 数据预处理见 `metaanalysis_archive/acute_data_preprocessing.R`：排除无时间/无 subject id 样本，标准化 time（-1=baseline, 小时）。
 - **关键**：单数据集内 training(组间)+time(配对) 同时进模型；跨数据集 rma.mv 带 gse 随机效应——"独立、配对、随机效应"三者同时建模的期刊级正统做法。
 
-## ④ Zemke 海马 aging（用户专利相关）
+## ④ Zemke 海马 aging（用户知识产权相关）
 
 - **源码**：`E:/tmp/deg_source/Zemke_hippocampus/`；`03_age_correlation/` 有 correlation_gene_expression.ipynb（连续年龄相关）、02_feature_calling/ 有 DMR 分析。
 - 用连续年龄相关 + 单细胞 multi-omics（非离散组间比较），可参考其基因-年龄相关部分。

@@ -221,13 +221,10 @@ results/{模块名}_{方法名}_{日期}_{sid}/
 
 部署步骤：
 ```
-1. skill_view("heartbeat-monitor")  ← 加载心跳监控 skill
 2. 从分析 skill 的 Expected Outputs 节提取预期产出文件列表
 3. cronjob(action="create",
      name="监控-{任务名}",
      schedule="15m",    ← 根据下表选择
-     prompt="{HEARTBEAT_PROMPT}",  ← 从 heartbeat-monitor SKILL.md 复制模板
-     skills=["heartbeat-monitor"],
      workdir="{results_dir}",  # ⚠️ 会话路径！
      deliver="local")
 ```

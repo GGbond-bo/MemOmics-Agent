@@ -28,7 +28,7 @@ graph LR
 ## 最新目录结构（v3.0）
 
 ```text
-F:/CellBender_v2/
+/data/CellBender_v2/
 ├── h5ad/                          # Stage 1: 转换后的 h5ad (int32)
 │   ├── 4CL_SD_D4_1_scRNA.h5ad
 │   ├── e4CL_D2_1_scRNA.h5ad
@@ -76,25 +76,25 @@ tasklist /FI "IMAGENAME eq python.exe" /FO CSV
 # 查 GPU
 nvidia-smi --query-gpu=name,memory.used,utilization.gpu --format=csv,noheader
 # 查目录
-dir F:/CellBender_v2/ /B /S | findstr /I "filtered"
+dir /data/CellBender_v2/ /B /S | findstr /I "filtered"
 ```
 
 ### 启动
 
 ```bash
 # 方案 A: 完整流水线（从 raw matrix 开始）
-cd /d F:\CellBender_v2
-python scripts/stage1_to_h5ad.py --base_dir F:/00.RawData --out_dir F:/CellBender_v2/h5ad
+cd /d /data/CellBender_v2
+python scripts/stage1_to_h5ad.py --base_dir /data/00.RawData --out_dir /data/CellBender_v2/h5ad
 # 确认 h5ad 生成后：
-start /B python scripts\run_pipeline.py --work_dir F:\CellBender_v2 --skip_stage1
+start /B python scripts\run_pipeline.py --work_dir /data/CellBender_v2 --skip_stage1
 
 # 方案 B: 分阶段（推荐首次调试用）
 # Stage 2: 仅跑 CellBender
-start /B python scripts\run_pipeline.py --work_dir F:\CellBender_v2 --skip_stage1 --only_stage 2
+start /B python scripts\run_pipeline.py --work_dir /data/CellBender_v2 --skip_stage1 --only_stage 2
 # Stage 3: 压缩
-python scripts\ptrepack_all.py --cb_dir F:/CellBender_v2/cellbender_output --out_dir F:/CellBender_v2/seurat_h5
+python scripts\ptrepack_all.py --cb_dir /data/CellBender_v2/cellbender_output --out_dir /data/CellBender_v2/seurat_h5
 # Stage 4: 统计
-python scripts\stats_summary.py --h5ad_dir F:/CellBender_v2/h5ad --cb_dir F:/CellBender_v2/cellbender_output --out_dir F:/CellBender_v2/summary
+python scripts\stats_summary.py --h5ad_dir /data/CellBender_v2/h5ad --cb_dir /data/CellBender_v2/cellbender_output --out_dir /data/CellBender_v2/summary
 ```
 
 ### 运行中 — LLM 巡检
@@ -131,7 +131,7 @@ python scripts\stats_summary.py --h5ad_dir F:/CellBender_v2/h5ad --cb_dir F:/Cel
 | 7 | **`learning_rate=0.001`** | 峰值 LR 达 `0.01`，超出官方 "do not exceed 1e-3" | 修正为 `1e-4`（官方默认） | 🟡 中等 |
 | 8 | **不查就说** | 用户问"还在跑吗？"凭空答"没有在跑" | 三连击（tasklist + nvidia-smi + dir）后再回答 | 🔴 致命 |
 | 9 | **残留进程撞车** | 两个 CellBender 各占 7.2GB RAM+VRAM | 启动前 `taskkill /F /IM cellbender*` | 🔴 致命 |
-| 10 | **gzzkq8fy 目录名** | 随机 session ID，无法追踪 | `--work_dir` 用语义名如 `F:/CellBender_v2/` | 🟡 中等 |
+| 10 | **gzzkq8fy 目录名** | 随机 session ID，无法追踪 | `--work_dir` 用语义名如 `/data/CellBender_v2/` | 🟡 中等 |
 
 ## LLM 巡检模板
 

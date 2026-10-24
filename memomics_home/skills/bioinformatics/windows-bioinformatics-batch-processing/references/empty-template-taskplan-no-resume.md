@@ -16,7 +16,7 @@ The user's actual requests in this session were:
 3. Download human hippocampus ATAC-seq data (GSE000000)
 
 The Agent, on system wake check #6, read `system_log.jsonl` and found records from a **different session** (`memomics-1c1890da`) that had a monkey CellBender batch task. It then:
-- Started a 13-sample CellBender batch pipeline at `<数据目录>
+- Started a 13-sample CellBender batch pipeline at `<数据目录>`
 - Deployed heartbeat monitoring
 - Reported "主线任务: Monkey CellBender 批量" as if this was the current session's task
 

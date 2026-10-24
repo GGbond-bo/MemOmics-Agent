@@ -593,3 +593,8 @@ export_complete_design(batch_design, design_params, output_dir = "design_results
 |------|------|------|------|------|------|------|----|
 | mouse | skeletal_muscle | statistics_review | 2026-09-25 | stats_review_demo_pseudoreplication.R | - | - |  |
 | mouse | skeletal_muscle | statistics_review | 2026-09-25 | stats_review_figures.R | - | - |  |
+| human | synthetic_expression | aging | 2026-10-18 | aging_vs_t2d_two_group_stats.py | - | - |  |
+| human | synthetic_expression | aging | 2026-10-18 | aging_vs_t2d_two_group_stats.py | - | - |  |
+| human | synthetic_expression | aging | 2026-10-18 | input_integrity_audit_expr_flawed.py | - | - |  |
+| human | synthetic_expression | aging | 2026-10-18 | expr_flawed_three_gene_two_group_stats.py | - | - |  |
+| human | synthetic_expression | aging | 2026-10-18 | expr_flawed_scenario_sim_and_grading.py | - | - |  |

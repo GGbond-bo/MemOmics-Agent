@@ -225,7 +225,7 @@ for (name in names(sigs)) {
 # 3. 画 UMAP 看分布 → 每个 cluster 取最高 score 的大群
 ```
 
-### 🔴 Phase 5b: DA tiles 伪bulk — 统计单元铁律（2026-09-01 专利多年龄组教训）
+### 🔴 Phase 5b: DA tiles 伪bulk — 统计单元铁律（2026-09-01 知识产权多年龄组教训）
 
 **`getGroupSE` 的 `groupBy` 只能是"聚合单元"（individual/样本），绝不能是"分组变量"（年龄组/条件）**。千问生成的代码用 `groupBy="age_group"` 被当场纠正（用户多轮追问"为什么复杂""要用个体的吗"）：
 
@@ -235,13 +235,11 @@ for (name in names(sigs)) {
 | ✅ `groupBy="individual"` | 40/20 列（每个体 1 列） | n=40（猴 n=20）真实重复 → dispersion 可靠 |
 
 - **年龄组是 DESeq2 的 design 因子**，不是聚合单元：`DESeqDataSet(se, design=~age_group)` + `test="LRT", reduced=~1`
-- **⚠️ 方法选型（2026-09-01 用户拍板）**：对齐 Zemke Science 2026（GSE000000）→ 该文官方方法**不是 DESeq2**，而是**连续年龄 Pearson + shuffle ×5000 + FDR<0.1**。用户被问"你确定人家文章使用的是这个吗?"启发后明确选择 **Pearson + shuffle 版**：每个 tile `cor(log2CPM, Age)`（Age=供体连续年龄），FDR<0.1 且 r>0=Up / r<0=Down；shuffle 置换供体年龄标签×5000 得经验 p；四年龄组只作**下游展示层**（Up/Down tiles 按组画趋势）。50 万 tiles 用向量化 `apply(lcpm,1,cor)` + `pt()` 替代逐行 cor.test（快 1000 倍）。完整脚本 → `references/archr-da-tiles-4age.md`
 - **剔除个体（如猴 M4）必须在 `getGroupSE` 之前**过滤 project 细胞（`proj <- proj[keep, ]`），否则被剔除个体成为 NA-age 列 → stopifnot 报错或污染数据底（与 L2 数据底 meta60=40人+20猴不一致）
 - **PeakMatrix ≠ TileMatrix**：L2 已有的个体级 PeakMatrix SE 不能用于 DA tiles；DA 需在同一 project 上 `getGroupSE(useMatrix="TileMatrix", groupBy="individual")` 重新聚合（分钟级，不贵）
 - **colData 贴分组用 `match()` 按个体名对齐**，不用行号（SE 列顺序与 meta 行顺序不一定一致）
 - **猴侧坐标是 MFA8/T2T 非 hg38**：DA tiles 原样输出，下游 agent 负责 liftover 映射
 - Exceptionally old 组个体 <2 → DESeq2 组内方差不可估报错 → 并入 Old 重跑（Pearson 版无此问题，连续年龄天然处理）
-- 完整人/猴双版本脚本 → `references/archr-da-tiles-4age.md`
 
 #### 🔴 getGroupSE 三大坑（2026-09-02 猴/人双侧 530 万 tiles 实测，源码级确认）
 
@@ -268,9 +266,8 @@ out <- data.frame(chr  = fr[[1]],
 - 上千~上万行 CSV 可直接**后处理**修坐标（统计列 r/p/q 与坐标无关，无需重跑 getGroupSE）；r>0=Up / r<0=Down / q<0.1 判定不受影响
 - **猴侧 20 样本 + FDR q<0.1 常见 0 个显著 tiles**（530 万次检验 FDR 极严）——up/down csv 只有表头是正常结果不是报错；M3 秩保守比较用 all.csv 全部 r 值即可，显著集为空只影响"显著 tile 跨物种重叠"类分析，需改用秩保守设计
 
-完整修正脚本（含 divideN + rowData 坐标换算）→ `references/archr-da-tiles-4age.md`（v2.1）
 
-### Phase 6: TF Footprinting + Motif（专利核心）
+### Phase 6: TF Footprinting + Motif（知识产权核心）
 ```r
 proj <- addMotifAnnotations(proj, motifSet="cisbp", name="Motif")
 proj <- addBgdPeaks(proj)
@@ -284,10 +281,7 @@ seFoot <- getFootprints(proj, positions=motifPositions, groupBy="AgeGroup")
 
 ---
 
-## 跨物种 CRE 保守性评估（专利方向）
-> 详见 `references/hippocampus-annotation-markers.md`（人+猴海马 marker 列表 + 对齐表 + 亚群命名规则）
-> 详见 `references/table-s1-donor-age-mapping.md`（GSE000000 样本→年龄映射铁律：只准代码匹配 Table_S1，禁止手写占位——曾因手排 age_map 被用户当场抓错）
-> 详见 `references/archr-peak-calling-cluster-pitfalls.md`（HDF5 写权限根因 / 官方参数实测 / 张潇 example-cohort cCRE 参数 / BSgenome 澄清 / CPU 现象 / 20万细胞时间估算 / 样本名→individual 提取）
+## 跨物种 CRE 保守性评估（知识产权方向）
 
 ### 需要的数据
 | 数据 | 用途 |
@@ -306,7 +300,7 @@ L3: TF 结合保守性 → footprinting + motif 富集 + 结合强度比较
 A/B/C/D 四级分类（B 类 = 序列+可及性保守但 TF 结合不同 → 核心创新）
 ```
 
-### 专利从权留口
+### 知识产权从权留口
 - 从权中预留 RNA 层（SCENIC regulon 保守性）和 Hi-C 层（3D 结构保守性）
 - 独权只覆盖纯 ATAC 三层，后续数据充足时拓展
 
@@ -332,8 +326,7 @@ A/B/C/D 四级分类（B 类 = 序列+可及性保守但 TF 结合不同 → 核
 - 聚类精度：**SnapATAC2 > ArchR**（尤其复杂脑组织亚型、稀有类型；Luo 2024 Genome Biol benchmark）
 - 速度：SnapATAC2 最快；内存：ArchR 最省；SnapATAC v1 >2万细胞内存爆炸不可扩展
 - **库大小偏差**：LSI（ArchR/Signac）嵌入与测序深度强相关，跨样本/跨年龄比较需警惕混杂；SnapATAC 系（Jaccard）几乎不受影响
-- footprinting/共可及性：ArchR 独占强项；跨物种 CRE 专利实施例建立在 ArchR 输出上，勿轻易换管线
-- 详见 `references/archr-vs-snapatac-benchmark.md`（全文证据 + Europe PMC 抓取路径）
+- footprinting/共可及性：ArchR 独占强项；跨物种 CRE 知识产权实施例建立在 ArchR 输出上，勿轻易换管线
 - **引用核实（2026-08-11 实测）**：任务委托给的 PMID 31072930（实为 PNAS 纹状体论文）与 31061468（实为 Sci Rep 植物 RNAi 论文）均与 ArchR/SnapATAC 无关。正确引用：ArchR=PMID 33633365（Nat Genet 2021, DOI 10.1038/s41588-021-00790-6）；SnapATAC=PMID 33637727（Nat Commun 2021, DOI 10.1038/s41467-021-21583-9）；SnapATAC2=PMID 38191932（Nat Methods 2024, DOI 10.1038/s41592-023-02139-9，委托给的 10.1038/s41592-024-02229-8 无法匹配）；Luo benchmark=PMID 39152456。**铁律：委托中的 PMID/DOI 引用前必须先 query_ncbi/pubmed 核实**，报告中附勘误说明
 - SnapATAC v1 确认 EOL（GitHub 最后 push 2023-04-27，README 自 2019-09 起推荐 v2）；SnapATAC2 无 Windows wheel、缺 footprinting/chromVAR deviations/co-accessibility 模块
 - 完整 15 维度对比报告（含总览表+选择建议+对跨物种项目的专项建议）：`results/memomics-1f916507/archr_vs_snapatac_report.md`
@@ -355,18 +348,13 @@ A/B/C/D 四级分类（B 类 = 序列+可及性保守但 TF 结合不同 → 核
 | symlink 失败 | Windows 无管理员 | 直接 copy Arrow 文件 |
 | `.libPaths()` 劫持 | `.Rprofile` 硬编码 | 改为版本自适应 |
 | `getMarkerFeatures` 跑 5 分钟后静默死亡 | 16万+细胞 × 30+ cluster = OOM，日志无 error | 加 `maxCells=500` 或改 `testMethod="G"` |
-| `addGroupCoverages` 报 `H5Fcreate: HDF5. File accessibility. Unable to open file` | loadArchRProject 加载的是**他人 Project**（outputDirectory 指向没写权限的目录）→ 创建 coverage .h5 失败；次要：残留损坏 .h5、磁盘满、NFS 写锁 | ① `getOutputDirectory(proj)` 确认指向；`touch <dir>/__test.tmp` 验写权限 ② `copyArchRProject()` 复制到自己可写目录，或改 `proj@projectMetadata$outputDirectory` ③ `unlink("GroupCoverages", recursive=TRUE)` + `force=TRUE` 重跑。完整排查见 `references/archr-peak-calling-cluster-pitfalls.md` |
 | ATAC marker "在好几个亚群高表达" | 用了谱系级 marker（SLC17A7）打亚群 | 分层注释：先大群 → 大群内亚聚类 → 亚群级 marker |
 | `AddModuleScore` 报错 "no applicable method for ArchRProject" | Seurat 函数不能直接用于 ArchRProject | 先 `getMatrixFromProject()` 提取矩阵，手算 `colMeans(mat[idx,])` |
 | 跨物种注释说"用 TransferData 预测" | Zhang Xiao 2026 实际是手动 canonical marker 注释 | 读原文 Methods，不要猜方法 |
 | `getEmbedding(proj, "UMAP")` 报错 "Embedding not in computed embeddings" | Harmony 整合后 embedding 名称为 `UMAPHarmony` 而非 `UMAP` | 用 `getEmbedding(proj, embedding="UMAPHarmony")`；先 `names(proj@embeddings)` 查看可用 embedding 名称 |
 | `no slot of name "cellEmbeddings" for this object of class "ArchRProject"` | ArchRProject 没有 `cellEmbeddings` slot（那是 Seurat 的） | 用 `getEmbedding(proj, embedding="UMAPHarmony")` 或 `proj@embeddings$UMAPHarmony$df` |
-| `getMatrixFromProject(proj, useMatrix="TileMatrix")` 触发 `Cannot allocate vector ... 2^31-1` | 大项目（几十 arrow / 几十万细胞）TileMatrix cell 维太大，`Matrix` cbind 溢出 | 逐 arrow 建 project 聚合到 sample 维（samples × tiles 小矩阵），详见 `references/tilematrix-sample-aggregation.md` |
-| `getMatrixFromProject(..., cellNames=...)` → `unused argument (cellNames=...)` | **该函数没有 `cellNames` 参数**（formals 仅 8 个），且读全部 arrow 后 cbind，无按 cell 子集读单 arrow 的能力 | 每个 arrow 单独 `ArchRProject(ArrowFiles=af[i])` 再取矩阵；`.availableCells` 要写 `ArchR:::.availableCells(...)`。详见 `references/tilematrix-sample-aggregation.md` |
-| 产出 `样本 × ~1万` 矩阵、列名全是 `GSM...#barcode` 细胞条码、体积只有几 MB | `assay(se)` 是 **tile(行) × cell(列)**；用了 `colMeans` 对 cell 求均值 → 拿到 n_cells 长度、名字=条码的向量，不是 tile 覆盖 | **用 `Matrix::rowMeans(assay(se))`**（对行=tile 求均值 → n_tiles≈608万、名=`chr:start-end`、值域 0-1 覆盖比例）。人猴 L2 比对两侧须同口径=覆盖比例。真伪自检：维度 `样本×608万`、列名 tile 坐标、体积 ~400MB。详见 `references/tilematrix-sample-aggregation.md` |
 | `Error in getMatrixFromProject(proj, useMatrix="PeakMatrix"): useMatrix is not in Available Matrices` | **`addPeakMatrix()` 从未执行**——`addReproduciblePeakSet` 只生成 peak **坐标集合**（PeakSet），不生成 细胞×peak **计数矩阵**（PeakMatrix）。保存的 project 若只有 PeakSet，getMatrixFromProject 必然报错（2026-08-30 用户集群实测） | ① `getAvailableMatrices(proj)` 确认缺 "PeakMatrix" ② `proj <- addPeakMatrix(proj, force=TRUE)`（需能访问 Arrow，20万细胞 15-30min，I/O 瓶颈）③ `saveArchRProject(proj, ..., load=TRUE)` ④ 再取矩阵。**给用户的 peak calling 指令必须四步一起给：addReproduciblePeakSet → addPeakMatrix → saveArchRProject → getMatrixFromProject**；不要让用户跑完 call peak 就停下来 |
 | peak CSV 里 `end-start=500` 被误判"非501bp" | **ArchR GRanges 是闭区间**：`width = end - start + 1`，501bp 的 peak 导出后 `end-start=500` 完全正常（2026-08-30 本会话差点误报） | 校验宽度用 `end-start+1`（或 R 的 `width()`），不要用 `end-start`；bed 转 CSV/跨格式对比时注意 0-based/1-based ±1 |
-| `getGroupSE(groupBy="age_group")` 检年龄相关 DA | 把年龄组当聚合单元 → 每组仅 1 列 → n=4 伪重复，DESeq2 dispersion 不可估，p/FDR 虚高 | `groupBy="individual"`（40 列），年龄组放 `design=~age_group` 做 LRT；剔除个体（M4）必须在聚合前过滤 project；详见 `references/archr-da-tiles-4age.md` |
 | `All tiles filtered out!`（getGroupSE 后 rowSums 过滤剩 0） | `divideN=TRUE`（默认）把 counts 除以组内细胞数 → 小数计数全被 `rowSums >= 2*ncol` 过滤 | `getGroupSE(..., scaleTo=NULL, divideN=FALSE)` 才返回原始总 counts；先查 divideN，别改阈值 |
 | `rowRanges mismatch: length=0 vs nrow=...` | getGroupSE 的 SE **不填 rowRanges**，坐标在 `rowData(se)`（源码 `SummarizedExperiment(..., rowData=featureDF)`） | 坐标用 `as.data.frame(rowData(se))`，不要用 `rowRanges(se)`；完整解析见 Phase 5b「getGroupSE 三大坑」 |
 | DA tiles CSV 坐标错（end/start≈500 或 start 连续 +1） | rowData 第 2 列是 per-chr tile idx、第 3 列是 `(idx-1)*500` 伪坐标，被误当 start/end | 换算 `start=col3+1, end=col3+500`（tileSize=500）；统计列 r/p/q 不受影响，可直接后处理修坐标不重跑 |
@@ -513,7 +501,7 @@ tasklist | grep -i "Rscript\|python"
 nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader
 
 # 3. 检查 RDS checkpoint 进度（ArchR pipeline 特有）
-ls -lt <数据目录>
+ls -lt E:/知识产权/ArchR_Output/project_*.rds
 # project_raw.rds → Phase 1 完成
 # project_qc.rds → Phase 2 完成
 # project_lsi.rds → Phase 3 完成
@@ -521,7 +509,7 @@ ls -lt <数据目录>
 # project_final.rds → Phase 5-6 完成
 
 # 4. 检查 coverage 进度（如果 Phase 4 在跑）
-ls <数据目录> | wc -l
+ls E:/知识产权/ArchR_Output/GroupCoverages/Clusters/ | wc -l
 # 每组 ~2-3 个 .coverage.h5 文件，57 组 = 114-171 文件
 # 文件按 C1→C57 顺序生成 → 最大编号 = 当前进度
 ```

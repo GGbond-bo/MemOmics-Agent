@@ -8,7 +8,7 @@ auth/path differences.**
 
 | | Local ComfyUI | Comfy Cloud |
 |---|---|---|
-| Base URL | `http://login-host:22` | `https://cloud.comfy.org` |
+| Base URL | `http://127.0.0.1:8188` | `https://cloud.comfy.org` |
 | API path prefix | none (`/prompt`, `/view`, …) | `/api/...` (`/api/prompt`, `/api/view`, …) |
 | Auth | none (or bearer token if configured) | `X-API-Key` header |
 | WebSocket | `ws://host:port/ws?clientId={uuid}` | `wss://cloud.comfy.org/ws?clientId={uuid}&token={API_KEY}` |
@@ -52,7 +52,7 @@ The skill helper `_common.parse_model_list()` normalizes both.
 
 ```bash
 # Local
-curl -X POST "http://login-host:22/prompt" \
+curl -X POST "http://127.0.0.1:8188/prompt" \
   -H "Content-Type: application/json" \
   -d '{"prompt": '"$(cat workflow_api.json)"', "client_id": "'"$(uuidgen)"'"}'
 
@@ -100,8 +100,8 @@ accept both.
 ### Get History (Local)
 
 ```bash
-curl -s "http://login-host:22/history"          # all
-curl -s "http://login-host:22/history/{id}"     # one prompt_id
+curl -s "http://127.0.0.1:8188/history"          # all
+curl -s "http://127.0.0.1:8188/history/{id}"     # one prompt_id
 ```
 
 Local entry shape:
@@ -126,7 +126,7 @@ checking `completed`, because both can be true for failed runs.
 
 ```bash
 # Local (direct bytes)
-curl -s "http://login-host:22/view?filename=ComfyUI_00001_.png&subfolder=&type=output" \
+curl -s "http://127.0.0.1:8188/view?filename=ComfyUI_00001_.png&subfolder=&type=output" \
   -o output.png
 
 # Cloud (302 → signed URL; -L follows; STRIP X-API-Key for the second hop)
@@ -144,7 +144,7 @@ Connect for real-time execution events.
 
 ```bash
 # Local
-wscat -c "ws://login-host:22/ws?clientId=MY-UUID"
+wscat -c "ws://127.0.0.1:8188/ws?clientId=MY-UUID"
 
 # Cloud
 wscat -c "wss://cloud.comfy.org/ws?clientId=MY-UUID&token=$COMFY_CLOUD_API_KEY"
@@ -184,12 +184,12 @@ user are broadcast to every connection. Filter messages client-side by
 
 ```bash
 # Image
-curl -X POST "http://login-host:22/upload/image" \
+curl -X POST "http://127.0.0.1:8188/upload/image" \
   -F "image=@photo.png" -F "type=input" -F "overwrite=true"
 # Returns: {"name": "photo.png", "subfolder": "", "type": "input"}
 
 # Mask (linked to a previously uploaded image)
-curl -X POST "http://login-host:22/upload/mask" \
+curl -X POST "http://127.0.0.1:8188/upload/mask" \
   -F "image=@mask.png" -F "type=input" \
   -F 'original_ref={"filename":"photo.png","subfolder":"","type":"input"}'
 ```
@@ -200,14 +200,14 @@ Cloud equivalent: prepend `https://cloud.comfy.org/api` and add `-H "X-API-Key: 
 
 ```bash
 # All node types and their input specs
-curl -s "http://login-host:22/object_info" | python3 -m json.tool
+curl -s "http://127.0.0.1:8188/object_info" | python3 -m json.tool
 
 # Specific node
-curl -s "http://login-host:22/object_info/KSampler"
+curl -s "http://127.0.0.1:8188/object_info/KSampler"
 
 # Models per folder (local)
-curl -s "http://login-host:22/models/checkpoints"
-curl -s "http://login-host:22/models/loras"
+curl -s "http://127.0.0.1:8188/models/checkpoints"
+curl -s "http://127.0.0.1:8188/models/loras"
 
 # Models per folder (cloud — note the experimental prefix)
 curl -s "https://cloud.comfy.org/api/experiment/models/checkpoints" \
@@ -218,30 +218,30 @@ curl -s "https://cloud.comfy.org/api/experiment/models/checkpoints" \
 
 ```bash
 # View queue
-curl -s "http://login-host:22/queue"
+curl -s "http://127.0.0.1:8188/queue"
 
 # Clear all pending
-curl -X POST "http://login-host:22/queue" \
+curl -X POST "http://127.0.0.1:8188/queue" \
   -H "Content-Type: application/json" \
   -d '{"clear": true}'
 
 # Delete specific items
-curl -X POST "http://login-host:22/queue" \
+curl -X POST "http://127.0.0.1:8188/queue" \
   -H "Content-Type: application/json" \
   -d '{"delete": ["prompt_id_1", "prompt_id_2"]}'
 
 # Cancel currently-running job
-curl -X POST "http://login-host:22/interrupt"
+curl -X POST "http://127.0.0.1:8188/interrupt"
 ```
 
 ## System Management
 
 ```bash
 # Stats (VRAM, RAM, GPU, ComfyUI version)
-curl -s "http://login-host:22/system_stats"
+curl -s "http://127.0.0.1:8188/system_stats"
 
 # Free GPU memory
-curl -X POST "http://login-host:22/free" \
+curl -X POST "http://127.0.0.1:8188/free" \
   -H "Content-Type: application/json" \
   -d '{"unload_models": true, "free_memory": true}'
 ```
@@ -253,15 +253,15 @@ via the API instead of `comfy-cli`.
 
 ```bash
 # Install a custom node from a git URL
-curl -X POST "http://login-host:22/manager/queue/install" \
+curl -X POST "http://127.0.0.1:8188/manager/queue/install" \
   -H "Content-Type: application/json" \
   -d '{"git_url": "https://github.com/user/comfyui-node.git"}'
 
 # Check install queue status
-curl -s "http://login-host:22/manager/queue/status"
+curl -s "http://127.0.0.1:8188/manager/queue/status"
 
 # Install model
-curl -X POST "http://login-host:22/manager/queue/install_model" \
+curl -X POST "http://127.0.0.1:8188/manager/queue/install_model" \
   -H "Content-Type: application/json" \
   -d '{"url": "https://...", "path": "models/checkpoints", "filename": "model.safetensors"}'
 ```

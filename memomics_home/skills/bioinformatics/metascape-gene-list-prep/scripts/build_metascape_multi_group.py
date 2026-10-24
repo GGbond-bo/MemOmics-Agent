@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-build_metascape_multi_group.py — 多比较组工作簿 → 每组一张 Metascape 输入表
+build_metascape_multi_group.py — 多比较组工作簿 → 每组一张 示例分析 输入表
 
 适用：一个 xlsx 里有 N 个 sheet（每 sheet 一个比较组），列为
       gene / celltype / regulation(Up|Down) / coef / se / z / p / fdr / direction / comparison / ...
 输出：每个 sheet 一张表，表内「每列 = 一个亚群的一个方向」
       - 列名 up_<celltype> / down_<celltype>，列序 = 亚群字母序，每亚群 up 在前 down 在后
       - 列内按 |coef| 降序（并列按 fdr 升序）取 top-N，不足全取
-      - 空列（该亚群该方向无显著基因）不出这一列（只有表头的列会让 Metascape 报噪声）
+      - 空列（该亚群该方向无显著基因）不出这一列（只有表头的列会让 示例分析 报噪声）
       - 交付两份：<前缀>.txt（tab、utf-8-sig，直接上传）+ 同名 .xlsx（便于肉眼检查）
       - 外加 列基因数汇总.csv + _自检报告.csv
 
@@ -17,10 +17,10 @@ import os, csv
 import pandas as pd
 
 # ===== 配置区 =====
-F     = r"<数据目录>/DEG_fdr05_coef025_5contrasts_formatted.xlsx"   # 输入工作簿
+F     = r"D:/我的下载/DEG_fdr05_coef025_5contrasts_formatted.xlsx"   # 输入工作簿
 OUT   = r"D:/肌肉锻炼/DEG_metascape"                                  # 输出目录（用户指定）
 TOP_N = 100                                                           # 每列取前 N（不足全取）
-PREFIX = "Metascape"                                                  # 文件名前缀
+PREFIX = "示例分析"                                                  # 文件名前缀
 # 可选：把用户贴的样板放进来，自动反查排序口径（键 = "up_<celltype>" / "down_<celltype>"）
 EXAMPLE_SHEET = "Aging"
 EXAMPLE = {

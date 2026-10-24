@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 """pixel_diff_single_change.py — 证明"只改了一处"的确定性探针
 
-配套 SKILL.md「单元素改版：像素差分核验协议」+ references/single-element-revision-pixel-diff.md
 
 用法
 ----

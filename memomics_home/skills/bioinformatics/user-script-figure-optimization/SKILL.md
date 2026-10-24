@@ -8,11 +8,12 @@ description: >-
   矢量导出 + Source Data）。触发词：「按 nature 优化」「帮我改一下我的脚本」
   「检查一下这个脚本」「我的画图代码」「CNS 级出图」「改成发表级」「这个图怎么优化」
   「Seurat DimPlot 优化」「UMAP 出图改一下」。适用于任何「用户给脚本 + 要求提升图质量」
-  的场景，R 与 Python 均适用，R/ggplot2 侧有专门小节。
+  的场景，R 与 Python 均适用。
   另覆盖**模板化复刻**：用户给「一张参考图 / 一段能跑的代码 + 新数据」要求
   「根据这个火山图直接换个代码，分别做出 N 张」「你自己看看代码」「我只要里面最完整的图」时，
   以他的代码为基线、只换数据源/子集/循环/每图标题，出 N 张同风格图。
-  追加触发词：「宽度不够」「亚群名字挤在一块」「标签/文字重叠」→ 先按 strwidth 重算画布宽度；
+  追加触发词：「宽度不够」「亚群名字挤在一块」「标签/文字重叠」→ 按 strwidth 重算画布宽度；
+  「名字太长/分类名太长/有没有简短贴切的」→ 先量可用高度再推荐名字（见 references/vertical-label-fit-and-rename.md）；
   「你用的哪个数据」「这个类别不该有」→ 数据源核查（过滤版 vs 全表版）；
   「这个基因为什么没标记」「标记标准是什么」「为什么不标这个点」→ 读脚本 filter→arrange→slice
   的真实顺序做四步审计（gate-then-rank：FDR 是门槛、|coef| 只是门槛内的排序键），
@@ -132,6 +133,72 @@ need_panel <- length(LAB) * max(w) * 1.06     # 每类目 1 个色块，留 6% �
   点明这层影响 + 给出「一条命令联动放大」的选项，**不要默默替他改点径**
 - 验收脚本见 `references/volcano-panel-canvas-and-data-source.md`「每块文字墨迹 vs 块宽」
   （本次 5 图 × 8 块全过：墨迹最宽 425 px / 块宽 486 px = 0.87，零溢出零跨块）
+
+### 竖排分组名「太长 / 压到邻组」+「换个短名字」（量**可用高度**，不是画布宽度）
+
+触发语：**「XXX 这个名字太长了，有没有简短贴切的？」「分类名太长」「这个名字压到旁边了」**。
+
+🔑 **铁律：先量，再推荐名字。** 直觉上最像原文的英文词往往**照样溢出** —— 实测
+`Degeneration`（语义最接近 Decompensation）量出 **0.768 in，仍超该组色块 0.758 in 达 0.01 in**，
+凭感觉推荐 = 用户改完还是错的。
+
+**几何规则（竖排 `srt=90` 的组名）**：文字长度 = 它占用的**纵向高度**，与「该组色块带」共享同一段纵向区间：
+
+```
+可用高度 = 该组行数 × 行高          行高 = axes_h_in / (NROWS + 1.5)
+安全溢出上限 = 相邻组间隙 / 2
+```
+
+⇒ **跟「它自己那组的行数」比，不是跟画布比**。实测 5 轴里 `Decompensation` 只有 2 行（Atrophy+Fibrosis）、
+其余组 3–4 行 ⇒ 同样字符数，行数少的组先溢出，**同一张图里只有一部分组会出问题**。
+
+| 实测（16.5×8.4 in，ps=9，cex=7.5/9，font=2；`row_in=0.379`，间隙 0.095 in→安全溢出 0.047 in） | |
+|---|---|
+| **Decompensation**（14 字符） | **0.967 in vs 可用 0.758 (2 行) → 溢出 0.21 in**（安全上限的 4.4 倍，真压邻组） |
+| Wasting 7 字 / Sarcopenia 10 字 / End-stage 9 字 | 0.462 / 0.645 / 0.610 in → 均装得下 ✅ |
+| **Degeneration**（12 字） | 0.768 in → **仍溢 0.01 in**，不可用 ❌ |
+| **Inflamm-aging**（13 字符） | 0.849 in vs 可用 1.138 (3 行) → **未溢出**，只是看着长 |
+
+🔴 **必须区分「真缺陷」与「审美取舍」**：本次 `Decompensation` 是真溢出（非改不可），
+`Inflamm-aging` 其实装得下（改它只是取舍）。不分清就会让用户以为两件都非改不可。
+
+**`strwidth` 三个实测坑（本会话连踩两次）**：
+
+| 症状 | 根因 | 修法 |
+|---|---|---|
+| `Error: plot.new has not been called yet` | `strwidth` 依赖**活动绘图区** | 先 `plot.new(); plot.window(...)` 再量 |
+| 数值**小得离谱**（14 字符 = 0.063） | `strwidth(x)` 默认返回**用户坐标**不是英寸 | A：`par(mai=rep(0,4)); plot.new(); plot.window(xlim=c(0,W), ylim=c(0,H))` 让 1 单位=1 英寸（最稳）／B：`strwidth(s, units="inches")` |
+| 量的字与图上不一致 | `par(ps=)`/`cex=`/`font=` 没对齐 | 脚本 `cex = 7.5/9` → 探测器传 `--cex 0.8333` |
+
+> 现成工具：**`scripts/measure_text_in_inches.R`** —— `--labels "A,B" --bands 3,4,2 --row-in 0.379 --pt 9 --cex 0.8333 --font 2`
+> 直接输出「实宽 / 可用高度 / 溢出 / 结论」。
+
+**换词硬约束：贴切 ≠ 可用。** 候选词**不得与轴内成员程序名撞词**，否则读者分不清「这是分组名还是程序名」：
+
+| 轴 | 热图行名（成员） | 因此禁用 |
+|---|---|---|
+| 终末失代偿轴 | `scoreAtrophy`、`Fibrosis` | Atrophy / Fibrosis / Fibro-atrophy |
+| 炎症-衰老轴 | `scoreInflammatory`、`scoreTNFA`、`scoreROS` | Inflammatory / Inflammation |
+
+**语义窄化要主动摆到明面**：`SASP` 极短且是领域标准缩写，但该轴含 ROS，而 ROS 是 SASP 的**上游驱动**，
+用 SASP 会藏掉"氧化应激"这条腿 ⇒ 交付时写明「图注需补 SASP axis includes ROS」。
+同理 `Wasting` 只覆盖 Atrophy 一侧不含纤维化；`End-stage` 保留原词 `Terminal decompensation` 的"不可逆"方向性。
+
+> 🔒 **项目定稿选词（用户 2026-10-21 选方案B）：`Sarcopenia` + `Inflammaging`** —— 三关顺序筛
+> 「① 不撞名 → ② 版式可行 → ③ 术语规范」的唯一交集。用户说「**我只要了解名字即可**」⇒
+> 只给理由、**不动脚本不出图**，落地前再确认。逐条理由（诊断实体 / 术语收敛写法 /
+> 与知识库口径一致 / 为何更短的 SASP 不能用）见 `references/vertical-label-fit-and-rename.md` §5。
+>
+> ⚠️ **早前版本把 `Sarcopenia` 也说成「只覆盖 Atrophy 一侧」，该说法已被推翻**：EWGSOP2 的
+> **临床定义**仍是三维主判（旧说法在这一层成立），但**作为轴名**覆盖萎缩+纤维化双表型有文献支持
+> —— 同一句话在两层上答案不同（同 §5.3）。
+
+**交付 = 只 patch `AXES` 的 `name` 字段**（绘图逻辑/几何/配色/字号/星号判据一字不动）；
+派生脚本（dz 版 / fibertype 版）用同名轴 ⇒ 先问「要不要同步」，**不要自动批量改**；
+方案用 `ask_user(kind="plan")` 给互斥选项（每项附实测宽度 + 代价），**不在正文末尾用问句**。
+
+> 完整实测表（9 个候选词逐个宽度）、三坑复现路径、撞词禁用清单、语义窄化话术见
+> `references/vertical-label-fit-and-rename.md`。
 
 ---
 
@@ -673,6 +740,8 @@ for (i in seq_along(exprs)) {
 - `references/volcano-panel-canvas-and-data-source.md` —— **标签不重叠的画布宽度算法（strwidth 实测）**、每块文字墨迹 vs 块宽验收脚本、**过滤版 vs 全表版数据源判定 + 从用户成品图反证**、图例内容用「裁切+OCR」而不是按色找键、`_deprecated_*` 版本卫生、箭头别用字形用矢量（含像素 run-length 验方向）
 - `references/volcano-label-rule-audit.md` —— **标注规则审计**：gate-then-rank（FDR 门槛 → 池内 \|coef\| top N）、回答「为什么这个基因没标记」的四步审计脚本、同池 SE 倍数对比、跨亚群交叉验证、中等显著带离群性量化、TMSB4X 实测案例（coef +1.619 / se 0.515 / z 3.14 / FDR 2.1e-03）、`pd.ExcelFile(p).sheet_names` 别名坑、口径（图内 8 亚群 vs 全表 10 celltype）声明规矩
 - `references/annotation-rule-supplement-execution.md` —— **补标执行协议**（用户勾选「只补标该基因」后怎么办）：白名单四元组代码、`stopifnot` 精确命中校验、`source` 溯源列、验收三件套（OCR 直读标签名 + `n_labels` 恰好 +1 + 补标行数 == 1）、老版备份 `_v1_*/`、`base::rbind` 追加 tibble 坑、**R 脚本静默失败的逐表达式定位配方**
+- `references/vertical-label-fit-and-rename.md` —— **竖排分组名「太长」的量化处置 + 换短名实测选法**：可用高度公式（组行数×行高）、9 个候选词逐个实测宽度表（`Degeneration` 直觉最佳却仍溢 0.01 in 的反例）、`strwidth` 三坑（未 `plot.new()` / 返回用户坐标不是英寸 / ps·cex·font 未对齐）、**撞词禁用清单**（轴内成员名不可作轴名）、语义窄化声明（SASP 不含 ROS）
+- `scripts/measure_text_in_inches.R` —— 量文字实宽（英寸）+ 对照「该文字被分配到的可用高度」判溢出：`--labels "A,B" --bands 3,4,2 --row-in 0.379 --pt 9 --cex 0.8333 --font 2`，用于改名选词、竖排组名溢出判定、加宽画布前的宽度预算
 - ggplot2 官方 `theme()` 参考页（ggplot2 4.0.3）— https://ggplot2.tidyverse.org/reference/theme.html
 
 ## Proven Scripts

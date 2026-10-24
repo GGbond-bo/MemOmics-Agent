@@ -22,7 +22,7 @@
   * <成品名>_preview_300dpi.png —— 成品全页 300dpi 预览（替代 72dpi 小图）
   * font_compare_report.json    —— 两份 PDF 的字号/字体/放大对证据
 
-依赖：pymupdf + Pillow（本机 venv `<安装目录> 已装）。
+依赖：pymupdf + Pillow（本机 venv `<安装目录>\\.venv` 已装）。
 约定：只读 PDF，不碰任何源文件；页码固定取第 1 页。
 """
 from __future__ import annotations

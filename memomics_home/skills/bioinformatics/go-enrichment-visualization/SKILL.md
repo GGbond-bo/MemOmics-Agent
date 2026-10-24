@@ -12,7 +12,6 @@ when_to_use: >
   enrichment heatmap or dotplot. e.g. "把选好的GO富集词条画成CNS级别的热图" or
   "按这个张图的样子绘制热图" (reference-figure style matching), or
   "先把每个亚群的词条和对应的基因列出来，我自己挑" (selection worksheet FIRST — see
-  references/term-selection-worksheet.md), or
   "这个也太多太大了，有其他的展现形式吗？" (matrix >85% sparse → the heatmap FORM is the
   problem, not its size: switch to the facet-lollipop grid, §稀疏度 >85% → 换形式).
 version: 1.1.0
@@ -50,6 +49,48 @@ where `Log(q-value)` = `-log10(q)` (negative; magnitude = significance exponent)
 - Rows = GO term name; gray = "this cluster lacks this term".
 - Export `svg` + `pdf` + `png@300dpi` (editable vector text for submission).
 
+## 示例分析 导出表的后处理（去冗余 + 稳健性审计）—— 必做核查清单
+
+用户给 `*_GO.xlsx`（示例分析 导出，`GeneList` 列为 `方向_亚群`）时，**先核查再分析**：
+
+1. **截断核查必须逐组做，不要跨组套用**：同目录 `示例分析_列基因数汇总.csv` 的 `capped` 列是唯一权威。
+   实测（2026-10-23）：Aging / O_EX 组多为 `capped=True`（up 截到 100 基因），
+   **DM_EX 组 20 列全为 False** —— 把「up 截断到 100、down 为全集」当成本表事实，
+   会写出一份口径全错的声明。用户选「做截断校正」时，正确落点可能是**功效校正**而非降采样：
+   列表规模跨 2–42 基因时跨列表 `LogP/Enrichment` 禁止直接比大小，一律换长度无关指标
+   （覆盖列表数 / Jaccard）。
+2. **`GeneList` 唯一值数 < 设计列数是常态，不是数据错误**：示例分析 只输出**有富集**的列表。
+   实测 20 列里只有 13 列有条目、7 列零条目（含 5 个 n≥5 的）—— **「零条目」本身是要报告的结论**，
+   不能只报有富集的那些（分母偏倚是审稿人必问项）。
+3. **去冗余必须分层（最容易做错的一步）**：
+   - **同一列表内** Jaccard>0.7 的词条 = 真冗余（GO 父子链共享同一批命中基因；实测 295→118，冗余率 60%）
+   - **跨列表同名词条 = 共享信号，绝不合并** —— 用户要的「跨亚群共享词条」正是后者
+   → per-list 贪心去冗余 与 跨列表按 GO ID 聚合统计共享，是两件独立的事，分开做。
+4. **小列表功效声明**：`p_min = hypergeom.sf(min(m, k) - 1, N_lib, m, k)`（完全重叠时的超几何上尾）。
+   `p_min > 0.05` 的列表（实测 n=2 / n=3）在结构上不可能显著 → 标 `underpowered`，其条目不进结论。
+5. **核实「最大列表占比」，并主动做 leave-one-list-out（LOO）**：实测 `up_RP_high(I)`（n=39 基因）
+   产出 224/564 条 = **40%**，这是审稿人第一顺位质疑（"单列表主导的伪共识"）。
+   LOO = 逐个剔除列表后重算共享词条的覆盖列表数/亚群数，配 Jaccard 0.5–0.9 阈值敏感性。
+   实测 LOO 剔除该列表后 **12/12 核心词条存活且仍跨 ≥5 列表**（myofibril 9 列表/7 亚群）
+   → 质疑被数据否决，这是可写进交付的**正面证据**（比空口辩解强得多）。
+6. **方向性不要自行解读**：ORA 不检验方向。同一词条同时出现在 up 与 down 两侧（实测 36/50）
+   **只能说两侧列表都含该基因集成员**，不能读作「反向库应」；判定需原始 DEG 的 effect size。
+   多角色辩论会把这条列为硬阻断（不得写"跨亚群核心信号"、不得写"反向适应"）—— 措辞按
+   「描述性富集画像 / 候选共享程序」，并列出补齐方向性所需的数据。
+7. **方向构成分开算，不要写差值**：`only_down = ((n_down>0)&(n_up==0)).sum()`、
+   `only_up = ((n_up>0)&(n_down==0)).sum()`。实测 36 双侧 / 7 仅 down / 7 仅 up；
+   用 `(n_down>0).sum() - (n_up>0).sum()` 这种差值写法会把 7/7 错报成 0/0。
+
+> 完整配方（脚本骨架、实测数字、LOO / 敏感性实现）见
+> `references/metascape-output-dedup-and-robustness-audit.md`。
+
+### 分面 dotplot 选词的几何陷阱（实测）
+按「跨列表共享数」降序给 panel 选词，会让**条目数最多的列表的特有信号被完全挤出图**
+（实测 `up_RP_high(I)` 占 40% 条目却几乎不可见 —— vision_describe 核验时才发现）。
+正确选词 = **共享词条 top N + 每列表在「同一 ontology 子集内」的 top 2 特异词条**。
+⚠️ per-list top2 必须在 ontology 子集内排序，否则 KEGG / MF 词条会被 BP/CC 挤掉
+（实测 KEGG panel 一度只剩 2 条，修正后 4 条；BP 11→14、MF 6→9）。
+
 ## Dotplot note
 For enrichment *dotplots* (x=cluster, y=term, size=gene count, color=-log10(q)), the user
 prefers a light-red→dark-red ramp; clusterProfiler's 7-step RdBu = `#b2182b → #2166ac`.
@@ -59,12 +100,12 @@ heatmap above is cleaner than a full dotplot grid.
 ## R environment bridge (reuse existing envs — do NOT reinstall or re-probe)
 `ComplexHeatmap`/`circlize` are NOT actually in the main R 4.5.3 (`E:/R-libs/R-4.5.3`) *despite
 `environment.json` listing them in key_pkgs*; they live in **R 4.4.2**
-(`<用户目录>, ~526 pkgs). R 4.5.3 has `openxlsx`/`svglite`/`ragg`,
+(`C:/Users/<用户>/AppData/Local/R/R-4.4.2/`, ~526 pkgs). R 4.5.3 has `openxlsx`/`svglite`/`ragg`,
 R 4.4.2 lacks them. Zero-install bridge:
 1. `execute_r` (kernel = R 4.5.3, has `openxlsx`) reads the `.xlsx`, cleans (drop rows where
    col1 == `"Cluster"`, keep rows whose GO ID matches `^GO:`), writes `data/go_heatmap_data.csv`.
 2. `terminal` runs R 4.4.2 Rscript (has ComplexHeatmap):
-   `"<用户目录>" script.R`
+   `"C:/Users/<用户>/AppData/Local/R/R-4.4.2/bin/x64/Rscript.exe" script.R`
 3. Export via **base `grDevices`** `png()`/`pdf()`/`svg()` — these ship with R and do NOT need
    svglite/ragg, so R 4.4.2 emits all three formats despite missing those packages.
    (A `circlize` "built under R 4.4.3" warning is harmless; `null device 1` lines are normal dev.off.)
@@ -163,7 +204,26 @@ Always deliver BOTH files side by side and tell the user which is which; the gen
 **🔴 用户给的清单可能少于源表 —— 必须比对并主动报告**：本例用户在消息里给了 RSS 3 条 + Specialized MF 4 条，源表里这两个亚群**各有 5 条**（漏 `sensory system development`、`neuron projection development`、`modulation of chemical synaptic transmission`）。
 正确做法 = **按用户给的条目执行**（不擅自补），但交付时**逐条列出未纳入项 + 其 -log10(q)** 并问是否补。静默按子集出图 = 用户以为你用了全表。
 
-配方（矩阵增量构建脚本模式 + 列序核对输出）：`references/incremental-cluster-term-extension.md`。
+
+### 🔴 源表多 sheet → 先判是不是「子集视图」，别当两份数据（2026-10-23 实测 · `HAD_MF_BO_Selected_Paths_v2.xlsx`）
+
+本图族源表 `D:/肌肉锻炼/file/HAD_MF_BO_Selected_Paths_v2.xlsx` 有 **2 个 sheet**，极易被当成两套数据重复计数：
+
+| Sheet | 列 | 实质 |
+|---|---|---|
+| `Hoja1` | Cluster / Path ID / Path / Genes / Log(q-value) / Comments / Hypothesis | **主表**（本图族全部群体） |
+| `Specialized-MF_subcluster` | Category / CategoryID / GO / Description / Hits / Log(q-value) / GeneList / Unnamed: 7 | **子集视图，不是新数据**：`Hits` 列装的是**群体名**（cluster1–6 + NMJ），`Unnamed: 7` 是该词条的 **GO 类别（BP/CC）**；30 行与 Hoja1 逐条对应 |
+
+**判定动作（动手前 30 秒）**：把两 sheet 的 `(群体, 词条, -log10q)` 三元组对一遍 —— 完全重合即子集。
+**子集 sheet 只当「类别注释」用**（值得单独出一张类别拆解图），**不要单独统计它的行数/词条数** —— 否则 78 行会被报成 108 行。
+
+本表实测：`Hoja1` 82 行含 **4 处内嵌重复表头**（索引 20/39/54/68）→ 剔重 + 只留 `^GO:` 行后 = **78 行 / 17 群体 / 56 词条 / 矩阵稀疏度 91.8%**（78/952 非零）。
+
+**几何实测（56 行 × 17 列，零裁切）**：`cellwidth = 16` pt（比 v12b 的 24.66 窄 —— 列多时收窄）、`cellheight = 9` pt、`PAD(上右下左) = c(1.2, 3.5, 2.0, 4.5)` cm → `pdf(NULL)` 内量得内容 **26.63 × 23.70 cm** → 画布 **10.56 × 9.41 in（3169 × 2822 px @300dpi）**，PNG 146 KB 正常。行数 48 → 56 只改 `cellheight` 乘子，宽度只由列数决定。
+
+**⚠️ 截顶色标会藏掉量级差 —— 必须双向呈现**：图族沿用 `min(abs(logq), 10)` 截顶 + 图例写 `(clipped at 10)`，本表有 **18 个格被截**（最极端 RP_high 的 `translation` = **97 / 89**，OXPHOS 31–35）。热图上看不出 RP_high 与其它群体的量级差 ⇒ **交付时必须同时给一张用原始值的图**（分面棒棒糖 / log 轴汇总条形），并在回复里明写「热图截顶在 10，量级看另一张图」。少了这句 = 静默丢掉本表最强的生物学信号（RP_high 是 RNA/蛋白合成 + OXPHOS 双超活跃群体）。
+
+**稀疏度 >85% 时建议一次给四张**（本表 91.8% 实测好用）：① block-diagonal 热图（图族主图）② 分面棒棒糖（每群体一面，保留全量级）③ 群体汇总双面板（词条数 bar + max/median -log10q log 轴）④ 子集 sheet 的类别拆解。用户会按需砍，不会嫌多。
 
 ### Env note (pheatmap path needs NO CSV bridge)
 `pheatmap` + `RColorBrewer` are in **BOTH** R 4.5.3 (`execute_r` kernel, also has `openxlsx`) and R 4.4.2. So the whole pheatmap pipeline runs one-shot inside `execute_r`: read xlsx → build matrix → pheatmap → png/pdf/svg via base grDevices (`png(res=300)` + `pdf()` + `svg()`). Unlike the ComplexHeatmap path, no terminal-Rscript bridge required.
@@ -185,7 +245,6 @@ User's exact words: *"不一定top2，你先把每个亚群的词条和对应的
 - Report dims / non-zero % **after** the user picks, not before.
 - This **supersedes the auto-filter instinct** for this task class: P5's density filter is for *uncurated* matrices. Once the user has curated, listing everything for selection wins.
 
-Ready-to-run R snippet (one-shot in `execute_r`): `references/term-selection-worksheet.md`.
 
 ### Aesthetic canvas sizing (rows drive height; width is locked)
 User: *"亚群只有15个，词条却是有几十个。所以肯定是偏长的形状"* / *"长和宽要协调"* / *"画图的大小你来决定，按照美学来"*.
@@ -289,7 +348,6 @@ bg = most_common_colour(png)          # modal colour
 share = (pixels != bg).mean()         # non-background ratio
 # <0.05 -> broken/blank (v7 1.4%, v8 0.0%)   >0.30 -> healthy (v9 47.8%)
 ```
-Full working script skeleton + measurement probe: `references/pheatmap-sizing-and-export.md`.
 
 ## 🔴 零裁切画布反推（2026-09-15 v12b 终版 · 根治内容左右被裁）
 
@@ -315,7 +373,6 @@ Wi <- (tot_w + 0.20)/2.54; Hi <- (tot_h + 0.20)/2.54        # +0.2 cm 缓冲
 
 **最小增量原则**：用户说「Vxx 就可以，但是把 X 调一下」时，**只 patch 那一个参数重跑**，不要借机重设计配色/布局/字号（本会话用户已明确\"V12 就可以\"）。交付只报「改了什么 + 新文件路径」，不要重述全部规格。
 
-完整配方（含诊断阶梯、pixel 探针、PNG mode P 坑）：`references/pheatmap-noclip-canvas-geometry.md`。
 
 ### 🔴 「只调边距、其他不变」= 本体与边距必须解耦（2026-09-15 v13 · 用户严格约束，第二次为此发火）
 
@@ -335,7 +392,6 @@ Wi <- (tot_w + 0.20)/2.54; Hi <- (tot_h + 0.20)/2.54        # +0.2 cm 缓冲
 
 **⚠️ 验证诚实性铁律（本轮教训）**：像素掩码**不总能**识别热图本体——透明/调色板 PNG、YlOrRd 低端近白（`#FFF7EC`）都会让掩码把整幅判成内容（v12/v13 两版都测出"本体=整幅画布"，数字自相矛盾）。**测量方法本身不可信时，禁止用它的数字宣称"已验证"**：要么改结构化测量（`pdf(NULL)` 内 `convertWidth(sum(gt$widths))` → 一次定论），要么如实汇报"数学推导成立、像素未实测，请你在 Illustrator 里定夺"。**谎报"已验证"比承认未验证严重得多。**
 
-细节、实测数字与降级脚本回退法：`references/pheatmap-margin-only-adjustment.md`。
 
 ## 富集去冗余与 ORA 规模化防护（词条动辄上千时先看这里 · 2026-09-24 实测）
 
@@ -347,10 +403,9 @@ Wi <- (tot_w + 0.20)/2.54; Hi <- (tot_h + 0.20)/2.54        # +0.2 cm 缓冲
 2. **默认用 Jaccard 去冗余**（纯集合运算，秒级，零 GOSemSim 依赖）：`scripts/jaccard_term_dedup.R`。阈值 Jaccard > 0.7 = 高度冗余；按 `p.adjust` 升序贪心一趟，未被归簇者当簇代表，`Members` 列留被合并词条供人工核对；矩阵 `median(off-diagonal)` 可作整体冗余度写进报告。
 3. 真要 `simplify()`：**只允许在 `p.adjust < 0.05` 的显著子集、且 `nrow <= 200` 时调用**（守卫写进脚本：`safe_simplify()`，别靠人记）。> 200 直接跳过改用 Jaccard。
 4. 假死判据：窗口 280s 内 CPU/IO 零变化 = 假死 → 强杀 → **改结构重跑，不要原样重试同一脚本**。⚠️ 强杀前先查 CommandLine：含 `_kernel_worker.py/.R`、`webui/server.py` 的是平台基础设施（按设计空闲待命），绝不杀；MSYS bash 下 `taskkill //F //T` 会被吃参数，用 psutil 按进程树杀。
-5. GO 引擎库路径：clusterProfiler / org.Hs.eg.db / enrichplot / DOSE 装在用户库 `<用户目录>，持久内核默认 `.libPaths()` 不含它 → 跑前 `.libPaths(c("E:/R-libs/R-4.5.3", "<用户目录>", .libPaths()))`，否则报 "there is no package called 'clusterProfiler'"。
+5. GO 引擎库路径：clusterProfiler / org.Hs.eg.db / enrichplot / DOSE 装在用户库 `C:/Users/<用户>/R/R-4.5.3-library`，持久内核默认 `.libPaths()` 不含它 → 跑前 `.libPaths(c("E:/R-libs/R-4.5.3", "C:/Users/<用户>/R/R-4.5.3-library", .libPaths()))`，否则报 "there is no package called 'clusterProfiler'"。
 6. **已落盘的 ORA 表永不重算**：只补缺的那部分（去冗余 / simplify / 出图）。
 
-> 完整排查记录（已落盘 vs 缺失产物对照表、6 组 ORA 产出数、分级替代方案、阈值依据）：`references/go-ora-simplify-hang-and-jaccard-dedup.md`
 
 ## Reference-figure style matching workflow
 
@@ -369,7 +424,6 @@ When user provides a reference image ("按这个张图的样子绘制"):
 `par(fig=..., new=TRUE)` 放色标，交付前必须做**矩阵逐格比对 + 像素颜色直方图**两道验证。
 
 ⛔ **动手前先 `search_files` 扫一遍会话 `scripts/`**——本轮用户问这句话时 R 版其实已经写好了（差点重复劳动）。
-完整配方（实测数字 + 跨语言模板陷阱 + QA 证据写法）：`references/matplotlib-to-base-r-port.md`。
 
 ### 分组色条 = 分类声明：交付必须附「分组依据」（2026-09-15 · 用户追问「每个基因集的分类是什么依据？」）
 
@@ -378,12 +432,10 @@ When user provides a reference image ("按这个张图的样子绘制"):
 - 交付四件套：**成员清单（逐条列名）+ 分组判据（一句说清什么轴）+ 每个成员的来源（PMID/DOI 或标自建）+ 来源缺失时明写并给回填路径**。
 - 打分/富集矩阵 CSV **只带数值列、不含基因成员** → **禁止凭记忆重建基因列表或基因数**；数字一律回原始来源查证（`search_papers` 取 PMID/DOI），与本项目「数字必须可溯源」要求一致。
 - 组色条放行标签外侧、同组成员连续成块；组色用定性色板，与热图的连续发散/顺序色标明确区分（色条=分类，色块=数值）。
-- 可复用实例（18 程序 → 5 组 + Identity 的分法与引文，含 SenMayo PMID 35974106 / MSigDB Hallmark PMID 26771021）：`references/grouped-heatmap-grouping-provenance.md`。
 - **🔴 深挖版（2026-09-15 · 用户要求「用生物知识分类，让我有理由」）——只讲机制不够，必须给数据理由**：辩论裁判会直接索要**基因集间 Jaccard 重叠矩阵**（实测裁决 `need_more_info`，missing 第一条就是它）。三步必做：
   1. **先审表**：逐集基因数与源表对照。派生「CLEAN 版」会**静默截断**——实测 `pathway_score_CLEAN_v2.xlsx` 有 10/22 个签名被砍到恰好 23 个基因（原始 44–200），共丢 744 基因，下游打分完全看不出来。识破信号 = 多个集基因数**恰好相同** + 截断停在**字母序中途**。
   2. **再验分类**：算两两 Jaccard，报**轴内均值 vs 轴间均值**（实测 0.0424 vs 0.0064，差 6.6 倍 = 分类成立）+ 对 `1−J` 做层次聚类看是否复现拟分类的轴。
   3. **交付附边界说明**：跨轴弱配对（0.07 量级）≠ 分错，是真实通路串扰；某集与所有集 J<0.05 时归轴属**调控归属**而非基因重叠归属，必须写明。
-  配方（含损坏 xlsx 的 zip/XML 兜底读法、合并单元格 Class 列填充、22 签名溯源表、6 功能轴机制理由 + 实测 Jaccard）：`references/geneset-provenance-and-axis-classification.md`。
 - ⚠️ **引文核对**：不要拿自己检索到的 PMID 去"纠正"用户原表——同一作者同主题常有多篇（Machado 2021 有 33609440 原始出处 + 34074577 方法学评论）。以原表 annotation 为准，检索到的作并列补充。
 
 ### 图上标签可读性 / 格中心对齐 / 转置（2026-09-15 · 用户三连返工，逐条照做即免返工）
@@ -431,7 +483,6 @@ When user provides a reference image ("按这个张图的样子绘制"):
 - ⚠️ 但必须写明口径（含 ±2 截断）：行内标准化会把**低动态范围程序**（实测 15% vs OxPhos 55%）的微小波动拉满色阶 ⇒ **不得据色块强度对其下强生物学结论**。
 - **可辨性要实测，不能拿"RdBu 是标准色标"当论据**：`scripts/audit_heatmap_gray_cvd.py`（PNG 逐格取样 + 相对亮度 + Viénot 色盲模拟）。实测 17 行 × 10 格：灰度 Δ min **0.639** / 中位 0.869，红绿色盲 Δ min **1.183** ⇒ 灰度与 CVD 下均可辨，「低动态行不可辨」的质疑不成立。
 
-📄 完整配方（几何常量表、y 轴倒序代码、自检代码、灰度/CVD 审计口径与实测值、版本链 v3→v6、辩论引擎 `auto_kb=false` 与 L1 草稿识别）：`references/matrix-heatmap-layout-and-color-validity.md`
 🔧 可达性审计脚本：`scripts/audit_heatmap_gray_cvd.py`
 
 **🔴 45° 标签被静默裁切 = 出图后必查项**：长标签 + `adj=c(1,1)` 超出画布底部会被无声切掉——**图不报错、文件大小正常、扫一眼看不出**。实测本会话老版 FigA3：10 个亚群只渲染出 8 个（`RSS` / `Specialized MF` 已被切掉）。
@@ -445,11 +496,6 @@ When user provides a reference image ("按这个张图的样子绘制"):
 **删除任一成员 = 四件套一起改**（只改前两处必报错、只改后两处留残余）：① `PROGRAM` 向量去掉该项（18→17）；② `AXES` 删掉整个轴对象（6→5，否则 `stopifnot(setequal(gene_order, PROGRAM))` 中断）；③ `DISP` 删掉显示名；④ `GAPX_AFTER` 之类"隔离专用间隙"一并删（已无被隔离对象，留着就是无意义空白）。⑤ 脚本结尾的 `cat(..., "| X 是否已移除:", !("X" %in% PROGRAM))` 一起加，让"删干净"成为可验证 stdout。
 ✅ **画布尺寸不要手改**：`U` 是常量时 `W = 列数×U + 边距` 自动收窄且**色块保持正方形**（实测 18→17 列：9.60 → 9.39 in，恰好少一个 `U=0.42`，无拉伸）。只有当画布是手填常数时才会变形——先改成推导式再删。
 
-📄 完整配方（base R 零依赖矩阵热图骨架、缩短显示名的 DISP 映射写法、格中心对齐代码、45° 裁切的下边距反推公式、转置三件套、画布几何推导）：`references/matrix-heatmap-labels-and-transpose.md`。
-📄 **增删成员/分组轴的最小编辑协议（四件套 + 画布自解 + OCR 正负向核验 + 两处落盘交付 + 速度期望）**：`references/matrix-heatmap-add-remove-members.md`。
-📄 **🔴 绘制顺序静默裁切 + `axis(2)` 半格偏移 + 三层核验链（base R 零依赖路径必读）**：`references/base-graphics-draw-order-and-layer-verification.md`（一键核验：`scripts/verify_figure_layers.py`）。
-📄 **🔴 外侧装饰（分类色块 / 竖排轴名 / 标题）几何 + 「标题不与顶部标签重叠」两层布局 + 文字宽度自检 + 迭代改图纪律**：`references/r-base-graphics-outer-layout.md`。
-📄 **🔴 栅格级版式取证（"标签贴没贴着热图 / 有没有对齐 / 其他元素动没动"）—— 列剖面、深色格污染排除、对齐方向判定、脚本内自检符号坑、实测基线表**：`references/raster-layout-measurement-forensics.md`。
 
 ### 🔴 迭代改图纪律（vN 脚本 + 像素级"没动"证据 + 一次核验即止）
 
@@ -458,7 +504,6 @@ When user provides a reference image ("按这个张图的样子绘制"):
 - **交付前 `vision_describe` 核验成图 PNG**（行/列顺序、是否在画布内、新增或删除元素是否生效）——OCR 是发现「标题被裁、标签重叠、元素没删干净」的**唯一手段**，光读脚本看不出来（本会话标题被裁就是 OCR 抓到的）。
 - **一次出图 + 一次核验即止**：命令成功、产物非空之后不要再反复重跑同一张图做确认（重复验证会触发循环干预）；要再改就直接改脚本重出。
 - 版式元素（分类色块在左/右侧、是否画某条注释条、标签位置）按用户**逐图指定**执行，不套用上一张图的默认；汇报用「你要的 → 我的落地 → 核验证据」三列表。
-- 🔴 **同族脚本的缺陷波及面：报告，不擅自批量重画**（2026-09-25 实测）。修掉一个**机制性**缺陷（绘制顺序裁色块 / 标签锚底边 / 循环变量遮蔽矩阵 / `xaxs` 外扩）后，用 `search_files "group_stripes|draw_cbar|axis\(2|xaxs" scripts/fig_*.R` 扫全族 —— 实测母脚本 `fig_split_v10.R` 两坑齐全且仍持旧分组/旧成员，其产出的 FigA1/B1/B2/B3 同样带病。正确动作 = **修好手上这张 + 未同步清单显式列出交用户拍板**（末尾加"要修就说一声"）；⛔ 不要默默留着，也不要顺手批量重画（用户偏好连续性，未经确认的批量返工 = 打扰）。清单写法 + 复制起点选择 → `references/sibling-script-defect-sweep.md`。
 
 **🔑 用户说「标签能不能对齐自己的热图 / 搞个色块表示分类吧」时的正确姿势 = 先查渲染，再改代码。**
 本会话实测：用户要的「分类色块」在代码里**早就写了**（`draw_group_stripes()`），只是被绘制顺序 bug 静默裁掉从没显示过。
@@ -483,7 +528,6 @@ data.frame(n_cells = nrow(s), median_abs_d = median(abs(s$d)),
 - 图面差异 ≠ 统计差异：`median|d|` 只作趋势，结论落在 `pct_sig` / 显著格子数上。
 - 交付形态 = 图 + 配套效应汇总 CSV；这也是 debate 裁 `need_more_info` 时裁判**第一条索要的证据**。
 - ⚠️ **同族静态坑——R 变量名遮蔽**：这类脚本里矩阵变量**不要叫 `d`/`q`/`p`/`sub`**——它们与 CSV 列名重合，且会被 `for (d in OUTS)` 这类循环变量**静默覆盖**，症状是绘图时 `V[ni, pi*n_sub+ci+1]: 量度数目不正确`。矩阵一律命名 `DM`/`QM`/`Z6`，循环变量用 `outdir`，`data.frame(dir=outdir, ...)` 同步改。
-- 配方与实测数字：`references/regrouping-replot-and-claim-recheck.md`。
 
 ## User's heatmap style preferences (from 2026-09 session, CORRECTED after user rejection)
 
@@ -603,18 +647,14 @@ sparsity = 1 - (m.values > 0).mean()
 | 45° 列名最左列被裁（如 `Pure Type IIA` 缺字） | 画布宽度不足 + 行名区过长 | 加宽画布至 ≥3800px(res=300)，ComplexHeatmap 再设 `row_names_max_width`；验证时裁剪左上角放大 OCR，别只看整图 |
 | `pheatmap(cellwidth=0.38)` 出图被压成一个点 / 整图 98.6% 空白，但 exit 0 | **`cellwidth`/`cellheight` 单位是磅(pt)，不是 cm** | 传 `cellwidth = cm × 28.35`（0.39cm→11，0.46cm→13）；渲染后量本体宽度验证 |
 | 三格式导出后 PNG 全白（`extrema=(255,255)`，文件大小≈PDF 大小） | ① 持久内核里一次连开 png+pdf+svg，图形设备状态串了；② **更常见：导出前做了「量尺寸」动作（`pheatmap(silent=TRUE)` / `convertWidth`）→ 留下隐式设备，把随后开的 png 吞成空白**（**独立 Rscript 进程内同样会发生**） | ① 导出放独立 Rscript 进程；② 量尺寸整段包进 `pdf(NULL) … dev.off()`；③ 判据：`Image.open(p).convert("L").getextrema() == (255,255)` 即全白坏图 |
-| 内容**左右两侧各被裁掉一截**（x=0 与 x=W-1 都有内容贴边；改了几轮画布宽度都没用） | **`cellwidth` 未指定时 pheatmap 的矩阵宽度按设备 npc 比例缩放** → gtable 总宽不可预测，`grid.draw` 默认居中 → 溢出部分左右各裁一半（v12：内容+边距 22.38 cm vs 画布 21.59 cm → 每侧裁 ≈0.4 cm） | 锁死 `cellwidth/cellheight`(pt) → `pdf(NULL)` 内量 `sum(gt$widths/heights)` → 反推画布 = 内容 + 边距 + 0.2 cm。详见 §零裁切画布反推 + `references/pheatmap-noclip-canvas-geometry.md` |
 | 用户要求「只加大边距」，结果**热图本体也跟着变宽了**（用户原话："边距是边距，怎么把热图本体也变大了？"） | `cellwidth` 未指定时本体是 **null 单位**，随设备宽解算 ⇒ 只加画布宽 = 本体一起变宽；只加 padding 不改画布 = 本体被压窄 | 二选一：① **Δ画布宽 = Δ(左+右 padding)**（保持原脚本其余不动）② 锁死 `cellwidth`(pt) + 反推画布。详见 §「只调边距、其他不变」 |
 | 像素检测抛 `zero-size array to reduction operation minimum` / 说"图里没有任何非白像素" | ① 图真的全白（坏图）；② PNG 是**调色板模式 `mode P`**，阈值化前没 `convert("RGB")` | 一律 `Image.open(p).convert("RGB")` 再 `np.array()`；先看 `convert("L").getextrema()` 判全白 |
 | 图定稿后被系统判定"循环失控"强制中断 | 反复用像素扫描/vision 重新确认同一件事（尺寸/裁切） | 几何问题用**结构化量尺寸一次定论**（`convertWidth(sum(gt$widths))`），不要靠重复像素分析；定稿后只跑 `scripts/verify_figure_no_clip.py` **一次**即交付 |
 | `strwidth(x, units="cm")` 报 `invalid units` | 空设备（null device）下不支持 cm | 用 `units="inches"` 取值后再 ×2.54 |
 | base `svg()` 出来的 SVG 里 `<text>` 数为 0，只有 `<use>`/`<path id="glyph-*">`，grep 文字内容 NOT FOUND | **R 的 `svg()` 设备把文字转成矢量轮廓（glyph paths），不是活文字**（2026-09-15 实测：756pt 宽的 SVG 里 `use`×1643 / `path`×801 / `text`×0）。**这是设备行为，不是坏图** | ① 只是"文字不可双击编辑"，用户仍可在 Illustrator 里改色/缩放/移动，通常够用；② 需要真活文字 → 改用 `svglite::svglite("x.svg", width=, height=)` 重出（R 4.5.3 已装 svglite）。③ **永远不要用 grep SVG 文字来验证图**（必然 0 命中）——改用像素扫描 |
-| **分组色块条 / 轴名 / 分组名整条消失**（图上只剩热图；R exit 0、四格式文件大小全部正常、无 warning；SVG 里搜该**颜色** 0 命中而 `xlink:href` glyph 引用数正常） | **绘制顺序 bug**：某个辅助函数用 `par(fig=..., new=TRUE)` + `plot.window()` **重置了坐标系**（典型 = 画色标的 `draw_cbar()`），而在它**之后**调用的 `draw_*(...)` 仍按**数据坐标**发指令（如 `rect(x=-1.25, y=0..18.25)`）→ 全部落到画布外**被静默裁掉**（`xpd=NA` 也救不了，设备边界照样裁） | 把**所有数据坐标绘制**移到重置坐标系的函数**之前**（本例：`draw_group_stripes()` 移到 `draw_cbar()` 前）。诊断顺序 = ①按 `rgb(%)` 形式搜分组色 / 直接跑 `scripts/verify_figure_layers.py`（⚠️ **`grep '#RRGGBB'` 必然 0 命中 = 假阴性**；报 0 之前先拿一张**已知含该色**的图跑同一命令做阳性对照，阳性对照也 0 ⇒ 是取样方法问题，改用栅格层像素计数，别断言元素没渲染）②搜 `xlink:href`（正常则设备没问题）③直接查绘制顺序。波及面排查 `grep -n "group_stripes\|draw_cbar\|axis(2" scripts/fig_*.R`。详见 `references/base-graphics-draw-order-and-layer-verification.md` + 一键核验 `scripts/verify_figure_layers.py` |
 | 标签整体**偏移半格**（不居中）| `axis(2, at = NROWS-1-row_pos)` 锚的是**格底边**，不是格中心 | 改 `at = NROWS - 0.5 - row_pos`。判据：改动后整批标签**位移 = 半个格子**（实测 1 单位=100.8px → 位移≈50px）；位移不是半格说明算错 |
-| 标题右半截被裁（OCR 只读到前半句，缺 `(row z-score, all samples)`） | `mtext`/`text` 的 `at` 是**数据坐标**；把 `(MAI[2]+NCOL*CELL/2)/CELL` 当"图幅中心"属量纲混用，算出 10.29 > xlim 上限 10 → 标题画到画布右缘外**被静默裁掉** | 图幅中心 = `at = (W/2 - MAI[2]) / CELL`（`W = NCOL*CELL + MAI[2] + MAI[4]`）。详见 `references/r-base-graphics-outer-layout.md` |
 | 标题与顶部色标/刻度标签**互相重叠**（用户报"头顶的标题和 label 不要重叠"） | 标题和色标都画在绘图区内同一带（`text(NCOL/2, TOP-0.10)` + 顶部色标），间距只剩 0.02 in | 两层分离：**标题改 `mtext(side=3, line=0.60)` 画到上边距**（`MAI[3] ≥ 0.55 in`），绘图区内只留色标（`TOP <- YMAX+0.95`，色标带 `y0=YMAX+0.60`，刻度标签 `y0-0.08`）⇒ 物理上不可能重叠（实测标题 y=109px vs 色标标签 y=171px） |
 | `strwidth` 警告「PostScript字体数据库里找不到'Arial'」/ 量出的宽度不可信 | 用 `pdf(NULL)` 做文字尺寸自检——PostScript 设备没有 Arial，回退到未知字宽 | 换 **cairo 临时 png**（`png(tf, type="cairo", family=FAM)` → 量 → `dev.off(); unlink(tf)`）；自检块放在**出图循环之前**（否则 stopifnot 失败时坏图已落盘）；可用宽度符号别写反（`(-0.10 - LB0)` 不是 `(LB0 + 0.10)`）；竖排文字量 **`strheight`** 而非 `strwidth` |
-| 像素实测「标签距热图 1 px」与脚本自检「0.010 in（=3 px）」**互相打架** | 找墨迹用 `max(RGB) < 200` 阈值，而**热图最深格 `#053061` 的 max(RGB)=97 也满足** → 深色热图格被当成文字墨迹，把缝量小 | 测量带严格限制在 `x < 热图左边界(MAI[2]×dpi) − 2px`，或排除饱和像素（`sat>25` = 色块/热图，文字 sat≈0）。**两来源不一致时先定位污染再汇报**，别先报一个数下轮改口。详见 `references/raster-layout-measurement-forensics.md` |
 | 新加/改动的**小字号文字**（如 7.5 pt 图注）**整图 OCR 读不到**，疑似没渲染 / 被裁 | 全图 OCR 对**小字**漏检：实测 7.5 pt 图注在 4950×2520 全图 OCR 中 **0 命中**，但同一区域**裁出 + LANCZOS 放大 2×** 后**置信度 0.98 完整读出**。而 SVG 因文字转曲必然 0 命中（见上上行）⇒ 两条\"没渲染\"的证据**都不可用** | 核验小字三步：① **裁剪目标区域 + 放大 2×** 再跑 `vision_describe`（fig 坐标→像素：`x_px = x_fig*W`，`y_px = (1-y_fig)*H`）② **同区域墨迹像素数与该图上/上一版对比**证明文本确实落上去（实测加长图注后 **6525 vs 旧版 3687**）③ 核完**删掉临时裁剪文件**，别留进交付目录。④ 顺手检查长文本是否越界：靠近右缘的 `text()` **默认 `adj=c(0.5,0.5)` 居中会越出画布**，长串一律改 `adj=c(1,0.5)` 右对齐（实测该图注起于画布 **77.5%** 处未越界） |
 
 ## 🔴 中文标签方框 + 导出默认 + 「数据整理步骤也要配图」（三件高频事）
@@ -660,7 +700,6 @@ for ext in ("png", "svg"):
 对策 = 把「数据质量核查图」作为标配产物：表重建 → 源表 vs 派生表逐项对照图（标出被截断/丢失项）；
 清洗前后 → 丢失条目条形图。既过审查，又让用户一眼看到数据没被暗改。
 
-配方细节：`references/cjk-font-and-export-defaults.md`
 
 ## Proven Scripts
 
@@ -679,7 +718,6 @@ norm = Normalize(vmin=0, vmax=10)
 ```
 **Never** use matplotlib built-in `Reds` or `RdBu` — they include blue/gray tones at the low end.
 **Never** use `plt.cm.get_cmap('Reds')` — the user catches the blue/gray immediately.
-**See**: `references/colormap-anti-patterns.md` for full list of colormaps to avoid and why.
 | human | skeletal_muscle | aging | 2026-09-07 | read_MF_SMF_GO_select.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-07 | go_heatmap_pheatmap_MF_SMF.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-08 | go_heatmap_MF_SMF_v2.R | - | - |  |
@@ -690,8 +728,16 @@ norm = Normalize(vmin=0, vmax=10)
 | human | skeletal_muscle | aging/exercise | 2026-09-15 | `templates/go_heatmap_cns_handoff_pheatmap.R` | **v11 定稿·Illustrator 交付版（首选模板）**：pheatmap `silent=TRUE` → `gtable_add_padding` 留四周空白（左 1.8cm 根治 45° 列名截断）→ 画布 10.5×11.5 in → 右下横放 legend → 独立 Rscript 三格式导出 + 3 项后验检查。全部 48 词条不筛选，收窄热图本体、放宽词条区。 |
 | human | skeletal_muscle | aging/exercise | 2026-09-15 | `results/memomics-440038cf/scripts/go_heatmap_v11_wider_margin_words_only.R` | v11 实际运行脚本（项目内），与上面模板同源。 |
 | human | skeletal_muscle | aging/exercise | 2026-09-15 | `scripts/go_heatmap_v12b_margin_words_only.R` | **v12b 终版·零裁切宽边距（用户认可，首选起点）**：`cellwidth=24.66pt` / `cellheight=9pt` 锁死几何 + `PAD(上右下左)=c(1.2,3.5,2.0,4.5)cm` + **null 设备内量尺寸反推画布** 11.92×8.33 in → 48 词条 × 15 亚群零裁切。项目内副本：`results/memomics-440038cf/scripts/go_heatmap_v12b_margin_words_only.R`。验收探针：`scripts/verify_figure_no_clip.py`（一次跑完，别反复像素扫描）。 |
-| human | skeletal_muscle | aging | 2026-09-15 | `scripts/go_heatmap_v13_margin_words_only.R` | **v13 · 只加左右边距版（路径 A）**：严格照抄 v12，仅 `PAD` 左2.8→5.0 / 右1.8→4.0 cm + 画布宽 8.5→**10.23 in**（Δ画布=Δ边距 ⇒ 本体不变）；同源 v12b = 路径 B（锁 `cellwidth` 零裁切）。手册：`references/pheatmap-margin-only-adjustment.md`。 |
 | human | skeletal_muscle | aging | 2026-09-15 | go_heatmap_v14_smaller_words_only.R | - | - |  |
 | human | skeletal_muscle | aging/exercise | 2026-10 | `templates/go_enrichment_facet_lollipop.py` | **稀疏矩阵替代形式（非零率 >85% 时首选，别出矩形热图）**：分面棒棒糖图，17 panel 网格 11.4×8.6 in，零空格子；含 GO 词条名缩写表 + `wspace≥1.6` 防 panel 标签压叠 + 「图注不得声称未实现的编码」自检。实例产出：`results/memomics-440038cf/figures/GO_enrichment_facet_lollipop_v1.{png,svg,pdf}`。 |
 | human | skeletal_muscle | aging/exercise | 2026-09-15 | `results/memomics-2274ab75/scripts/fig_A2_5effects_v3.R` | **base-graphics 多面板矩阵热图元脚本（零第三方依赖）**：17 程序 × 5 效应面板 × 10 亚群，`rect()` 拼格子 + `TwoSlopeNorm` 等价 256 级 LUT + FDR 星号 + 左侧**分组色块条**（5 轴色）+ `par(fig)` 右下/右侧色标。**已修两坑**：① 分组色块条移到 `draw_cbar()` **之前**绘制（v2 因顺序问题色块从未渲染）② 标签 `at = NROWS-0.5-row_pos` 行中心（v2 用底边偏半格）。四格式 @300dpi + manifest QA。**要复制这套版式就从 v3 起，不要从 v2 或 `fig_split_v10.R` 起——它们两坑都有**。同族：`scripts/fig_A3_transposed_v3.R`（转置版，干净）。 |
 | human | skeletal_muscle | aging | 2026-09-19 | `results/memomics-2274ab75/scripts/fig_A3_CNS_v5.R` | **转置矩阵热图·定稿版式（用户认可）**：亚群 x × 程序 y，17 程序 / 5 轴 / 10 亚群，107.9×155.5 mm，base graphics 零第三方依赖 + Arial + `svglite`（SVG 文字可编辑）。**关键常量**：`CELL=0.255`、`MAI=c(0.75,1.35,0.55,0.35)`、`LBLX=-0.04`（行标签右端紧贴热图，实测缝 3 px）、`LB0=-3.40/LB1=-4.11`（左侧分类色块）、`LNX=-4.27`（竖排轴名，**黑色 `COL_TXT`**）、标题 `mtext(side=3, line=0.60, at=(W/2-MAI[2])/CELL)`。脚本自带 strwidth 版式自检 + `archive_superseded/` 归档上一版。 |
+| human | skeletal_muscle | exercise+aging | 2026-10-23 | 00_inspect_metascape_stdio | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-23 | 01_scope_dedup.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-23 | 01_scope_dedup.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-23 | 02_figures.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-23 | read_dedup_sheets_summary | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-23 | 03_loo_sensitivity.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-23 | 04_figures_v2.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-23 | 03_loo_sensitivity.py(fix2) | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-23 | 04_figures_v2.py(fix) | - | - |  |

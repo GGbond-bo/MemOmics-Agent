@@ -473,6 +473,16 @@ class ChatCompletionsTransport(ProviderTransport):
                     _e = (reasoning_config.get("effort") or "").strip().lower()
                     if _e in {"low", "medium", "high"}:
                         _kimi_effort = _e
+                # 2026-10-21：MemOmics 思考强度滑块（llm.model_efforts/全局档）接入
+                # Kimi 顶层通道 —— 显式档位覆盖默认；Kimi 只认 low/medium/high → max 截断。
+                try:
+                    _slide = _resolve_reasoning_effort(model)
+                    if _slide in {"low", "medium", "high"}:
+                        _kimi_effort = _slide
+                    elif _slide == "max":
+                        _kimi_effort = "high"
+                except Exception:
+                    pass
                 api_kwargs["reasoning_effort"] = _kimi_effort
 
         # Tencent TokenHub: top-level reasoning_effort (unless thinking disabled)
@@ -488,6 +498,15 @@ class ChatCompletionsTransport(ProviderTransport):
                     _e = (reasoning_config.get("effort") or "").strip().lower()
                     if _e in {"low", "medium", "high"}:
                         _tokenhub_effort = _e
+                # 2026-10-21：滑块接入 TokenHub 顶层通道（同上，max 截断为 high）
+                try:
+                    _slide = _resolve_reasoning_effort(model)
+                    if _slide in {"low", "medium", "high"}:
+                        _tokenhub_effort = _slide
+                    elif _slide == "max":
+                        _tokenhub_effort = "high"
+                except Exception:
+                    pass
                 api_kwargs["reasoning_effort"] = _tokenhub_effort
 
         # LM Studio: top-level reasoning_effort. Only emit when the model

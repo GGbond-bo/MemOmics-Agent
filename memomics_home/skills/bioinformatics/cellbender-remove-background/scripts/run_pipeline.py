@@ -6,13 +6,13 @@ Chains: Stage 1 (raw→h5ad) → Stage 2 (CellBender) → Stage 3 (ptrepack) →
 
 Usage:
   # 完整 4 阶段（从 raw matrix 开始）
-  python run_pipeline.py --base_dir F:/00.RawData --work_dir F:/CellBender_v2
+  python run_pipeline.py --base_dir /data/00.RawData --work_dir /data/CellBender_v2
 
   # 从 Stage 2 开始（h5ad 已就绪）
-  python run_pipeline.py --h5ad_dir F:/CellBender_v2/h5ad --work_dir F:/CellBender_v2 --skip_stage1
+  python run_pipeline.py --h5ad_dir /data/CellBender_v2/h5ad --work_dir /data/CellBender_v2 --skip_stage1
 
   # 仅跑其中几个样本
-  python run_pipeline.py --base_dir F:/00.RawData --work_dir F:/CellBender_v2 --samples S1 S2 S3
+  python run_pipeline.py --base_dir /data/00.RawData --work_dir /data/CellBender_v2 --samples S1 S2 S3
 
 核心设计:
   - 串行执行，一次一个样本

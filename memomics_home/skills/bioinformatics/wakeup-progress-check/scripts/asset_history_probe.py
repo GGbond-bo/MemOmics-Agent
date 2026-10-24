@@ -9,7 +9,7 @@ asset_history_probe.py —— 「这个活到底干过没有」一步探针
 用法：
     python asset_history_probe.py <会话目录> <关键词> [--n 40]
 例：
-    python asset_history_probe.py <安装目录> 44_MEF2C
+    python asset_history_probe.py <安装目录>/results/memomics-afd2d418 44_MEF2C
 
 输出：按时间排序的 工具调用时间线 + 关键行的摘要（write_file / execute_* / rail_review /
       skill_evolution.record_run 的 notes —— notes 就是上一轮自己写的"做了什么"）。

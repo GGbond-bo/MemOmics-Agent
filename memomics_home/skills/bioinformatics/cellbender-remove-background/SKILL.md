@@ -1,8 +1,7 @@
 ---
 name: cellbender-remove-background
 description: "CellBender去除环境RNA污染。使用场景：10X raw h5矩阵，怀疑有空滴/环境RNA污染，需GPU环境，输入raw_feature_bc_matrix"
-when_to_use: "[cellbender-remove-background] CellBender背景RNA去除：原始UMI矩阵→深度学习去噪→背景RNA去除→纯净表达矩阵"
-version: 3.0.0
+when_to_use: "[cellbender-version: 3.0.0
 author: MemOmics
 license: MIT
 platforms: [windows, linux, macos]
@@ -126,7 +125,7 @@ CellBender remove-background 基于深度生成模型(VAE)估计并去除环境R
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  F:/00.RawData/{sample}/output/raw_matrix/                      │
+│  /data/00.RawData/{sample}/output/raw_matrix/                      │
 │  ├── matrix.mtx.gz     ← 稀疏矩阵（基因×细胞）                   │
 │  ├── barcodes.tsv.gz   ← 细胞 barcode                           │
 │  └── features.tsv.gz   ← 基因名（兼容 BGI 1列 / 10x 2/3列）     │
@@ -173,34 +172,34 @@ CellBender remove-background 基于深度生成模型(VAE)估计并去除环境R
 
 ```bash
 # 完整流水线（从 raw matrix 开始，脱离式后台）
-start /B python F:/CellBender_v2/run_pipeline.py ^
-  --base_dir F:/00.RawData ^
-  --work_dir F:/CellBender_v2
+start /B python /data/CellBender_v2/run_pipeline.py ^
+  --base_dir /data/00.RawData ^
+  --work_dir /data/CellBender_v2
 
 # 从 Stage 2 开始（h5ad 已就绪）
 start /B python run_pipeline.py ^
-  --h5ad_dir F:/CellBender_v2/h5ad ^
-  --work_dir F:/CellBender_v2 ^
+  --h5ad_dir /data/CellBender_v2/h5ad ^
+  --work_dir /data/CellBender_v2 ^
   --skip_stage1
 
 # 仅跑某个阶段
-python run_pipeline.py --work_dir F:/CellBender_v2 --only_stage 4
+python run_pipeline.py --work_dir /data/CellBender_v2 --only_stage 4
 ```
 
 ### 阶段独立运行
 
 ```bash
 # Stage 1: 只转换 h5ad
-python scripts/stage1_to_h5ad.py --base_dir F:/00.RawData --out_dir F:/CellBender_v2/h5ad
+python scripts/stage1_to_h5ad.py --base_dir /data/00.RawData --out_dir /data/CellBender_v2/h5ad
 
 # Stage 2: 只跑 CellBender
-python scripts/run_pipeline.py --work_dir F:/CellBender_v2 --skip_stage1 --only_stage 2
+python scripts/run_pipeline.py --work_dir /data/CellBender_v2 --skip_stage1 --only_stage 2
 
 # Stage 3: 只压缩
-python scripts/ptrepack_all.py --cb_dir F:/CellBender_v2/cellbender_output --out_dir F:/CellBender_v2/seurat_h5
+python scripts/ptrepack_all.py --cb_dir /data/CellBender_v2/cellbender_output --out_dir /data/CellBender_v2/seurat_h5
 
 # Stage 4: 只统计
-python scripts/stats_summary.py --h5ad_dir F:/CellBender_v2/h5ad --cb_dir F:/CellBender_v2/cellbender_output --out_dir F:/CellBender_v2/summary
+python scripts/stats_summary.py --h5ad_dir /data/CellBender_v2/h5ad --cb_dir /data/CellBender_v2/cellbender_output --out_dir /data/CellBender_v2/summary
 ```
 
 ---
@@ -346,7 +345,7 @@ cellbender remove-background \
 
 | # | Script | 职能 | 输入 | 输出 |
 |---|--------|------|------|------|
-| 1 | `scripts/stage1_to_h5ad.py` | 原始 matrix → h5ad | F:/00.RawData/{s}/output/raw_matrix/ | {work_dir}/h5ad/{s}.h5ad |
+| 1 | `scripts/stage1_to_h5ad.py` | 原始 matrix → h5ad | /data/00.RawData/{s}/output/raw_matrix/ | {work_dir}/h5ad/{s}.h5ad |
 | 2 | `scripts/run_pipeline.py` | 完整流水线（Stage 1-4） | raw / h5ad | cellbender_output/ + seurat_h5/ + summary/ |
 | 3 | `scripts/ptrepack_all.py` | 批量 ptrepack 压缩 | cellbender_output/{s}/_filtered.h5 | seurat_h5/{s}_filtered_seurat.h5 |
 | 4 | `scripts/stats_summary.py` | 前后对比统计表 | h5ad/ + cellbender_output/ | summary/cellbender_stats.tsv |

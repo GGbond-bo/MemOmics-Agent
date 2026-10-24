@@ -5600,7 +5600,7 @@ def interactive_setup() -> None:
         )
         connection_mode = "webhook" if mode_idx == 1 else "websocket"
         if connection_mode == "webhook":
-            print_info("Webhook defaults: login-host:22/feishu/webhook")
+            print_info("Webhook defaults: 127.0.0.1:8765/feishu/webhook")
             print_info("Override with FEISHU_WEBHOOK_HOST / FEISHU_WEBHOOK_PORT / FEISHU_WEBHOOK_PATH")
             print_info("For signature verification, set FEISHU_ENCRYPT_KEY and FEISHU_VERIFICATION_TOKEN")
     save_env_value("FEISHU_CONNECTION_MODE", connection_mode)

@@ -176,7 +176,7 @@ def is_browser_debug_ready(url: str, timeout: float = 1.0) -> bool:
 
 # Both loopback literals: Windows (and some Linux setups) can hand the IPv4
 # loopback to one process and the IPv6 loopback to another. Chrome asked to
-# bind :9222 while e.g. VS Code's js-debug holds login-host:22 will come up
+# bind :9222 while e.g. VS Code's js-debug holds 127.0.0.1:9222 will come up
 # on [::1]:9222 only — reachable, but invisible to an IPv4-only probe.
 _LOOPBACK_PROBE_HOSTS = ("127.0.0.1", "[::1]")
 _LOOPBACK_SOCKET_HOSTS = ("127.0.0.1", "::1")

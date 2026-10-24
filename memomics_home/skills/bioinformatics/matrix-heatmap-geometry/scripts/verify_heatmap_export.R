@@ -13,7 +13,7 @@
 # ============================================================================
 
 ## ---------- CONFIG ----------
-DIR         <- "<安装目录>"
+DIR         <- "<安装目录>/results/<session>/figures/CNS"
 FIGS        <- c("FigA3_program_subcluster_CNS", "FigA3_program_subcluster_pre_v3_CNS")
 EXTS        <- c("png", "pdf", "svg", "tiff")
 CANVAS_MM_W <- 183           # 期望纸宽（Nature 双栏；单栏 89）

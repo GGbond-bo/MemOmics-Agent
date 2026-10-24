@@ -6,7 +6,7 @@
 # 2026-08-07 memomics-1135ed52 实测: GSE000000 40样本 ArchR 串行, 5/5 逻辑判定 + 3/3 循环行为验证通过
 
 # ============ 每项目必改 ============
-DONE_DIR="/e/专利/Human_Hippocampus_ATAC/ArchR_Arrow_QC_Filtered"   # DONE_MARK 根目录(含 {s}/{s}_filtered_cells.csv 的样本=完成)
+DONE_DIR="/e/知识产权/Human_Hippocampus_ATAC/ArchR_Arrow_QC_Filtered"   # DONE_MARK 根目录(含 {s}/{s}_filtered_cells.csv 的样本=完成)
 LOG_DIR="/e/MemOmics-Agent/results/<SESSION>/batch/logs"            # 批处理逐样本日志目录
 MON_LOG="/e/MemOmics-Agent/results/<SESSION>/batch/monitor.log"     # 监控日志(循环追加)
 ALERT_FILE="/e/MemOmics-Agent/results/<SESSION>/batch/alerts.json"  # 告警文件(异常写/恢复清)

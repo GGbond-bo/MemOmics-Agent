@@ -1,6 +1,6 @@
 # node1 / node3 / node4 —— 三节点规格、外网、环境分工（实测 2026-10-08）
 
-> 唯一真源：`<安装目录> 的 `cluster` 段（用户锁定，持久声明、**不被探针重扫覆盖**）。
+> 唯一真源：`<安装目录>/environment.json` 的 `cluster` 段（用户锁定，持久声明、**不被探针重扫覆盖**）。
 > 本文件是它的人读版 + 探针原始证据、安装链与验证配方；两者冲突以 `environment.json` 为准。
 > 新会话要连集群：先读 `environment.json.cluster`，**不要重新探测**。
 
@@ -8,16 +8,16 @@
 
 | name | host | 角色 | 核 | 内存 | 外网 | 备注 |
 |---|---|---|---|---|---|---|
-| `node1` | `login-host` | **default_node** / 大内存 | 144 | 3.0 TB | ❌ | 超大内存任务（10x 全量、ArchR、大矩阵） |
-| `node4` | `login-host` | 计算节点 | 112 | 503 GB（MemTotal 528,067,776 kB ≈ 503.6 GiB，可用 495 GiB） | ❌ | Xeon E7-4830 v4 @2.0GHz（主频低 → 单线程弱，适合多核并行）；本地 `/` 407G（余 379G）、`/tmp` **仅 24G**、`/home` 1.0T（共享，已用 667G） |
-| `node3` | `login-host` | **安装节点** | 8 | 15.5 GB | ✅ | 唯一能上外网；只用来装包 / 下载 / 轻量脚本，⛔ 不跑重计算 |
+| `node1` | `login-host.login-host` | **default_node** / 大内存 | 144 | 3.0 TB | ❌ | 超大内存任务（10x 全量、ArchR、大矩阵） |
+| `node4` | `compute-node.login-host` | 计算节点 | 112 | 503 GB（MemTotal 528,067,776 kB ≈ 503.6 GiB，可用 495 GiB） | ❌ | Xeon E7-4830 v4 @2.0GHz（主频低 → 单线程弱，适合多核并行）；本地 `/` 407G（余 379G）、`/tmp` **仅 24G**、`/home` 1.0T（共享，已用 667G） |
+| `node3` | `login-host.login-host` | **安装节点** | 8 | 15.5 GB | ✅ | 唯一能上外网；只用来装包 / 下载 / 轻量脚本，⛔ 不跑重计算 |
 
 共用：user=`user`、port=22、home=`/home/user`、workdir=`/cluster/share/user`（**三节点 realpath 一致**）。
 config.yaml 里 node4 的 note 写「小内存节点」是相对 node1 的 3TB 而言，503 GB 实测并不小。
 
 ## 2. 共享存储 / 队列 / 选点行为
 
-- 挂载：`login-host:/share → /cluster/share`，**三节点同一份 NFS**：120T 总 / 97T 已用 / **24T 可用（81%）**，全实验室共享 → 写大矩阵/BAM/索引前留意配额。
+- 挂载：`cluster.login-host:/share → /cluster/share`，**三节点同一份 NFS**：120T 总 / 97T 已用 / **24T 可用（81%）**，全实验室共享 → 写大矩阵/BAM/索引前留意配额。
 - 调度器：三节点同为 **SGE 8.1.9**（`/opt/gridengine/bin/lx-amd64/{qsub,qstat,qdel}`，无 Slurm）→ **同一套队列**。
 - ⇒ **三个登录口只是入口不同，不是三个独立算力池**：别按登录口分配任务、别跨节点搬文件；真决定作业跑在哪台的是调度器。
 - 选点：`default_node=node1`、`node_policy=ask`。只配 1 个 → 静默用；配多个未指定 → 用 default（node1）；**没配 default 才会返回 `needs_node` 硬拦**（那时必须先问用户，不许自己挑）。

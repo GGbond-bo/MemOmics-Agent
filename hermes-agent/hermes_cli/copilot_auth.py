@@ -63,7 +63,7 @@ def validate_copilot_token(token: str) -> tuple[bool, str]:
     if token.startswith(_CLASSIC_PAT_PREFIX):
         return False, (
             "Classic Personal Access Tokens (ghp_*) are not supported by the "
-            "Copilot API. Use one of:\n"
+            "Copilot API. Use one o/data/n"
             "  → `copilot login` or `hermes model` to authenticate via OAuth\n"
             "  → A fine-grained PAT (github_pat_*) with Copilot Requests permission\n"
             "  → `gh auth login` with the default device code flow (produces gho_* tokens)"

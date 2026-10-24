@@ -13,7 +13,6 @@ description: >-
   **配色选择（给我一个专业好看的颜色 / Nature 级别配色 / 要两三个 / FeaturePlot 上色 / score 配色）**。
   **桑基图 / 桑葚图（常见错写）/ Sankey / Alluvial / 冲积图 / 左边X右边Y 流带图的版式与导出**；
   不做：图型选择（走 cns-visualization/scipilot）、示意图形状设计（走 diagram-design）；
-  ⚠️ 配色**速查**在本 skill 的 `references/publication-palettes-featureplot.md`（可直接取用，不必再绕道）。
 when_to_use: "用户问导出的图太大/太糊/保存尺寸/dpi/格式选择/透明底白底时触发；**也覆盖已渲染位图的字号合规审计与「为什么改不了字体」**（量已发表论文配图或自己导出图的真实 pt 值、判是否达 5pt 下沿、解释位图无字体对象/无矢量母版）。明确面向投稿发表的导出决策，不负责图型选择。"
 version: 1.0.0
 author: MemOmics
@@ -134,7 +133,6 @@ python scripts/measure_figure_fontsize.py fig.png --dpi 300                # 已
   出版社 `MediaObjects` 只发位图（`.jpg` 变体常 404，无矢量母版可下），且
   14–20 px 墨迹的字本来也无法经济修描。要可编辑 = 拿原始数据重画
 
-完整方法与实测数据见 `references/figure-legibility-audit.md`；源码在手时用
 `academic-figure-skill/scripts/check_fontsize.py`（量声明值，精确）。
 
 ## 色阶范围：颜色按 min→max 分配 + 图例标真实分数值（2026-09-21 用户诉求）
@@ -224,14 +222,12 @@ python scripts/measure_figure_fontsize.py fig.png --dpi 300                # 已
   （实测 ≤10 px / 2600 px = 0.4%）。⚠️ 没做 A/B 对照就**不要声称"修好了原版不居中"**，只能说"本版实测居中"。
 
 ### 配套支持文件（本 skill）
-- `references/figure-geometry-audit.md` — 几何自检完整配方：gtable 取值怪癖、像素测量口径、像素↔数据换算、坐标直方图分诊、灰度亮度表、A/B 两版实测数值
 - `scripts/measure_figure_geometry.py` — 可复跑探针：量面板几何/填充率/留白；`--palette` 量配色灰度可分性
 
 ## 与其他 skill 分工
 
 - **图型选择/整体规范** → cns-visualization、scipilot-figure-skill、nature-figure
 - **配色选择（连续型 score / FeaturePlot 上色）** → 本 skill 的
-  `references/publication-palettes-featureplot.md` 直接取用三套 Nature 级锚点 hex；
   分类色/整体配色规范仍走 cns-visualization
 - **画什么图来论证** → figure-designer
 - **本 skill 只解决导出段 + 配色速查**：多大、什么 dpi、什么格式、怎么压缩、用什么色
@@ -246,7 +242,6 @@ python scripts/measure_figure_fontsize.py fig.png --dpi 300                # 已
 | 比值 >100% 被画上轴 | 柱/标注渲染到坐标轴外 | 召回/命中率等比值指标的分子集合 > 分母池 ⇒ 跨方法**不可比**，须先按精度筛选 |
 | 中文字体缺**符号**字形（不止下标） | `Z₁/Z₂`、标题里的 `PCA↔scVI` 之类**静默变方框**；脚本正常退出、图文件照常生成，极易漏检 | `UserWarning: Glyph 8321 missing from font(s) Microsoft YaHei`（下标）/ `Glyph 8596 (\N{LEFT RIGHT ARROW}) missing from font`（箭头，2026-09-24 实测：6 面板指标图 4 处标题全中方框）—— Microsoft YaHei / SimHei **不含** U+2080–2089 与 U+2194 / U+2192；改用 `Z1`、mathtext `$Z_1$`，箭头改 `-` / `vs` / `与`；`①②③`（U+2460–）可用。⚠️ **出图后必须扫 stderr 有无 `Glyph … missing from font`** —— 只看「图文件生成了」＝漏检；含中文的 SVG 交付加 `plt.rcParams["svg.fonttype"]="path"`（字形转路径，不依赖目标机器字体） |
 
-**出图后必做**：① 报像素尺寸并断言在 `figsize×dpi` 的 15% 内；② `vision_describe` 核对 OCR 是否读出全部预期数字 + 有无方框 + 亮度图非全白全黑。详见 `references/matplotlib-canvas-and-font-pitfalls.md`。
 
 ### 🔴 撑爆的**硬崩**变体：单位不一致把 artist 丢到数据区外（2026-10-01 实测）
 
@@ -288,12 +283,32 @@ length(grepRaw("/FontFile", raw, all = FALSE)) > 0   # FALSE ⇒ 未嵌入
 实测同一批 5 张图一次改动：**2.8–3.4 MB 无嵌入 → 1.8–2.2 MB 已嵌入**（子集化后反而更小）。
 同族可选设备：`ragg::agg_tiff`、`svglite::svglite`（SVG 记得 `print(p)`）。
 
+🔴 **第五类导出坑：多格式导出链「后段失败」≠ 整任务失败（2026-10-19 集群实测）**
+
+```r
+ggsave("x.png", p, width=24, height=10, dpi=300, limitsize=FALSE)   # ✅ 已写盘
+ggsave("x.pdf", p, width=24, height=10, limitsize=FALSE)            # ✅ 已写盘
+ggsave("x.svg", p, width=24, height=10, limitsize=FALSE)            # ❌ halt
+# Error in dev(...): The package "svglite" is required to save as SVG.
+# Calls: ggsave -> dev -> check_installed  →  Execution halted
+```
+
+- **判据：非零退出 ≠ 无产出。** 换到集群/同事机器跑图时高频出现，但前面的格式在崩之前就已落盘。
+  排查顺序 = `tail` 日志找 `#TASK:PROGRESS` / `#TASK:OUTPUT` 打点 → 列产出目录核对文件 →
+  **按「失败点之前」确认真实交付物**。⛔ 不要报「整任务失败」，也不要含糊说「完成了」。
+- **修法（两条一起做）**：① 每个导出各自兜住，让缺设备包只丢那一个格式 ——
+  `for (fmt in c("png","pdf","svg")) tryCatch(ggsave(f, p, width=24, height=10, device=fmt), error=function(e) message("导出 ", fmt, " 失败: ", conditionMessage(e)))`；
+  ② **提交到集群/新环境前一行预检设备包**（R ≥4 的 `ggsave` 对 SVG 走 `svglite`，
+  PDF 字体嵌入走 `cairo_pdf`）：`cat(requireNamespace("svglite", quietly=TRUE), requireNamespace("ragg", quietly=TRUE))`。
+- 🔴 **设备包缺失 = 环境缺件 ⇒ 装之前先问用户**（铁律 29），不要在集群上擅自 `install.packages`。
+  交付口径：「PNG/PDF 已产出可用；SVG 需装 svglite 后重跑导出那一步（几分钟）」—— 把选择权交给用户，
+  不要因为一个可选格式失败就把整批图判为未交付。
+
 同批另两条导出核验（都是一行代码，别只报文件大小）：
 
 - **SVG「文字可编辑」** = 数 `<text` 元素（本例每图 ~100 个）+ 确认各分类色 hex 出现在文件里（8/8）
 - **PNG** 报尺寸 / 墨迹占比 / 类别色数（本例 2400×1800 @300dpi、墨迹 13–27%、8 色块 8 色相）
 
-🔴 **一次改完即停，不要为同一批图反复做二次核对**（见 `references/multipanel-figure-qa.md` 的收尾纪律）。
 
 ### 🔴 第五坑：底部图例被裁 —— 健康检查全过、只有 OCR 能抓（2026-10-01 实测）
 
@@ -310,7 +325,6 @@ legend 与画布内其他 artist（`transAxes` 定位的脚注文字）重叠时
 **通用判据（不限于 Sankey）**：任何 figure，**出图后数 OCR 文本条数 = 预期元素数**；
 偏少就是有元素静默没渲染出来。完整配方（零依赖手绘贝塞尔流带、左右各自归一布局、
 带宽 = 跨条件支持度语义、Sankey/Alluvial 触发词）→
-`references/sankey-alluvial-matplotlib.md`。
 
 ### 🔴 第六坑：**顶部**同样会被裁 + OCR「混读」＝文本重叠的确定性判据（2026-10-01 实测）
 
@@ -365,7 +379,6 @@ usable = 1 - gap                 # UP 图 tot=102 ⇒ gap=0.022×102=2.244 ⇒ u
 字体同步换 `["Arial", "Helvetica", "DejaVu Sans"]`（英文图不必挂中文字体，
 顺带规避「中文字体缺符号字形」那一坑，见上文静默失败三坑）。
 完整中→英对照表（本例实译，可直接复用）在
-`references/sankey-alluvial-matplotlib.md` §6b。
 
 ## 多面板图的空白面板探针 & 导出环节两个 Windows 坑（2026-09-29 实测）
 
@@ -413,13 +426,11 @@ ink = [[(a[i*H//4:(i+1)*H//4, j*W//3:(j+1)*W//3] < 245).any(axis=2).mean()*100
 **hero 用语义双编码**（面积 = 比例/计数，颜色 = 方向/偏倚），辅助面板各只承担**一条**
 独立证据，不做重复编码。本会话实例（细胞级 DEG 全景）：hero = 5 对比 × 10 亚群圆矩阵
 （面积 = FDR<0.05 占比、颜色 = 上调比例），辅面板 = p 值区间堆积条 / |效应量| 分布 /
-"全部基因 vs 显著基因"中位对比。完整配方见 `references/multipanel-figure-qa.md`。
 
 ## CNS 图「不好看」的四类客观硬伤 + 变体挑选协议（2026-09-29 实测）
 
 用户说「我觉得不好看」时**先量，不要先换配色**——本会话从图上读出的四类硬伤全部可判定，
 **没有一类是配色问题**。完整判据、代码与四变体规格见
-`references/cns-figure-refinement-variants.md`。
 
 | # | 硬伤 | 判据（实测） | 修法 |
 |---|---|---|---|
@@ -462,7 +473,6 @@ y 必须落在 `ylim` 内**且符号与直觉相反**。
 ## 多面板同轴背离柱大图：刻度策略 + 顶部/左侧 frame（2026-09-29 实测）
 
 N 个面板并排、共用同一行轴（亚群 / 细胞类型 / 组别），每面板 = 水平背离柱（右=上调 左=下调）。
-版式常量、`yfrac()` 公式与可复用清单见 `references/multipanel-diverging-bar-frame.md`。
 
 ### 🔴 刻度策略（**用户已定稿的偏好——别再默认共享刻度**）
 
@@ -526,7 +536,6 @@ N 个面板并排、共用同一行轴（亚群 / 细胞类型 / 组别），每
 ## 🔴 单元素改版（"只去掉 a–e / 只对调一处"）：像素差分核验协议（2026-09-29 v4→v5 实测）
 
 用户说"这张图还有个小问题，只改 X，其他的不变"时，交付前**必须用逐像素差分证明"其余零改动"**，
-不能说"看着没变"。完整配方 + 实测数值见 `references/single-element-revision-pixel-diff.md`，
 探针 = `scripts/pixel_diff_single_change.py`（可直接跑）。
 
 **四步协议**
@@ -567,23 +576,15 @@ N 个面板并排、共用同一行轴（亚群 / 细胞类型 / 组别），每
 
 ## 参考文档
 
-- `references/cns-figure-refinement-variants.md` — **CNS 图版式精修**：四类硬伤判据与修法、OCR 字号探针、
   多变体生产配方（面板参数化 + 源数据缓存 + 导出分层）、四变体规格表（可直接复用）、
   倒置轴标签越界坑、多产物批量探针（**一次调用**出 4 张体检表）
-- `references/matplotlib-canvas-and-font-pitfalls.md` — 画布越界撑爆 / 比值 >100% 不可比 / 中文字体缺下标字形 / 出图后读图核验 / 换数字必重出源图（含断言代码）
-- `references/multipanel-figure-qa.md` — **多面板组合图交付三件套**：分块墨量探针（可复跑，抓空白 panel）、收尾纪律（探针通过即停，禁止重复校验）、Windows TIFF 压缩坑与修复、hero+3 证据面板骨架构型、语义双编码规则
-- `references/multipanel-diverging-bar-frame.md` — **多面板同轴背离柱大图的 frame 配方**（2026-09-29 v3 修订）：刻度策略**两阶段演化史**（独立绝对刻度 → 统一 symlog，含"round 2 用户推翻 round 1"的完整判据与图注写法）、**统一 symlog 配方**（`linthresh` 线性段占比公式、纯十倍阶梯、`TMAX` 取单行 max 的陷阱）、**左侧"模块竖带"版式**（取代旧的两级家族括号；含文字宽度的 fig-fraction 压叠算术与反面案例）、**逐柱数值标签**（`frac>0.80 → 内嵌白字` 分流 + `offset points` 纪律）、顶部标题带 figure 坐标常量、`yfrac()` 与 `set_ylim` 镜像公式、结构不变的改图纪律（总量复核 + 按文件名定位生成脚本）、裁切+转正 OCR 双验与「精确颜色计数」假阴性反例、四格式 + source data 导出清单
-- `references/sankey-alluvial-matplotlib.md` — **Sankey / Alluvial（左类别→右类别）版式与导出**（2026-10-01 实测）：
   零依赖手绘三次贝塞尔流带、**左右各自归一**的布局算法（共用比例会让图歪向一边）、
   **带宽语义 = 该「左-右」对被几个条件共同支持**（共识带数量本身就是结论）、
   节点分档配色、**底部图例裁切坑**（`ncol=1` 竖排被静默裁掉，健康检查全过）、
   **§6b 顶部标题裁切**（figure 坐标 + `va="top"` 修法）与 **OCR「混读」= 文本重叠判据**、
   **图内文字一律英文**（用户定稿偏好 + 中→英对照表）、
   出图后 OCR 数条目自检、触发词「桑基图 / **桑葚图**（常见错写）/ Sankey / Alluvial」
-- `references/high-cell-count-raster-export.md` — 50万点云导出的完整细节与
   Nature 契约表（本会话沉淀，含 ragg/ggsave 参数差异、pngquant 配方、经验法则）
-- `references/publication-palettes-featureplot.md` — **发表级配色速查**：FeaturePlot / 连续型 score 上色的三套 Nature 级锚点 hex（viridis / Blues / YlOrRd，可直接粘 `cols=`）、为何弃用 `c("lightyellow","darkblue")`、配色包探测回退（不装包也能用）、**以及"探测→计算→出图写成一次 execute_r"的加速配方**、**§2b 图例改字必须改内层 scale（🔴 禁叠 `scale_*_gradientn`：Seurat v5 内部 `1~2` 缩放 → `limits` 错位 → `grey50` 黑白图；正确 = `p[[1]]$scales$get_scales("colour")` 原地改 breaks/labels）+ 交付前像素验证（主色不得为 `#7f7f7f`）**。用户说「给我个专业好看的颜色 / Nature 级别配色 / 要两三个」时先读它
-- `references/single-element-revision-pixel-diff.md` — **单元素改版核验**（2026-09-29 v4→v5）：
   "只改一处、其他不变"的四步协议与两轮实测数值（v3→v4 删面板字母 2,229 px / 5 簇；v4→v5 Σ 对调 13,320 px / 1 簇）、
   **跨解释器渲染使差分失真**的完整对照表（mpl 3.10.9 vs 3.11.0 → 13,320 vs 111,449 px）、
   fig 坐标↔图像行换算、顺序类问题的颜色簇判据、用户矛盾表述的处理、冗余编码候选（含 3 篇 PMID）

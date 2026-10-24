@@ -1,4 +1,4 @@
-# Unit tests for install.ps1's ConvertTo-LongPath helper.
+﻿# Unit tests for install.ps1's ConvertTo-LongPath helper.
 #
 # Run from a PowerShell prompt:
 #
@@ -6,7 +6,7 @@
 #
 # Background: on a Windows profile whose folder name contains a space (e.g.
 # "First Last"), %TEMP%/%TMP% can be exposed as an 8.3 short path
-# (C:\Users\FIRST~1.LAS\...). PowerShell's FileSystem provider chokes on the
+# (<用户目录>~1.LAS\...). PowerShell's FileSystem provider chokes on the
 # "~1.ext" component when it reaches a provider cmdlet (Tee-Object -FilePath),
 # aborting the Node/Electron install+build stages. install.ps1 expands such
 # paths to their long form up front; this verifies the helper's contract.
@@ -64,7 +64,7 @@ Assert-Equal -Expected "" -Actual (ConvertTo-LongPath "") -Label "empty string r
 Assert-Equal -Expected $null -Actual (ConvertTo-LongPath $null) -Label "null returns null"
 
 # No 8.3 component -> returned verbatim (even with spaces).
-$longish = "C:\Users\First Last\AppData\Local\Temp"
+$longish = "<用户目录> Last\AppData\Local\Temp"
 Assert-Equal -Expected $longish -Actual (ConvertTo-LongPath $longish) -Label "long path with spaces is unchanged"
 
 $noTilde = "/tmp/some/long/path"
@@ -72,7 +72,7 @@ Assert-Equal -Expected $noTilde -Actual (ConvertTo-LongPath $noTilde) -Label "ti
 
 # Looks like an 8.3 name but does not exist -> graceful fallback to the input
 # (FolderExists/FileExists both false, or COM unavailable on this host).
-$fakeShort = "C:\Users\FIRST~1.LAS\does\not\exist"
+$fakeShort = "<用户目录>~1.LAS\does\not\exist"
 Assert-Equal -Expected $fakeShort -Actual (ConvertTo-LongPath $fakeShort) -Label "nonexistent 8.3 path falls back to input"
 
 # --- Summary ---

@@ -1,4 +1,4 @@
-# 人类海马正常衰老 snRNA-seq 数据集 — 专利实施例数据源
+# 人类海马正常衰老 snRNA-seq 数据集 — 知识产权实施例数据源
 
 > 2026-07-20 · 经 search_geo + search_papers 检索验证
 
@@ -55,6 +55,6 @@ GSE000000 → count matrix (.h5/.mtx) + metadata (age, donor_id, cell_type)
   └─ S205: Harmony/scVI 跨物种批次校正
 ```
 
-## 在专利说明书中的写法
+## 在知识产权说明书中的写法
 
 > "实施例使用GEO数据库GSE000000数据集(40例神经正常供体全生命周期人脑海马snRNA-seq)..."

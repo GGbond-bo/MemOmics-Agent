@@ -176,7 +176,6 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 
 | 用户说 | 立即调用 |
 |--------|---------|
-| "心跳" / "监控" / "heartbeat" / "进度汇报" / "跑多久了" / "还在跑吗" | `skill_view("heartbeat-monitor")` |
 | "取消" / "停止" / "暂停" / "停掉" / "不要跑了" / "abort" / "cancel" / "stop" | ⛔ **最高优先级** — 立即执行取消流程（见下方） |
 | "html" / "报告" / "report" | `skill_view("bioinformatics-html-report")` |
 | "安装" / "创建skill" / "没有这个工具" / "新工具" / "做一个skill" / "建个skill" / "没有对应的skill" | `skill_view("create-bio-skill")` ← 无脚本 + 主题有文章/官网/教程 → 自动建 skill 并注册 |
@@ -662,7 +661,7 @@ terminal 完成 → _pending_record = True
 
 ```
 每次分析启动:
-  1. read_file("<安装目录>")   ← 全局环境文件
+  1. read_file("<安装目录>/environment.json")   ← 全局环境文件
   2. terminal("python scripts/validate_env.py --verbose")
   3. exit 0 → 继续 | exit 1 → 已修复→继续 | exit 2 → 阻断
   4. env_inventory(action="verify")  ← 再确认一遍环境变没变（毫秒级；没变直接复用清单）
@@ -897,10 +896,9 @@ terminal 完成 → _pending_record = True
 ## 参考
 
 > 📋 **SOUL-detail.md**：场景触发表、19领域一览、分析流程、长任务追踪规则 12-21、task_plan.md 模板、心跳/error_scanner 部署、后台进程模式决策树、HTML 报告规则、目录策略
-> 📚 **SKILLS_INDEX.md**：368 个生信技能索引（由系统按意图动态注入）
-> 🔧 **environment.json**：`<安装目录> 全局环境文件
+> 📚 **SKILLS_INDEX.md**：459 个生信技能索引（由系统按意图动态注入）
+> 🔧 **environment.json**：`<安装目录>/environment.json` 全局环境文件
 
-| "GSE000000" / "人海马ATAC" / "hippocampus aging ATAC" / "对比流程复现" / "Zemke aging hippocampus" / "fragments 年龄相关" / "atac" / "zemke" / "aging" / "hippocampus" | `skill_view("GSE000000-atac-aging-comparison")` |
 | "代谢组学" / "metabolomics" / "LC-MS" / "GC-MS" / "峰表" / "peak table" / "差异代谢物" / "代谢通路富集" / "代谢组" / "lc-ms" / "gc-ms" / "火山图" / "热图" / "volcano" / "heatmap" / "代谢物差异" | `skill_view("metabolomics-full-pipeline")` |
 | "学术图" / "学术级" / "专业出图" / "期刊出图" / "论文配图" / "出图规范" / "检查脚本" / "脚本优化" / "academic figure" / "publication figure" | `skill_view("academic-figure-skill")` ← 见上方必触发列表 |
 | "DNBelab" / "dnbc4tools" / "华大单细胞" / "BGI索引" / "基因组索引构建" / "mkref" / "STAR 索引" / "mkgtf" / "华大BGI" / "华大" / "索引" | `skill_view("dnbc4tools-index-building")` |

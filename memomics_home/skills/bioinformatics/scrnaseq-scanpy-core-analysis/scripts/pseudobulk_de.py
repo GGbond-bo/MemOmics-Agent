@@ -32,7 +32,6 @@ Pseudobulk Differential Expression Analysis
 This module implements pseudobulk aggregation and differential expression analysis
 for single-cell RNA-seq data using DESeq2.
 
-For methodology and best practices, see references/pseudobulk_de_guide.md
 
 Functions:
   - aggregate_to_pseudobulk(): Aggregate counts per sample × cell type

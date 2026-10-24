@@ -800,7 +800,7 @@ suite.
 Git touches it`. Cosmetic — the repo's `.gitattributes` normalizes. Don't
 let editors auto-convert committed POSIX-newline files to CRLF.
 
-**Forward slashes work almost everywhere.** `C:/Users/...` is accepted by
+**Forward slashes work almost everywhere.** `<用户目录>` is accepted by
 every Hermes tool and most Windows APIs. Prefer forward slashes in code
 and logs — avoids shell-escaping backslashes in bash.
 

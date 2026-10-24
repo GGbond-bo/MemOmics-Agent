@@ -89,7 +89,7 @@ dcs_cloud(action="context")     # 一次拿到：当前用户/当前项目/候�
 ```
 dcs_cloud(action="context")                                # 看默认下载目录
 dcs_cloud(action="ls", path="/Files/Muscle", long=True)    # 定位文件（点/选出来）
-dcs_cloud(action="download", path="/Files/Muscle/x.csv", target="<安装目录>", type="web")
+dcs_cloud(action="download", path="/Files/Muscle/x.csv", target="<安装目录>/results/dcs", type="web")
 ```
 > 小文件 `web`（下载 ≤200MB，且不支持文件夹/FastQ/BAM）；大文件用 `raw` 换 `oss`/`raysync`。
 

@@ -101,9 +101,9 @@ obj@misc$MF_wgcna$wgcna_net$TOMFiles <- "E:/.../TOM_official/MF_wgcna_TOM.rda"
 - ✅ 正确做法：hdWGCNA 流程**一律用 terminal + R 4.4.2 全路径**，不要用 execute_r
 ```r
 # 正确路径必须含 x64（少了 x64 会报"系统找不到指定的路径"）
-# <用户目录>
+# C:/Users/<用户>/AppData/Local/R/R-4.4.2/bin/x64/Rscript.exe
 ```
-- R 4.4.2 库：`E:/R-libs/R-4.4.2` + `<用户目录> + `AppData/Local/R/R-4.4.2/library`
+- R 4.4.2 库：`E:/R-libs/R-4.4.2` + `C:/Users/<用户>/R/R-4.4.2-library` + `AppData/Local/R/R-4.4.2/library`
 - 版本实测：hdWGCNA 0.4.12 / WGCNA 1.74 / Seurat 5.5.0 / future 1.70.0 / enrichR 3.4
 
 ### 10. 🔴 metacell 对象键名 = `wgcna_metacell_obj`（不是 `metacell_obj`）
@@ -224,16 +224,14 @@ stopifnot(ncol(datExpr) == length(primary_lab), nrow(datExpr) < ncol(datExpr))
 
 - 判定用 `ari()` 手写实现 + best-match Jaccard（避免依赖 mclust）
 - 复跑脚本：`scripts/module_stability_ari.R`（**已于 2026-09-24 修掉上述两 bug + 加朝向断言 + 补 seed 变体**，可直接改基因集/参数复用）
-- 明细与本会话完整数据（7 变体实测表 + bug 定位过程）：`references/module-credibility-and-figure-pitfalls.md`
 
 ## 关键教训：基因子集 ≠ 网络平坦
 - ⚠️ 用 top3000 高变基因子集跑 WGCNA 会得到假平坦网络（R²=0.72@power1、单一 turquoise 模块）→ 误判"数据不适合 WGCNA"
 - ✅ 改用**全部 WGCNA 基因（SetupForWGCNA fraction 0.05 → 10176）**后：power=10 R²=0.982，拆出 11 模块
 - 教训：WGCNA 必须用完整基因集（或至少 >5000 基因），子集实验只用于参数预探
-- ⚠️ 拆模块失败排查顺序：先换完整基因集重跑，再下"低异质性/均质"结论——NMF 可作互补验证（见 `references/limitations-and-literature.md`），但不可作为跳过完整基因集尝试的理由
 
 ## 环境备注（本机）
-- R 4.4.2 在 `<用户目录>，可执行文件必须写全 **`bin/x64/Rscript.exe`**（⚠️ 2026-09-24 修正：本文档原写"execute_r 和 PATH 的 Rscript 用这个"已过时 —— execute_r 内核实际跑 **R 4.5.3**，见坑 #9；Program Files 下只有 4.5.3/4.6.1，其中 R 4.5.3 的 Matrix.dll 已损坏——`loadNamespace` 任何依赖 Matrix 的包都会报 LoadLibrary failure，遇此直接用 `<用户目录> 跑参数核实/诊断脚本）
+- R 4.4.2 在 `C:/Users/<用户>/AppData/Local/R/R-4.4.2/`，可执行文件必须写全 **`bin/x64/Rscript.exe`**（⚠️ 2026-09-24 修正：本文档原写"execute_r 和 PATH 的 Rscript 用这个"已过时 —— execute_r 内核实际跑 **R 4.5.3**，见坑 #9；Program Files 下只有 4.5.3/4.6.1，其中 R 4.5.3 的 Matrix.dll 已损坏——`loadNamespace` 任何依赖 Matrix 的包都会报 LoadLibrary failure，遇此直接用 `C:/Users/<用户>/AppData/Local/R/R-4.4.2/bin/Rscript.exe` 跑参数核实/诊断脚本）
 - hdWGCNA 0.4.12 + WGCNA 1.74 + enrichR 3.4（.onAttach 联网不可达）已装进 AppData 库
 - 网络：GitHub raw/codeload 有时可达，github.com 页面 curl 常 reset——R 包安装优先 pak 或已缓存
 
@@ -257,9 +255,6 @@ stopifnot(ncol(datExpr) == length(primary_lab), nrow(datExpr) < ncol(datExpr))
 ## References
 - 官方 tutorial: https://smorabit.github.io/hdWGCNA/articles/basic_tutorial.html
 - hdWGCNA GitHub: https://github.com/smorabit/hdWGCNA
-- `references/limitations-and-literature.md` — WGCNA/hdWGCNA 局限性文献核实版（19 条已核实 PMID/DOI：dropout 伪共表达、伪重复、共表达≠因果、metacell 聚合局限、NMF 适用边界判据、Zsummary 假阳性控制阈值、关键文献速查；2026-08-14 调研产出）
-- `references/wgcna-vs-hdwgcna-parameters.md` — WGCNA vs hdWGCNA 官方参数默认值全量核实表（v1.74/0.4.12 已装包签名 + CRAN 手册 + 官方 vignettes/论文/FAQ）：含误区纠正（mergeCutHeight 0.15 非 0.25、minModuleSize min(20,ncol/2) 非 30、networkType unsigned vs signed、WGCNA 无 pickSoftThresholdFromBootstrap、metacell 数量无字面 >500 声明）、全参数对比表、适用场景速判、来源清单
-- `references/module-credibility-and-figure-pitfalls.md` — 模块可信性判定实操档案（FDR 不对称指纹、**稳定性协议 7 变体完整实测表 + 判定结论**、**split-half 维度 bug 的指纹与修复**、permuted 零模型的正确读法（看 grey 占比而非模块数）、脏数据/类型不一致崩溃的完整 trace 定位过程、`future` 作为可选依赖包的登记）
 - `scripts/module_stability_ari.R` — 可直接复用的模块稳定性评估脚本（ARI + best-match Jaccard；reproduce 对照 / permuted 严格零模型 / **split-half 按行分半** / 参数变体 / seed 对照，含 `stopifnot` 朝向断言，结果增量落盘 CSV）。**2026-09-24 已修掉 v1 自带的两个静默 bug**（ncol 分半、permuted 打乱方向）
 
 ## Proven Scripts

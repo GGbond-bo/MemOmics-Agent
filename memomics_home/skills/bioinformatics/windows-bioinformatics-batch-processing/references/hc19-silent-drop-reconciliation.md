@@ -23,8 +23,8 @@
 ## 修复（三步）
 
 1. **双副本同步 patch watchdog 数组**：
-   - `<发布目录> 权威副本）
-   - `<安装目录>
+   - `<发布目录>/guardian_authority/watchdog_v3.sh`（guardian 权威副本）
+   - `<安装目录>/results/memomics-1135ed52/batch/watchdog_v3.sh`（运行副本）
    - 数组改为 `(hc40 hc212191 hc35 hc9 hc19 hc73)` — hc19 放 hc73 前（小样本先跑，避免大样本页文件失败饿死 hc19）
    - ⚠️ guardian.sh 每轮 `cmp -s AUTH/f batch/f`，不一致就 AUTH 覆盖 batch → **只改 batch 会被回滚**；两处同改后 `cmp -s` 一致 = 安全
 2. **替换 watchdog 实例**：

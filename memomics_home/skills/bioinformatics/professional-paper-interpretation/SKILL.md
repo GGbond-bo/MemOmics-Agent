@@ -19,6 +19,24 @@ prerequisites:
 
 ## 专业编辑视角论文解读
 
+### 🔴 第一铁律：精读 ≠ 翻译（2026-10-23 用户当场纠正）
+
+用户说「**精读**」时，几乎总是要**中文深度解读**，⛔ **不是**中英对照双语文件。实测事故：71 页 Cell 论文，用户说「帮我精读这篇文献，告诉我这文献背景，实验对象，实验方法和内容，结论是什么？怎么思路框架是什么？」，Agent 按双语 reader 写了三个分片（中英对照），用户当场打断：
+> 「双语精读器，谁要你中英文对照了？？？？我要精读，不是要翻译」
+
+| 用户说法 | 走哪条 | 交付物 |
+|---|---|---|
+| 精读 / 解读 / 帮我看看这篇文章 / 这文献背景·对象·方法·结论 / 思路框架是什么 | **中文精读解读（默认）** | 中文单语解读文档（骨架见下）+ **对话里给完整成品**；双语正文一律作废 |
+| 中英对照 / 原文对照 / 全文翻译 / 双语 / 翻译这篇 paper | 双语 reader 流程（nature-reader），**且只在用户点名时** | paper.md + source_map.json + translation_notes.md |
+
+- ⛔ 不要"先做双语再说解读"，也不要"解读里顺带贴英文原文"——用户要的是解读，不是翻译。
+- ✅ 中文精读解读的完整骨架、抽取步骤与踩坑：`references/deep-reading-cn-mode.md`
+- ✅ 整页图版论文（Cell/Science 式，图独占一页）批量裁主图：`scripts/crop_fullpage_figures.py`
+  ```bash
+  python scripts/crop_fullpage_figures.py <pdf> results/<sid>/figures --pages 3,6,8,10,13,16,17 --dpi 200
+  ```
+  （页号按 **1-based** 传；脚本内部转 0-based；裁完必须抽查一张，见 references 的 off-by-one 坑）
+
 ### 触发条件
 - 用户说「从专业编辑角度说」「编辑视角」「研究思路」「做了什么」「这篇文章讲了什么」
 - 用户说「帮我解读一下」+ 含「不满意/重新/之前的不好」的重做信号
@@ -39,6 +57,11 @@ Step 1: 提取 PDF 文本（双栏期刊必须重排，不能直接用默认块�
   ├── 剔除图注块（`Fig. N |` / `Extended Data Fig. N |` 开头）与图内碎片（裸数字串/化学符号）
   ├── 图内标签乱码（Type3 子集字体）= 字符码定值偏移，可暴力解码（Nature 语料为 +29）
   ├── 出图：由 caption 顶部反推图区矩形 + get_pixmap(clip=..., dpi≥500) 渲染，别裁正文
+  ├── 现成脚本（直接跑，别每轮手写）：`scripts/pdf_2col_extract.py`（双栏阅读顺序还原 → 逐页 txt + 结构表）
+  │     └── `python scripts/pdf_2col_extract.py <pdf> results/<sid>/data/pdf_text2`
+  ├── `scripts/crop_figures_by_caption.py`（caption 锚点批量裁图，自动匹配 `Figure N.` / `Figure S1:` / `Fig. N |`，
+  │     └── `python scripts/crop_figures_by_caption.py <pdf> results/<sid>/figures/<主题> --pages 3,6,8,10`
+  │     报告里 anchor=FALLBACK 的行必须复核——缺锚点说明该页 caption 在**下一页**，别当成裁好了）
   └── 完整配方含代码：references/pdf-layout-recovery.md
 
 Step 2: 判断文章类型
@@ -111,12 +134,39 @@ Step 3: 按输出模板生成编辑视角解读
    - 相关 vs 因果——模型特征重要性 ≠ 因果，看作者是否用实验补了因果链
    - 成功是否依赖**不可先验保证**的条件（如优化器恰好采样到有代表性的区域）
    - 必须写一节**反例/离群点**：作者如何处置异常样本，往往藏着后续机理入口
+   - **论文类型不同，检查清单要换**：上面五条是为**实验/化学/生物**论文写的。若解读的是
+     **AI/agent 方法学论文**（benchmark + 案例研究 + 人类评分），改用 `references/nature-reader-bundle-contract.md`
+     第 5 节的 9 点清单：真值是否由 LLM 抽取（粒度未定义）、judge 的人工校验样本量、基线与 agent
+     **提示词是否同构**（增益含提示词工程成分）、案例是否**择优**、评分者是否单人不盲、核心卖点有没有
+     **独立消融**、亮点是否**人类提示后才产生**（属人机协作而非纯自主）、有无**伪重复**统计口径、
+     成本/失败率是否披露。写法做成「论文呈现 → 阅读时应注意」两列证据强度审计表 + 新发现分级（强/中/中低）。
    ⛔ 没有批判性章节 = 解读不合格；只写优点会被要求重做。
 
 ### 与 nature-reader 的分工
 - **nature-reader**：全文中英对照精读，侧重翻译和术语
 - **本 skill**：专业编辑视角解读，侧重研究逻辑和写作策略
 - 两者可结合：先用 nature-reader 精读，再用本 skill 做编辑分析
+
+### 与 nature-reader 联用时的硬契约（交付前必过）
+
+用户说「解读这篇文件」且全文对照是主交付物时，**官方校验器不过 = 不得交付**。三条硬规则：
+
+1. **paper.md 是唯一真相源**：双语分片合并成 `paper.md` 后，`source_map.json` 必须**从 paper.md 反推**
+   （正则扫 `<a id="S001"></a>` 锚点生成）。不要先手写 map 再对 paper.md——会在
+   `MISSING_SOURCE_MAP_ENTRY` 与 `SOURCE_MAP_ORPHAN` 两个错误之间来回打转（本次实测）。
+2. **校验器 schema 照抄**：`equations` 要 **list**（写成 dict 直接 FAIL）、`page` 要 **int**、
+   `confidence` ∈ {high,medium,low}、`latex`/`image_path` 至少一个非空、`blocks[].type`
+   （**不是 `kind`**）等于 `"equation"` 才被算作条目。
+   ```bash
+   python "<skills>/bioinformatics/nature-reader/scripts/validate_reader_math.py" paper.md --source-map source_map.json
+   # 期望：No math validation findings. Ready: yes
+   ```
+3. **标签口径**：原文一律 `**Original:**`（**图注也用它**，别写 `**Original caption:**`）；中文侧只认
+   `**中文:**` / `**中文说明:**` / `**中文图注:**`（`**中文表注:**` **不在**白名单内）。
+
+完整流程、提图双轨（矢量图必须走整页渲染，实测判据：`get_images()` 对矢量图只捞到 160×160 / 15×462
+级碎片 → 长边 ≥1000 px 才当图用，否则整页渲染）、交付自检清单、以及 **AI/agent 方法学论文的
+批判性阅读 9 点**，全部见 `references/nature-reader-bundle-contract.md`。
 
 ### 与 literature-full-summary 的分工
 - **literature-full-summary**：9项结构化摘要（给人看的方向）
@@ -134,3 +184,20 @@ Step 3: 按输出模板生成编辑视角解读
 - **裁剪图后必须抽查**：用 `vision_describe` 看一张主图，确认 OCR 出来的只有图内标签、没有正文段落；混入正文说明矩形画错了。
 - **长解读文件分块写**：双语长文（paper.md 级）用 append 分 3–4 次写，单次全量易超长/超时；每块主题要明确不同，避免形态相似的分块触发系统循环检测提示。
 - **只输出对话不落文件 = 交付不完整**：完整精读应交付 `paper.md` + `source_map.json` + `translation_notes.md` + `figures/`，收尾前校验（`**Original:**` 与 `**中文:**` 块对数量一致、图片链接全部真实存在）。
+- **⛔ 不要用「y 分桶」排序块**：`sorted(blocks, key=lambda b: (round(b[1]/30), b[0]))` 看起来是个合理的近似，**实际会把左右栏交错**，且静默——文本非空、脚本成功、段落就是错的（实测：Cell 双栏论文 p4 变成两句不相干的话交替）。正确做法是 **x-中心 vs 页中线分栏 + 宽块（>0.72×W）单独按 y 归并**，见 `scripts/pdf_2col_extract.py`。**先抽 1–2 页验阅读顺序再批量**，接缝处应能跨页续读半句话。
+- **caption 前缀不止一种，补充图 caption 常在下一页**：Nature 是 `Fig. N |`，Cell 正文是 `Figure N.`，**Cell 补充图是 `Figure S1:`（冒号，不是句点）**。只匹配 `^Figure\s+S?\d+\.` 会漏掉**全部**补充图 → 裁剪静默回退到"页底 −120pt"估值，可能把 caption 散文裁进图里或把多面板图裁残。判据：裁图报告的 `anchor=FALLBACK` / `captionsplit=False` 若多于 0 行就是漏了，去**下一页**取 caption 重裁；正则在 `scripts/crop_figures_by_caption.py` 里已做全前缀匹配。
+- **超长论文（70+ 页、20 万字符级）先交付"看得见的东西"，全文中英对照另起一轮**：这种体量做全篇双语 `paper.md` 是几十万字符，一轮硬做既超时也容易触发系统的循环检测干预。推荐顺序：**① 双栏文本提取 → 逐页 txt（可核查）② caption 裁图（用户立刻能看图）③ 专业解读 md（硬数字 + 图表索引 + 数据获取号 + 局限）④ 收尾把"全文中英对照"作为可选下一步问用户**。用户说"解读文献"时，解读就是主交付物——交付解读**不算**降级为摘要；只有全文对照才算精读交付，所以要点名提供，让用户选。⛔ 且**默认永远不是双语**（见第一铁律）：用户说「精读/解读」时，中文解读就是终交付，不要把双语当"下一步主动做掉"——2026-10-23 实测 71 页 Cell 论文先写双语，全部作废。
+- **⛔ 短论文（30 页级）做全文对照是完全可行的，别拿"太长"当借口缩水**：本次 31 页 / 9.9 万字符，
+  实际做法是「抽全文 → 写 4 个主题分片 → 脚本合并 → 从 paper.md 反推 source_map → 跑校验」，
+  一趟走完，`paper.md` 130 KB / 71 个源锚定块（60 正文 + 6 图 + 1 表 + 3 图注 + 1 算法）。
+  「超长论文分轮」那条规则针对的是 **70+ 页 / 20 万字符级**，不要套用到 30 页论文上。
+  ⚠️ 适用前提是用户**明确要求中英对照**；用户说「精读/解读」时，短论文同样走中文解读模式、不做双语（第一铁律）。
+- **校验器 FAIL 不要靠猜修**：先 `read_file` 校验脚本本身（`validate_reader_math.py`）看它到底
+  校验哪些字段（`equation_entries()` / `validate_source_map()` 两个函数就是全部规则），
+  一次读清再改，比反复试错快得多。
+- **附录提示词/参考文献不必逐条全文翻译，但必须给出索引**：15 个附录 prompt 给「编号—用途」清单
+  （锚点块 + 页码），参考文献在正文译文中原样保留 `[49]` 这类编号即可；覆盖面与"为什么不逐条翻"
+  写进 `translation_notes.md`。⛔ 静默略过附录 = 读者以为没有附录。
+- **解读主交付物是对话里的成品，不是路径通报**：收尾回复必须直接把解读写完（含必出 Mermaid 流程图 +
+  关键数字表 + 证据强度审计 + 核心结论），再附交付物清单表与校验结果一句。只回"已落盘，路径在 X"
+  会被判交付不完整。

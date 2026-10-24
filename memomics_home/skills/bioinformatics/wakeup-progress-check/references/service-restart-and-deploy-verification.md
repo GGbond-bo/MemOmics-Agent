@@ -14,7 +14,7 @@
 
 | PID | 角色 | 线程 | RSS | 监听 | 父进程 | 启动 |
 |---|---|---|---|---|---|---|
-| **43864** | **真实对外服务** | 56 | 382.1 MB | **login-host:22** | 54408（python） | 10-01 00:04:16 |
+| **43864** | **真实对外服务** | 56 | 382.1 MB | **127.0.0.1:8899** | 54408（python） | 10-01 00:04:16 |
 | 54408 | **包装壳**（start.bat 起的） | **1** | **1.2 MB** | **无** | 25376（cmd.exe） | 10-01 00:04:16 |
 
 判据（不要靠 cmdline 猜）：
@@ -157,5 +157,5 @@ ls -l results/<sid>/scripts/*.py \
       "memomics_home/skills/bioinformatics/wakeup-progress-check/scripts/"*.py 2>&1 | head -20
 ```
 
-→ 可复用脚本一律从 skill 目录调用：`python "<安装目录>"`。
+→ 可复用脚本一律从 skill 目录调用：`python "<安装目录>/memomics_home/skills/bioinformatics/wakeup-progress-check/scripts/<脚本>"`。
 → 首查 0 命中 ≠ 不存在（SKILL.md 陷阱 C5）：**两个位置都 `ls` 过**才可以对外说「不存在」。

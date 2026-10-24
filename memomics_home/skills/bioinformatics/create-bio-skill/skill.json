@@ -1,288 +1,87 @@
 {
-  "id": "create-bio-skill",
-  "name": "生信Skill自动创建器",
-  "category": "meta",
-  "language": "Python",
-  "description": "当 skill_view 返回 not found 或用户指定了特定包时触发。自动查询官方文档+文献，按 BioMinI/MemOmics 标准格式创建新的生信 skill（含 SKILL.md + 脚本模板 + skill.json + 强制规则）。创建后立即注册到 SOUL.md，立即可用。",
-  "triggers": [
-    "创建skill",
-    "新建skill",
-    "生成技能",
-    "创建技能",
-    "skill不存在",
-    "not found",
-    "没有这个skill",
-    "找不到skill",
-    "creat-bio-skill",
-    "create skill",
-    "new skill",
-    "skill not found",
-    "生成新skill",
-    "新建分析skill",
-    "创建分析skill"
-  ],
-  "tools": [
-    "web_search",
-    "web_extract",
-    "search_papers_by_context",
-    "download_pdf",
-    "extract_params_from_pdf",
-    "write_file",
-    "skill_view",
-    "skill_manage",
-    "terminal"
-  ],
-  "python_requires": [],
-  "r_requires": [],
-  "steps": [
-    {
-      "name": "查询官方文档",
-      "description": "web_search + web_extract 查询包的官方文档首页、API 参考、教程/vignette（至少 3 个页面）"
-    },
-    {
-      "name": "查文献",
-      "description": "search_papers_by_context 搜索相关文献，download_pdf + extract_params_from_pdf 提取方法参数"
-    },
-    {
-      "name": "生成 SKILL.md",
-      "description": "按 BioMinI 标准格式生成 SKILL.md（含 7 条强制规则 + Pipeline + Parameters + Proven Scripts + Common Issues + References）"
-    },
-    {
-      "name": "生成脚本模板",
-      "description": "生成 R/Python 脚本模板（含审查辩论铁律注释块 + 图片空白/NA 检查规则）"
-    },
-    {
-      "name": "生成 skill.json",
-      "description": "在同目录下创建 skill.json（含 triggers/tools/steps/proven_params），确保 skill_evolution.record_run 可写入 proven_params"
-    },
-    {
-      "name": "写入 skill 库",
-      "description": "用 write_file 写入 skills/bioinformatics/<skill-name>/ 目录"
-    },
-    {
-      "name": "注册到 SOUL.md",
-      "description": "在 SOUL.md 技能匹配表的 AUTO_SKILL_INSERT_MARKER 上方插入新行，确保后续分析可自动匹配"
-    },
-    {
-      "name": "验证",
-      "description": "调用 skill_view 确认新 skill 可加载，调用 verify_registration 确认 SOUL.md 已注册"
-    }
-  ],
-  "parameters": {
-    "steps": "查询官方文档 → 查文献 → 生成 SKILL.md → 生成脚本 → 生成 skill.json → 写入 skill 库 → 注册 SOUL.md → 验证",
-    "note": "绝对不能凭记忆创建 skill — 必须查官方文档 + 文献。创建后立即可用。"
+ "id": "create-bio-skill",
+ "name": "生信Skill自动创建器",
+ "category": "meta",
+ "language": "Python",
+ "description": "当 skill_view 返回 not found 或用户指定了特定包时触发。自动查询官方文档+文献，按 BioMinI/MemOmics 标准格式创建新的生信 skill（含 SKILL.md + 脚本模板 + skill.json + 强制规则）。创建后立即注册到 SOUL.md，立即可用。",
+ "triggers": [
+  "创建skill",
+  "新建skill",
+  "生成技能",
+  "创建技能",
+  "skill不存在",
+  "not found",
+  "没有这个skill",
+  "找不到skill",
+  "creat-bio-skill",
+  "create skill",
+  "new skill",
+  "skill not found",
+  "生成新skill",
+  "新建分析skill",
+  "创建分析skill"
+ ],
+ "tools": [
+  "web_search",
+  "web_extract",
+  "search_papers_by_context",
+  "download_pdf",
+  "extract_params_from_pdf",
+  "write_file",
+  "skill_view",
+  "skill_manage",
+  "terminal"
+ ],
+ "python_requires": [],
+ "r_requires": [],
+ "steps": [
+  {
+   "name": "查询官方文档",
+   "description": "web_search + web_extract 查询包的官方文档首页、API 参考、教程/vignette（至少 3 个页面）"
   },
-  "when_to_use": "当 skill_view 返回 not found 且没有相似 skill，或用户指定了特定包需要创建新 skill 时触发",
-  "proven_params": [
-    {
-      "species": "",
-      "tissue": "",
-      "direction": "",
-      "script": "probe_github_repo.sh",
-      "params": "",
-      "date": "2026-08-28",
-      "score": 8,
-      "auto_score": 0.0,
-      "approved": false,
-      "custom_script": false,
-      "result": "确认 MGI-tech-bioinformatics/DNBelab_C_Series_HT_scRNA-analysis-software 仓库存在（官方 DNBelab C 系列单细胞分析 pipeline），version2.0 分支可用；skill 库无同功能 skill，可创建新 skill"
-    },
-    {
-      "species": "",
-      "tissue": "",
-      "direction": "",
-      "script": "clone_dnb_repo.sh",
-      "params": "",
-      "date": "2026-08-28",
-      "score": 8,
-      "auto_score": 0.0,
-      "approved": false,
-      "custom_script": false,
-      "result": "批量 curl 下载文档失败（超时），策略改为 git clone --depth 1 -b version2.0 整仓拉取，一次解决所有文档获取"
-    },
-    {
-      "species": "",
-      "tissue": "",
-      "direction": "",
-      "script": "investigate_dnb_docs.sh",
-      "params": "",
-      "date": "2026-08-28",
-      "score": 9,
-      "auto_score": 0.0,
-      "approved": false,
-      "custom_script": false,
-      "result": "dnbc4tools 文档调查完成：①rna mkref=STAR 2.7.2b genomeGenerate（自动 genomeSAindexNbases/genomeChrBinNbits），输出 ref.json+Genome/SA/SAindex；②atac mkref=chromap 0.2.6（输出 genome.index/tss.bed/promoter.bed/chrom.siz"
-    },
-    {
-      "species": "",
-      "tissue": "",
-      "direction": "",
-      "script": "verify_skill_trigger.py",
-      "params": "",
-      "date": "2026-08-28",
-      "score": 7,
-      "auto_score": 0.0,
-      "approved": false,
-      "custom_script": false,
-      "result": "verify_skill_trigger.py 首次调用因工作目录 /tmp/dnb_repo_v2 找不到 memomics_home/SOUL.md 报 FileNotFoundError，需 cd 项目根或传 --soul-path 绝对路径"
-    },
-    {
-      "species": "",
-      "tissue": "",
-      "direction": "",
-      "script": "create_dnbc4tools_skill.sh",
-      "params": "",
-      "date": "2026-08-28",
-      "score": 9,
-      "auto_score": 0.0,
-      "approved": false,
-      "custom_script": false,
-      "result": "dnbc4tools-index-building skill 创建完成并通过全部门禁：官方文档调查（GitHub version2.0 分支）=STAR 2.7.2b + chromap 0.2.6 双索引构建；SKILL.md+skill.json+run_mkref.sh 齐备；SOUL.md 注册 11 关键词 RED 必触发；意图测试 6/6 命中；frontmatter 校验全过。注意"
-    },
-    {
-      "species": "",
-      "tissue": "",
-      "direction": "",
-      "script": "verify_skill_json.py",
-      "params": "",
-      "date": "2026-08-28",
-      "score": 8,
-      "auto_score": 0.0,
-      "approved": false,
-      "custom_script": false,
-      "result": "skill.json JSON 校验通过（合法+6 键齐全），SKILL.md/run_mkref.sh 路径存在；准备跑 pytest 确认 skill 创建不破坏项目"
-    },
-    {
-      "species": "",
-      "tissue": "",
-      "direction": "",
-      "script": "pytest -m offline",
-      "params": "",
-      "date": "2026-08-28",
-      "score": 8,
-      "auto_score": 0.0,
-      "approved": false,
-      "custom_script": false,
-      "result": "webui/tests 存在，.venv 正常。skill 创建只改了 memomics_home/skills/（含 SKILL.md/skill.json/scripts），不涉及 webui/server.py 或 hermes-agent/tools/ 核心代码，跑离线 pytest 确认无破坏"
-    },
-    {
-      "species": "",
-      "tissue": "",
-      "direction": "",
-      "script": "pytest offline",
-      "params": "",
-      "date": "2026-08-28",
-      "score": 8,
-      "auto_score": 0.0,
-      "approved": false,
-      "custom_script": false,
-      "result": "git status 确认本次改动仅 memomics_home/skills/bioinformatics/dnbc4tools-index-building/ 新建 + SOUL.md/SKILLS_INDEX.md 注册行；其余 Modified/Untracked 均为历史既有文件。下一步复核 test_frontend_ux 失败是否预先存在"
-    },
-    {
-      "species": "",
-      "tissue": "",
-      "direction": "",
-      "script": "pytest frontend_ux",
-      "params": "",
-      "date": "2026-08-28",
-      "score": 8,
-      "auto_score": 0.0,
-      "approved": false,
-      "custom_script": false,
-      "result": "失败根因定位：test_single_script_block 断言 index.html 仅 1 个 <script> 块，实际 2 个（I18N 界面语言脚本 + 主脚本）。git 确认 webui/ 目录零改动→该失败为本轮改动之前即存在的预先失败，与 skill.json 创建零交集。本次改动全部位于 memomics_home/skills/（SKILL.md/skill.json/scri"
-    },
-    {
-      "species": "",
-      "tissue": "",
-      "direction": "",
-      "script": "clone_dnb_v213.sh",
-      "params": "",
-      "date": "2026-08-28",
-      "score": 0.0,
-      "auto_score": 0.0,
-      "approved": false,
-      "custom_script": false,
-      "result": "尝试 git clone --depth 1 -b 2.1.3 拉取 DNBelab 仓库失败：proxy 127.0.0.1 无法连接 github.com:443（Could not connect to server）。之前 00:36 版本2.0分支 clone 成功，说明网络/代理状态可能变化。需排查代理或换源。"
-    },
-    {
-      "species": "human",
-      "tissue": "",
-      "direction": "",
-      "script": "inspect_github_repo.sh",
-      "params": "curl -sL raw.githubusercontent.com/huangwb8/ChineseResearchLaTeX/main/README.md",
-      "date": "2026-10-12",
-      "score": 8,
-      "auto_score": 0.0,
-      "approved": false,
-      "custom_script": false,
-      "result": "只读探查外部项目用于新建 skill：确认 huangwb8/ChineseResearchLaTeX（中国科研常用 LaTeX 模板集 v4.1.1，MIT），含 NSFC 青年C/面上/地区、广东省/广西基金、SCI论文(paper-sci-01/paper-coverletter-01)、学位论文(thesis-ahnu-master)/博士后(cas-postdoc)模板，自带 Agent"
-    },
-    {
-      "species": "",
-      "tissue": "",
-      "direction": "",
-      "script": "inspect_github_repo.sh",
-      "params": "curl GitHub API contents + raw README(150-460)",
-      "date": "2026-10-12",
-      "score": 8,
-      "auto_score": 0.0,
-      "approved": false,
-      "custom_script": false,
-      "result": "ChineseResearchLaTeX v4.1.1 结构探明：projects/(NSFC_Young/General/Local、GDNSF、GXNSF、paper-sci-01、paper-coverletter-01、thesis-*(安师大/国科大/哈工大/吉农/江科大/江西理工/南大/西北大/南方医/中山/西电)、cv-01)；packages/(bensz-nsfc、bensz-p"
-    },
-    {
-      "species": "",
-      "tissue": "",
-      "direction": "",
-      "script": "install_chinese_research_latex.sh",
-      "params": "bash install_chinese_research_latex.sh (github openssl -> gitee -> tarball)",
-      "date": "2026-10-12",
-      "score": 7,
-      "auto_score": 0.0,
-      "approved": false,
-      "custom_script": false,
-      "result": "规避 rm -rf 安全门禁：改为写安装脚本（独立目录 CRL_gh/CRL_gitee/CRL_tar，成功后 mv 到 CRL），三级回退 GitHub(openssl)→Gitee→tarball，克隆到 <安装目录>"
-    }
-  ],
-  "proven_script": "install_chinese_research_latex.sh",
-  "error_count": 2,
-  "success_count": 13,
-  "user_prefs": {
-    "last_used_script": "install_chinese_research_latex.sh"
+  {
+   "name": "查文献",
+   "description": "search_papers_by_context 搜索相关文献，download_pdf + extract_params_from_pdf 提取方法参数"
   },
-  "errors": [
-    {
-      "timestamp": "2026-08-28 00:35",
-      "error_type": "timeout",
-      "message": "批量 curl raw.githubusercontent.com 下载文档超时（exit 124），循环内文件未生成",
-      "root_cause": "GitHub raw 单个文件逐个 curl 慢；循环连接导致总超时",
-      "fix_applied": "改用 git clone --depth 1 -b version2.0 一次性拉取整个仓库",
-      "species": "",
-      "tissue": "",
-      "script": "",
-      "severity": "medium"
-    },
-    {
-      "timestamp": "2026-08-28 00:36",
-      "error_type": "safety_block",
-      "message": "rm -rf 删除操作被安全防护拦截（exit 2），且命令含 rm 触发确认机制",
-      "root_cause": "命令中 rm -rf 被平台安全层识别为删除操作需要确认",
-      "fix_applied": "去掉 rm -rf，改用唯一目录名 dnb_repo_v2 直接 git clone",
-      "species": "",
-      "tissue": "",
-      "script": "",
-      "severity": "medium"
-    }
-  ],
-  "trigger_keywords": [
-    "安装",
-    "创建skill",
-    "没有这个工具",
-    "新工具",
-    "做一个skill",
-    "建个skill",
-    "没有对应的skill",
-    "create-bio-skill"
-  ],
-  "trigger_level": "RED"
+  {
+   "name": "生成 SKILL.md",
+   "description": "按 BioMinI 标准格式生成 SKILL.md（含 7 条强制规则 + Pipeline + Parameters + Proven Scripts + Common Issues + References）"
+  },
+  {
+   "name": "生成脚本模板",
+   "description": "生成 R/Python 脚本模板（含审查辩论铁律注释块 + 图片空白/NA 检查规则）"
+  },
+  {
+   "name": "生成 skill.json",
+   "description": "在同目录下创建 skill.json（含 triggers/tools/steps/proven_params），确保 skill_evolution.record_run 可写入 proven_params"
+  },
+  {
+   "name": "写入 skill 库",
+   "description": "用 write_file 写入 skills/bioinformatics/<skill-name>/ 目录"
+  },
+  {
+   "name": "注册到 SOUL.md",
+   "description": "在 SOUL.md 技能匹配表的 AUTO_SKILL_INSERT_MARKER 上方插入新行，确保后续分析可自动匹配"
+  },
+  {
+   "name": "验证",
+   "description": "调用 skill_view 确认新 skill 可加载，调用 verify_registration 确认 SOUL.md 已注册"
+  }
+ ],
+ "parameters": {
+  "steps": "查询官方文档 → 查文献 → 生成 SKILL.md → 生成脚本 → 生成 skill.json → 写入 skill 库 → 注册 SOUL.md → 验证",
+  "note": "绝对不能凭记忆创建 skill — 必须查官方文档 + 文献。创建后立即可用。"
+ },
+ "when_to_use": "当 skill_view 返回 not found 且没有相似 skill，或用户指定了特定包需要创建新 skill 时触发",
+ "trigger_keywords": [
+  "安装",
+  "创建skill",
+  "没有这个工具",
+  "新工具",
+  "做一个skill",
+  "建个skill",
+  "没有对应的skill",
+  "create-bio-skill"
+ ],
+ "trigger_level": "RED"
 }

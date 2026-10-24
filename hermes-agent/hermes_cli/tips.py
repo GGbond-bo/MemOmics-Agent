@@ -380,7 +380,7 @@ TIPS = [
     "HERMES_TUI_THEME=light|dark|<hex> forces the TUI theme on terminals that don't set COLORFGBG.",
     'Ctrl+G or Ctrl+X Ctrl+E in the TUI opens the input buffer in $EDITOR for long multi-line prompts.',
     'The TUI renders LaTeX inline — $E=mc^2$ becomes Unicode math instead of raw TeX.',
-    'hermes dashboard launches a local web UI at login-host:22 — zero data leaves localhost.',
+    'hermes dashboard launches a local web UI at 127.0.0.1:9119 — zero data leaves localhost.',
     'hermes dashboard embeds the full Hermes TUI in your browser via xterm.js and a WebSocket PTY.',
     'Drop a YAML in ~/.hermes/dashboard-themes/ with two palette colors to reskin the entire dashboard.',
     'Dashboard plugins are drop-in: manifest.json + JS bundle in ~/.hermes/dashboard-plugins/ — no npm build required.',

@@ -119,7 +119,6 @@ dev = text_bbox_center_y - ax.transData.transform((LX, (y0+y1)/2))[1]
 - 标签定位：墨迹色（`#222222`）在条带外侧 x 区间取行 band → ink bbox
 - 判据：`|标签 band 中心 − 条带中心| ≤ 3 px`、**`节点高 ≥ 1.5 × 标签字高`**、相邻条带 0 重叠
 - **A/B 量旧版备份**，把"修复前 → 修复后"的像素数字一起报（本例 34→54 px、1.00→1.59）
-- 可复跑探针 → `scripts/render_pixel_audit.py`；完整配方与实测数字 → `references/sankey-node-layout-and-bandwidth.md`
 
 ⚠️ 右列若节点条与色带**同色**（本例 `cmap[3]` 两者共用），必须在条带自身 x 范围取样
 （色带在 `RX−NODE_W` 处已收敛 → 条带中线处只有条带，不会被色带污染）。
@@ -133,7 +132,6 @@ dev = text_bbox_center_y - ax.transData.transform((LX, (y0+y1)/2))[1]
 
 ## 配套文件
 
-- `references/sankey-node-layout-and-bandwidth.md` — 四个铁律的完整推导、全部实测数字（含 gap 负高度案例链、MIN_H 守恒证明、放大倍数表）、以及"用户说不对齐但中心实测 0.5 px"的排查顺序
 - `scripts/render_pixel_audit.py` — 可直接复跑：从 PNG 里找条带列与标签 band，输出逐项中心偏差 / 高度比 / 重叠对数（不需要脚本任何变量）
 
 ## 交叉参考

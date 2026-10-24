@@ -17,7 +17,7 @@ on:
       release_tag:
         description: '测试哪个 Release 的 Linux 完整包'
         required: false
-        default: 'v2026-09-01'
+        default: 'v2026-09-10'
   push:
     paths:
       - '.github/workflows/linux-install-test.yml'
@@ -30,7 +30,7 @@ jobs:
     steps:
       - name: Download Linux full package
         run: |
-          RELEASE_TAG="${{ github.event.inputs.release_tag || 'v2026-09-01' }}"
+          RELEASE_TAG="${{ github.event.inputs.release_tag || 'v2026-09-10' }}"
           curl -fsSL -o pkg.tar.gz \
             "https://github.com/GGbond-bo/MemOmics-Agent/releases/download/${RELEASE_TAG}/MemOmics-Linux.tar.gz"
           tar -xzf pkg.tar.gz
@@ -48,14 +48,14 @@ jobs:
           nohup ./start.sh 8899 > boot.log 2>&1 &
           BOOTED=0
           for i in $(seq 1 180); do
-            if curl -fsS -o /dev/null --max-time 5 http://login-host:22/ 2>/dev/null; then BOOTED=1; break; fi
+            if curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:8899/ 2>/dev/null; then BOOTED=1; break; fi
             sleep 5
           done
           echo "SERVER_BOOTED=$BOOTED"
           if [ "$BOOTED" != "1" ]; then echo '--- boot.log tail ---'; tail -80 boot.log; exit 1; fi
           echo '--- boot.log key lines ---'
           grep -E 'Miniconda ready|Found:|venv created|Dependencies ready|OCR ready|START|核心依赖就绪' boot.log | head -12
-          curl -sS -o /dev/null -w 'root HTTP %{http_code}\n' http://login-host:22/
+          curl -sS -o /dev/null -w 'root HTTP %{http_code}\n' http://127.0.0.1:8899/
           .venv/bin/python --version
       - name: Upload boot log on failure
         if: failure()
@@ -80,7 +80,7 @@ jobs:
 
       - name: Download Linux full package
         run: |
-          RELEASE_TAG="${{ github.event.inputs.release_tag || 'v2026-09-01' }}"
+          RELEASE_TAG="${{ github.event.inputs.release_tag || 'v2026-09-10' }}"
           curl -fsSL -o pkg.tar.gz \
             "https://github.com/GGbond-bo/MemOmics-Agent/releases/download/${RELEASE_TAG}/MemOmics-Linux.tar.gz"
           tar -xzf pkg.tar.gz
@@ -109,23 +109,23 @@ jobs:
       - name: Boot server (core-only, no OCR)
         run: |
           cd MemOmics
-          export MEMOMICS_HOME="$PWD/memomics_home"
+          export HERMES_HOME="$PWD/hermes_home"
           export MEMOMICS_PORT=8899
           export PYTHONPATH="$PWD:$PWD/hermes-agent"
           # 首启配置
-          if [ ! -f "$MEMOMICS_HOME/config.yaml" ] && [ -f "$MEMOMICS_HOME/config.yaml.example" ]; then
-            cp "$MEMOMICS_HOME/config.yaml.example" "$MEMOMICS_HOME/config.yaml"
+          if [ ! -f "$HERMES_HOME/config.yaml" ] && [ -f "$HERMES_HOME/config.yaml.example" ]; then
+            cp "$HERMES_HOME/config.yaml.example" "$HERMES_HOME/config.yaml"
           fi
           nohup .venv/bin/python webui/server.py > server.log 2>&1 &
           BOOTED=0
           for i in $(seq 1 90); do
-            if curl -fsS -o /dev/null --max-time 5 http://login-host:22/ 2>/dev/null; then BOOTED=1; break; fi
+            if curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:8899/ 2>/dev/null; then BOOTED=1; break; fi
             sleep 5
           done
           echo "SERVER_BOOTED=$BOOTED"
           if [ "$BOOTED" != "1" ]; then tail -60 server.log; exit 1; fi
-          curl -sS -o /dev/null -w 'root HTTP %{http_code}\n' http://login-host:22/
-          curl -sS --max-time 15 http://login-host:22/api/update/check | head -c 200; echo
+          curl -sS -o /dev/null -w 'root HTTP %{http_code}\n' http://127.0.0.1:8899/
+          curl -sS --max-time 15 http://127.0.0.1:8899/api/update/check | head -c 200; echo
           echo '--- server log: OCR/vision 降级提示（无 rapidocr 不崩）---'
           grep -iE 'ocr|vision|rapid' server.log | head -5 || echo '(无 OCR 相关日志 = 静默降级)'
           echo '--- server log tail ---'

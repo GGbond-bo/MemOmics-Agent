@@ -2,13 +2,13 @@
 # terminal_session_fingerprint.sh
 # 终态会话「非进程类」唤醒指纹 —— 一条命令取全，守 E6「round 内 terminal ≤1 条」。
 #
-# 适用：文献 / 交付物 / 专利 类会话（没有 Rscript/python 分析进程，Step 3 的进程源与 GPU 源
+# 适用：文献 / 交付物 / 知识产权 类会话（没有 Rscript/python 分析进程，Step 3 的进程源与 GPU 源
 #       全是空跑，为"凑三源"去跑 nvidia-smi/tasklist 只会白烧 token + 触发循环检测）。
 # 取三源：① 唤醒源（loopx registry + task_state）② 载体指纹（核心产物 md5）
 #        ③ 交付物字节 + mtime，外加「晚于 task_plan mtime 的未记账候选」。
 #
 # 用法: bash terminal_session_fingerprint.sh <会话目录> [载体相对路径] [交付目录]
-#   bash terminal_session_fingerprint.sh <安装目录> data/cards.json deliverables
+#   bash terminal_session_fingerprint.sh <安装目录>/results/memomics-xxxx data/cards.json deliverables
 #
 # 判读：md5 同值（记"第 N 次同值"）+ 交付物字节/时间戳全同 + 无未记账产出 ⇒ 零写入收敛轮。
 

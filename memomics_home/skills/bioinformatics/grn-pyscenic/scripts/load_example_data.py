@@ -233,5 +233,4 @@ if __name__ == "__main__":
 
     print("\nExample data ready for pySCENIC workflow!")
     print("Next steps:")
-    print("  1. Download cisTarget databases (see references/database_downloads.md)")
     print("  2. Run: python scripts/run_grn_workflow.py")

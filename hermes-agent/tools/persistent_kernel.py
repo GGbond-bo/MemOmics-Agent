@@ -577,7 +577,7 @@ class _SessionKernelPool(KernelPool):
             # 2026-09-24 真机事故（11c-go-9000 / sid memomics-6cb793a7）：这里只注入
             # environment.json 的 lib_user（E:/R-libs/R-4.5.3）就 return 了，于是持久 kernel
             # 的 .libPaths() 只剩「主力库 + R 自带」两项 —— clusterProfiler 这类装在用户自建库
-            # （<用户目录>，在 execute_r 里一律
+            # （<用户目录>\R\R-4.5.3-library）里的包，在 execute_r 里一律
             # "there is no package called 'clusterProfiler'"；而同一个包用 check_env 走的
             # memomics._r_lib_env()（候选库 11 个）明明能找到。
             # docs/ENVIRONMENT_MANAGEMENT.md 说两处"完全同一个 R_LIBS"，实测并不是。

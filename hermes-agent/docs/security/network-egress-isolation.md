@@ -87,7 +87,7 @@ services:
       - internal
       - egress              # needs outbound for Telegram, LLM APIs
     ports:
-      - "login-host:22:9119"   # dashboard proxy, localhost only
+      - "127.0.0.1:9119:9119"   # dashboard proxy, localhost only
 
   dashboard:
     network_mode: ""
@@ -131,7 +131,7 @@ services:
     networks:
       - egress
     volumes:
-      - ./config/squid-allowlist.conf:/etc/squid/conf.d/allowlist.conf:ro
+      - ./config/squid-allowlist.con/data/etc/squid/conf.d/allowlist.conf:ro
     restart: unless-stopped
 ```
 

@@ -11,13 +11,12 @@
 #
 # INPUT  : data/<x>.csv  — first column = row names (GO term), header row = clusters,
 #                          cells = abs(-log10 q) clipped to 0-10, 0 = term absent.
-#          Build it with references/term-selection-worksheet.md's recipe.
 # OUTPUT : figures/<tag>.{png,pdf,svg}   (svg text is OUTLINED by R's svg() device —
 #          switch to svglite::svglite() if the user needs editable text objects)
 # =============================================================================
 
 suppressMessages({library(pheatmap); library(grid); library(gtable)})
-setwd("<安装目录>")           # <-- edit
+setwd("<安装目录>/results/<session_dir>")           # <-- edit
 
 m <- as.matrix(read.csv("data/<matrix>.csv", row.names = 1, check.names = FALSE))
 cat("dim:", dim(m), "\n")                                  # sanity: rows x cols

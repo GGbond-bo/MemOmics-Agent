@@ -118,5 +118,4 @@ category: bioinformatics
 
 - `dcs-cloud` —— 云平台开工前确认协议（项目 / 数据 / 参数 / 费用）、`/Files` vs `/work` vs 本机三套路径
 - `remote-cluster-execution` —— 远端集群 `push` / `pull` 与作业投递
-- `references/download-failure-diagnosis.md` —— 实测证据链与完整排查记录
 - `scripts/probe_transfer_artifacts.py` —— 一键探测目标端残件与剩余空间

@@ -682,7 +682,7 @@ def stop_kernel_by_id(kernel_id: str) -> dict:
 
 # ---------------- 用户决策（2026-10-18）----------------
 INTERACTIVE_IDLE_SEC = 6 * 3600     # 决策1：6 小时不动自动结束
-LOGIN_NODE_PATTERNS = ("login", "cluster-login")   # 决策3：登录节点禁止跑重分析
+LOGIN_NODE_PATTERNS = ("login", "cngb-login")   # 决策3：登录节点禁止跑重分析
 
 
 def is_login_node(host: str) -> bool:

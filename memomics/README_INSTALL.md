@@ -135,7 +135,7 @@ remote:
   enabled: true
   host: cluster.example.edu
   user: yourname
-  key: C:/Users/you/.ssh/id_ed25519   # 只支持密钥登录（BatchMode，不弹密码）
+  key: <用户目录>/.ssh/id_ed25519   # 只支持密钥登录（BatchMode，不弹密码）
   workdir: /home/yourname/memomics
   scheduler: auto                      # auto | slurm | pbs | none
 ```

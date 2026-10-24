@@ -22,8 +22,8 @@
 示例
 ----
     python render_slide_previews.py \
-        <安装目录> \
-        <安装目录>
+        <安装目录>/results/<sid>/reports/deck.html \
+        <安装目录>/results/<sid>/figures
 
 约定
 ----

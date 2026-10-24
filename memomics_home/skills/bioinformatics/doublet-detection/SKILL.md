@@ -97,5 +97,4 @@ prerequisites:
 
 ## 参考
 
-- `references/doublet-detection-multisample.md` — 完整配方：导出 counts 的 R 片段、Python scrublet 与 R-4.4.2 scDblFinder 两条可跑脚本模板、按样本/组/簇的判读细节、交付与报告口径
 - 配套：`scrna-qc`（质控总流程，其 Pipeline 第 4 步即本步骤）、`platform-execution-pitfalls`（门禁/包探测/审查口径）

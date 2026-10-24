@@ -9,7 +9,7 @@ lifecycle instead of read-only search endpoints.
 
 Config via environment variables (profile-scoped via each profile's .env)
 or a linked OpenViking CLI config:
-  OPENVIKING_ENDPOINT  — Server URL (default: http://login-host:22)
+  OPENVIKING_ENDPOINT  — Server URL (default: http://127.0.0.1:1933)
   OPENVIKING_API_KEY   — API key (required for authenticated servers)
   OPENVIKING_ACCOUNT   — Tenant account for local/trusted mode (default: default)
   OPENVIKING_USER      — Tenant user for local/trusted mode (default: default)
@@ -53,7 +53,7 @@ from utils import atomic_json_write, env_var_enabled
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_ENDPOINT = "http://login-host:22"
+_DEFAULT_ENDPOINT = "http://127.0.0.1:1933"
 _OPENVIKING_SERVICE_ENDPOINT = "https://api.vikingdb.cn-beijing.volces.com/openviking"
 _DEFAULT_AGENT = "hermes"
 _AGENT_PROMPT_LABEL = "Hermes peer ID in OpenViking"

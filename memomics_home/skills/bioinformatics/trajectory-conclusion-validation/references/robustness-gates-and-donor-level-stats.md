@@ -16,7 +16,7 @@ saveRDS(Embeddings(obj, "umap"), "data/traj_umap.rds")
 
 ```bash
 # ② 用另一个 R 的 Rscript 绝对路径跑 monocle3（bash 里直调，不要 cmd //c 包装）
-"<用户目录>" \
+"C:/Users/<用户>/AppData/Local/R/R-4.4.2/bin/x64/Rscript.exe" \
   "E:/.../scripts/traj_02_monocle3.R" > log/traj_monocle3.log 2>&1
 ```
 

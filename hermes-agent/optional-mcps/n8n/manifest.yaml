@@ -47,7 +47,7 @@ auth:
   env:
     - name: N8N_BASE_URL
       prompt: "n8n instance URL"
-      default: "http://login-host:22"
+      default: "http://127.0.0.1:5678"
       required: true
       secret: false
     - name: N8N_API_KEY

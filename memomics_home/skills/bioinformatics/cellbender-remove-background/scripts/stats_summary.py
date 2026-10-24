@@ -5,7 +5,7 @@ CellBender 前后对比统计表
 读取 h5ad (before) + cellbender_output_filtered.h5 (after)，生成 TSV 对比表。
 
 Usage:
-  python stats_summary.py --h5ad_dir F:/CellBender_v2/h5ad --cb_dir F:/CellBender_v2/cellbender_output --out_dir F:/CellBender_v2/summary
+  python stats_summary.py --h5ad_dir /data/CellBender_v2/h5ad --cb_dir /data/CellBender_v2/cellbender_output --out_dir /data/CellBender_v2/summary
 """
 
 import os, sys, glob, csv, argparse, time

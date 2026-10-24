@@ -90,7 +90,7 @@ _BUILTIN_DELIVER_PLATFORMS = {
 #     was listening on 0.0.0.0 (v4 only) → connection refused.
 #   - "::" is NOT a safe fix: on hosts where the kernel sets IPV6_V6ONLY=1
 #     (verified on Fly machines), binding "::" yields an IPv6-ONLY socket, which
-#     then breaks the IPv4 loopback health check (``curl login-host:22/health``)
+#     then breaks the IPv4 loopback health check (``curl 127.0.0.1:8644/health``)
 #     and the AF_INET port-conflict probe in connect().
 #   - ``None`` asks the event loop to create a listening socket per resolved
 #     family, so both 127.0.0.1 (v4) and the 6PN fdaa (v6) are served regardless

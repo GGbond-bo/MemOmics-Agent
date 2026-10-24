@@ -2,21 +2,21 @@
 name: metascape-gene-list-prep
 version: 1.0
 description: >
-  从 DEG/FindMarkers 结果表构建 Metascape 输入基因列表。按亚群分列、按 avg_log2FC（或 coef）降序取 top-N，
+  从 DEG/FindMarkers 结果表构建 示例分析 输入基因列表。按亚群分列、按 avg_log2FC（或 coef）降序取 top-N，
   输出一列一个亚群的 CSV/TXT（亚群名为列头，基因竖排）。支持上/下调分列（up_/down_ + 亚群）、
   多比较组工作簿一表一组、多表 cbind 合并（如 MF+SMF 合并）。触发词：
-  metascape / 基因列表 / top100 / DEG转Metascape / 按亚群取基因 / 合并Metascape表 /
+  metascape / 基因列表 / top100 / DEG转示例分析 / 按亚群取基因 / 合并示例分析表 /
   分出五个比较组的表格 / 各亚群上下调各100个基因。
 category: user-skill
 source: user-requested
 tags: [metascape, deg, gene-list, marker, csv-formatting]
 ---
 
-# Metascape 基因列表构建
+# 示例分析 基因列表构建
 
 ## 使用场景
 
-用户有 FindMarkers / DEG 结果 CSV（含 `cluster`、`gene`、`avg_log2FC` 列），需要构建 Metascape 导入格式的基因列表：
+用户有 FindMarkers / DEG 结果 CSV（含 `cluster`、`gene`、`avg_log2FC` 列），需要构建 示例分析 导入格式的基因列表：
 - 每列 = 一个亚群
 - 列头 = 亚群名
 - 下方 = 该亚群按 `avg_log2FC` 降序排列的 top-N 基因（默认 100）
@@ -91,13 +91,12 @@ metascape_df.to_csv(OUT, index=False, encoding="utf-8-sig")
 
 - 列名 `up_<celltype>` / `down_<celltype>`；列序 = 亚群**字母序**，每亚群 up 在前 down 在后
 - 列内按 `|coef|` 降序（并列按 fdr 升序）取 top-N（默认 100），不足全取；组内先去重（保序）
-- **空列（该亚群该方向无显著基因）不出这一列** —— 只有表头的列会让 Metascape 报噪声/报错
-- 同时出两份：`Metascape_<组>_top100.txt`（tab、utf-8-sig，直接上传）+ 同名 `.xlsx`（用户要打开肉眼检查）
-- 附带 `Metascape_列基因数汇总.csv`（每列取了几个 / 是否取满 / 该列 |coef| 范围）+ `_自检报告.csv`
+- **空列（该亚群该方向无显著基因）不出这一列** —— 只有表头的列会让 示例分析 报噪声/报错
+- 同时出两份：`示例分析_<组>_top100.txt`（tab、utf-8-sig，直接上传）+ 同名 `.xlsx`（用户要打开肉眼检查）
+- 附带 `示例分析_列基因数汇总.csv`（每列取了几个 / 是否取满 / 该列 |coef| 范围）+ `_自检报告.csv`
 - 交付回复必须给**每组列数与基因数范围表**，并主动说明"某组基因少是该对比本身显著基因少，不是漏取"
 
 脚本：`scripts/build_metascape_multi_group.py`（参数化，改顶部常量即可复用）
-本次细节（反查证据、分列数字）：`references/multi-group-workbook-and-example-reverse-check.md`
 
 ## ⚠️ 假基因符号：只处理「确证是残渣」的，别一刀切短符号
 
@@ -116,13 +115,13 @@ metascape_df.to_csv(OUT, index=False, encoding="utf-8-sig")
 6. [ ] **读回磁盘文件再核**（不信内存对象）：列数 / 最长列 / 表头是否 `up_`/`down_` 开头 / 空列 = 0 / 列内重复 = 0 / 各列基因数与预期吻合
 7. [ ] 多组交付时核对总列数 = 各组列数之和（本次 20×4 + 19 = 99），并给用户"组 × 列数 × 基因数范围"表
 
-## 合并多个 Metascape 表格
+## 合并多个 示例分析 表格
 
-用户常有多张 Metascape CSV（如 MF + SMF 两套亚群），需要合并成一张大表再丢 Metascape。
+用户常有多张 示例分析 CSV（如 MF + SMF 两套亚群），需要合并成一张大表再丢 示例分析。
 
 ### ⛔ 关键陷阱：cbind vs rbind（2026-08-22 用户纠正）
 
-Metascape 表格合并 = **cbind（横向合并）**，不是 rbind（纵向拼接）！
+示例分析 表格合并 = **cbind（横向合并）**，不是 rbind（纵向拼接）！
 
 - **cbind（正确）**：`pd.concat([df1, df2], axis=1)` — 列数相加，行数不变
 - **rbind（错误）**：`pd.concat([df1, df2], axis=0)` — 行数相加，列数不变
@@ -130,8 +129,8 @@ Metascape 表格合并 = **cbind（横向合并）**，不是 rbind（纵向拼�
 用户原话纠正："用cbind不就行了吗？你现在SMF的基因都跑102行以下了" — 用 rbind 会导致后表的基因从第 N+1 行开始填入，前面全是空值。
 
 **何时用什么**：
-- 合并两张 Metascape 表（如 MF 10列 + SMF 7列）→ **cbind**（横向合并，17列）
-- Metascape 只需要基因列表，不需要空行填充
+- 合并两张 示例分析 表（如 MF 10列 + SMF 7列）→ **cbind**（横向合并，17列）
+- 示例分析 只需要基因列表，不需要空行填充
 
 ### cbind 合并代码（正确做法）
 
@@ -158,24 +157,53 @@ merged = pd.concat([df1, df2], ignore_index=True)  # axis=0 纵向
 - 列数 = 各表列数之和
 - 每列非空基因数 = min(top_n, 该亚群原始基因数)（无空行）
 
-## Metascape 格式要求
+## 示例分析 格式要求
 
-Metascape 导入格式：
+示例分析 导入格式：
 - 第 1 行 = 列名（自定义，如亚群名）
 - 第 2 行起 = 基因 symbol（每行一个基因）
-- 不需要 p-value / log2FC 列（Metascape 只需基因列表）
+- 不需要 p-value / log2FC 列（示例分析 只需基因列表）
 - 列数不限，每列独立分析
+
+## 基因集（signature）宽表重排与交付（2026-10-21 实战）
+
+用户给一张宽表 xlsx（一行一个 signature，如 `pathway_score_CLEAN_v3.xlsx`）说"内容随便排的，
+按分类所属排列、去掉那两个、改名叫 X"时，按这套走：
+
+- ⛔ **"分类"必须先确认是哪一套**（本会话建立的功能轴 / 原表 `Class` 列 / 别的），确认口径后再动手；
+  把口径写成脚本顶部常量 `AXES = [(轴中文名, 轴英文名, 归类依据, [成员...]), ...]`，并加三条 assert
+  （删掉的集不能还在轴定义 / 不能有集没归轴 / 行数 == 弹窗承诺行数）。
+- ⛔ **宽表列位真相：基因列 = 4..max_column**。第 1 个基因写在 `Genes` **表头底下**，
+  写成 `r[4:]` 会让 200 基因的集少读 1 个。（本次实读基因数与分类表 `n_genes` 逐集相等 → 反证未截断。）
+- ⛔ **验收脚本的列位偏移**：派生表前置 `Axis` 列后所有列位右移 1。忘同步的症状是 `KeyError` 的键为
+  **分类名**（Muscle/Metabolism/Diabete/…）而非签名名 —— 这时是**验收件错、不是产物错**；
+  同轮若已出现"轴序 PASS"就证明产物没问题，**改验收件、不要重跑产物**。
+- **校验 6 项**（读回磁盘）：轴序+行数 / 被删集不在 / 基因**集合**相等 / 基因**顺序**逐位相等
+  （集合相等 ≠ 顺序相等，两条都要）/ `Class`+`Annotation` 未改 / 与分类表 `n_genes` 交叉对齐；
+  再加 **源表 mtime 未变** 证明只读。
+- **不在功能轴体系内的集另立轴，不硬塞进最像的轴**：本次 4 个肌纤维型打分（Type I/II/IIA/IIX）
+  按 fibertype 脚本已写死的口径"身份打分 vs 功能程序轴语义层级不同 → 另立一轴，不并入 Contractile"，
+  另立"肌纤维身份轴"置顶。**凡本会话自己定过的口径优先于现场直觉 —— 先翻既有脚本的注释/常量。**
+- **轴名用哪一套要避开"悬空改名"**：图上 EN 轴名可能处于"用户已定但未落脚本"状态
+  （本次 `Sarcopenia / Inflammaging`）→ 交付表改用分类文件的**中文轴名**可避免表↔图不一致，
+  同时在回复里给出"要不要一次同步两边"的一句话选项。
+- **交付形态**：主 sheet `Axis | Class | Signature | Annotation | Genes…`（原列全保留、`Axis` 插最前、
+  `freeze_panes='D3'`）+ 附 `Axis_legend` 表（轴名/EN 名/n_members/成员/归类依据/参考文献）；
+  源表**只读不动**，新表另存到用户指定路径。
+- **回复形态**：产物路径 + 字节数 + `行×列` + 轴×集数×成员表 + 校验 PASS 清单 + 判断说明。
+  用户会核对文件大小与行数，不要只回"已完成"。
+
+脚本：`scripts/verify_gene_score_table.py`（参数化 6 项校验，可直接跑）
 
 ## 脚本模板
 
-- `scripts/metascape_top100.py` — 单表构建：输入校验 + 手动 CSV writer + 验证输出
+- `scripts/示例分析结果.py` — 单表构建：输入校验 + 手动 CSV writer + 验证输出
 - `scripts/merge_metascape_cbind.py` — 多表 cbind 合并：横向拼接 + 逐列验证非空基因数
 - `scripts/build_metascape_multi_group.py` — 多比较组工作簿 → 每组一张表（`up_`/`down_` + 亚群分列、`|coef|` 降序 top100、空列跳过、txt+xlsx 双出、内置"样板反查"检查）
 
 ## 参考
 
-- Metascape 官网: https://metascape.org
-- `references/multi-group-workbook-and-example-reverse-check.md` — 多组工作簿实战数字 +「用户样板反查」三步法与证据
+- 示例分析 官网: https://metascape.org
 - 用户偏好（按场景分）：**分析过程中的临时脚本直接贴对话**（不写文件、不封装、多解释会被批）；**交付物**（用户要去检查的表/图）必须**落盘到他指定的目录**，并回报文件名 + 字节数 + 列结构。
 
 ## Proven Scripts
@@ -185,3 +213,19 @@ Metascape 导入格式：
 | 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
 |------|------|------|------|------|------|------|----|
 | human | skeletal_muscle | exercise+aging | 2026-09-30 | 23_build_metascape_5groups.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-21 | build_gene_score_table.py | - | - |  |
+
+
+| human | skeletal_muscle | aging | 2026-10-21 | verify_gene_score_table.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-21 | verify_gene_score_table.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-21 | build_gene_score_table.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-21 | build_gene_score_table.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-21 | build_gene_score_table.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-21 | build_gene_score_table.py | - | - |  |
+## Common Issues
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| PermissionError: [Errno 13] Permission denied: 'E: | Windows 下 openpyxl save 直接以 'wb' 打开目标路径， | 先探测文件占用（open(...,'a') 写权限测试），确认被 Excel/WPS 占用后：若确认 |
+| KeyError: 'Muscle'; 剩余 5 | 验收脚本新增 Axis 列后未同步列位，仍按源表 Class/Signature | load() 增加 new 开关：新表前面多一列 Axis，列位右移 1（sig=o+1, cls= |
+

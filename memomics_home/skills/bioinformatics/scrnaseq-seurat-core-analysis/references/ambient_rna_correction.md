@@ -137,8 +137,7 @@ cellbender remove-background \
 ### Python Wrapper
 
 ```python
-from scripts.remove_ambient_rna import run_cellbender
-
+from scripts.
 adata = run_cellbender(
     raw_h5="raw_feature_bc_matrix.h5",
     expected_cells=10000,
@@ -356,8 +355,7 @@ print(f"Average UMI reduction: {reduction_pct:.1f}%")
 
 ## Key References
 
-1. **CellBender**: Fleming SJ, et al. Unsupervised removal of systematic background noise from droplet-based single-cell experiments using CellBender. *bioRxiv*. 2019.
-   - https://github.com/broadinstitute/CellBender
+1. **CellBender**: Fleming SJ, et al. Unsupervised   - https://github.com/broadinstitute/CellBender
 
 2. **SoupX**: Young MD, Behjati S. SoupX removes ambient RNA contamination from droplet-based single-cell RNA sequencing data. *GigaScience*. 2020;9(12):giaa151.
    - https://github.com/constantAmateur/SoupX

@@ -8,7 +8,9 @@ description: 系统唤醒/进度询问时的任务状态核查规程。定位活
 ## 何时触发
 
 - 🔴 **挂起项先「前提证伪」再追问**：登记「待用户给 DOI/篇名/路径」前先在本地确定性找一遍——有 PDF 时 `pymupdf` 读 `doc.metadata`（Springer 的 DOI 在 `subject`）即可自证；证伪后**仍禁**在回复里重列待决项；串扫描是**语义**规则不是词表（`等你一句话`/`二选一` 同属违规）。→ `references/pending-item-premise-audit.md`
-- 🔴 **零 delta tick ≥5 轮 → 自行暂停 LoopX**（同值判据 + registry 双改 `paused`+`quota.compute:0`；可逆不必等点头；⛔ 有 in_progress/后台进程/未核销回执不可停；`.loopx/` 须 `find`；task_plan 改前读全防缩进漂移）→ `references/loopx-noop-tick-escalation.md` · 🔴 **暂停后还有两件收尾**：① **验根** —— 读回 JSON ≠ 停成（`waiting`/`cleared` 会被放行），必须跑一次 `LoopXBridge.should_run()`，为 False 即判「暂停有效」（§3-b）；唤醒头 `📊 LoopX 状态` 块写 `goal: active`、或暂停后仍收到 tick，**都不是「没停成」的证据**（头字段是注入的渲染摘要）⇒ 回读 registry 复核即可，⛔ 不重复暂停；② **报告骨架里的 `【仍挂起】` 行已删除** —— 照它写就必然踩 `delegation-orchestration` 4-b 的「挂起项重列 + 邀约句」违规（本会话实测照此发出），待决项只进 `notes.md`，发前跑 `replay_reply_lint.py --ledger`
+  · ⛔ **证伪须「绑定校验」**：ID 要回绑到**目标条目本人**才算「输入已备」——只 grep 到一个 ID 就登记「已备」，会拿别的文档的 ID 冒充（实测把主论文 DOI 误记成缺件 DOI，错判存活 6+ 轮）。判据：「凭什么说这 ID 是它的？」→ §1-b
+  · 🔴 **「第 N 个缺件」先反解编号**：`n` 常是池子列表位置 ⇒ 用**全部已确认条目**做「位置↔ID」校验，反解真身 + 判体裁（无 abstract/type、oa=N ⇒ 新闻稿，不做卡）+ 输出未做件全清单，把「补不补第 N 张」升级为「补哪几篇」。→ §5
+- 🔴 **零 delta tick ≥5 轮 → 自行暂停 LoopX**（同值判据 + registry 双改 `paused`+`quota.compute:0`；可逆不必等点头；⛔ 有 in_progress/后台进程/未核销回执不可停；`.loopx/` 须 `find`；task_plan 改前读全防缩进漂移）→ `references/loopx-noop-tick-escalation.md` · 🔴 **暂停后还有两件收尾**：① **验根** —— 读回 JSON ≠ 停成（`waiting`/`cleared` 会被放行），必须跑一次 `LoopXBridge.should_run()`，为 False 即判「暂停有效」（§3-b）；唤醒头 `📊 LoopX 状态` 块写 `goal: active`、或暂停后仍收到 tick，**都不是「没停成」的证据**（头字段是注入的渲染摘要）⇒ 回读 registry 复核即可，⛔ 不重复暂停；② **报告骨架里的 `【仍挂起】` 行已删除** —— 照它写就必然踩 `delegation-orchestration` 4-b 的「挂起项重列 + 邀约句」违规（本会话实测照此发出），待决项只进 `notes.md`，发前跑 `python scripts/replay_reply_lint.py --text-file <草稿>`（**脚本已落地**——此前 tick#22/#24/#27 三轮违规的根因之一就是 SKILL 写着要跑它、它却不存在）
 - ⛔ **零 delta 轮回复：发前禁串扫描（tick#24 同型违规第 2 次）**——结论末尾命中 `待你决定`/`待决定`/`请提供`/`说一句`/`即可恢复`/`仍挂起` 任一 ⇒ **删整段**（禁改写＝换个说法继续邀约）；只留三行核验表 + 「无待办」，待决项仅进 `notes.md`，用户主动问起才列 → `references/zero-delta-reply-discipline.md`
 - 🔴 **零 delta 轮次的回复纪律（2026-10-14 tick#22 亲历：规则明明写着，仍照旧犯）**：三条硬约束 ——
   ① **task_plan 每轮只写 ≤1 行**（`#N 第 N 次同值 → 零写入`）；本轮的结构性发现 / 逐条数字 / 证据指纹**全部进 `notes.md`**，
@@ -20,7 +22,7 @@ description: 系统唤醒/进度询问时的任务状态核查规程。定位活
      返回 1 ⇒ 按提示删整段重跑；0 才发。⛔ 不凭「读一遍觉得干净」发 —— tick#22 正是没跑 linter，把
      「仍需你一句话的两件事：① 32 号卡 DOI ② 是否恢复 LoopX」原样发出，与 4-b 违规史**逐字同形**。
 - 🔴 **`📌 用户最近诉求（本会话）` 记忆块会串会话 —— 先验归属再动手（2026-10-14 实测）**：唤醒 / 回执轮注入的该块
-  可能混入**别的会话**的原话。本轮块内一条「看看 `<安装目录> 有没有 README.md / AGENTS.md，讲讲项目是干什么的」
+  可能混入**别的会话**的原话。本轮块内一条「看看 `<安装目录>` 有没有 README.md / AGENTS.md，讲讲项目是干什么的」
   实为 `memomics-75ba0499` 的诉求（`session_search` 只命中他会话，`search_history` 本会话 0 命中）⇒ 行动前先
   `session_search(query=<该诉求的独有名词>)` 验归属：命中他会话 ⇒ **按铁律 -5 不接管、不代跑**，只在 `notes.md` 记一行，
   ⛔ 不写进回复、更不列成待决项（会与 4-b 的 lint 正面冲突）；0 命中 ⇒ 只能说「本会话无记录」，不等于用户没说过。
@@ -51,11 +53,11 @@ ls -lt results/*/task_plan.md | head -5
 ```
 
 - 💡 **替代命令：`search_files(target='files', pattern='task_plan.md', path='<results根>')`（唤醒 #74 实测 2026-08-09）**：返回值按 mtime 降序（最新在前），一次列出全部 task_plan（本会话 4 个：memomics-1c1890da 最新 → 依次），避开 MSYS `ls -lt` 通配/路径坑；同样以第一条 = 最新 mtime 为准选当前主线。
-- ✅ **显式 E:/ 绝对路径的 `ls -lt` 本机可靠（2026-08-09 skip 唤醒实测）**：`ls -lt <安装目录> 2>/dev/null | head -20` 一次成功列出全部 4 个 task_plan 并按 mtime 降序（memomics-1c1890da 13:20 最新 → 依次）——MSYS 通配/路径坑主要在**相对路径**（`results/*/task_plan.md` 无驱动器前缀）；用显式 `E:/` 驱动器前缀 + 通配符时 `ls -lt` 可直接用，不必绕 search_files。
+- ✅ **显式 E:/ 绝对路径的 `ls -lt` 本机可靠（2026-08-09 skip 唤醒实测）**：`ls -lt <安装目录>/results/*/task_plan.md 2>/dev/null | head -20` 一次成功列出全部 4 个 task_plan 并按 mtime 降序（memomics-1c1890da 13:20 最新 → 依次）——MSYS 通配/路径坑主要在**相对路径**（`results/*/task_plan.md` 无驱动器前缀）；用显式 `E:/` 驱动器前缀 + 通配符时 `ls -lt` 可直接用，不必绕 search_files。
 
 - 多个 task_plan 并存时**取最新 mtime** 作为当前主线。
 - ⛔ 不要假设唤醒消息/记忆里的目录就是活跃任务——以 mtime 为准。
-- 🔴 **磁盘 task_plan 与记忆/会话锚点项目不一致 = 跨项目唤醒（2026-08-15 实测）**：memory + 会话锚点显示用户最近诉求是**人海马 ATAC**（addClusters resolution=0.8 maxClusters=30 → 用户嫌 30 群太多想分 8 群；用户点名文件 `<数据目录> = 那 30 群的 DAR marker 列表），但磁盘唯一 task_plan = **示例组织衰老 10k subset scTour 任务**（不同项目、Phase 4 in_progress）。正确处理：① 不擅自启动旧 task_plan（Session 隔离铁律）② 用 `search_files(target=files, pattern='task_plan.md', path='results根')` 列全部 plan 判归属——本机只有旧任务的 plan，说明新任务未建 plan ③ 用户点名的文件**可能落在不同项目目录**（示例组织锻炼目录下）——用 search_files 全盘确认存在后 read_file 核列头（本机实证：20,327 行，列 = group/group_name/seqnames/start/end/strand/name/idx/Log2FC/FDR/MeanDiff，是带坐标的差异可及区域 marker 表，非普通基因列表）④ 汇报时把「磁盘旧 plan 状态」与「记忆指示的当前诉求」分列，给用户 A/B/C/D 方向菜单选，不猜。**判「旧 plan ≠ 当前项目」的依据 = memory 最近诉求 + 会话锚点 vs 磁盘 plan 的 Goal 标题对比**；两者都是参考，最终方向以用户确认为准。
+- 🔴 **磁盘 task_plan 与记忆/会话锚点项目不一致 = 跨项目唤醒（2026-08-15 实测）**：memory + 会话锚点显示用户最近诉求是**人海马 ATAC**（addClusters resolution=0.8 maxClusters=30 → 用户嫌 30 群太多想分 8 群；用户点名文件 `<数据目录>/human_40_markerList.csv` = 那 30 群的 DAR marker 列表），但磁盘唯一 task_plan = **示例组织衰老 10k subset scTour 任务**（不同项目、Phase 4 in_progress）。正确处理：① 不擅自启动旧 task_plan（Session 隔离铁律）② 用 `search_files(target=files, pattern='task_plan.md', path='results根')` 列全部 plan 判归属——本机只有旧任务的 plan，说明新任务未建 plan ③ 用户点名的文件**可能落在不同项目目录**（示例组织锻炼目录下）——用 search_files 全盘确认存在后 read_file 核列头（本机实证：20,327 行，列 = group/group_name/seqnames/start/end/strand/name/idx/Log2FC/FDR/MeanDiff，是带坐标的差异可及区域 marker 表，非普通基因列表）④ 汇报时把「磁盘旧 plan 状态」与「记忆指示的当前诉求」分列，给用户 A/B/C/D 方向菜单选，不猜。**判「旧 plan ≠ 当前项目」的依据 = memory 最近诉求 + 会话锚点 vs 磁盘 plan 的 Goal 标题对比**；两者都是参考，最终方向以用户确认为准。
 - ⛔ 不要抄旧编号从 0 重计：终态任务（completed/等用户指示）不重启。
 - **唤醒记录编号以 task_plan 实际已有为准，消息头 #N 不作数（2026-08-09 实测）**：消息标"[系统唤醒 #1]"但
   task_plan 已含"唤醒 #1 完成 P3-P6"+"唤醒 #2 终态确认" → 本次实际是 #3。取最大号：read_file 全文人工数
@@ -186,7 +188,7 @@ task_plan 说"已完成"但可能是上次 Agent 的乐观记录。
 | 首查（错） | 实况 | 正确检索 |
 |---|---|---|
 | `ls 技术交底书_…_v15*bak*`（假设**后缀**式备份名） | 备份真名 = **前缀**式 `_bak_v15_before_fig1_regen_180347.docx` | `ls -1 \| grep -i bak` / `find . -name "*bak*"` |
-| `<数据目录> | 真实在两处：`<数据目录> **与** `<数据目录> | `find . -maxdepth 3 -type d -name "*figures*"` 先探布局 |
+| `E:/知识产权/figures_bw`（假设图目录在项目根） | 真实在两处：`E:/知识产权/patent/figures_bw/` **与** `E:/知识产权/交付_…/figures_bw/` | `find . -maxdepth 3 -type d -name "*figures*"` 先探布局 |
 
 → **规则**：① 复核自己/上一轮产物时**先用子串 + `find` 全树定位**（`ls -1 \| grep -i <关键词>`、`find <根> -name "*<子串>*"`），**别照抄记忆里或上一轮叙述里的路径写法**——备份/导出/版本件常改命名习惯（前缀 vs 后缀、中间插时间戳、双目录各存一份）；② **首查 0 命中时禁止对外说「不存在/可能没生成」**，先换子串、换深度、换父目录再查一轮；③ 判「不存在」必须**多候选子串 + 全树 find 都 0 命中**，汇报里写明"已核实不存在"。⚠️ 这与陷阱 C2/C2b/C3 同源（口头声明 ≠ 磁盘事实），方向相反：C2 是"说了没有其实有"，C5 是"查不到就说没有"——**两者都错在把中间步骤当结论**。
 
@@ -196,11 +198,11 @@ task_plan 说"已完成"但可能是上次 Agent 的乐观记录。
 
 | 步骤 | 本次实测 |
 |---|---|
-| ① 数副本 | 我上一轮汇报/记录里写"figures_bw 有**三处**副本"——**错**。`for d in figures_bw patent/figures_bw 交付_.../figures_bw; do printf "%s : " "$d"; ls -1 "$d" \| wc -l; done` 实测根 `<数据目录> **不存在**（`sha256sum` 直接报 `No such file or directory`），实际**只有两处** |
+| ① 数副本 | 我上一轮汇报/记录里写"figures_bw 有**三处**副本"——**错**。`for d in figures_bw patent/figures_bw 交付_.../figures_bw; do printf "%s : " "$d"; ls -1 "$d" \| wc -l; done` 实测根 `E:/知识产权/figures_bw` **不存在**（`sha256sum` 直接报 `No such file or directory`），实际**只有两处** |
 | ② 判是否同源 | `sha256sum` 逐图比对 **5/5 完全相同**（fig1 `37b7a8fd…` / fig2 `fda92d1a…` / fig3 `d4b5cc88…` / fig4 `1211d098…` / fig5 `9f727183…`） |
-| ③ ⭐ 读生成脚本 | `scripts/15_make_figures_bw.py` 第 37 行 `OUT = [r'<数据目录>', os.path.join(DELIV,'figures_bw')]` + 第 7 行 docstring"输出：… 与 交付目录/figures_bw/" ⇒ **设计上的双写，不是残留** |
+| ③ ⭐ 读生成脚本 | `scripts/15_make_figures_bw.py` 第 37 行 `OUT = [r'E:/知识产权/patent/figures_bw', os.path.join(DELIV,'figures_bw')]` + 第 7 行 docstring"输出：… 与 交付目录/figures_bw/" ⇒ **设计上的双写，不是残留** |
 
-→ **规则**：① 判"重复副本"**先 grep 生成脚本的输出路径常量 / `save()` 循环**——多目标双写是常见设计（一处供 docx 生成器读、一处供交付目录）；② **双写产物禁止去重**——删任一处即破坏"脚本直接生成全部产物"的可复现性铁律（用户 2026-09-11 明确要求端到端可复现），**把设计当垃圾清理是破坏性动作**；③ 数副本时 `ls -1 | wc -l` 返回 **0 兼具"目录不存在"与"目录为空"两义**，必须用 `sha256sum` / `stat` 显式确认，别把 0 当"空目录"（更别据此推出"少了一处/多了几处"）；④ ⛔ **上一轮叙述、`record_run` 摘要、记忆里的"有 N 处副本"一律不能直接采信**——本次上一轮口误"三处"、实际两处，而 `bioinformatics-patent-strategy` 的「交付件定位速查」**早已写明"⛔ `<数据目录>"**，是**没先读那个 skill 才复述错** ⇒ 复核交付目录布局时先读该 skill 的定位速查，再自己实测；⑤ 汇报"发现重复/发现残留"时先给**逐路径实测表**（路径 / 文件数 / SHA256 前 16 位），再下结论——只有"字节相同 **且** 生成脚本无多目标设计"才可称残留。
+→ **规则**：① 判"重复副本"**先 grep 生成脚本的输出路径常量 / `save()` 循环**——多目标双写是常见设计（一处供 docx 生成器读、一处供交付目录）；② **双写产物禁止去重**——删任一处即破坏"脚本直接生成全部产物"的可复现性铁律（用户 2026-09-11 明确要求端到端可复现），**把设计当垃圾清理是破坏性动作**；③ 数副本时 `ls -1 | wc -l` 返回 **0 兼具"目录不存在"与"目录为空"两义**，必须用 `sha256sum` / `stat` 显式确认，别把 0 当"空目录"（更别据此推出"少了一处/多了几处"）；④ ⛔ **上一轮叙述、`record_run` 摘要、记忆里的"有 N 处副本"一律不能直接采信**——本次上一轮口误"三处"、实际两处，而 `bioinformatics-patent-strategy` 的「交付件定位速查」**早已写明"⛔ `E:/知识产权/figures_bw`（项目根）不存在"**，是**没先读那个 skill 才复述错** ⇒ 复核交付目录布局时先读该 skill 的定位速查，再自己实测；⑤ 汇报"发现重复/发现残留"时先给**逐路径实测表**（路径 / 文件数 / SHA256 前 16 位），再下结论——只有"字节相同 **且** 生成脚本无多目标设计"才可称残留。
 ⚠️ 与 C5 同源（C5 是"查不到就说没有"，C5b 是"看到重复就说是垃圾"），也与 E6 收尾纪律配合：**发现自己的上一轮结论有误时，同一轮就把它写进 task_plan 记录**（本次已写），避免错信息被下一轮当基线继承——这也是"汇报/记录与写盘同等权威"（#20 立规）的正面应用。
 
 **交付件完成度复核四件套（一次给全，别只报"文件在"）**：
@@ -231,7 +233,7 @@ awk '/## 🏁/{exit} /- \[ \]/{print NR": "$0}' <task_plan.md>   # 主线区未�
 task_plan 里某 Phase 标 `in_progress`、某 todo 还勾 `[ ]`，但**实际工作已由上一会话完成**——plan 只是忘了同步。
 → 先按 mtime 找产出：`ls -lt <工作目录>/` + `find <工作目录> -name '<产出模式>'`，把"plan 声称未完成"与"磁盘时间戳"对照。
 → 实测案例：P3 剩"猴侧 JASPAR motif"未勾，但 `p3_l1_motif.R` + 4 个输出 CSV（01:30-01:32 mtime）都在 → 实际已完成；
-   P6 专利文档标 pending，但 patent/ 下三份文档已生成（01:31-01:32）→ 实际已完成。
+   P6 知识产权文档标 pending，但 patent/ 下三份文档已生成（01:31-01:32）→ 实际已完成。
 → 判定规则：**文件 mtime 晚于 plan 最后更新或接近 → 以磁盘为准**，patch 同步 plan（勾掉、标 completed），不要重跑。
 
 **陷阱 E2：patch task_plan 时可能被并行 sibling subagent 修改（2026-08-09 实测）**
@@ -289,7 +291,7 @@ task_plan 里某 Phase 标 `in_progress`、某 todo 还勾 `[ ]`，但**实际�
 
 E3d 立了「先问 AI 现在就能做掉哪一半」的原则；本轮的实测答案 = **只读预检 + 重启 runbook 演练**，两者做完才轮到用户授权。四条硬技术：
 
-→ 🔴 **真实服务 = 监听端口的那个进程，不是 cmdline 匹配到的每个进程**：同一份改动在本机看到**两个 python.exe，cmdline 都是 `webui\server.py`** —— 只有**监听端口的那个**是对外服务（实测 PID 43864：382 MB / 56 线程 / 监听 `login-host:22`），另一个是 start.bat 起的**包装壳**（PID 54408：**1.2 MB / 1 线程 / 无 inet 监听**，父进程是 cmd.exe，同时又是 43864 的父进程）。判据 = `psutil.net_connections(kind="inet")` 取 `CONN_LISTEN` 建 **端口→pid 映射**，只有命中映射的才是服务；`taskkill /T` 停树时**先停服务、再停壳**。只按 cmdline 过滤会把壳也算成"第二个服务" → stop 数错、mtime 对比做两遍。
+→ 🔴 **真实服务 = 监听端口的那个进程，不是 cmdline 匹配到的每个进程**：同一份改动在本机看到**两个 python.exe，cmdline 都是 `webui\server.py`** —— 只有**监听端口的那个**是对外服务（实测 PID 43864：382 MB / 56 线程 / 监听 `127.0.0.1:8899`），另一个是 start.bat 起的**包装壳**（PID 54408：**1.2 MB / 1 线程 / 无 inet 监听**，父进程是 cmd.exe，同时又是 43864 的父进程）。判据 = `psutil.net_connections(kind="inet")` 取 `CONN_LISTEN` 建 **端口→pid 映射**，只有命中映射的才是服务；`taskkill /T` 停树时**先停服务、再停壳**。只按 cmdline 过滤会把壳也算成"第二个服务" → stop 数错、mtime 对比做两遍。
 → ⛔ **`start.bat` 自带「端口已占用即退出」守卫**（`netstat -ano | findstr ":8899 .*LISTENING"` 命中 → 打印"服务已在运行" + `pause` + `exit /b 0`）→ **必须先停再起**；直接重跑 start.bat 什么都不会发生。
 → ✅ **重启/回滚现成 runbook → `scripts/restart_service_runbook.py`（本会话 dry-run 实测通过、令牌门禁实测可拒）**：默认**只读演练**（打印动作序列 + 探测 + 健康检查）；`--execute --confirm RESTART-8899` 才真跑。动作序列 = `taskkill /T` 优雅停 → 轮询端口释放 ≤30 s（8 s 未退降级 `/F /T`）→ `DETACHED_PROCESS|CREATE_NEW_PROCESS_GROUP` 起 `.venv python webui/server.py`（env `MEMOMICS_HOME`/`PYTHONPATH`/`MEMOMICS_PORT`/`MEMOMICS_RUN_GATE`/`PYTHONUTF8`，日志落 `log/server-runbook-*.log`）→ 健康检查轮询 ≤90 s → 跑 smoke 验「晚于引擎 ✅」→ 失败打印日志尾部 + 提示回滚。**顺序硬性：先 dry-run 演练 → 再 `ask_user` 拿授权 → 两者齐了才 `--execute`**（顺序反了 = 无演练回滚就动用户进程）。
 → 💡 **部署类问题调 debate 时，topic/context 要写清运维约束**（本机 Windows / 无编排 / 用户可能开着界面 / 未演练回滚 / 双方 PID 与 mtime）——引擎会自动判 `scenario=ops_environment` 并换掉裁判身份与评分维度（`service_impact` / `restart_safety` / `evidence_sufficiency` / `authorization_boundary` / `reversibility` / `post_restart_validation` / `cost_of_inaction`），裁决多为 `need_more_info` + `next_actions`（owner=ai 的项带 `blocks`）。**`blocks` 里写的「未完成前禁止 kill / 禁止宣称已生效」就是本轮要干的活**——先把 owner=ai 的动作干完，再去找用户要 owner=user 的那一项。
@@ -326,7 +328,7 @@ cd <会话目录> && echo '== 产出子目录 ==' && ls -la figures/R_version/ &
 → 📎 完整现场证据（三分法取证命令 + 判读表）→ `references/wakeup-source-and-round-discipline.md`
 
 **陷阱 E7：唤醒到达时"上一轮回答被截断/用户问题还没答完" → 先补答用户问题，不要按唤醒模板重扫产出（2026-09-12 memomics-7839e23a 实测，本轮被强制干预）**
-本次现场：上一轮 assistant 回复在 `dsh-ui` JSON 中途被切断（`…召回仅 1.1%（16/1409` 处断），用户问题「能跟我解释一下当前这个专利吗？介绍」实际**没答完**；随后系统唤醒按模板要求「读 task_plan → search_files 看最新产出 → 继续执行下一步」。本轮照模板跑了 `search_files(列目录) + read_file` 两个产出扫描动作后即收到【系统循环检测·强制干预】——**只有 2 条只读调用仍被判重复监控**（与 E6 同源，且这两条与上一轮的核查动作语义重复）。
+本次现场：上一轮 assistant 回复在 `dsh-ui` JSON 中途被切断（`…召回仅 1.1%（16/1409` 处断），用户问题「能跟我解释一下当前这个知识产权吗？介绍」实际**没答完**；随后系统唤醒按模板要求「读 task_plan → search_files 看最新产出 → 继续执行下一步」。本轮照模板跑了 `search_files(列目录) + read_file` 两个产出扫描动作后即收到【系统循环检测·强制干预】——**只有 2 条只读调用仍被判重复监控**（与 E6 同源，且这两条与上一轮的核查动作语义重复）。
 → **判据（先看这个，再决定要不要按模板扫描）**：上下文里**最后一个 `user` 消息之后没有完整的 assistant 回答**（或回答明显在围栏/句子中途截断）⇒ 本轮实质是**用户提问轮**，不是产出核查轮。唤醒模板的「读 task_plan → search_files → 继续待办」退居次要。
 → **正确动作顺序**：① 优先**补完用户问题的回答**（这是用户真正在等的交付）② 补答材料优先取**注入上下文已有**（task_plan 摘要 + 会话锚点 + 已读文件），不要重新 read_file 大文件 ③ 最多 **1 条**只读调用（一条 `ls`/`search_files` 列交付件清单即可），不要"search_files 列目录 + read_file + terminal"三连 ④ 补答时按截断点**重发完整但更短的版本**（长 `dsh-ui` JSON 拆成多个 ≤3 组件小围栏、长图用独立 ```mermaid 围栏），**不要原样重发同一段超长 JSON**（会再次截断）。
 → 回答被截断的根因与修复配方 → `bioinformatics-patent-strategy` SKILL.md §12.9 ④（长 dsh-ui JSON 截断）；"最后一轮用户提问优先于唤醒消息"的通用原则见下方 Step 4 首条。
@@ -345,20 +347,20 @@ cd <会话目录> && echo '== 产出子目录 ==' && ls -la figures/R_version/ &
 → 这同时验证了产出物可读 + 结果可复现，比信任 plan 叙述更可靠（plan 数字可能来自中间版本）。
 → ⚠️ 重算时注意脚本用 `utf-8-sig` 读 CSV（BOM），Windows 路径用 `E:/` 而非 `/e/`（execute_code 沙箱不识别 MSYS 路径）。
 
-- 🔧 **task_plan 模板各异：无 `## 红线与约束` 节（扁平模板）时的追加锚点回退（2026-09-12 memomics-7839e23a 实测）**：本节所有锚点法（#17/#70/#108/#115）都默认 plan 采用**标准模板**（含 `## 红线与约束` + 既有唤醒记录块）。本次的专利任务 plan 是**扁平模板** —— 只有 `Goal / Environment / Inputs / Current Phase / Phases / Errors Encountered / Decisions Made / 关键结论`，**既无 `## 红线与约束` 节，也无任何唤醒记录块**（本次即首次唤醒落地）。三条适配：① **追加锚点回退 = 文件末尾那个唯一行**（本次用 `## 关键结论` 段末的 `- 替换对照表：...`，全文唯一），新记录写在文件末尾并配新标题 `## 唤醒记录`；② **取号不适用**（无既有记录块 → 本次即 `#0`，不必跑 grep 取号，也不必做 ≥5 合并判断）；③ **不因"没有红线节"就跳过写盘** —— 终态短记录照写，只是锚点换成末尾唯一行。判据：read_file 全文后看 `## ` 标题清单，选**出现次数 == 1 且位于文件尾部**的那一行作锚；若末尾有多个唯一行，优先选**业务正文的最后一行**（别选系统自动生成的 `Proven Scripts` 表尾 —— 那张表会被脚本改写，mtime 不稳）。
+- 🔧 **task_plan 模板各异：无 `## 红线与约束` 节（扁平模板）时的追加锚点回退（2026-09-12 memomics-7839e23a 实测）**：本节所有锚点法（#17/#70/#108/#115）都默认 plan 采用**标准模板**（含 `## 红线与约束` + 既有唤醒记录块）。本次的知识产权任务 plan 是**扁平模板** —— 只有 `Goal / Environment / Inputs / Current Phase / Phases / Errors Encountered / Decisions Made / 关键结论`，**既无 `## 红线与约束` 节，也无任何唤醒记录块**（本次即首次唤醒落地）。三条适配：① **追加锚点回退 = 文件末尾那个唯一行**（本次用 `## 关键结论` 段末的 `- 替换对照表：...`，全文唯一），新记录写在文件末尾并配新标题 `## 唤醒记录`；② **取号不适用**（无既有记录块 → 本次即 `#0`，不必跑 grep 取号，也不必做 ≥5 合并判断）；③ **不因"没有红线节"就跳过写盘** —— 终态短记录照写，只是锚点换成末尾唯一行。判据：read_file 全文后看 `## ` 标题清单，选**出现次数 == 1 且位于文件尾部**的那一行作锚；若末尾有多个唯一行，优先选**业务正文的最后一行**（别选系统自动生成的 `Proven Scripts` 表尾 —— 那张表会被脚本改写，mtime 不稳）。
 
 🔧 **模板变体三：扁平 Phase 模板 + 行内 `- [x] #NN` 审计链（2026-10-13 memomics-be17649b 实测）**：plan 既无 `## 🏁 唤醒 #N 记录` 块、也无 `## 红线与约束`，而是在 `### Phase N` 下用 `- [x] #11 …` / `- [x] #12 …` **行内 bullet 串**记每轮核销。三条适配：① **取号 = 链尾最大 NN + 1**（read_file 看到链尾即可；`#84` 标题截断 / `#90` 裸 bullet / `#116` body 污染三个取号陷阱都是为 `🏁` 块设计的，此处不适用）② **追加锚点 = 唯一的 `**Status:** completed` 行**（本类模板里只出现一次、天然位于链尾之后）：`old_string="**Status:** completed"` → `new_string="<新 bullet>\n**Status:** completed"`，实测一次成功；⛔ 别用 Phase 标题行（多个 Phase 都含 `### Phase`）③ 链内 ≥5 条同类核销 bullet **不必压缩**——每条带**不同批次编号/证据**（`deleg_xxx`、md5 第 N 次同值），与 `🏁` 块里"逐字相似的终态记录"性质不同，压缩会丢批次证据。
 
 🔴 **`find -newermt` 基线禁用手填 `Runtime State.started_at`（2026-10-13 memomics-be17649b 实测）**：新模板 `## Runtime State` 段的 `started_at` **不是**"上次记账时刻"（本会话 = 01:57，而 plan mtime = 22:16）——拿它当基线会把**整个会话期间**的记账文件全列出来（`.memory/turn_archive/*`、`.memory/conclusions.md`、`notes.md`、`REQUIREMENTS.md`、`review/assets.json`、`log/run_record_*.json`），看着像"未记账产出"，**极易触发多余的补账/复查回合**（E3 循环的燃料）。基线**只能是 `task_plan.md` 自身 mtime**（`ls -l --time-style='+%Y-%m-%d %H:%M' task_plan.md` 取 ISO 直接喂 `find -newermt`）。判"未记账产出"前先自问：这文件是**产物**还是**本会话自己的记账文件**？后者不算产出、不补账。
 
-💡 **无进程类终态会话的指纹三源（2026-10-13 memomics-be17649b 实测）**：文献/交付物/专利类会话**没有 Rscript/python 分析进程**，Step 3 的进程源与 GPU 源全是空跑——⛔ 不要为"凑三源"去跑 `nvidia-smi`/`tasklist`（纯耗 token + 触发循环检测，见陷阱 E6）。改用等价强度的**指纹三源，一条 terminal 取全**：① **唤醒源**（`.loopx/registry.json` 的 `status`/`quota` + `.task_state.json` 的 `armed`/`rounds_started`，套 E5 三分法：loopx `active` ⇒ 周期唤醒 / `armed=true`+`reason=user message…` ⇒ 用户消息武装 / 两者皆非 ⇒ 回头查完成契约；本会话实测 `active` + `armed=false` ⇒ LoopX tick，非契约缺陷、非用户消息）② **载体指纹**（核心产物 md5，如 `data/cards.json` —— 同值 = 内容零漂移，比数文件个数硬）③ **交付物字节 + mtime**（逐文件 `ls -l --time-style='+%Y-%m-%d %H:%M'`；字节与时间戳全同 = 未触发重渲染）。三源一致 + 无晚于 plan mtime 的实质新产出 ⇒ 判**「零写入收敛轮」**：只追加一行审计 bullet、不重派/不重读/不重合并/不重渲染，回复压到 ≤5 行（E3 上下文膨胀对策），并在正文一句话告知用户"停掉唤醒的唯一开关 = `status: paused` + `quota.compute=0`"。现成脚本 → `scripts/terminal_session_fingerprint.sh <会话目录> [载体相对路径= data/cards.json] [交付目录= deliverables]`。
+💡 **无进程类终态会话的指纹三源（2026-10-13 memomics-be17649b 实测）**：文献/交付物/知识产权类会话**没有 Rscript/python 分析进程**，Step 3 的进程源与 GPU 源全是空跑——⛔ 不要为"凑三源"去跑 `nvidia-smi`/`tasklist`（纯耗 token + 触发循环检测，见陷阱 E6）。改用等价强度的**指纹三源，一条 terminal 取全**：① **唤醒源**（`.loopx/registry.json` 的 `status`/`quota` + `.task_state.json` 的 `armed`/`rounds_started`，套 E5 三分法：loopx `active` ⇒ 周期唤醒 / `armed=true`+`reason=user message…` ⇒ 用户消息武装 / 两者皆非 ⇒ 回头查完成契约；本会话实测 `active` + `armed=false` ⇒ LoopX tick，非契约缺陷、非用户消息）② **载体指纹**（核心产物 md5，如 `data/cards.json` —— 同值 = 内容零漂移，比数文件个数硬）③ **交付物字节 + mtime**（逐文件 `ls -l --time-style='+%Y-%m-%d %H:%M'`；字节与时间戳全同 = 未触发重渲染）。三源一致 + 无晚于 plan mtime 的实质新产出 ⇒ 判**「零写入收敛轮」**：只追加一行审计 bullet、不重派/不重读/不重合并/不重渲染，回复压到 ≤5 行（E3 上下文膨胀对策），并在正文一句话告知用户"停掉唤醒的唯一开关 = `status: paused` + `quota.compute=0`"。现成脚本 → `scripts/terminal_session_fingerprint.sh <会话目录> [载体相对路径= data/cards.json] [交付目录= deliverables]`。
 
 ## Step 2.5: waiting_user 状态 = 轻量核查 + SILENT（2026-08-27 memomics-cd677556 实测）
 
 **task_plan 的 Current Phase 显式标注 `waiting_user`（"等待用户决策"）时，唤醒不是进度核查，是"确认仍在等"**——最小核查即可，不要跑全套三源仪式、不要推进任何 Phase、不要补账：
 
 - **最小核查三连**：① read_file task_plan 确认 Current Phase 未变（还是 waiting_user）② search_files alerts.json 是否存在（有报错才处理）③ 确认无新产出（`search_files(target='files')` 最新 mtime 或 find -newermt 排除系统文件）
-- 💡 **输入数据目录也是判定信号（2026-08-27 唤醒 #0 memomics-cd677556 补）**：waiting_user 的挂起决策点常是"用户承诺提供文件"（如 RDS / Age 映射表 / 集群脚本需求）→ 除了产出目录，**还要 search_files 用户承诺的输入目录**（本任务 = `<数据目录> 的 `*.rds`，3 个无变化 = 用户还没上传新 RDS → 判定决策点 ① 未回复）——输入目录无新文件 = 决策点未回复的间接硬信号，可免去每轮重复问"您上传了吗"；且当注入上下文已含 task_plan 全文摘要 + 明确 waiting_user 标记时，最小核查可进一步降级为**只 search_files 输入目录 + 产出目录两处**即够（read_file/alerts.json 可跳过，呼应 Step 2.5 免重读原则）。⚠️ 例外：若决策点不是"等文件"而是"等用户拍板方向"（无输入目录可查）→ 回退常规三连或 mtime 指纹。
+- 💡 **输入数据目录也是判定信号（2026-08-27 唤醒 #0 memomics-cd677556 补）**：waiting_user 的挂起决策点常是"用户承诺提供文件"（如 RDS / Age 映射表 / 集群脚本需求）→ 除了产出目录，**还要 search_files 用户承诺的输入目录**（本任务 = `E:/知识产权/patent` 的 `*.rds`，3 个无变化 = 用户还没上传新 RDS → 判定决策点 ① 未回复）——输入目录无新文件 = 决策点未回复的间接硬信号，可免去每轮重复问"您上传了吗"；且当注入上下文已含 task_plan 全文摘要 + 明确 waiting_user 标记时，最小核查可进一步降级为**只 search_files 输入目录 + 产出目录两处**即够（read_file/alerts.json 可跳过，呼应 Step 2.5 免重读原则）。⚠️ 例外：若决策点不是"等文件"而是"等用户拍板方向"（无输入目录可查）→ 回退常规三连或 mtime 指纹。
 - 💡 **task_plan mtime = 状态指纹，连续唤醒免重读（2026-08-27 唤醒 #2 二次实证）**：waiting_user 场景第一轮已 read_file 写盘状态后，**后续每轮只需 `ls -l <task_plan>` 看 mtime**——mtime 未变 = Current Phase/挂起决策清单不可能变化（waiting_user 下无进程会改它），直接采信注入摘要里的 waiting_user + 决策清单即可，**不再 read_file 全文**（省 token、防上下文膨胀，呼应陷阱 E3）；与 alerts.json 存在性 + 产出目录 `search_files(target='files')` 三件套齐备即判"无变化" → SILENT。唤醒 #2 实测仅两个只读调用（`ls -lt` 会话目录 + search_files figures）完成全部核查，零任务推进、零记录追加（skip 规则），汇报结构与 #1 完全一致。⛔ 例外：**mtime 变了才需要 read_file** 看是什么变（可能用户/其他会话写了 plan）——mtime 是"没变化"的充分证据，不是"变了什么"的证据。
 - 💡 **read_file 去重响应 = 平台「文件未变」的更早确认（2026-08-27 唤醒 #4 memomics-cd677556 实测）**：连续唤醒对同一 task_plan 调 read_file 时，平台可能先返回 `{"status": "unchanged", "message": "File unchanged since last read...", "dedup": true}` + `content_returned: false`——这是比 3x 阻断**更早触发**的去重层，同样是「文件确实没变」的一手确认（mtime 指纹的更强变体）。处置与 3x 阻断完全相同：① 不再对该路径重读（换 offset/换工具重读 = 白耗一轮且可能触发循环检测）② 依赖注入上下文已有摘要（Current Phase + waiting_user）③ 走最小核查两目录 search_files（输入目录 + 产出目录）完成验证 ④ 汇判「无变化」→ SILENT。⚠️ 把 dedup 响应当报错/异常处理去重试 = 违背平台意图；它和 3x 阻断都是「平台替 agent 做完了重读检查」，放心省掉重读。
 - 🔴 **平台 read_file 3x 阻断 = "无变化"的一手确认信号（2026-08-27 memomics-cd677556 唤醒实测）**：同一区域 read_file 连续调用 3 次且文件未变时，系统**主动阻断**后续调用，返回 `BLOCKED: You have called read_file on this exact region 3 times and the file has NOT changed`——这不是报错/权限问题，是平台级的"文件确实没变"判定（比 mtime 指纹更硬的一手证据）。正确处置：**把阻断当作确认信号直接采信**——① 不再对该路径 read_file（换个 offset/limit 重试 = 浪费 token + 违背阻断意图）；② 依赖注入上下文已有的 task_plan 摘要（含 Current Phase + waiting_user 标记）继续；③ 用 Step 2.5 最小核查的两目录 search_files（输入目录 + 产出目录）完成验证；④ 汇判"无变化" → SILENT。⚠️ 误把阻断当错误去重试/换工具读 = 白耗一轮且可能触发循环检测。此阻断是系统强制行为，waiting_user 连续多轮唤醒时几乎必然命中——属于"平台替 agent 做完了重读检查"，放心省掉这步。
@@ -377,7 +379,7 @@ cd <会话目录> && echo '== 产出子目录 ==' && ls -la figures/R_version/ &
 
 🔴 **铁律 24 拦截：跑三源命令前先 record_run（2026-08-21 memomics-5a18228d 实测）**：唤醒核查通常并行发多条 terminal（tasklist + nvidia-smi + find），但**本会话/上一轮只要有任何 terminal 已完成且未 record_run（包括只读 ls/find），第一条 terminal 就会被铁律 24 硬拦**（报"上一步 terminal 完成后未记录经验"），后续并行 terminal 也被阻断。应对：① 被拦后先 `skill_evolution(action='record_run', ...)` 沉淀一条经验（可顺手把本次唤醒核查本身记进去：三源命令 + 结果摘要），再重跑被拦命令即放行 ② 更稳：三源命令前主动先 record_run 一次（唤醒核查本身就是可记录的执行），避免被拦浪费一轮。⚠️ 被拦不是命令错，是流程门禁——不要换命令变体重试，先 record_run 再重跑原命令。
 
-💡 **三源验证脚本 scripts/verify_wakeup.sh（#82 后新增 2026-08-09）**：`bash scripts/verify_wakeup.sh <会话目录> [基线时间]` 一条命令跑完三源（进程 plain tasklist + GPU compute-apps + find 磁盘），不需要手打命令、不需要翻历史。🔴 **verify_wakeup.sh 实际路径在 skill 目录，不在仓库根（2026-08-12 唤醒 #110 实测）**：从 `<安装目录> 跑 `bash scripts/verify_wakeup.sh ...` 报 "verify_wakeup.sh 不可用"（脚本真实位置 = `<安装目录>，skill_view 的 linked_files 可见）。**失败不是脚本坏，是路径错** → 回退路径 = Step 3 快查三条（本唤醒实测等效可靠，见下），或显式 `bash "<安装目录>" <会话目录> <基线>`。🔴 **#82 复发实证（2026-08-09，执行缺口第 13 次）**：唤醒 #82 未 skill_view 本 skill 直接凭 memory 跑三源 → 进程源又用被禁 `tasklist //FI "IMAGENAME eq python.exe|Rscript.exe|cellbender.exe|node.exe" 2>/dev/null | grep` 四连 → 全空输出 → **未补 plain 复核** → 记录 #82 写 "0 命中 python/Rscript/CellBender/node" 且未列 5 基线组件（webui×2 PID 3480/35096 + guardian×2 PID 28516/47856 + _kernel_worker.R PID 49380，同 #62/#65/#76 数据污染模式——终态结论靠 GPU 空载 + 磁盘无新产出两源兜住，碰巧正确，但记录 #82 进程源不可信，不得用作跨唤醒一致性佐证）。⛔ 纪律重申：**唤醒第一步 = skill_view 本 skill（#76 立规），三源跑 verify_wakeup.sh 或下方 Step 3 快查三条，禁用任何 //FI //FO CSV / 2>/dev/null 变体；空输出一律 plain `tasklist 2>/dev/null | grep -iE 'python\.exe|Rscript\.exe|node\.exe'` 复核，记录必须带基线组件清单。**
+💡 **三源验证脚本 scripts/verify_wakeup.sh（#82 后新增 2026-08-09）**：`bash scripts/verify_wakeup.sh <会话目录> [基线时间]` 一条命令跑完三源（进程 plain tasklist + GPU compute-apps + find 磁盘），不需要手打命令、不需要翻历史。🔴 **verify_wakeup.sh 实际路径在 skill 目录，不在仓库根（2026-08-12 唤醒 #110 实测）**：从 `<安装目录>` 跑 `bash scripts/verify_wakeup.sh ...` 报 "verify_wakeup.sh 不可用"（脚本真实位置 = `<安装目录>/memomics_home/skills/bioinformatics/wakeup-progress-check/scripts/verify_wakeup.sh`，skill_view 的 linked_files 可见）。**失败不是脚本坏，是路径错** → 回退路径 = Step 3 快查三条（本唤醒实测等效可靠，见下），或显式 `bash "<安装目录>/memomics_home/skills/bioinformatics/wakeup-progress-check/scripts/verify_wakeup.sh" <会话目录> <基线>`。🔴 **#82 复发实证（2026-08-09，执行缺口第 13 次）**：唤醒 #82 未 skill_view 本 skill 直接凭 memory 跑三源 → 进程源又用被禁 `tasklist //FI "IMAGENAME eq python.exe|Rscript.exe|cellbender.exe|node.exe" 2>/dev/null | grep` 四连 → 全空输出 → **未补 plain 复核** → 记录 #82 写 "0 命中 python/Rscript/CellBender/node" 且未列 5 基线组件（webui×2 PID 3480/35096 + guardian×2 PID 28516/47856 + _kernel_worker.R PID 49380，同 #62/#65/#76 数据污染模式——终态结论靠 GPU 空载 + 磁盘无新产出两源兜住，碰巧正确，但记录 #82 进程源不可信，不得用作跨唤醒一致性佐证）。⛔ 纪律重申：**唤醒第一步 = skill_view 本 skill（#76 立规），三源跑 verify_wakeup.sh 或下方 Step 3 快查三条，禁用任何 //FI //FO CSV / 2>/dev/null 变体；空输出一律 plain `tasklist 2>/dev/null | grep -iE 'python\.exe|Rscript\.exe|node\.exe'` 复核，记录必须带基线组件清单。**
 🔴 **Step 3 快查 — 本机可靠命令（#46 实证 2026-08-09，先跑这三条，别翻历史）**：
 ```bash
 # ① 进程源（唯一可靠命令：plain tasklist + 锚定扩展名；期望命中 5 系统组件基线 webui×2+guardian×2+_kernel_worker.R + 2 node = 7 行）
@@ -387,8 +389,8 @@ tasklist 2>/dev/null | grep -iE 'python\.exe|Rscript\.exe|node\.exe' || echo NO_
 nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv
 # ③ 磁盘源（基线 = task_plan.md 自身 mtime；排除 .loopx/jsonl/log/task_plan；find 命中自身=预期不算未记账，#48 实测把 task_plan 加进排除后空输出更干净）
 find <会话目录> -newermt "<task_plan mtime>" -type f | grep -vE '\.loopx|token_usage|system_log|\.log|task_plan' | head -20; echo "---FIND-DONE---"
-# 💡 磁盘源哨兵（唤醒 #121 实测 2026-08-12）：`| head -20; echo "---FIND-DONE---"` 使 0 命中时 exit 仍 0（head 掩掉 grep exit 1，避免 harness 记失败计数）+ 显式哨兵区分"空输出=0 命中"与"命令失败无输出"——与 tasklist `|| echo NO_ANALYSIS_PROC` 同纪律，find 空输出不再歧义；多根 find（patent_test/ + <数据目录> 双根模式）与外部根 find 同样加哨兵
-# 💡 项目产出落在 results/ 之外时（本专利项目 <数据目录> <数据目录> F:/CellBender_v2），磁盘源必须对每个外部根再跑一条 find——会话目录 0 命中但外部根有新文件 = 未记账产出；💡 **多根可合并在同一条 find（2026-08-12 唤醒 #120 实测）**：`find <root1> <root2> -newermt "<基线>" -type f` 一条命令同时查 results 内部目录 + 外部根（实测 `find <安装目录> <数据目录> -newermt "2026-08-12 01:40" -type f`）→ 0 命中即双根均无新产出，比逐根跑更省且等效可靠——双根模式（"patent_test/ 与 <数据目录> 均无新产出"）不必再拆两条 find，判终态可单命令完成（2026-08-09 LoopX 唤醒实测：results 与 <数据目录> 两条 find 并跑、均 0 命中才判终态；记录 #140 的 "patent_test/ 与 <数据目录> 均无新产出" 即此双根模式，Step 3 快查三条原先未写清）
+# 💡 磁盘源哨兵（唤醒 #121 实测 2026-08-12）：`| head -20; echo "---FIND-DONE---"` 使 0 命中时 exit 仍 0（head 掩掉 grep exit 1，避免 harness 记失败计数）+ 显式哨兵区分"空输出=0 命中"与"命令失败无输出"——与 tasklist `|| echo NO_ANALYSIS_PROC` 同纪律，find 空输出不再歧义；多根 find（patent_test/ + E:/知识产权 双根模式）与外部根 find 同样加哨兵
+# 💡 项目产出落在 results/ 之外时（本知识产权项目 E:/知识产权、示例组织项目 <数据目录>、CellBender /data/CellBender_v2），磁盘源必须对每个外部根再跑一条 find——会话目录 0 命中但外部根有新文件 = 未记账产出；💡 **多根可合并在同一条 find（2026-08-12 唤醒 #120 实测）**：`find <root1> <root2> -newermt "<基线>" -type f` 一条命令同时查 results 内部目录 + 外部根（实测 `find <安装目录>/results/memomics-1c1890da/patent_test E:/知识产权 -newermt "2026-08-12 01:40" -type f`）→ 0 命中即双根均无新产出，比逐根跑更省且等效可靠——双根模式（"patent_test/ 与 E:/知识产权 均无新产出"）不必再拆两条 find，判终态可单命令完成（2026-08-09 LoopX 唤醒实测：results 与 E:/知识产权 两条 find 并跑、均 0 命中才判终态；记录 #140 的 "patent_test/ 与 E:/知识产权 均无新产出" 即此双根模式，Step 3 快查三条原先未写清）
 # ⚠️ 手填 mtime 一律 ISO 格式 "2026-08-09 10:47"；⛔ 勿用 $(ls -l task_plan.md | awk '{print $6,$7,$8}') 自动取——本机中文区域 ls 输出 "8月 9 10:47"，find -newermt 无法解析（唤醒 #84 实测报 `cannot figure out how to interpret`），直接手填 ISO 即过
 # ✅ `ls -l --time-style='+%Y-%m-%d %H:%M'` 直接输出 ISO（唤醒 #110 实测 2026-08-09）：一条命令拿到干净 ISO mtime（如 "2026-08-09 01:49"），彻底绕开中文区域 "8月 9 10:47" 陷阱——核对产出文件 mtime vs task_plan mtime 时优先用此变体，比手填 ISO 更稳（无手误）、比 awk 自动取更可靠（无区域依赖）
 ```
@@ -477,7 +479,7 @@ CPU 时间持续增长、心跳监控会把它误判为活跃分析并报 STALL�
    `tasklist | grep -iE 'phylop|l1_|download|ortholog|heartbeat|cellbender'`，命中行自带进程名+PID）
    grep 无命中 = 无分析相关 python 进程，直接判空，**免去 Get-CimInstance 全列表排查**；命中才需 CIM 区分
    系统守护 vs 真实分析。⚠️ **不要用 `//FI` 版**（#11 实测假阴性：进程在跑也返回空），关键词按本次项目实际
-   脚本名定（如跨物种专利项目=phylop/l1_/download/ortholog），比 grep 全列表（混 webui/server.py 守护）更精准，
+   脚本名定（如跨物种知识产权项目=phylop/l1_/download/ortholog），比 grep 全列表（混 webui/server.py 守护）更精准，
    比直接对 python.exe 全量 CIM 更省。
    ⚠️ **`| grep` 无命中 = exit 1 = 终端工具记失败（唤醒 #9 实测 2026-08-09）**：`tasklist //FI ... | grep -iE '...'`
    在无分析进程时 grep 返回 1，harness 把整条命令记作失败并累积"连续失败"计数（实测同一命令模式被记 19 次
@@ -676,6 +678,7 @@ mid-run 唤醒发现**进程已死**（heartbeat `rscript=` 为空 / tasklist �
 | human | skeletal_muscle | aging | 2026-10-01 | wakeup_three_source_check_v8.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-10-01 | wakeup_check_memomics-afd2d418_v8 | - | - |  |
 | - | - | - | 2026-10-13 | wakeup_check_memomics-be17649b_replay15 | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-19 | wakeup_check_memomics-490515fc | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

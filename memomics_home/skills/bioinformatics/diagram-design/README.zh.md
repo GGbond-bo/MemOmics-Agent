@@ -5,7 +5,7 @@
 
 ## MemOmics 适配说明
 
-1. **分工**: 本 skill 管**示意图/流程图/架构图/路线图/专利方案图**（审美与信息设计）；
+1. **分工**: 本 skill 管**示意图/流程图/架构图/路线图/知识产权方案图**（审美与信息设计）；
    科学数据图（箱线图/UMAP/火山图等）仍走 matplotlib/R + nature-figure / scipilot-figure。
 2. **输出位置**: `results/<sid>/diagrams/`（HTML + 内联 SVG）。
 3. **PNG 转换**: 用 svglib（`from svglib.svglib import svg2rlg; from reportlab.graphics import renderPM`），

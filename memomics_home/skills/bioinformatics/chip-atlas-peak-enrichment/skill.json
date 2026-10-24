@@ -1,20 +1,17 @@
 {
-  "id": "chip-atlas-peak-enrichment",
-  "name": "chip-atlas-peak-enrichment",
-  "category": "scATAC",
-  "language": "R+Python",
-  "description": "Analyze enrichment of ChIP-seq peaks from 433,000+ experiments via the ChIP-Atlas API.",
-  "tags": [],
-  "user_score": 0,
-  "auto_score": 0,
-  "approved": false,
-  "steps": [],
-  "when_to_use": "ChIP-Atlas peak富集分析:peak列表→基因组区域注释→motif富集→GO/KEGG通路富集→调控网络",
-  "trigger_keywords": [
-    "chip",
-    "atlas",
-    "peak",
-    "enrichment"
-  ],
-  "trigger_level": "YEL"
+ "id": "chip-atlas-peak-enrichment",
+ "name": "chip-atlas-peak-enrichment",
+ "category": "scATAC",
+ "language": "R+Python",
+ "description": "Analyze enrichment of ChIP-seq peaks from 433,000+ experiments via the ChIP-Atlas API.",
+ "tags": [],
+ "steps": [],
+ "when_to_use": "ChIP-Atlas peak富集分析:peak列表→基因组区域注释→motif富集→GO/KEGG通路富集→调控网络",
+ "trigger_keywords": [
+  "chip",
+  "atlas",
+  "peak",
+  "enrichment"
+ ],
+ "trigger_level": "YEL"
 }

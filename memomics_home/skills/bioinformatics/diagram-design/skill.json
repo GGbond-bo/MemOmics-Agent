@@ -20,7 +20,7 @@
     "路线图"
   ],
   "difficulty": "basic",
-  "when_to_use": "示意图/流程图/架构图/技术路线图/专利方案图/研究设计图(非数据统计图; 数据图走 nature-figure)",
+  "when_to_use": "示意图/流程图/架构图/技术路线图/知识产权方案图/研究设计图(非数据统计图; 数据图走 nature-figure)",
   "prerequisites": {
     "requires": [],
     "description": "无前置依赖; 输出 HTML+SVG 文本, PNG 转换用 svglib"

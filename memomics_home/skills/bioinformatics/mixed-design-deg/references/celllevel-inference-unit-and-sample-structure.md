@@ -37,7 +37,7 @@
 PMID **42612631** / DOI `10.1016/j.cell.2026.07.045`（预印本 bioRxiv `10.1101/2025.03.11.641786`）
 规模化：2,955,873 核 / 8 个脑区 / 23 只雌性食蟹猴 / 4 个年龄组（6·5·6·6）。
 
-**代码（比正文更权威）**：`github.com/3DC-STAR-Anthony/example-cohort` →
+**代码（比正文更权威）**：`github.com/3DC-STAR-Anthony/示例队列` →
 `snRNA/04.Identification_of_differentially_expressed_genes(DEGs)/RUV_MAST_pDEG_MBA.R`、`RUV-seq_sDEGs.R`
 
 **两阶段：细胞级检验 + 样本级校正**

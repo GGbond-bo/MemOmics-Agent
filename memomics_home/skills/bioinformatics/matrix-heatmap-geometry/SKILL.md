@@ -148,7 +148,6 @@ tiff = function(f) tiff(f, width=W, height=H, units="in", res=300, bg="white", c
 > **铁律：任何「标签与色块是否对齐」的判定，必须对最终导出的 PNG 做像素测量。**
 > 对象级数字只能当线索，不能当结论。汇报必须给**逐项 Δ 数值 + 容差**，不能只说「已对齐」。
 > 完整检测配方与自校准修法（含 band/质心/行高口径与全部实测数字）→
-> `references/label-row-alignment-pixel-audit.md`
 
 **第二层假 PASS：把自检从对象级换成像素级之后，它依然会骗你。**（2026-10-01 二次实测，代价是用户第二次说同一句话）
 自校准脚本（量 PNG 色带中心 → `transData.inverted()` → `set_y()`）跑完后，内置自检报
@@ -161,7 +160,6 @@ tiff = function(f) tiff(f, width=W, height=H, units="in", res=300, bg="white", c
 - 判据升级：当**用户说错位、自检说对齐**时，你手里其实还没有测量结果 —— 先跑独立读数再回话。
   不要在 `ask_user` 的提问文本里先写「我量过，没量出错位」（本次这么写，用户只能重复同一句抱怨）。
 - 独立读数配方 + 本次全部实测数字 + 「同一仪器差分比较」口径 →
-  `references/independent-verification-of-figure-geometry.md`
 
 ## 多面板（panel set）一致性核验 —— 同一脚本的多张图必须量到同一组数字
 
@@ -234,19 +232,14 @@ tiff = function(f) tiff(f, width=W, height=H, units="in", res=300, bg="white", c
 | 逐行统计标签时数目对不上（10 个名数成 12/13） | 按 y 连通分组：名称里的括号/下延字符留 1 px 空隙被拆成两组 | 改为**逐行开窗取墨迹质心**（±0.4 行高窗口），不依赖分组 |
 | **整列色块发白、该侧看不出变化** | 色标边界远大于数据范围（±0.5 vs ±0.15 → 该侧只用 30%） | 铁律 4：按 `max\|值\|` 收紧边界 + 同步改刻度 |
 | 审计报大量"重叠"但肉眼无异常 | 重叠阈值设成 `> 0.5 px`，相邻 bbox 边界相接被误判（190 个 1×1 px 假阳性） | 阈值提到 `> 2 px`，只输出 top-N |
-| 用户说"图不合格"但几何审计全过 | 只查了排版，没查**色标/数据匹配度、格宽高比、字号与画布比** | 见 `references/effect-matrix-heatmap-pitfalls.md` §四「先量后猜」顺序 |
 | 用户打断"这跟刚才那件事什么关系？" | 把 `ask_user` 多选表单里顺手勾选的第二项当成了任务授权，扩成长链（补丁→重跑→审计→辩论→量化） | 主线程优先；勾选项与主线程无关时先交付主线程，要动第二项先确认（见上节边界纪律 1） |
 | 用户说"看不到图" | 引用了不存在的文件名（漏后缀）；或只在正文写 markdown 图片语法当交付手段 | 报路径前 `search_files` 核实真名与大小；给绝对路径 + WebUI「结果→🖼️ 图片」面板 + 直链 |
 
 ## 配套文件
 
 - 桑基图/冲积图（非矩阵型）的节点布局、最小节点高度与带宽保真度 → skill **`sankey-alluvial-layout`**
-- `references/base-graphics-cns-heatmap.md` — 零第三方包手绘 CNS 热图的完整配方与本次实测数字（含代码骨架、双路核验命令、口径决策实证）
-- `references/effect-matrix-heatmap-pitfalls.md` — **效应值矩阵热图（logFC × 亚群）的诊断与配方**：色标失配的量化判据与修法（铁律 4 实证）、每格标数值/`†`/最小 FDR 虚线框的画法、脚注五要素、用户说"不合格"时的「先量后猜」顺序、SVG 源码级定位脚本
 - `scripts/verify_heatmap_export.R` — 出图后一键核验：PNG 尺寸/DPI（解析 IHDR + pHYs）、四格式文件大小、svglite SVG 的分组色计数、并按"命中数=成员数"给判定
 - `scripts/verify_panel_geometry_bands.py` — **多面板一致性核验**（纯 Pillow+numpy，可直接跑）：量导出 PNG 底部的墨迹带 —— 末带高（脚注）/ 次末带高（旋转标签）/ 两带间隙 / 底边墨迹，跨面板要求同一组数字，自动打印 PASS/FAIL。判据数字见「多面板一致性核验」节
-- `references/label-row-alignment-pixel-audit.md` — **「标签 ↔ 色块行对齐」的像素级审计与自校准**：对象级自检为何会报假 PASS（bbox 退化 1×1 px + dpi 混用）、非白色带/墨迹质心/行高口径的检测配方及两条反直觉选择（别用白格线、别按 y 连通分组）、`transData.inverted()` 自校准代码、以及「半个行高 60.5 px」的完整实测数字
-- `references/independent-verification-of-figure-geometry.md` — **图几何声明的独立验证（自检为何自证清白）**：三层假 PASS 的演进、用 `vision_describe` OCR 对成品 PNG 做仲裁的配方、「同一仪器差分比较」口径（只做组间差分，不与计算出来的布局数字比绝对 px）、半行高恒定偏置的签名、47 图全部实测数字（120 px pitch / ≈59 px 偏置）、汇报与 `ask_user` 提问纪律
 
 ## Proven Scripts
 

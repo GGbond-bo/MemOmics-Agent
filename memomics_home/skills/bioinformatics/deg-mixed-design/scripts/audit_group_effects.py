@@ -15,7 +15,7 @@ import pandas as pd
 from scipy import stats
 
 # ---------------- CONFIG（按项目改这里） ----------------
-META_CSV = "<数据目录>"   # 细胞级长表
+META_CSV = "<数据目录>/示例评分方法_meta.csv"   # 细胞级长表
 GROUP_COL = "type"                                # 组别列
 SUBJ_COL = None                                   # 个体列；None = 从 sample 名剥离 _Pre/_Post
 SAMPLE_COL = "samplename"

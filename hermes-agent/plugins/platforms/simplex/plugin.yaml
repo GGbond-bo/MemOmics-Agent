@@ -15,7 +15,7 @@ author: Mibayy, jooray
 # ``hermes_cli/config.py``.
 requires_env:
   - name: SIMPLEX_WS_URL
-    description: "WebSocket URL of the simplex-chat daemon (e.g. ws://login-host:22)"
+    description: "WebSocket URL of the simplex-chat daemon (e.g. ws://127.0.0.1:5225)"
     prompt: "SimpleX daemon WebSocket URL"
     password: false
 optional_env:

@@ -56,7 +56,7 @@ For most code-changing tasks, the work isn't truly *done* until a human reviewer
 import json
 
 kanban_comment(
-    body="review-required handoff:\n" + json.dumps({
+    body="review-required handof/data/n" + json.dumps({
         "changed_files": ["rate_limiter.py", "tests/test_rate_limiter.py"],
         "tests_run": 14,
         "tests_passed": 14,

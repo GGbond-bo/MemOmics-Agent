@@ -196,7 +196,7 @@ def _find_kb_root() -> Path:
 
     # 5. 常见部署路径（最后手段）
     for fallback in [
-        Path("<安装目录>"),
+        Path("<安装目录>/memomics/knowledge_base"),
         Path("E:/MemOmics/memomics/knowledge_base"),
     ]:
         if fallback.exists():

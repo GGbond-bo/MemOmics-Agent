@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-cbind 合并多张 Metascape 基因列表表格。
+cbind 合并多张 示例分析 基因列表表格。
 用法: python merge_metascape_cbind.py out.csv table1.csv table2.csv [table3.csv ...]
-陷阱: 必须用 axis=1 (cbind), 不是 axis=0 (rbind)。Metascape 表格列数不同但行数应一致。
+陷阱: 必须用 axis=1 (cbind), 不是 axis=0 (rbind)。示例分析 表格列数不同但行数应一致。
 """
 import pandas as pd
 import sys

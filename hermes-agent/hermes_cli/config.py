@@ -4234,7 +4234,7 @@ OPTIONAL_ENV_VARS = {
         "category": "tool",
     },
     "OPENVIKING_ENDPOINT": {
-        "description": "OpenViking server URL (default: http://login-host:22)",
+        "description": "OpenViking server URL (default: http://127.0.0.1:1933)",
         "prompt": "OpenViking endpoint",
         "category": "tool",
         "advanced": True,
@@ -4446,7 +4446,7 @@ OPTIONAL_ENV_VARS = {
         "advanced": True,
     },
     "BLUEBUBBLES_SERVER_URL": {
-        "description": "BlueBubbles server URL for iMessage integration (e.g. http://login-host:22)",
+        "description": "BlueBubbles server URL for iMessage integration (e.g. http://10.0.0.1:1234)",
         "prompt": "BlueBubbles server URL",
         "url": "https://bluebubbles.app/",
         "password": False,
@@ -4600,7 +4600,7 @@ OPTIONAL_ENV_VARS = {
     },
     "GATEWAY_PROXY_URL": {
         "description": "URL of a remote Hermes API server to forward messages to (proxy mode). When set, the gateway handles platform I/O only — all agent work is delegated to the remote server. Use for Docker E2EE containers that relay to a host agent. Also configurable via gateway.proxy_url in config.yaml.",
-        "prompt": "Remote Hermes API server URL (e.g. http://login-host:22)",
+        "prompt": "Remote Hermes API server URL (e.g. http://10.0.0.1:8642)",
         "url": None,
         "password": False,
         "category": "messaging",

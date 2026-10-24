@@ -1,4 +1,4 @@
-# ============================================================================
+﻿# ============================================================================
 # Hermes Agent Installer for Windows
 # ============================================================================
 # Installation script for Windows (PowerShell).
@@ -94,11 +94,11 @@ try {
 # When the Windows user-profile folder name contains a space (e.g.
 # "First Last"), Windows generates an 8.3 short alias for it (e.g. FIRST~1.LAS)
 # and may expose %TEMP%/%TMP% in that short form:
-#   C:\Users\FIRST~1.LAS\AppData\Local\Temp
+#   <用户目录>~1.LAS\AppData\Local\Temp
 # PowerShell's FileSystem provider mishandles the "~1.ext" component when such a
 # path is handed to a provider cmdlet like `Tee-Object -FilePath` /
 # `Out-File -FilePath`, throwing:
-#   "An object at the specified path C:\Users\FIRST~1.LAS does not exist."
+#   "An object at the specified path <用户目录>~1.LAS does not exist."
 # Every Node/Electron build+install stage streams its log to %TEMP% via
 # Tee-Object, so they all abort with that error, while the Python/uv stages --
 # which never write a side log to %TEMP% through a provider cmdlet -- complete

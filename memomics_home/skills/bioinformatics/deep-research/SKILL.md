@@ -8,7 +8,7 @@ license: MIT
 platforms: [windows, linux, macos]
 metadata:
   memomics:
-    tags: [deep-research, literature-review, systematic-review, patent-search, 文献综述, 研究设计, 专利调研]
+    tags: [deep-research, literature-review, systematic-review, patent-search, 文献综述, 研究设计, 知识产权调研]
     difficulty: advanced
     language: Python
     category: Literature
@@ -19,25 +19,25 @@ prerequisites:
 
 # 深度研究
 
-13-agent深度研究团队，系统性文献检索+综述+PRISMA。支持方法专利 prior-art 调研。
+13-agent深度研究团队，系统性文献检索+综述+PRISMA。支持方法知识产权 prior-art 调研。
 
-适用场景: 深度文献研究, 系统性综述, 方法专利调研, 专利空白分析
+适用场景: 深度文献研究, 系统性综述, 方法知识产权调研, 知识产权空白分析
 
 难度: advanced
 
-触发提示: "深度调研" / "系统调研" / "专利调研" / "prior art" / "方法专利" / "可专利性"
+触发提示: "深度调研" / "系统调研" / "知识产权调研" / "prior art" / "方法知识产权" / "可知识产权性"
 
-别名: 深度研究, 文献综述, 系统性回顾, 专利调研
+别名: 深度研究, 文献综述, 系统性回顾, 知识产权调研
 
 ## When to Use
 
 适用于:
 - 深度文献研究, 系统性综述
-- 方法专利/软著 prior-art 调研 (跨物种比较、组学方法、可代替性评估)
-- 专利空白分析 (从文献格局推断专利机会)
+- 方法知识产权/软著 prior-art 调研 (跨物种比较、组学方法、可代替性评估)
+- 知识产权空白分析 (从文献格局推断知识产权机会)
 - 毕业/课题相关的系统性 method landscape 调研
 
-## 方法专利调研流程
+## 方法知识产权调研流程
 
 详见 references/patent-method-research.md。
 
@@ -46,10 +46,10 @@ prerequisites:
 2. **Round 2**: download_pdf(top-5) + search_papers(refined)
 3. **Round 3**: 结构化报告 (优先级分层 + 空白分析 + 可视化总结)
 
-专利 API 不可达时的回退: 走"文献→专利空白推断"路线 — 从论文格局识别未覆盖的方法专利机会。
+知识产权 API 不可达时的回退: 走"文献→知识产权空白推断"路线 — 从论文格局识别未覆盖的方法知识产权机会。
 
 ## Support Files
-- `references/patent-method-research.md` — 生信方法专利 prior-art 调研完整方法论
+- `references/patent-method-research.md` — 生信方法知识产权 prior-art 调研完整方法论
 - `scripts/run.py` — 执行脚本
 
 ## Proven Scripts
@@ -62,7 +62,7 @@ prerequisites:
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| 专利数据库 API 全部不可达 | Google Patents/Espacenet/WIPO 限制服务器访问 | 走文献→专利空白推断路线；给用户手动检索策略 |
+| 知识产权数据库 API 全部不可达 | Google Patents/Espacenet/WIPO 限制服务器访问 | 走文献→知识产权空白推断路线；给用户手动检索策略 |
 | Nature 系列 PDF 下载失败 | Cloudflare 反爬虫 | bioRxiv PDF 通常可下载；告知用户手动获取 |
 | *(accumulated from runs)* | | |
 

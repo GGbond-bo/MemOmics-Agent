@@ -18,7 +18,7 @@
 **调用方式（Windows / 本仓库 venv，必须带代理）**：
 
 ```powershell
-$env:HTTPS_PROXY="http://login-host:22"; $env:HTTP_PROXY="http://login-host:22"
+$env:HTTPS_PROXY="http://127.0.0.1:6478"; $env:HTTP_PROXY="http://127.0.0.1:6478"
 .venv\Scripts\python.exe memomics_home\skills\bioinformatics\nature-academic-search\scripts\lit_bridge.py search "skeletal muscle single-cell aging" --limit 5 --json
 ```
 

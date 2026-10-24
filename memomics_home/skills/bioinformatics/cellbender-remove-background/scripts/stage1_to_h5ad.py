@@ -10,8 +10,8 @@ Input:  {BASE_DIR}/{sample}/output/raw_matrix/
 Output: {OUTPUT_DIR}/{sample}.h5ad
 
 Usage:
-  python stage1_to_h5ad.py --base_dir F:/00.RawData --out_dir F:/CellBender_v2/h5ad
-  python stage1_to_h5ad.py --base_dir F:/00.RawData --out_dir F:/CellBender_v2/h5ad --samples S1 S2 S3
+  python stage1_to_h5ad.py --base_dir /data/00.RawData --out_dir /data/CellBender_v2/h5ad
+  python stage1_to_h5ad.py --base_dir /data/00.RawData --out_dir /data/CellBender_v2/h5ad --samples S1 S2 S3
 """
 
 import os, sys, time, traceback, gzip, argparse

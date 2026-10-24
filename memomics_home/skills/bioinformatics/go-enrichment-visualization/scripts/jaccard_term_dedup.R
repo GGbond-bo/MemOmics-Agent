@@ -15,7 +15,6 @@
 # 返回: 簇代表词条 data.frame（可直接用于出图）
 #
 # ⛔ 全量 enrichResult（数千词条）上不要调 simplify()/GOSemSim —— 假死。
-#    见 references/go-ora-simplify-hang-and-jaccard-dedup.md
 # ============================================================
 jaccard_term_dedup <- function(x, top_n = 15, tag = "", ont = "BP",
                                outdir = "results", thresh = 0.7) {

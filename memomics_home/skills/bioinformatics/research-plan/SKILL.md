@@ -1,14 +1,14 @@
 ---
 name: research-plan
 category: General Utility
-description: 根据研究问题自动生成Mermaid技术路线图+对照表，支持scRNA/ATAC/空间/bulk/多组学/跨物种比较/专利导向
+description: 根据研究问题自动生成Mermaid技术路线图+对照表，支持scRNA/ATAC/空间/bulk/多组学/跨物种比较/知识产权导向
 trigger:
   when:
     - 用户问"怎么分析"、"用什么方法"、"实验方案"、"技术路线"、"研究思路"
     - 用户说"研究方案"、"实验设计"、"方案设计"、"设计实验"、"研究计划"
     - 用户说"research plan"、"research proposal"
     - 用户说"CNS"、"深度"、"分阶段"、"太泛了"、"不够深" → 启用 CNS 级模板（references/cns-level-plan-template.md）
-    - 专硕/应用类研究，需要专利切入点的方案设计
+    - 专硕/应用类研究，需要知识产权切入点的方案设计
   rules:
     - 生成方案前从历史消息提取研究问题、数据类型、物种、样本信息
     - 不要给通用模板，方案必须基于用户实际数据或明确的研究方向
@@ -32,7 +32,7 @@ trigger:
 | 物种 | 可选 | 人/小鼠/大鼠/斑马鱼/拟南芥/猴/跨物种比较 |
 | 样本信息 | 可选 | 分组/批次/时间点/处理条件 |
 | 比较方案 | 可选 | 如 "Treated vs Control"、"Old vs Young"、"猴 vs 人" |
-| 个性化需求 | 可选 | 如 "要做免疫浸润分析"、"需要专利切入点"、"专硕应用类" |
+| 个性化需求 | 可选 | 如 "要做免疫浸润分析"、"需要知识产权切入点"、"专硕应用类" |
 
 #### 2. 步骤 1 — 数据类型判定 → 模块映射表
 
@@ -90,27 +90,27 @@ trigger:
 | RNA + 甲基化 | 基因座关联 | MOFA, mixOmics |
 | 跨物种比较 | 同源基因映射 + Domain Adaptation | Seurat CCA/Harmony, biomartr, OrthoFinder, XGBoost + SHAP |
 
-##### 📦 跨物种比较专项模块（专硕应用类/专利导向）
-| 模块 | 触发条件 | 关键工具 | 专利方向 |
+##### 📦 跨物种比较专项模块（专硕应用类/知识产权导向）
+| 模块 | 触发条件 | 关键工具 | 知识产权方向 |
 |------|----------|----------|----------|
 | 跨物种细胞类型对齐验证 | 两种物种的snRNA/scRNA数据 | Seurat FindTransferAnchors, SingleR | — |
 | 细胞组成保守性分析 | 两物种均有young/old分组 | MiloR + Pearson相关性 | 细胞类型替代性指数(CTRI) |
 | 跨物种DEG保守性 | 鉴定了各物种的衰老DEG | DESeq2 pseudobulk, Venn分析 | 保守性衰老基因面板 |
 | 跨物种通讯比较 | 有细胞类型注释 | CellChat v2.1 compareInteractions | 信号通路替代性评分 |
-| 跨物种衰老预测模型 | 物种A数据 → 预测物种B | XGBoost + Harmony Domain Adaptation + SHAP | 跨物种衰老预测模型专利 |
+| 跨物种衰老预测模型 | 物种A数据 → 预测物种B | XGBoost + Harmony Domain Adaptation + SHAP | 跨物种衰老预测模型知识产权 |
 
-### 🧪 专利查新 — 方案含方法学创新点时必须执行
+### 🧪 知识产权查新 — 方案含方法学创新点时必须执行
 
-当方案涉及**方法学创新点**（评分系统、预测模型、基因集组合物等），先做5轮专利查新再推进分析：
+当方案涉及**方法学创新点**（评分系统、预测模型、基因集组合物等），先做5轮知识产权查新再推进分析：
 
-**查新5轮覆盖**: (1) PubMed/Europe PMC (2) Semantic Scholar (3) Google Scholar中英文双通道 (4) 中国专利数据库关键词组合 (5) 全球专利数据库（Lens.org/Espacenet）
+**查新5轮覆盖**: (1) PubMed/Europe PMC (2) Semantic Scholar (3) Google Scholar中英文双通道 (4) 中国知识产权数据库关键词组合 (5) 全球知识产权数据库（Lens.org/Espacenet）
 
 **查新后判断逻辑**:
 | 查出什么 | 含义 | 行动 |
 |---------|------|------|
 | 相同技术方案已被授权 | ❌ 不可申请 | 报告用户换方向 |
-| 有论文但无专利，概念部分重叠 | ⚠️ 需差异化 | 制作对比表突出差异 |
-| 纯科学发现未包装为方法 | ❌ 不可直接专利 | 包装为方法/系统/模型 |
+| 有论文但无知识产权，概念部分重叠 | ⚠️ 需差异化 | 制作对比表突出差异 |
+| 纯科学发现未包装为方法 | ❌ 不可直接知识产权 | 包装为方法/系统/模型 |
 | 无任何命中 | ✅ 可申请 | 推进分析 |
 
 **差异化对比表模板**（当存在最接近论文时，按以下格式制作）:
@@ -157,7 +157,7 @@ S₅ = 跨物种预测AUC = AUC(monkey_model → human_data)              [w₅=
 
 **专硕应用类研究设计要点**:
 - 研究方案必须以应用价值为导向：猴能否替代人做实验
-- 必须有专利切入点：每个 Phase 至少对应一个可专利的技术方案
+- 必须有知识产权切入点：每个 Phase 至少对应一个可知识产权的技术方案
 - 假说要回答实际问题，而非纯机制探索："能不能替代"比"机制是什么"更适合专硕
 - Figure 策略必须包含"三一结构"：内容描述 + 具体数值预期 + 备选解读
 - 每个创新点必须有技术方案细节（计算方法/公式/权利要求示例）
@@ -168,7 +168,7 @@ S₅ = 跨物种预测AUC = AUC(monkey_model → human_data)              [w₅=
 | "我想研究X通路在Y疾病中的作用" | 推荐实验设计 + 可选组学技术 + 分析路线 + 预期发现 |
 | "X 基因已知功能是什么，怎么研究它" | 文献已知功能总结 + 推荐下一步实验/分析 |
 | "有什么生信方法可以解决X问题" | 方法综述 + 工具对比表 + 推荐路线 |
-| "专硕要写专利，需要应用类动物研究方案" | 5-Phase方案 + 可专利点分析 + 应用价值突出 |
+| "专硕要写知识产权，需要应用类动物研究方案" | 5-Phase方案 + 可知识产权点分析 + 应用价值突出 |
 
 #### 3. 步骤 2 — 生成 Mermaid 技术路线图
 
@@ -299,7 +299,7 @@ flowchart LR — snRNA/snATAC各自链路 + 跨组学虚线桥接 + 整合节点
 9. 统计方案（功效 + 效应量 + 阴阳对照）
 10. 实验验证路径
 11. 备选方案与风险
-12. 专利分析
+12. 知识产权分析
 13. 可执行待办
 14. 可复现性声明
 15. 质量检查（Loop Gate 10 项）
@@ -327,7 +327,7 @@ flowchart LR — snRNA/snATAC各自链路 + 跨组学虚线桥接 + 整合节点
 1. **停止尝试修复 Mermaid** — 即使语法完全正确，Mermaid 11.x 在某些环境下也不稳定
 2. **改用 HTML 文件交付技术路线图** — 使用 `templates/tech-roadmap-html.html` 模板
 3. **HTML 优势**：自包含、无渲染依赖、支持复杂表格+流程图+Panel 布局+颜色编码
-4. **写文件后提示用户直接打开**：浏览器打开 `file:///<安装目录>
+4. **写文件后提示用户直接打开**：浏览器打开 `file:///<安装目录>/results/...html`
 
 > ⛔ **不要在第 3 次失败后继续尝试 Mermaid。直接切 HTML。** 用户要的是可见的路线图，不是 Mermaid 语法正确性。
 
@@ -335,9 +335,9 @@ flowchart LR — snRNA/snATAC各自链路 + 跨组学虚线桥接 + 整合节点
 
 - **`templates/tech-roadmap-html.html`** — Mermaid 失败时的 HTML 技术路线图模板。
 - **`references/mermaid-style-showcase.md`** — 同一流程六种 Mermaid 样式展示（Flowchart TD/LR、Mindmap、Gantt、Timeline、Sankey、State）。当用户要求"换一种展示方式"时加载。含 5 阶段卡片流 + Panel 布局网格 + 数据流表 + 故事线。颜色编码：🔴核心/🟡增强/🟢输出。
-- **`references/cns-level-plan-template.md`** — CNS 级完整 15 段方案模板。当用户说"太泛了"/"不够深"/"分阶段"/"CNS级别"时加载。包含：文献依据表、H₀/H₁假说、Gap分析、Figure三一结构、专利分析、Loop Gate等所有必需段落。
+- **`references/cns-level-plan-template.md`** — CNS 级完整 15 段方案模板。当用户说"太泛了"/"不够深"/"分阶段"/"CNS级别"时加载。包含：文献依据表、H₀/H₁假说、Gap分析、Figure三一结构、知识产权分析、Loop Gate等所有必需段落。
 - **`references/cross-species-hippocampus-aging-analysis.md`** — 跨物种海马衰老分析案例参考。
-- **`references/cross-species-replaceability-framework.md`** — 🔑 五层递进可代替性评估框架（Level 1-5: IRS+SDI+cos(θ)+Mixed Model+ABCD基因分类）。专利级跨物种方法论，比 S₁-S₅ 更严谨。
+- **`references/cross-species-replaceability-framework.md`** — 🔑 五层递进可代替性评估框架（Level 1-5: IRS+SDI+cos(θ)+Mixed Model+ABCD基因分类）。知识产权级跨物种方法论，比 S₁-S₅ 更严谨。
 - **`references/multi-group-subtype-deep-analysis.md`** — 复杂多组×亚型分析 Playbook。≥4 组 + 亚型分解的场景：伪bulk DEG/基因集评分/应答指数/多条件 DotPlot/轨迹推断。
 
 ## Proven Scripts

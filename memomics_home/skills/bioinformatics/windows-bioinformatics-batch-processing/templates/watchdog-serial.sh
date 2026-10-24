@@ -16,7 +16,7 @@
 # ============================================================
 
 # ---------- 每项目必改 ----------
-DONE_DIR="/e/专利/Human_Hippocampus_ATAC/ArchR_Arrow_QC_Filtered"   # DONE_MARK 目录（含 {s}/{s}_filtered_cells.csv）
+DONE_DIR="/e/知识产权/Human_Hippocampus_ATAC/ArchR_Arrow_QC_Filtered"   # DONE_MARK 目录（含 {s}/{s}_filtered_cells.csv）
 TOTAL=40                                                             # 总样本数
 RUN_SCRIPT="run_serial_v2.sh"                                        # ⚠️ 必须是当前 sanctioned 版本，不是旧名！
 SCRIPT_DIR="/e/MemOmics-Agent/results/memomics-1135ed52/batch"       # 调度器所在目录

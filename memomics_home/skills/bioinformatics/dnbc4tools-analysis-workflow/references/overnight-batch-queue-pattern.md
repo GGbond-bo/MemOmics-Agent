@@ -58,8 +58,8 @@ nohup 的子进程留在 WSL 内部继续跑（MemOmics 的 background process �
 2. **串行不并行**：ATAC 单库输出 40–80G，2 个并行非常可能爆余量盘；排队脚本天然串行。
 3. **MemOmics process(list) 看不到 WSL 内 nohup 进程**：查状态必须
    `wsl -e bash -c "ps aux | grep dnbc4tools"` + `tail <outdir>/<name>.log`（日志落在 F 盘）。
-4. **向用户交付可检视的产物路径**：告诉用户早上看 `F:\output\<文库名>\output\singlecell.csv`
-   （每库一个）+ `F:\output\logs\batch.log`（全部批次状态），PPATH 明确。
+4. **向用户交付可检视的产物路径**：告诉用户早上看 `/data/output\<文库名>\output\singlecell.csv`
+   （每库一个）+ `/data/output\logs\batch.log`（全部批次状态），PPATH 明确。
 5. 排队脚本也要走铁律 24 的 skill_evolution(record_run) 沉淀，否则后续 terminal 被拦截。
 6. **挂完排队脚本必须 ps 验证真在跑**（2026-09-01 事故）：`nohup ... &` 后
    `wsl -e bash -lc "ps -ef | grep atac_queue"` 确认；本会话声称已挂好但实际只有单库实例在跑，

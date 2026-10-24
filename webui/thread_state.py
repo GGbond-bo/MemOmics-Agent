@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """P2-2 显式 ThreadState（2026-09-23）——把「一个会话的活状态」从裸字典键收进显式对象。
 
-## 为什么（体检实测数据，2026-09-23，见 <发布目录>
+## 为什么（体检实测数据，2026-09-23，见 <发布目录>/_p22_inventory.json）
 
 对 webui/server.py（18263 行）做 AST 体检，实测：
 
@@ -86,6 +86,7 @@ _KEYS = {
         "_live_tool_warned _stall_notice_last _stall_diag _stall_wake_active "
         "_stall_noevent_ts _self_check_count _self_check_last_sig _wakeup_retry_n "
         "_saying_wakeup_n _urgent_wakeup _loop_guard _last_event_ts _syslog_dedup "
+        "_narration "
         "_intent_confirmed _code_edit_asked _dir_created _form_ans_marker "
         "_title_summary_at_msg _red_hits _task_count _partial_text "
         "_self_check_total _artifact_sig_last _artifact_stall"

@@ -32,7 +32,6 @@ Ambient RNA Correction for Single-Cell RNA-seq Data
 This module provides functions for removing ambient RNA contamination using
 CellBender or SoupX-based approaches.
 
-For detailed guidance, see references/ambient_rna_correction.md
 """
 
 import scanpy as sc

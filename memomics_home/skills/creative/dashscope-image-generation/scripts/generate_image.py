@@ -22,7 +22,7 @@ import sys
 import urllib.request
 import urllib.error
 
-CFG = r"<安装目录>"
+CFG = r"<安装目录>/memomics_home/image_gen_config.json"
 URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
 
 

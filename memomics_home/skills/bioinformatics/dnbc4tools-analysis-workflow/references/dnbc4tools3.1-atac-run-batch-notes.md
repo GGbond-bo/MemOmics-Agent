@@ -1,7 +1,7 @@
 # dnbc4tools 3.1 atac run 批量比对实测记录（2026-09-01）
 
 真实场景：Windows 11 本机 + WSL2 Ubuntu，dnbc4tools 3.1（FTP 版），人类 GRCh38 snATAC 文库批量比对。
-24 个文库位于 `F:\CRGMara1\`，用户要求逐库循环跑，输出到 `F:\output`。
+24 个文库位于 `/data/CRGMara1\`，用户要求逐库循环跑，输出到 `/data/output`。
 
 ## 数据规模（实测）
 

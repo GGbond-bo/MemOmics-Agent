@@ -109,7 +109,7 @@
 
 正确措辞：**「加效应量过滤」这个做法有文献支持；「取 0.2 还是 0.25」没有文献支持，是自由参数。**
 
-**上游出处核实**：去方法源头仓库 grep 该阈值是否存在（本例 example-cohort repo 的
+**上游出处核实**：去方法源头仓库 grep 该阈值是否存在（本例 示例队列 repo 的
 `snRNA/04.Identification_of_differentially_expressed_genes(DEGs)/`，含 `RUV_MAST_pDEG_MBA.R` +
 `RUV-seq_sDEGs.R`）。⚠️ **两个脚本里 grep 不到 ≠ 上游没有**（阈值可能在下游 pre-computed 列表
 —— 该脚本第 35 行 `read.csv('~/Revise_DEG_LIST/Revised_DEG_all_filter.csv')`、snATAC 兄弟目录

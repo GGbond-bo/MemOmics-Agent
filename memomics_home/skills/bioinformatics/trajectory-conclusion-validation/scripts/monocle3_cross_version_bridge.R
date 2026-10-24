@@ -13,8 +13,8 @@
 # 产出：data/traj_counts.rds|traj_meta.rds|traj_umap.rds、data/cds_full.rds、
 #       results/pseudotime_full.csv、results/pseudotime_root_<name>.csv、figures/traj_*.png
 
-BASE        <- "<安装目录>"     # ← 改成会话目录
-SEURAT_RDS  <- "<发布目录>"  # ← 改成输入 Seurat 对象
+BASE        <- "<安装目录>/results/<sid>"     # ← 改成会话目录
+SEURAT_RDS  <- "<发布目录>/_memtest/data/示例数据.rds"  # ← 改成输入 Seurat 对象
 ASSAY       <- "RNA"; UMAP_NAME <- "umap"
 N_DIM       <- 50; RES       <- 1e-4
 ROOT_COL    <- "celltype";  ROOT_VAL <- "RSS"          # 根端细胞类型（人为指定，须在结论里声明）

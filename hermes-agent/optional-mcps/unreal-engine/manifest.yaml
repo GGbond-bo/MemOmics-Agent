@@ -12,12 +12,12 @@ source: https://dev.epicgames.com/documentation/unreal-engine/unreal-mcp-in-unre
 # enables the plugin in-editor and the server binds to 127.0.0.1. Hermes's
 # MCP client just connects to the URL.
 #
-# Default bind is http://login-host:22/mcp (port + path are configurable in
+# Default bind is http://127.0.0.1:8000/mcp (port + path are configurable in
 # Editor Preferences > General > Model Context Protocol). If you change the
 # port/path in-editor, edit the url in mcp_servers.unreal-engine afterward.
 transport:
   type: http
-  url: http://login-host:22/mcp
+  url: http://127.0.0.1:8000/mcp
 
 # The editor-embedded server accepts connections only from the same machine
 # and has no authentication of its own (Epic's experimental design — not for
@@ -41,7 +41,7 @@ post_install: |
        (the Toolset Registry dependency enables automatically).
     3. Edit > Editor Preferences > General > Model Context Protocol, turn on
        "Auto Start Server" (or run `ModelContextProtocol.StartServer` in the
-       editor console). It binds to http://login-host:22/mcp by default.
+       editor console). It binds to http://127.0.0.1:8000/mcp by default.
 
   Start Hermes AFTER the editor's server is running so the tools are probed.
   If you changed the port or URL path in Editor Preferences, update the url in

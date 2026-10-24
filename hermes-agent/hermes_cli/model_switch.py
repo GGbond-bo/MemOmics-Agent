@@ -1832,7 +1832,7 @@ def list_authenticated_providers(
         lm_base = (
             os.environ.get("LM_BASE_URL")
             or (current_base_url if is_current_lmstudio and current_base_url else None)
-            or "http://login-host:22/v1"
+            or "http://127.0.0.1:1234/v1"
         )
         try:
             live = fetch_lmstudio_models(

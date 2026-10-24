@@ -154,8 +154,8 @@ except Exception as e:
 | - | - | - | 2026-08-13 | fix_xlsx_format.R | - | - |  |
 | - | - | - | 2026-08-13 | fix_xlsx_to_newfile.R | - | - |  |
 | - | - | - | 2026-08-13 | fix_xlsx_to_newfile.R | - | - |  |
-| - | - | - | 2026-08-22 | metascape_top100.py | - | - |  |
-| - | - | - | 2026-08-22 | metascape_top100.py | - | - |  |
+| - | - | - | 2026-08-22 | 示例分析结果.py | - | - |  |
+| - | - | - | 2026-08-22 | 示例分析结果.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-15 | verify_gene_signature_xlsx.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-24 | inspect_MF120_rds.R | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-24 | inspect_MF120_stats.R | - | - |  |
@@ -165,5 +165,5 @@ except Exception as e:
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| write.xlsx 写回 <数据目录> 时 Permis | 目标 xlsx 正被 Excel 程序占用（用户打开着文件），Windows 下 | 改为输出修复版到独立新文件，用户关闭 Excel 后自行替换 |
+| write.xlsx 写回 <数据目录>/pathway_score.xlsx 时 Permis | 目标 xlsx 正被 Excel 程序占用（用户打开着文件），Windows 下 | 改为输出修复版到独立新文件，用户关闭 Excel 后自行替换 |
 

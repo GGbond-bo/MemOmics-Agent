@@ -30,10 +30,10 @@ verified: 2026-10-01
 脚本头部路径常量：
 
 ```r
-F1 <- "<数据目录>/DEG_fdr05_coef025_5contrasts.xlsx"   # 优先用户路径
-F2 <- "<安装目录>"  # 缺失则会话内同 md5 副本
+F1 <- "D:/我的下载/DEG_fdr05_coef025_5contrasts.xlsx"   # 优先用户路径
+F2 <- "<安装目录>/results/<sid>/task2/results/DEG_fdr05_coef025_5contrasts.xlsx"  # 缺失则会话内同 md5 副本
 SRC_FILE <- if (file.exists(F1)) F1 else F2
-OUT <- "<安装目录>"
+OUT <- "<安装目录>/results/<sid>/task3/figures"
 ```
 
 ## 参数（用户原稿取值，勿擅改）

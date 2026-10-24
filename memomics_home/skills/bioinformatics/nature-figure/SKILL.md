@@ -234,6 +234,7 @@ save_pub_r <- function(plot, filename, width_mm = 183, height_mm = 120, dpi = 60
 | human | skeletal_muscle | exercise+aging | 2026-09-29 | 17_cns_deg_landscape.py | - | - |  |
 | human | skeletal_muscle | exercise | 2026-09-29 | 18_deg_landscape_variants.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-29 | 32_freescale_v2_top_left_optimized.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-23 | fig1_deg_landscape_8MF_cns.py; fig2_shared_structure_cns.py; fig3_effect_size_direction_cns.py | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

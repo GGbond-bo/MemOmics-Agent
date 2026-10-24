@@ -405,6 +405,6 @@ results/trajectory_monocle3_{date}/
 | 错误于pseudotime(cds4): No pseudotime calculated for  | step1 脚本把 saveRDS(cds_graph.rds) 放在 orde | cds_graph.rds 是在 learn_graph 之后、order_cells 之前保存的（ |
 | Must group by variables found in `.data`. Column ` | 跨嵌入比较用的 merge 只挑了部分列，后续按 cohort/donor/ti | merge 时把 donor/timepoint/cohort 列一起带进 m（原来只选了 cell |
 | Error in unique(): Must provide a graph object (pr | attach igraph(2.0+) 后 igraph::clusters 遮 | 从脚本中移除 library(igraph)（只用 igraph:: 前缀调用），避免 igraph |
-| cmd //c '...' 经 MSYS bash 传参被吞，cmd 只起了交互式 banner，脚 | MSYS 盘符/引号转换吃掉 cmd //c 的参数，导致命令未传给 cmd | 改为在 bash 里直接调用 Rscript.exe 全路径（"<用户目录> |
+| cmd //c '...' 经 MSYS bash 传参被吞，cmd 只起了交互式 banner，脚 | MSYS 盘符/引号转换吃掉 cmd //c 的参数，导致命令未传给 cmd | 改为在 bash 里直接调用 Rscript.exe 全路径（"C:/Users/<用户>/App |
 | Error in library(monocle3) : there is no package c | execute_r 内核的 R 与 check_env/rail_review  | 待定：定位 execute_r 内核实际使用的 R 与 libPaths，把 monocle3 所在 |
 

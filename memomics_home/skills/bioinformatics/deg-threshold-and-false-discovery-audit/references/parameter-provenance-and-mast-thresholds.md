@@ -102,7 +102,7 @@ sentences = re.split(r"(?<=[.;])\s+(?=[A-Z(])", re.sub(r"\s+", " ", re.sub(r"<[^
 
 ## 5. 更正记录：0.25 曾被我误标为「猴脑 RNA DEG 阈值」
 
-- 原文：example-cohort 猴脑图谱（*Cell* 2026, PMID 42612631, DOI 10.1016/j.cell.2026.07.045），官方代码仓库 `3DC-STAR-Anthony/example-cohort`。
+- 原文：示例队列 猴脑图谱（*Cell* 2026, PMID 42612631, DOI 10.1016/j.cell.2026.07.045），官方代码仓库 `3DC-STAR-Anthony/示例队列`。
 - 逐段核对后的事实：
   - **`log2FC > 0.25` 出现在 ATAC 的 sDAREs 判据里**（`P < 0.05` 且 `log2FC > 0.25`，且用的是**未校正 P**）；
   - 该文 **RNA DEG（pDEG/sDEG）** 段用 MAST v1.12.0 + 蛋白编码基因过滤，**官方脚本 `RUV_MAST_pDEG_MBA.R` 全文没有 `|coef|` 过滤**，只有：

@@ -5,7 +5,6 @@
 用途：回执判「迟到重放」后，对 store 做一次便宜的字段健康扫描，抓出真正的内容缺陷
       （字段被截断 / 空值 / 占位符残留），同时用白名单滤掉合法短值。
 
-配套阅读：references/merged-store-field-health-audit.md
 
 用法：
     python audit_store_field_health.py <store.json> [--fields a,b,c] [--min-len 25]
@@ -147,7 +146,6 @@ def main():
     if real:
         print("\n补齐方式（⛔ 别自己编）：回源全文 data/text/PMC<id>.txt 定位对应章节取原句；")
         print("  例：limitations → re.finditer(r'(?i)\\bLimitations?\\b') 命中偏移，读 §Limitations 段。")
-        print("  ⛔ 改 store 前先读 references/merged-store-field-health-audit.md §五 ——")
         print("     冻结交付物只报告不擅自改（改 store 不重建 DOCX/HTML/md = 交付物自相矛盾）。")
         return 1
     print("✅ 未发现缺陷")

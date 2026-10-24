@@ -1,4 +1,4 @@
-# Unit tests for install.ps1's Git Bash compatibility and Mandatory-ASLR
+﻿# Unit tests for install.ps1's Git Bash compatibility and Mandatory-ASLR
 # guidance helpers. The installer itself is never executed: functions are
 # extracted through the PowerShell AST to avoid downloads, PATH changes, or
 # user-environment writes.

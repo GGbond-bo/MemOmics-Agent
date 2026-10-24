@@ -47,4 +47,3 @@ description: 从文献（title/abstract/PMID）提取 MeSH/DeCS 受控词表标�
 ## 支持文件
 - `scripts/fetch_mesh_tags.py` — PMID → 全量 MeSH descriptor 抓取（含 MajorTopicYN 标记）
 - `scripts/decs_id_lookup.py` — DeCS 数字 ID → 名称/树号解析
-- `references/benchmarker-sessions-2026-08.md` — 三轮试卷逐题评分与根因记录

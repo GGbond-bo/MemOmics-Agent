@@ -12,8 +12,7 @@ import logging
 logger = logging.getLogger("memomics.memomics_pipeline")
 
 MODULES = {
-    "01": {"id": "01", "name": "深度去污染", "description": "CellBender/SoupX/DoubletFinder", "modality": "scrna", "skills": ["scrna-qc", "cellbender-remove-background"], "note": "探索性分析不建议", "substeps": [{"id": "cellbender", "name": "CellBender去背景", "skill": "cellbender-remove-background"}, {"id": "doublet", "name": "双胞过滤", "skill": "scrna-qc"}]},
-    "02": {"id": "02", "name": "基础分析", "modality": "scrna", "description": "QC->SCTransform->Harmony->UMAP->Leiden->Annotation->Markers", "skills": ["scrna-clustering", "annotate_celltype_scRNA"], "substeps": [
+    "01": {"id": "01", "name": "深度去污染", "description": "CellBender/SoupX/DoubletFinder", "modality": "scrna", "skills": ["scrna-qc", "cellbender-    "02": {"id": "02", "name": "基础分析", "modality": "scrna", "description": "QC->SCTransform->Harmony->UMAP->Leiden->Annotation->Markers", "skills": ["scrna-clustering", "annotate_celltype_scRNA"], "substeps": [
         {"id": "qc", "name": "QC", "skill": "scrna-qc"},
         {"id": "sct", "name": "SCTransform", "skill": "scrna-clustering"},
         {"id": "harmony", "name": "Harmony", "skill": "create_harmony_embeddings_scRNA"},

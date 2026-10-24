@@ -19,7 +19,7 @@ import pymupdf
 from rapidocr_onnxruntime import RapidOCR
 
 SRC = r"D:\path\to\scanned.pdf"
-OUT = r"<安装目录>"
+OUT = r"<安装目录>\results\<sid>\data\scanned_ocr.txt"
 DPI = 200
 
 doc = pymupdf.open(SRC)

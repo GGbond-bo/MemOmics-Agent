@@ -5116,7 +5116,7 @@ _PLATFORMS = [
         "vars": [
             {
                 "name": "BLUEBUBBLES_SERVER_URL",
-                "prompt": "BlueBubbles server URL (e.g. http://login-host:22)",
+                "prompt": "BlueBubbles server URL (e.g. http://10.0.0.1:1234)",
                 "password": False,
                 "help": "The URL shown in BlueBubbles Settings → API.",
             },
@@ -5984,13 +5984,13 @@ def _setup_signal():
         print()
         print_info("  After installing, link your account and start the daemon:")
         print_info('    signal-cli link -n "HermesAgent"')
-        print_info("    signal-cli --account +YOURNUMBER daemon --http login-host:22")
+        print_info("    signal-cli --account +YOURNUMBER daemon --http 127.0.0.1:8080")
         print()
 
     # HTTP URL
     print()
     print_info("  Enter the URL where signal-cli HTTP daemon is running.")
-    default_url = existing_url or "http://login-host:22"
+    default_url = existing_url or "http://127.0.0.1:8080"
     try:
         url = input(f"  HTTP URL [{default_url}]: ").strip() or default_url
     except (EOFError, KeyboardInterrupt):

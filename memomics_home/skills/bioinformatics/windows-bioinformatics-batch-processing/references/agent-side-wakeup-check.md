@@ -6,11 +6,11 @@ prompt 模板固定三行：1. 读 task_plan.md 看当前 Phase 2. search_files 
 ## 铁律 1: 找 task_plan — 按 mtime 选最新，禁止按路径假设
 
 本机实测（2026-08-08, 唤醒 #3）存在 **6 个 task_plan.md**：
-- `<安装目录> — **过期副本**（7月30 旧版），不是真身！
-- `<安装目录> — 每个 session 一份真身
+- `<安装目录>/task_plan.md` — **过期副本**（7月30 旧版），不是真身！
+- `<安装目录>/results/<session_dir>/task_plan.md` — 每个 session 一份真身
 
 ```bash
-ls -lt <安装目录> <安装目录> | head
+ls -lt <安装目录>/results/*/task_plan.md <安装目录>/task_plan.md | head
 ```
 
 选 **mtime 最新** 的一份读。读旧 task_plan = 基于过期状态决策 = 跨 session 污染（同铁律 -5）。
@@ -51,6 +51,6 @@ task_plan 中标 `等待用户确认` / `用户红线：不自动执行` / `阻�
 
 ## 为什么这是重复出现的类
 
-用户跑长任务（CellBender/ArchR 40 样本/跨物种专利）时会**持续**收到系统唤醒
+用户跑长任务（CellBender/ArchR 40 样本/跨物种知识产权）时会**持续**收到系统唤醒
 （本会话是 #3，说明 #1/#2 已发生过）。每次唤醒都是同一个陷阱组合：
 读错 task_plan（mtime 选错）+ 误启动 blocked phase（把"继续执行"当授权）。

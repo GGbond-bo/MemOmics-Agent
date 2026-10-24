@@ -32,7 +32,6 @@ Integration Quality Diagnostics
 This module implements metrics to quantify batch integration quality,
 including LISI (Local Inverse Simpson's Index) and ASW (Average Silhouette Width).
 
-For methodology and interpretation, see references/integration_methods.md
 
 Functions:
   - compute_lisi_scores(): Calculate iLISI (batch mixing) and cLISI (cell type separation)

@@ -60,7 +60,7 @@ prerequisites:
 > ```
 > 此验证步骤**不可跳过**。宁可多检查一次，不可漏一份记录。
 >
-> **⚠️ 结果路径**：所有输出必须放在 `results/` 下（项目根目录下的 `results/`，如 `<安装目录>，**绝对不放桌面，不放 `hermes-agent/results/`。** 2026-07-08 会话教训：memory 误写为 `hermes-agent/results/` 导致日志放错位置，用户指出后才修正。基路径统一为 `{MEMOMICS_ROOT}/results/`（读取 `memomics_home/.install_path` 获取真实路径）。`generate_report` 的 `output_path` 必须指定，不依赖默认桌面路径。
+> **⚠️ 结果路径**：所有输出必须放在 `results/` 下（项目根目录下的 `results/`，如 `<安装目录>/results/`），**绝对不放桌面，不放 `hermes-agent/results/`。** 2026-07-08 会话教训：memory 误写为 `hermes-agent/results/` 导致日志放错位置，用户指出后才修正。基路径统一为 `{MEMOMICS_ROOT}/results/`（读取 `memomics_home/.install_path` 获取真实路径）。`generate_report` 的 `output_path` 必须指定，不依赖默认桌面路径。
 >
 > ⚠️ **目录结构**：每步执行后必须创建 `figures/` `results/` `scripts/` `data/` `log/` 五个子目录。`log/` 目录是强制保留的，包含 `analysis.log`、`debate_*.json`、`run_record_*.json`。
 
@@ -555,7 +555,7 @@ results/<species>_<tissue>_<direction>_<date>/03_advanced/scTour/
 └── scTour_Trajectory_Report.html  # 综合HTML报告
 ```
 
-> **重要**：结果基路径为 `results/`（如 `<安装目录> 报告生成到结果目录下，**不放桌面**。
+> **重要**：结果基路径为 `results/`（如 `<安装目录>/results/`）。HTML 报告生成到结果目录下，**不放桌面**。
 
 ---
 
@@ -808,7 +808,6 @@ fig.tight_layout()
 2. **路线B 方向辩论**：Zone4 伪时间是否介于 Zone3 和 Zone5 之间（过渡态）？
 3. **一致性检查**：两条路线的伪时间推断是否与已知生物学知识一致？
 
-### 相关参考\n\n- 完整案例：`references/smf-subcluster-transition-analysis.md`（v2 修正版，包含 Zone1 内部梯度结构和双路线方法论）\n- 可复用脚本：`scripts/dual_route_sctour.py`（配置好 DATA 路径和亚群列表即可运行）\n
 ---
 
 ### 报告生成要求
@@ -855,7 +854,6 @@ fig.tight_layout()
 #### 报告生成脚本
 - 封装为 `scripts/generate_full_report.py`，下次同类分析只需改路径和图片引用
 - 内容包括：图片 base64 嵌入、辩论 JSON 读取、参数来源表生成、统计表渲染
-- 参考 `references/report-content-checklist.md` 确保不遗漏
 
 #### 文件命名与版本
 - **完整版**（含辩论+参数来源+结论+自进化日志+全部图集）：`scTour_Complete_Report.html`（2026-07-08 最终用户接受的命名）
@@ -959,7 +957,6 @@ print(f"✅ 报告验证通过 ({len(checks)}/{len(checks)})")
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| `AttributeError: module 'sctour' has no attribute 'get_pseudotime'` | 使用了不存在的模块级函数 | scTour v1.0.0 的 API 全在 Trainer 方法上：`tnode.get_time()` / `tnode.get_latentsp()` / `tnode.get_vector_field(T, Z)`。`sct.get_pseudotime()` 等函数不存在！详见 `references/api-verification.md` |
 | `ValueError: too many values to unpack` (get_latentsp) | 未解包 3-tuple | `get_latentsp()` 返回 `(mix_zs, zs, pred_zs)` 三元组，需 `mix_zs, zs, pred_zs = tnode.get_latentsp(...)` |
 | `KeyError: 'n_genes_by_counts'` | 未计算 QC metrics | 先运行 `sc.pp.calculate_qc_metrics(adata, percent_top=None, log1p=False, inplace=True)` |
 | `Invalid expression matrix` (loss_mode='nb') | `.X` 不是原始 UMI counts | 确保 `.X` 是整数 counts，或改用 `loss_mode='mse'` |
@@ -973,7 +970,6 @@ print(f"✅ 报告验证通过 ({len(checks)}/{len(checks)})")
 | 潜在空间不能区分细胞类型 | alpha_recon_lec 太小 | 增大 alpha_recon_lec（如 0.7-0.8） |
 | 向量场不明显 | 数据噪声大 | 增加 `n_top_genes`，或调整 `stream_density` |
 | 跨数据集预测失败 | 新数据基因不匹配 | 确保新数据使用相同的基因集 |
-| scanpy/anndata 包版本冲突，`import scanpy` 报错 | 环境中的 anndata 与 scanpy 版本不兼容（如 `make_register_namespace_decorator` 签名不匹配），或 Windows 上 `D:\Python\site-packages` 在 sys.path 中优先级高于系统 site-packages 导致加载了错误 Python 版本的包 | **方案 A（最快）**：`PYTHONPATH="" python ...` — 清除 PYTHONPATH 后系统 Python 只加载自己的 site-packages，绕过冲突包。**方案 B**：用 h5py 直接读取 h5ad 元数据做预览（详见 `references/h5ad-data-access.md`）。**方案 C**：创建新的 conda/uv 虚拟环境重新安装兼容版本 |
 | `AttributeError: 'SparseCSRView' object has no attribute 'A'` 或 `AttributeError: 'SparseCSRMatrixView' object has no attribute 'A'` | 新版 scipy（≥1.14）中 `SparseCSRView`/`SparseCSRMatrixView` 没有 `.A` 属性（即 `.toarray()`），但 scTour 的 `data.py:99` 调用了 `X.A` | 训练前将稀疏矩阵转为 dense numpy array：`if issparse(adata.X): adata.X = adata.X.toarray().astype('float32')`。11,630 细胞 × 1,000 基因 ≈ 46MB，内存无压力。**注意**：`.toarray()` 返回 dense 矩阵，适合 < 100,000 细胞的数据；更大数据需考虑子采样<br><br>**⚠️⚠️ 转换必须放在 `run_single_config` 函数内部，不能只放在顶层数据加载处。** 原因为：`sc.read()` 读取 h5ad 后 `.X` 是 `SparseCSRMatrixView` 类型；即使你在顶层转换了，`adata.copy()` 在函数内会保留原始矩阵类型。2026-07-08 会话教训：顶层转换正确，但 `run_single_config` 内用 `adata.copy()` 后仍报错，因为 copy 保留了 `.X` 的视图类型。修复方法：在训练代码附近直接转换，确保 Trainer 初始化时 `.X` 是 `float32` 的 dense 或常规 CSR 矩阵 |
 | `IORegistryError: No method registered for writing <class 'pandas.arrays.StringArray'>` | anndata 0.10.9 + pandas 3.0.3 的 StringArray 写入 h5ad 不兼容 | 改用内存管道：不保存中间 h5ad，直接在内存中加载 → 预处理 → scTour 训练 → 可视化。或在保存前转换所有 string 列为 `object` dtype（但 pandas 3.0+ 的 `.values` 仍返回 StringArray，跳过中间 h5ad 更可靠） |
 | `TypeError: Axes.boxplot() got an unexpected keyword argument 'labels'` | matplotlib ≥3.9 将 `labels` 参数重命名为 `tick_labels` | 使用 `tick_labels` 替代 `labels`：`ax.boxplot(data, tick_labels=labels)` |
@@ -1037,12 +1033,6 @@ print(f"✅ 报告验证通过 ({len(checks)}/{len(checks)})")
 - scTour 官方文档: https://sctour.readthedocs.io/
 - scTour GitHub: https://github.com/LiQian-XC/sctour
 - scTour PyPI: https://pypi.org/project/sctour/
-- Blackwell GPU 设置: `references/blackwell-gpu-setup.md` — RTX 50 系列 CUDA 配置
-- 多配置对比工作流（2026-07-07 第一次运行）: `references/multi-config-comparison-20260707.md` — 3 config comparison, run2_encoder won
-- 多配置对比工作流（2026-07-08 第二次运行）: `references/multi-config-comparison-20260708.md` — 同一数据不同辩论标准, run1_balanced won
-- SMF 亚群转换分析（示例组织衰老去神经/再神经支配路线）: `references/smf-subcluster-transition-analysis.md` — **v2（2026-07-08）** SMF亚聚类Zone1~Zone6+NMJ的生物学解读模型。**关键修正**：Zone1从MYH1+（快肌）→MYH7+（慢肌）。新增Zone1内部梯度结构（MYH7→去神经→COL19A1）、双路线独立scTour方法论（解决单轴混淆问题）、GALNTL6/FKBP5桥梁基因、Zone4超补偿假说。
-- skill_evolution 静默失败修复: `references/skill-evolution-silent-failure.md` — 当 record_run 返回 Success 但不落盘时的排查和修复方法
-- 报告内容清单（报告生成前必查）: `references/report-content-checklist.md` — 8项必备内容的详细检查标准
 - 完整报告生成脚本: `scripts/generate_full_report.py` — 可复用的综合HTML报告生成器
 
 ---

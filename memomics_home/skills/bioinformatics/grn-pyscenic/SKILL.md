@@ -192,7 +192,6 @@ wget https://resources.aertslab.org/cistarget/motif2tf/motifs-v10nr_clust-nr.hgn
 wget https://resources.aertslab.org/cistarget/tf_lists/allTFs_hg38.txt
 ```
 
-**For other species:** See [references/database_downloads.md](references/database_downloads.md)
 
 **Database requirements:**
 - Motif ranking database (.feather format, ~1-2GB)

@@ -4,7 +4,7 @@
 #target illustrator
 
 // ==== 只改这里 ====
-var OUTDIR = "E:/MemOmics-Agent/results/<session>/figures/";
+var OUTDIR = "<安装目录>/results/<session>/figures/";
 var PROBE_NAME = "memomics_full_probe";
 // ==================
 

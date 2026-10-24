@@ -87,7 +87,7 @@ as a random effect」一句，指向 MAST 模型**含样本随机效应**；但�
 不要在论文里替它断言随机效应有无，也**不要**拿这篇当 `(1|individual)` 的引用依据
 （要引随机效应：自己给 `glmer` 实测，或引该篇**细胞比例**分析那句明写了 `(1|sample)` 的 Poisson GLMM）。
 同一篇的**细胞比例**分析则用 Poisson GLMM `n ~ age + modality + (1|sample) + offset(log(total cell))`
-—— 该用随机效应的地方它确实用了。代码：`github.com/3DC-STAR-Anthony/example-cohort` →
+—— 该用随机效应的地方它确实用了。代码：`github.com/3DC-STAR-Anthony/示例队列` →
 `snRNA/04.Identification_of_differentially_expressed_genes(DEGs)/RUV_MAST_pDEG_MBA.R`、`RUV-seq_sDEGs.R`。
 
 ⇒ **本类设计（多供体 / 每组 7–10 / Pre-Post 配对）的推荐仍是 pseudobulk + dream LMM**
@@ -170,7 +170,7 @@ Aging/DM = 两 Pre 组 `~grp`；Ex_Young/Old/DM = 单组 `~time`；DiD = 两组 
 - Lovric 2022 Commun Biol（10.1038/s42003-022-04088-z）— 运动单细胞 3 人配对，源码用 cell-level Wilcoxon 无配对建模 = **反面教材**
 - MoTrPAC 大鼠（Nature 2024）— bulk DESeq2 + RNA 质量协变量（RIN/globin/UMI dup）
 - MoTrPAC 人类 meta 分析 — rma.mv `random = ~ V1|gse`（研究随机效应）+ `mods = ~ training + time` = 独立+配对+随机效应三者同时建模的正统示范
-- Zemke 海马 aging — 连续年龄相关（用户专利参考）
+- Zemke 海马 aging — 连续年龄相关（用户知识产权参考）
 
 ## 找同构文章源码的 GitHub 工作流
 

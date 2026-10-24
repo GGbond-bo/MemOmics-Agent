@@ -18,7 +18,7 @@ from scipy import stats
 from scipy.stats import norm
 
 # ---------------------------- CONFIG ----------------------------
-META = "<数据目录>"   # 细胞级表：samplename / type / annotation_L3 / *_AUC
+META = "<数据目录>/示例评分方法_meta.csv"   # 细胞级表：samplename / type / annotation_L3 / *_AUC
 OUT_CSV = None            # 需要落盘时给个路径，如 "results/axis_level_stouffer.csv"
 SCORE_SUFFIX = "_AUC"     # 打分列后缀（自动识别程序列）
 SUBCL = "annotation_L3"   # 亚群列

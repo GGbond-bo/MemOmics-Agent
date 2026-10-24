@@ -126,7 +126,7 @@ computer_use(action="type", text="Hello")
 
 要点（都是实测，不是推测）：
 
-- 显式通路走 `POST /api/weixin/send_image`（服务端 login-host:22），内部复用 `_send_weixin_image`，只收已存在的图片文件（扩展名白名单）。
+- 显式通路走 `POST /api/weixin/send_image`（服务端 127.0.0.1:8899），内部复用 `_send_weixin_image`，只收已存在的图片文件（扩展名白名单）。
 - **限流**：同一路径 60 秒内只发一次、两次发送间隔 ≥5 秒（`_gate_weixin_send`）；被限流返回 `ok:false`，那是限流不是发送失败。
 - **纯聊天会话没有 results 目录**（`session["results_dir"]` 是分析时才懒建的），所以自动通路在纯聊天里根本不会触发 —— 这正是显式通路存在的理由。
 - **跑脚本要用对解释器**：仓库 `.venv\Scripts\python.exe` 与本机 miniconda 都实测 exit=0；某些 python 下 `tools.computer_use` 的依赖门禁会抛 `FeatureUnavailable(... mcp==1.26.0 ... starlette==1.0.1)`，那是"解释器选错"，不是驱动坏了。脚本现在会把当前 `sys.executable` 和推荐的 `.venv` 路径一起打出来。

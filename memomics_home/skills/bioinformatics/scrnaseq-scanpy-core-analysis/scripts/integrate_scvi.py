@@ -32,7 +32,6 @@ Batch Integration Using scVI, scANVI, and Harmony
 This module implements state-of-the-art batch integration methods for single-cell
 RNA-seq data, including scVI (unsupervised), scANVI (semi-supervised), and Harmony.
 
-For methodology and best practices, see references/integration_methods.md
 
 Functions:
   - run_scvi_integration(): Unsupervised deep learning integration with scVI

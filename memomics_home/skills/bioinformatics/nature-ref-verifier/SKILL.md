@@ -186,7 +186,7 @@ trigger_keywords: ["核对参考文献", "参考文献核对", "校验文献", "
 | **中文 DOI 不在 Crossref 中** | 降级到 CNKI/万方（通过 webbridge 或 WebSearch）|
 | **IEEE 老文献 DOI 返回 404** | 用 IEEE Xplore 直接搜（其 DOI 不在 Crossref 注册）|
 | **学位论文无 DOI** | 用 CNKI / 万方 / ProQuest 验证标题+作者+年份 |
-| **产品手册/专利** | 不验证元数据，只确认来源可访问 |
+| **产品手册/知识产权** | 不验证元数据，只确认来源可访问 |
 | **谷歌学术搜不到部分文献** | 切换搜索引擎（Bing、百度学术、Semantic Scholar）|
 
 ## 环境依赖

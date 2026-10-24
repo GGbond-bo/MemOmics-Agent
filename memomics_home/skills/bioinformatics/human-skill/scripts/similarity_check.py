@@ -7,7 +7,7 @@
 
 两项指标:
   1. 内部重复率 —— 同一 n-gram 在文内出现 ≥2 次的字符覆盖占比
-  2. 源库重合率 —— 与 --ref 指定语料共有的 n-gram 字符覆盖占比（学位论文 vs 专利交底书等）
+  2. 源库重合率 —— 与 --ref 指定语料共有的 n-gram 字符覆盖占比（学位论文 vs 知识产权交底书等）
 
 ⚠ 口径声明：本工具是「自建库 n-gram 自检」，不是知网/CNKI。
    结果只能用于内部自查与改写定位，禁止当作官方查重率汇报。
@@ -183,7 +183,7 @@ def main():
                     ref_mark[k] = True
         common = covered_chars(ref_mark)
         cov = common / total * 100 if total else 0
-        print("## 2. 源库重合（源库 = 专利交底书/素材包/旧稿）\n")
+        print("## 2. 源库重合（源库 = 知识产权交底书/素材包/旧稿）\n")
         print(f"- 源库文件数：{len(files)}；源库 n-gram 数：{len(ref_grams)}")
         print(f"- 与源库重合成字符：{common}")
         print(f"- **源库重合率 = {cov:.2f}%**（阈值参考：>10% 建议重述）\n")

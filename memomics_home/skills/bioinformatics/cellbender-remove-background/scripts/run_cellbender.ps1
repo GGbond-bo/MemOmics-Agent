@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # CellBender Batch Run Script (Proven)
 # Source: User's actual production run on 15 monkey skeletal muscle samples
 # =============================================================================
@@ -9,7 +9,7 @@
 # =============================================================================
 
 $ErrorActionPreference = "Continue"
-$cellbender = "<用户目录>"
+$cellbender = "C:\Users\<用户>\AppData\Local\Programs\Python\Python312\Scripts\cellbender.exe"
 $h5adDir = "<数据目录>"
 $cbDir   = "<数据目录>"
 

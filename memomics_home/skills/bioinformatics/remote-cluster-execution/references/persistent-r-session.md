@@ -73,7 +73,7 @@ SGE qmaster 不可达（`scheduler: none`）；节点间是共享 NFS；用户�
 rds，而不是重新读取。」
 
 - 输入：`/cluster/share/user/Muscle_96_38/Umap/MuSC_exercise_clean_dele_cluster_umap.rds`
-  （661.8MB；与 `light.rds$src` 和 `musc_umap_prop_ssh3.R` 用的是**同一个文件**）；
+  （661.8MB；与 `light.rds$src` 和 `musc_umap_prop_node1.R` 用的是**同一个文件**）；
 - 节点：`node4`（compute-node，503GB 内存、余量 495GB；小节点也够）；
 - 会话：`s-20261009-014300-vq48`，pid **109595**，R 4.4.1（`R4.41` env），daemon 脚本
   `memomics_cache/bin/r_session_daemon.R`。

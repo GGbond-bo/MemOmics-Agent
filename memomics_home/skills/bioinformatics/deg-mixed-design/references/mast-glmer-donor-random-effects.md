@@ -63,7 +63,7 @@ fit <- MAST::zlm(~ stim + (1 | individual), sca, method = "glmer", ebayes = FALS
 ```
 公式没问题、`sca` 确实是 `SingleCellAssay`，但那行实际在抱怨 **cData 里找不到 `individual`**。
 
-**根因**：照搬官方代码用 `model.matrix()` **预先展开固定效应**当 cData。example-cohort 原文的公式是
+**根因**：照搬官方代码用 `model.matrix()` **预先展开固定效应**当 cData。示例队列 原文的公式是
 纯固定效应（`~ stim + W_1..W_5`），所以能这么写；一旦公式含 `(1|individual)`，
 `individual` 就不在 cData 里 → MAST 内部取变量失败 → 异常类型不匹配被当成 sca 类型问题抛出。
 

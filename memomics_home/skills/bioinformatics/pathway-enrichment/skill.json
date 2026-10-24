@@ -1,29 +1,26 @@
 {
-  "id": "pathway-enrichment",
-  "name": "pathway-enrichment",
-  "category": "scRNA",
-  "language": "R+Python",
-  "description": "Guidance for choosing ORA vs GSEA and interpreting enriched pathways correctly.",
-  "tags": [
-    "ORA",
-    "GSEA",
-    "enrichment",
-    "pathway",
-    "KEGG",
-    "Reactome",
-    "enrichr",
-    "clusterProfiler"
-  ],
-  "user_score": 0,
-  "auto_score": 0,
-  "approved": false,
-  "steps": [],
-  "when_to_use": "Guidance for choosing ORA vs GSEA and interpreting enriched pathways correctly.",
-  "trigger_keywords": [
-    "pathway-enrichment",
-    "pathway enrichment",
-    "pathway",
-    "enrichment"
-  ],
-  "trigger_level": "YEL"
+ "id": "pathway-enrichment",
+ "name": "pathway-enrichment",
+ "category": "scRNA",
+ "language": "R+Python",
+ "description": "Guidance for choosing ORA vs GSEA and interpreting enriched pathways correctly.",
+ "tags": [
+  "ORA",
+  "GSEA",
+  "enrichment",
+  "pathway",
+  "KEGG",
+  "Reactome",
+  "enrichr",
+  "clusterProfiler"
+ ],
+ "steps": [],
+ "when_to_use": "Guidance for choosing ORA vs GSEA and interpreting enriched pathways correctly.",
+ "trigger_keywords": [
+  "pathway-enrichment",
+  "pathway enrichment",
+  "pathway",
+  "enrichment"
+ ],
+ "trigger_level": "YEL"
 }

@@ -67,10 +67,10 @@ def kdh_to_text(filepath):
 ```python
 import os, fitz
 
-for fname in os.listdir('<数据目录>'):
+for fname in os.listdir('E:/知识产权'):
     if not fname.endswith('.caj'):
         continue
-    full_text = kdh_to_text(os.path.join('<数据目录>', fname))
+    full_text = kdh_to_text(os.path.join('E:/知识产权', fname))
     out = fname.replace('.caj', '.txt')
     with open(out, 'w', encoding='utf-8') as f:
         f.write(full_text)

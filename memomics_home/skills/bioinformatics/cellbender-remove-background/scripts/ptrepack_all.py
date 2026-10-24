@@ -4,7 +4,7 @@ ptrepack 批量压缩 CellBender 产出
 压缩后 h5 可直接被 Seurat Read10X_h5() 读取
 
 Usage:
-  python ptrepack_all.py --cb_dir F:/CellBender_v2/cellbender_output --out_dir F:/CellBender_v2/seurat_h5
+  python ptrepack_all.py --cb_dir /data/CellBender_v2/cellbender_output --out_dir /data/CellBender_v2/seurat_h5
   python ptrepack_all.py --cb_dir ... --out_dir ... --complevel 5 --samples S1 S2 S3
 """
 

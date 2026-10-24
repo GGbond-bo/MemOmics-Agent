@@ -251,7 +251,7 @@ def _is_local_base_url(base_url: str | None) -> bool:
     Local Honcho deployments can run without auth, but the SDK requires a
     non-empty api_key argument.  Treat loopback plus RFC1918/link-local/ULA
     and carrier-grade-NAT IPs as local so LAN/VPN URLs such as
-    ``http://login-host:22`` get the same placeholder-key behavior as
+    ``http://10.0.0.1:8000`` get the same placeholder-key behavior as
     localhost.
     """
     if not base_url:

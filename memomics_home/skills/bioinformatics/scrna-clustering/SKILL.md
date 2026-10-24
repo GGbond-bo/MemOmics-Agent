@@ -140,7 +140,6 @@ results/<模块>/<方法>/
 
 ## Pipeline
 
-0. **Pre-analysis: Data scan & metadata inspection**（参见 references/large-h5ad-metadata-inspection.md）\n   - 对 >5GB 的 h5ad 文件，先用 h5py 低内存方式读取 obs 元数据\n   - 识别：age分组（数值→Young/Old归类）、sample_id/donor_id分布、QC统计\n   - 确认双层抽样策略：celltype比例 + 样本平衡\n   - 知识库校对：匹配组织+物种+方向的参考阈值\n   - Tool: `execute_python` (用 h5py 而非 anndata)\n\n0a. **h5ad → Seurat loading**（参见 references/rhdf5-load-h5ad-to-seurat.md）\n   - Seurat v5.5.0 lacks `ReadH5AD` — use `rhdf5` (Bioconductor) for reliable loading\n   - For files > 3GB: subset in Python first, then load subset in R\n   - CSR matrix: build as `new("dgCMatrix")`, NOT `sparseMatrix()`\n   - Categorical obs: h5ad uses `categories` + `codes` groups (single underscore, not `__categories`)\n   - Pass metadata as `meta.data=` in `CreateSeuratObject()`, not via `$<-` after creation
 
 1. **Normalize (SCTransform)**
    - SCTransform recommended
@@ -222,6 +221,9 @@ results/<模块>/<方法>/
 | human | skeletal_muscle | aging | 2026-09-24 | 03_compare_eval.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-24 | 05_robustness.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-24 | 06_final_verdict.py | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-18 | check_annotation_levels.R | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-18 | check_annotation_levels.R | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-10-18 | meta_main_frequency_audit.sh | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
@@ -230,7 +232,7 @@ results/<模块>/<方法>/
 | KeyError: "['n_clusters_res0.8'] not in index"（03_ | 归一化/取前缀时用 split('_')[0] 对多下划线列名不安全（n_clu | ① 列名前缀 bug：原用 col.split('_')[0] 生成前缀，"n_clusters"  |
 | ValueError: Mix of label input types (string and n | annotation_L3 是字符串标签（10 个肌纤维亚型名），而 netwo | 把 confusion_matrix(labels, lab) 改为 confusion_matri |
 | RuntimeError: operator torchvision::nms does not e | scvi-tools 安装过程引入/保留了与 torch 2.11.0+cu12 | pip install scvi-tools 本身 exit=0 成功（附带装了 tensorboa |
-| ModuleNotFoundError: No module named 'scvi'（execut | check_env 探测的包清单来源与 execute_python 持久内核实 | ① 实测确认内核解释器 = <用户目录> |
+| ModuleNotFoundError: No module named 'scvi'（execut | check_env 探测的包清单来源与 execute_python 持久内核实 | ① 实测确认内核解释器 = C:/Users/<用户>/AppData/Local/Program |
 | 错误于RunLeiden(...): Package 'leidenbase' is require | R 4.5.3 库（E:/R-libs/R-4.5.3）未安装 leidenba | 改用 FindClusters(algorithm=1) = Louvain（igraph 实现，无 |
 | 即使删掉显式 conserve.memory=TRUE，execute_r 仍报 argument  | execute_r 的 SCTransform 铁轨注入与用户代码中的 SCTr | 绕过注入器匹配：用 do.call(SCTransform, list(object=..., vs |
 | formal argument "conserve.memory" matched by multi | execute_r 对 SCTransform 有铁轨自动注入（method=" | SCTransform 调用中删除显式 conserve.memory=TRUE（以及任何自动注入参 |
@@ -238,7 +240,6 @@ results/<模块>/<方法>/
 | '\/' is an unrecognized escape in character string | 通过 execute_r 传 R 代码时，字符串里的反斜杠转义（\\.）在传输层 | 去掉正则转义：改用 grep("res/cluster/leiden", ..., ignore.c |
 | all arguments must have the same length（bootstrap  | Seurat FindClusters 返回新对象，不回写原对象；扫描循环里只赋 | 扫描多分辨率时写成 `o <- FindClusters(obj, graph.name=G, re |
 | bootstrap 稳定性 ARI≈0.002（明显异常）：① n_clusters 取到 13（应 | Seruat subset 后旧的分辨率标签列全部保留，用 grep 批量取列会 | ① 取列 bug：subset 后 meta.data 仍保留全部 mf_snn_res.* 列，c |
-| R fails to read h5ad | Seurat v5 lacks ReadH5AD; hdf5r crashes in Rscript | Use `rhdf5` (Bioconductor) — see `references/rhdf5-load-h5ad-to-seurat.md` |
 | SCTransform OOM on 30k cells | scale.data is full dense matrix — huge save | Remove scale.data before saveRDS: `obj[["SCT"]]@scale.data <- new("matrix")` |
 | MT% = 0 after QC | Seurat's `_`→`-` renaming mismatches `^MT-` pattern | Verify with `grep("^MT-", rownames(obj))`; pattern is correct after rename |
 | Stratified sampling needed | Raw data has class imbalance for rare cell types | Use Python: proportional allocation by celltype + 50/50 Young/Old within each type |

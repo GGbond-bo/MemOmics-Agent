@@ -393,7 +393,7 @@ def show_status(args):
     if _effective_provider_label() == "LM Studio":
         from hermes_cli.models import probe_lmstudio_models
         model_cfg = config.get("model")
-        base = (model_cfg.get("base_url") if isinstance(model_cfg, dict) else None) or get_env_value("LM_BASE_URL") or "http://login-host:22/v1"
+        base = (model_cfg.get("base_url") if isinstance(model_cfg, dict) else None) or get_env_value("LM_BASE_URL") or "http://127.0.0.1:1234/v1"
         try:
             models = probe_lmstudio_models(api_key=get_env_value("LM_API_KEY") or "", base_url=base, timeout=1.5)
             if models is None:

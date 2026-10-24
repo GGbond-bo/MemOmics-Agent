@@ -19,7 +19,7 @@ on:
       release_tag:
         description: '测试哪个 Release 的 Linux 包 (tag 名)'
         required: false
-        default: 'v2026-09-01'
+        default: 'v2026-09-10'
   push:
     paths:
       - '.github/workflows/linux-smoke.yml'
@@ -31,7 +31,7 @@ jobs:
     steps:
       - name: Download shipped Linux package from Release
         run: |
-          RELEASE_TAG="${{ github.event.inputs.release_tag || 'v2026-09-01' }}"
+          RELEASE_TAG="${{ github.event.inputs.release_tag || 'v2026-09-10' }}"
           echo "Testing release tag: ${RELEASE_TAG}"
           curl -fsSL -o MemOmics-Linux.tar.gz \
             "https://github.com/GGbond-bo/MemOmics-Agent/releases/download/${RELEASE_TAG}/MemOmics-Linux.tar.gz"
@@ -110,7 +110,7 @@ jobs:
       - name: Test - persistent R kernel reuse (变量跨调用存活 = 持久化)
         run: |
           cd MemOmics
-          export MEMOMICS_HOME="$PWD/memomics_home"
+          export HERMES_HOME="$PWD/hermes_home"
           export PYTHONPATH="$PWD:$PWD/hermes-agent"
           ./.venv/bin/python - <<'PYEOF'
           from tools.persistent_kernel import KERNEL_POOL
@@ -127,7 +127,7 @@ jobs:
       - name: Test - persistent Python kernel reuse
         run: |
           cd MemOmics
-          export MEMOMICS_HOME="$PWD/memomics_home"
+          export HERMES_HOME="$PWD/hermes_home"
           export PYTHONPATH="$PWD:$PWD/hermes-agent"
           ./.venv/bin/python - <<'PYEOF'
           from tools.persistent_kernel import KERNEL_POOL

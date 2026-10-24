@@ -42,5 +42,5 @@ find /e/360Downloads /e/123pan /c/Users/<用户>/Downloads -maxdepth 2 \( -iname
 
 ## 2026-08-28 实例结论
 - 用户问 GRCh38.primary_assembly.genome.fa.gz / gencode.v32.primary_assembly.annotation.gtf.gz 是否在本地
-- 四盘全搜 = 不存在（唯一近似文件是 /e/tmp/ 的 H3K4me3 与 /e/专利/ 的猴 T2T gtf）
+- 四盘全搜 = 不存在（唯一近似文件是 /e/tmp/ 的 H3K4me3 与 /e/知识产权/ 的猴 T2T gtf）
 - 判定：需重新从 EBI 下载，下载后 `gzip -t` 验证

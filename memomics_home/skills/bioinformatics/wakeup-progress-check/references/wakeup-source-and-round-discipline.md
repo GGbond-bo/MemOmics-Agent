@@ -28,7 +28,7 @@
 
 ```bash
 SID=memomics-XXXX        # 会话目录名
-D="<安装目录>"
+D="<安装目录>/results/$SID"
 # ① LoopX 是否在发唤醒
 cat "$D/.loopx/registry.json" | head -20      # 看 status / quota.compute
 # ② task_state 是否被武装、被谁武装

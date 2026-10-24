@@ -29,8 +29,8 @@ verified: 2026-10-01
 脚本头部两个路径常量需按新项目改：
 
 ```python
-OUT = r"<安装目录>"
-SRC = r"<安装目录>"
+OUT = r"<安装目录>/results/<sid>/task2/figures"
+SRC = r"<安装目录>/results/<sid>/task2/results/deg_subcluster_updown_coef025_matrix.csv"
 ```
 
 ## 版式（用户 2026-09 逐轮定稿，勿擅改）
@@ -76,3 +76,11 @@ STEM = globals().get("STEM_OVERRIDE") or "fig_deg_updown_8sub_MF_v7_arrows_verti
 ## 来源
 
 - `user-requested`：用户口头需求（"DEG 各比较组展示不同亚群基因数量"）→ AI 编写 → 实际运行验证通过 → 2026-10-01 用户确认沉淀。
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| human | skeletal_muscle | exercise | 2026-10-23 | plot_OD_subcluster_updown.py | - | - |  |

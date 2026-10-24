@@ -23,6 +23,10 @@ metadata:
 > 📄 效应量阈值（θ=0.2/0.25）校准全流程 + 21 个正对照基因：`references/effect-size-threshold-calibration.md`
 >   —— 含 §4b 文献阈值的**模态核对**（猴脑 0.25 属 ATAC 非 RNA DEG）、§4c θ 效力随表而变、
 >   §4d 目的依赖的推荐、§4e 行数/去重基因双口径 + 方向指纹
+> 📄 **富集结论五类误读 + 无 clusterProfiler 时的离线 ORA 实现**：`references/enrichment-misreadings-and-offline-ora.md`
+>   —— KEGG 疾病名通路 = OXPHOS 别名（诊断判据）、条目数≠效应强度、0 条≠无变化、三项必声明口径、
+>   跨库一致≠独立验证；以及 msigdbr `C5/GO:BP` + `C2/CP:KEGG_LEGACY` 解析链 + `phyper` 超几何 ORA +
+>   三个必踩 R 报错（data.frame 退化 / `sparseMatrix` 维度截断 / `facet_wrap` 表达式求值）
 
 ## 何时触发（Red）
 
@@ -89,6 +93,25 @@ bh_floor     <- 0.05 / n_tested             # 23,674 基因 → 2.1e-6
 ### 门禁 4｜通路冗余：疾病名通路 ≠ 独立生物学
 KEGG 里同一批线粒体 ETC 基因被重复注释进多个疾病 map（实测两两 Jaccard 0.68–0.92：OXPHOS↔Thermogenesis 0.88、Huntington↔Parkinson 0.92）。
 处置：Jaccard>0.5 连通分量合并 → 模块 FDR **用并集基因集重算**（不许取成员最小 FDR）→ 代表名用生物学名（含 OXPHOS 就叫 "OXPHOS/ETC module"），⛔ 别用疾病名，也别用基因数最大的成员（实测自动规则选中 Thermogenesis，会误导成产热通路）。
+
+#### 门禁 4b｜疾病名通路的第二层陷阱：它本身就是 OXPHOS 的别名（2026-10-23 新增）
+
+门禁 4 讲的是「多条疾病名通路彼此冗余(**互相之间**)、别当独立结论」；
+这里补的是更基础的一层 —— **单条疾病名通路自身，语义上可能根本不是那个疾病**。
+
+msigdbr `C2/CP:KEGG_LEGACY` 的 `KEGG_PARKINSONS_DISEASE` 几乎完全由线粒体氧化磷酸化
+（复合物 I 为主）基因组成。它在衰老 / 肌肉 / 任何线粒体相关数据里**必然显著**
+⇒ 语义上 = 「OXPHOS 下调」的**同义反复**，不是「该组织出现帕金森病样改变」。
+同类：`KEGG_ALZHEIMERS_DISEASE`、`KEGG_HUNTINGTONS_DISEASE`、`KEGG_AMYOTROPHIC_LATERAL_SCLEROSIS`
+同样都是线粒体 / 蛋白酶体基因的集合。
+
+**诊断判据（一步到位）**：疾病名通路显著时，看 `OXIDATIVE PHOSPHORYLATION` / `RIBOSOME`
+是否**同时显著且 fold 接近**。是 ⇒ 按机制通路报告（呼吸链下调），疾病名只在表里保留原样，
+**正文不得写成疾病关联**。
+
+实测（人示例组织 aging，RP_high(II) 亚群）：OXPHOS GO padj **2.7e−48** fold 7.4 ／
+KEGG PD padj **4.6e−48** fold 8.1 —— padj 与 fold 几乎重合，就是同一批基因。
+同批 10 个亚群里 8 个出现 KEGG PD 显著，全部伴随 OXPHOS 显著。
 
 ### 门禁 5｜效应量阈值：θ 凭什么取这个数（2026-09-28 新增）
 
@@ -258,6 +281,9 @@ flowchart TD
 | `AggregateExpression(sub, layer="counts")` → `formal argument "layer" matched by multiple actual arguments`（连带 `slot="counts"` 兜底分支也静默失败，聚合矩阵返回 NULL，报错点飘到下游 `stopifnot`）（2026-09-24 实测） | 参数签名冲突 + tryCatch 兜底把错误吞掉 | **别用 `AggregateExpression` 做 pseudobulk**，手写稀疏求和：`cnt <- GetAssayData(sub, assay="RNA", layer="counts")` → `pb <- vapply(unique(grp), function(s) as.numeric(Matrix::rowSums(cnt[, grp==s, drop=FALSE])), numeric(nrow(cnt)))`（老版 Seurat 用 `slot=`） |
 | DESeq2 报 `variables in design formula cannot contain NA: type` | `sub$type[match(colnames(pb), sub$samplename)]` 在聚合带出空样本列时 `match` 返回 NA | 用 `unique()` 建的 **样本名→组别映射表**对齐，再 `stopifnot(!any(is.na(col_tab$type)), ncol(pb) >= 4)`；多余的列先 `pb[, ok]` 剔除 |
 | `assays(dds)[["cooks"]]` 报 `could not find function "assays"` | 精简 R 会话没 attach SummarizedExperiment | 写全名 `SummarizedExperiment::assays(dds)[["cooks"]]` |
+| 手写超几何 ORA 报 `选择了未定义的列` | `rbind(df1, df2)` 两个 data.frame 出来**还是 data.frame**，此时 `x[logical]` 是**列选择**语义，后面所有 `DT[i]` 语法失效 | `sets_all <- as.data.table(rbind(prep(gobp), prep(kegg)))` + `unique(by=c("db","gs_name","symbol"))`（顺带防 sparseMatrix 对重复 (i,j) 求和致 K 虚高） |
+| `M %*% sel` 报 `non-conformable arguments` | `sparseMatrix(i=, j=, x=)` 不传 `dims=` 时按 `max(i)/max(j)` 推维度；基因集**不覆盖** universe 中索引最大的基因 → `ncol(M) < N`（只在\"有些基因不在任何集合里\"时暴露，小示范数据看不出来） | `sparseMatrix(..., dims = c(length(gs_lv), length(u_genes)))` 显式给维度 |
+| `facet_wrap(interaction(a,b,sep="\n"), ...)` 报 `找不到对象'a'`，调用栈 `check_vars -> is_mapping -> interaction` | facet 的表达式在**数据上下文之外**求值 | 先落实体列 `d[, facet_grp := paste(as.character(a), as.character(b), sep="\n")]` 再 `facet_wrap(~ facet_grp, ...)`；网格底表（`expand.grid`）建完要**显式** `factor(..., levels=LVL)`，别靠 `unique()` 顺序 |
 
 ## 读本 skill 后的动作
 

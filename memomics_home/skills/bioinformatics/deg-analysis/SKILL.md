@@ -209,7 +209,7 @@ Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正
 | human | skeletal_muscle | exercise+aging | 2026-09-28 | 15_diag_new_deg_inflation.py | - | - |  |
 | human | skeletal_muscle | exercise+aging | 2026-09-29 | 19_coef_threshold_stats.py | - | - |  |
 | human | skeletal_muscle | exercise+aging | 2026-09-29 | lit_verify_coef_thresholds | - | - |  |
-| human | skeletal_muscle | exercise+aging | 2026-09-29 | fetch_example_cohort_threshold | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-09-29 | fetch_示例队列_official_threshold | - | - |  |
 | human | skeletal_muscle | exercise+aging | 2026-09-29 | 20_coef_threshold_diagnosis.py | - | - |  |
 | human | skeletal_muscle | exercise | 2026-09-29 | 21_export_coef025_by_contrast.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-29 | 21_export_coef025_by_contrast.py | - | - |  |
@@ -239,6 +239,17 @@ Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正
 | human | skeletal_muscle | aging+exercise | 2026-10-04 | hsp_extended_scope_sensitivity.py | - | - |  |
 | human | skeletal_muscle | exercise+aging | 2026-10-09 | stat_musc_cells.R | - | - |  |
 | human | skeletal_muscle | exercise+aging | 2026-10-09 | plot_musc_coverage.py | - | - |  |
+| - | - | - | 2026-10-18 | locate_prior_two_group_pipeline | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-18 | aging_vs_t2d_welch_ttest.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | probe_aging_csv_structure | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | 20_aging_deg_descriptive.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | aging_summary_extract | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | 00_inspect_deg_xlsx.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | 00_inspect_deg_xlsx.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | inspect_merged_od_xlsx.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | inspect_merged_xlsx.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | inspect_merged_od_xlsx.py | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | recon2_columns_OD.py | - | - |  |
 ## 🚨 Critical Pitfalls
 
 ### P1: Pseudobulk per subcluster×condition breaks DESeq2
@@ -268,7 +279,7 @@ Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| error in evaluating the argument 'X' in selecting  | split() 的分组变量为 NULL —— 想当然假设 meta 里有 ind | MF_subset_2000.rds 的 meta.data 不含 individual 列（只有  |
+| error in evaluating the argument 'X' in selecting  | split() 的分组变量为 NULL —— 想当然假设 meta 里有 ind | 示例数据.rds 的 meta.data 不含 individual 列（只有  |
 | variables in design formula cannot contain NA: typ | pseudobulk 聚合列名（colnames(pb)）与 sub$sampl | 待修:pseudobulk meta$type 由 sub$type[match(colnames( |
 | unused argument (compression = "none") — ggsave 在  | ggsave 的 compression 参数按设备分发，png 设备不接受该参 | 拆开三次 ggsave 调用：png/pdf 不传 compression，tiff 传 compr |
 | there is no package called 'MAST' | MAST not installed | `BiocManager::install('MAST')` |

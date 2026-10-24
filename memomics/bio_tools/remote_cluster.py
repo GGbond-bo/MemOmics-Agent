@@ -37,7 +37,7 @@ StrictHostKeyChecking=accept-new/ConnectTimeout/-p/-i）与执行语义和 memom
       host: login.example.edu.cn    # 登录节点
       user: zhangsan
       port: 22
-      key: C:/Users/me/.ssh/id_ed25519   # 私钥路径；留空则用 ssh-agent/默认密钥
+      key: <用户目录>/.ssh/id_ed25519   # 私钥路径；留空则用 ssh-agent/默认密钥
       workdir: /home/zhangsan/proj       # 远端工作目录（默认执行目录）
       scheduler: auto               # auto | slurm | pbs | gridengine | none
       partition: cpu                # Slurm 默认分区
@@ -142,7 +142,7 @@ def _get_config_path() -> Path:
         from hermes_constants import get_hermes_home
         base = Path(get_hermes_home())
     except Exception:
-        base = Path(os.environ.get("MEMOMICS_HOME", "<安装目录>"))
+        base = Path(os.environ.get("MEMOMICS_HOME", "<安装目录>/memomics_home"))
     return base / "config.yaml"
 
 
@@ -287,7 +287,7 @@ def _normalize_nodes(raw) -> dict:
               host: 10.0.0.5
               user: zhang
               port: 2222
-              key: C:/Users/me/.ssh/id_gpu
+              key: <用户目录>/.ssh/id_gpu
               proxy_jump: bastion.example.org
               workdir: /data/zhang
               note: 带 A100 的节点

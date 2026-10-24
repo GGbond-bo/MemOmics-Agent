@@ -66,8 +66,6 @@ Three files:
 | `html_report_builder.py` | Core library — import this in your script |
 | `example_usage.py` | Minimal template for any analysis (DEG, GSEA, etc.) |
 | `hdwgcna_report_generator.py` | Full reference implementation for hdWGCNA |
-| `references/sctour-report-template.md` | scTour trajectory report template (9 sections, 10 figs, 5 debates, 4 tables) |
-| `references/figure-completeness-check.md` | Post-generation figure completeness verification and recovery procedure |
 
 ---
 
@@ -375,7 +373,6 @@ from the internet when the HTML is opened in a browser.
 When the LLM generates the report after a multi-phase analysis, it often omits figures
 from earlier phases.
 
-**Fix**: After saving the report, verify figure completeness (see `references/figure-completeness-check.md`).
 
 ### ⚠️ Pitfall: param_source_zh Is Now Required (v1.1+)
 

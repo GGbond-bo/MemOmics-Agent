@@ -267,7 +267,7 @@ cat > "$HERMES_HOME/config.yaml" <<'YAML'
 model:
   provider: custom
   default: qwen3.6:35b
-  base_url: http://login-host:22/v1
+  base_url: http://127.0.0.1:11434/v1
   api_key: ollama
 plugins:
   enabled:
@@ -278,7 +278,7 @@ delegation:
   child_timeout_seconds: 180
   model: qwen3.6:35b
   provider: custom
-  base_url: http://login-host:22/v1
+  base_url: http://127.0.0.1:11434/v1
   api_key: ollama
 YAML
 ```
@@ -515,7 +515,7 @@ cat > "$HERMES_HOME/config.yaml" <<'YAML'
 model:
   provider: custom
   default: qwen3.6:35b
-  base_url: http://login-host:22/v1
+  base_url: http://127.0.0.1:11434/v1
   api_key: ollama
 plugins:
   enabled:

@@ -70,7 +70,7 @@ mkdir -p ~/notebooks
 Write a minimal .ipynb JSON file with one empty code cell, then start a kernel
 session via the Jupyter REST API:
 ```
-curl -s -X POST http://login-host:22/api/sessions \
+curl -s -X POST http://127.0.0.1:8888/api/sessions \
   -H "Content-Type: application/json" \
   -d '{"path":"scratch.ipynb","type":"notebook","name":"scratch.ipynb","kernel":{"name":"python3"}}'
 ```

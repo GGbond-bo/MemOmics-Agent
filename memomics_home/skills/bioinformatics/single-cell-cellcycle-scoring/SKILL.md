@@ -107,5 +107,4 @@ ICC <- (MSB - MSW)/(MSB + (m0-1)*MSW); DEFF <- 1 + (m0-1)*ICC      # 有效 n = 
 
 ## 支持文件
 - `scripts/cellcycle_validity_controls.R` — 一键跑阴性对照（marker 检出率 by 相位/组/供体）+ ICC/设计效应 +
-  供体级置换 + n 核 bootstrap，输出 CSV 与控制台判定行（可直接改路径复用）
-- `references/mf2000-cellcycle-case.md` — 上述 示例数据 案例的完整数值、命令与产物路径
+  供体级置换 + n 核 bootstrap，输出 CSV 与控制台判定行（可直接改路径复用）

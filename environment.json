@@ -1,0 +1,21 @@
+{
+  "_version": "1.1",
+  "_description": "MemOmics 全局环境 — 首次启动时 validate_env.py 自动探测填充。",
+  "platform": {
+    "current": "windows",
+    "supported": ["windows", "linux", "darwin"]
+  },
+  "task_guardian": {
+    "_comment": "通用长任务守护配置。project_dir 缺省则不启动守护。",
+    "project_dir": "",
+    "heartbeat_script": "heartbeat_v2.py",
+    "scanner_script": "error_scanner.py",
+    "task_name": "default_task",
+    "check_interval": 60
+  },
+  "paths": {
+    "python": {},
+    "r": {},
+    "conda_envs": []
+  }
+}

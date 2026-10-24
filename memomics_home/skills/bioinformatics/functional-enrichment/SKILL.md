@@ -196,10 +196,16 @@ GSEA/ORA功能富集分析。clusterProfiler/gseapy。GO/KEGG/Reactome/MSigDB
 | human | skeletal_muscle | aging | 2026-10-13 | build_v15_matrix.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-10-13 | build_v15_matrix.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-10-13 | go_heatmap_v15.R | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | 21_aging_enrichment_ORA.R (fixed re-run) | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | 21_aging_enrichment_ORA.R (fix2 re-run) | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | 21_aging_enrichment_ORA.R (ORA step verified) | - | - |  |
+| human | skeletal_muscle | aging | 2026-10-23 | 21_aging_enrichment_ORA.R | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
 |-------|-------|----------|
+| 错误于 M %*% sel: non-conformable arguments | sparseMatrix() 不传 dims 时按 max(i)/max(j)  | sparseMatrix 显式传 dims=c(n_sets, N_genes)；查询向量改为长度  |
+| 错误于`[.data.frame`(sets_all, sets_all$symbol %in% u | data.frame 单参数下标语义与 data.table 不同（列选择 vs | rbind 两个 data.frame 得到的是 data.frame 而非 data.table， |
 | R 进程 PID 59900 在 19:25 后零 CPU/IO、RSS 2335MB 卡死，随后进 | enrichGO 用 pvalueCutoff=1/qvalueCutoff=1 | 拆分脚本：ORA 结果已落盘 → 不重跑 enrichGO；第 5 步 simplify(measu |
 | <text>:1:106: unexpected symbol  1: exec(open("... | 在 execute_r 的持久 R 内核里沿用了 execute_python  | R 内核不支持 Python 的 exec(open(...).read()) 写法，改用 R 原生 |
 | msigdbr() 报错: The `category` argument of `msigdbr( | msigdbr 10.0.0+ 弃用了 category/subcategory | msigdbr 26.1.0 新版 API：category→collection、subcateg |

@@ -83,7 +83,7 @@ else:
 Pitfalls:
 - `conf` is a **str** — do NOT `%.2f` format it (ValueError). Use `conf={conf}` or str().
 - Locate uploaded files first: webui uploads live under
-  `<安装目录> — find with
+  `<安装目录>/webui/uploads/<timestamp>_<name>.png` — find with
   `find <安装目录> -name "<filename>"`.
 
 ## 整册扫描 PDF 批量 OCR（实测 2026-09，26 页 / 263 s）
