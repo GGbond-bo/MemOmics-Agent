@@ -18087,13 +18087,20 @@ async function checkFirstRun() {
   await ensureFreshUI();
   // 2026-10-24（用户最终口径）：欢迎界面只在安装后第一次打开出现一次，之后不再出现。
   // 不做任何 API 配置引导 —— 用户自己去「设置」里填 Key。
+  // 本地兜底标记（防"新前端 + 旧后端"混搭时反复弹）
+  var _localSeen = '';
+  try { _localSeen = localStorage.getItem('memomics_welcome_shown') || ''; } catch(e) {}
+  if (_localSeen === '1') return;                   // 本地已看过 → 不弹
   try {
     var r = await fetch('/api/setup/status');
+    if (!r.ok) return;                              // 请求失败：不弹（宁可少弹）
     var d = await r.json();
-    if (d.welcome_shown) return;   // 已经看过：永不再弹
+    // 只有明确"没看过"才弹：字段缺失（旧后端）/ true 一律不弹
+    if (typeof d.welcome_shown !== 'boolean') return;
+    if (d.welcome_shown) return;
     showWelcome();
-    markWelcomeShown();           // 弹出即记账（本次记下，之后不再出现）
-  } catch(e) { /* 忽略 */ }
+    markWelcomeShown();           // 弹出即记账（本地 + 服务端）
+  } catch(e) { /* 忽略：任何异常都不打扰用户 */ }
 }
 
 // 标记「欢迎界面已展示」——服务端持久化，跨刷新/跨版本都只出现一次

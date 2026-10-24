@@ -68,6 +68,16 @@ class TestMinimalWelcome(unittest.TestCase):
         body = self.h[i:i + 1100]
         self.assertNotIn("needs_config", body)
 
+    def test_welcome_guarded_against_old_backend(self):
+        """事故回归（2026-10-24）：常驻进程未重启 = 新前端 + 旧后端，
+        旧后端不返回 welcome_shown → 前端若判 undefined 会每次刷新都弹。
+        契约：字段缺失 / 请求失败 / 本地已看过 → 一律不弹。"""
+        i = self.h.find("async function checkFirstRun()")
+        body = self.h[i:i + 1400]
+        self.assertIn("typeof d.welcome_shown !== 'boolean'", body, "缺少字段类型校验")
+        self.assertIn("if (!r.ok) return;", body, "缺少请求失败保护")
+        self.assertIn("_localSeen", body, "缺少本地兜底标记")
+
     # ── 3. needs_config 判据收窄 ────────────────────────────────────────
     def test_needs_config_requires_no_saved_key(self):
         self.assertIn("_any_saved_key", self.s)
