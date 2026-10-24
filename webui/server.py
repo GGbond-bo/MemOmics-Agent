@@ -1433,7 +1433,7 @@ def _auto_create_task_plan(session, plan_path):
             text = m.get("content", "")
             if isinstance(text, str) and len(text) > 3:
                 goal = text[:80].replace("\n", " ")
-                # 尝试提取用户指定的路径（如 /data/CellBender_v2）
+                # 尝试提取用户指定的路径（如 F:/CellBender_v2）
                 import re
                 _path_match = re.search(r"([A-Za-z]:[/\\][^\s,，。]+)", text)
                 if _path_match:
@@ -8299,7 +8299,7 @@ def _extract_and_store_requirements(session, text):
             if any(_m in _s for _m in _META_WORDS):
                 continue  # (用户纠错) 含"取消/改成/不用记"等元指令的句子是操作不是新要求
             # 2026-08-31 极端评测修复：系统命令输出/服务器命令回显不是要求
-            # （实测 "df -h /cluster/… Filesystem Size Used Avail Use%" 被入库）。
+            # （实测 "df -h /hwfssz3/… Filesystem Size Used Avail Use%" 被入库）。
             # 注意：命令必须"命令+参数"组合（df -/du /ls /cat …），
             # 裸"conda 环境在 E:/envs"是环境陈述必须放行（回归教训）。
             if re.search(r"^\s*(df\s+-|du\s+\S|ls\s+-|cat\s+\S|head\s+-|tail\s+-|free\s+-|nvidia-smi\b|pip\s+install)", _s) \
@@ -8867,6 +8867,26 @@ async def set_reasoning_effort(request: Request):
     ok = _write_effort(level)
     logger.info(f"[reasoning] 思考强度设为 {level}（off=不发送）")
     return {"ok": bool(ok), "level": level}
+
+
+def _current_model_config_error(cfg=None) -> str:
+    """当前模型配置是否可用于创建 Agent；不可用时返回给用户看的提示语。
+
+    2026-10-24（用户反馈）：全量包安装后在欢迎向导点「稍后配置」，直接发消息会抛
+    hermes-agent 的原始报错（Provider 'openai' is set in config.yaml but no API key
+    was found）。这里提前判出「还没配 Key / Base URL / 模型」，给一句人话。
+    """
+    c = cfg or _current_model or {}
+    try:
+        if not _is_valid_api_key(c.get("api_key")):
+            return "还没有配置 API Key —— 请点左下角「⚙️ 设置」或下面的「配置 API 提供商」填好 Key 再开始对话。"
+        if not (c.get("base_url") or "").strip():
+            return "还没有配置 API Base URL —— 请在「⚙️ 设置 → API 提供商」里选一家提供商并填写。"
+        if not (c.get("model") or "").strip():
+            return "还没有选择模型 —— 请在「⚙️ 设置」里选一个模型。"
+    except Exception as e:
+        return "模型配置读取异常：%s" % (str(e)[:120],)
+    return ""
 
 
 def _create_agent(model_config=None, session_id=None, session=None):
@@ -20566,13 +20586,28 @@ async def ws_endpoint(ws: WebSocket):
                     _ei = _pt(session, "initializing_engine")
                     _session_emit(session, {"type": "progress", "step": _ei, "status": "pending",
                         "detail": _pt(session, "loading_skills"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                    _cfg_err = _current_model_config_error(session.get("model_config"))
+                    if _cfg_err:
+                        # 2026-10-24：未配置就发消息 → 给可读提示并让前端弹回配置向导，
+                        # 不再转发 hermes-agent 的原始报错（用户看不懂、也不知去哪配）
+                        _session_emit(session, {"type": "error", "content": "⚠️ " + _cfg_err,
+                                                "need_setup": True})
+                        session["_user_turn_active"] = False
+                        if _thread_state is not None:
+                            _thread_state.mark_turn_end(session["id"])
+                        continue
                     try:
                         agent = _create_agent(session["model_config"], session_id=session["id"], session=session)
                         session["agent"] = agent  # 缓存到 session
                         _session_emit(session, {"type": "progress", "step": _ei, "status": "done",
                             "detail": _pt(session, "engine_ready"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                     except Exception as e:
-                        _session_emit(session, {"type": "error", "content": f"Agent 创建失败: {e}"})
+                        # 兜底：仍然失败时把原始信息附在人话后面，便于排查
+                        _msg = str(e)
+                        if "no API key" in _msg or "API key was found" in _msg:
+                            _msg = ("还没有配置 API Key（或 Key 无效）—— 请在「⚙️ 设置」里填好再试。"
+                                    "\n技术细节：" + _msg[:200])
+                        _session_emit(session, {"type": "error", "content": f"Agent 创建失败: {_msg}"})
                         session["_user_turn_active"] = False  # 并发护栏: 失败路径也需清除
                         if _thread_state is not None:
                             _thread_state.mark_turn_end(session["id"])
@@ -21414,7 +21449,7 @@ async def ws_endpoint(ws: WebSocket):
                                 try:
                                     _recent_files = []
                                     _scan_dirs = []
-                                    # 用户指定的分析目录（如 /data/CellBender_v2）
+                                    # 用户指定的分析目录（如 F:/CellBender_v2）
                                     _analysis_dir = _s.get("analysis_dir", "")
                                     if _analysis_dir and os.path.isdir(_analysis_dir):
                                         _scan_dirs.append(_analysis_dir)

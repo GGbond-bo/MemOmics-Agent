@@ -2432,7 +2432,7 @@ var I18N_DYN = {
 '会话大纲':'Session Outline',
 '会话自检：pid/内存/对象/readRDS/图':'Session self-check: pid/memory/objects/readRDS/plots',
 '你':'You',
-'例 node1；填了它，说「用集群」就走它，想换就点名':'Example: node1; once set, saying Use Cluster goes there; to switch, name another one',
+'例 ssh3；填了它，说「用集群」就走它，想换就点名':'Example: ssh3; once set, saying Use Cluster goes there; to switch, name another one',
 '例如 deg-analysis；留空 = 全部导出':'Example: deg-analysis; leave empty = export everything',
 '依据':'Basis',
 '依据里含 PMID/DOI/KB/数据 锚点':'Basis contains PMID/DOI/KB/data anchors',
@@ -2560,8 +2560,8 @@ var I18N_DYN = {
 '大小：':'Size:',
 '失效边界':'Failure Boundary',
 '失败详情':'Failure Details',
-'如 login-host 或公网 IP':'e.g. login-host or a public IP',
-'如 node1（字母/数字/._-，会进入作业名）':'e.g. node1 (letters / digits / . _ -; it becomes part of the job name)',
+'如 cngb-supermem-a15-3 或公网 IP':'e.g. cngb-supermem-a15-3 or a public IP',
+'如 ssh3（字母/数字/._-，会进入作业名）':'e.g. ssh3 (letters / digits / . _ -; it becomes part of the job name)',
 '如: custom-heatmap':'e.g. custom-heatmap',
 '如: heatmap.R, utils.R':'e.g. heatmap.R, utils.R',
 '如: 当用户需要绘制热图时触发':'e.g. Triggered when the user needs to draw a heatmap',
@@ -2871,7 +2871,7 @@ var I18N_DYN = {
 '自检后自动同步到环境管理':'Sync to Environment Manager automatically after self-check',
 '自检成功后，自动把节点环境（核数/内存/调度器/R·Python 版本）沉淀到 🧩 环境管理；你手填的声明字段不会被覆盖':'After a successful self-check, the node environment (cores / memory / scheduler / R and Python versions) is saved into 🧩 Environment Manager automatically; declaration fields you filled in by hand are never overwritten',
 '节点名':'Node Name',
-'节点名 如 node1':'Node name, e.g. node1',
+'节点名 如 ssh3':'Node name, e.g. ssh3',
 '节点地址':'Node Address',
 '补全失败':'Completion failed',
 '表格加宽 200px（超宽时左右滚动）':'Widen the table by 200px (scroll left and right when it is too wide)',
@@ -4508,6 +4508,12 @@ function handleMessage(msg) {
     document.getElementById('steer-hint').style.display = 'none';
     refreshResults();  // 出错也可能已有部分产出,顺带刷一下结果面板
     _scheduleResultsRefresh(2500);   // 2026-10-12：出错/中断后同样宽限轮询，别让最后落盘的图漏掉
+    // 2026-10-24：还没配 API Key 就发消息 → 后端回 need_setup，这里把配置向导自动弹回来
+    // （此前只显示 hermes-agent 的原始报错，用户不知道去哪配）
+    if (msg.need_setup) {
+      try { localStorage.removeItem('memomics_setup_dismissed'); } catch (e) {}
+      if (typeof showSetupModal === 'function' && !document.getElementById('setup-modal')) showSetupModal();
+    }
   } else if (msg.type === 'todos') {
     renderTodos(msg.todos);
   } else if (msg.type === 'todos_update') {
@@ -18723,7 +18729,7 @@ function emDeclEdit() {
   var dec = (cl.declared && cl.declared.cluster) ? { cluster: cl.declared.cluster } : {};
   box.style.display = 'block';
   box.innerHTML = '<div class="em-form">' +
-    emRow(emT('em_decl_node'), emDeclInput('em-d-node', 'node1')) +
+    emRow(emT('em_decl_node'), emDeclInput('em-d-node', 'ssh3')) +
     emRow(emT('em_decl_host'), emDeclInput('em-d-host', 'login.hpc.example.edu')) +
     emRow(emT('em_decl_user'), emDeclInput('em-d-user', 'myaccount')) +
     emRow(emT('em_decl_workdir'), emDeclInput('em-d-workdir', '/data/proj')) +
@@ -18836,7 +18842,7 @@ var CLUSTER_MODES = {
   check:  { opt: 'check · 自检',      ph: '（不用输入，直接点执行）', hint: 'check：连通性 / 调度器 / CPU·内存 / 工作目录 / 已装工具自检。第一次连集群先跑这个。' },
   nodes:  { opt: 'nodes · 节点体检',  ph: '（不用输入；上面的节点选一个就只查那一个）', hint: 'nodes：列出配置里的所有节点，逐个探连通性 + CPU核数 + 负载 + 工作目录剩余空间，用来判断「现在哪台空着」。' },
   jobs:   { opt: 'jobs · 作业列表',   ph: '（不用输入，直接点执行）', hint: 'jobs：队列 + 最近作业历史（sacct）+ 本工具提交过的作业记录。' },
-  session_start:   { opt: '🧠 会话 · 开常驻', ph: '要读一次的大文件（可留空 = 空会话）  例：/cluster/share/user/Muscle_96_38/Umap/musc_annotation_umap_clean.rds', hint: 'session_start：在节点上起一个常驻 R 进程（setsid，ps 里看得见），带大文件就先同步读进内存——之后 FindMarkers / CellChat / 参数扫描都复用这个对象，不再回读。大文件（≥100MB）会自动落任务标记。' },
+  session_start:   { opt: '🧠 会话 · 开常驻', ph: '要读一次的大文件（可留空 = 空会话）  例：/hwfssz3/PS_JLU/zhangbo/Muscle_96_38/Umap/musc_annotation_umap_clean.rds', hint: 'session_start：在节点上起一个常驻 R 进程（setsid，ps 里看得见），带大文件就先同步读进内存——之后 FindMarkers / CellChat / 参数扫描都复用这个对象，不再回读。大文件（≥100MB）会自动落任务标记。' },
   session_exec:    { opt: '🧠 会话 · 投代码', ph: 'R 代码（多行；同一个进程里接着跑）  例：\nDimPlot(musc, reduction = "umap")\nFindMarkers(musc, ident.1 = "MuSC", only.pos = TRUE)', hint: 'session_exec：把 R 代码投给常驻会话（同一个 globalenv）。留空 = 看状态。跑得久的命令（FindMarkers 几分钟）建议走 agent 用 async=true，或先投再点「看状态」。' },
   session_status:  { opt: '🧠 会话 · 看状态', ph: '会话号（留空 = 最近一个）', hint: 'session_status：pid 活没活 / busy 在跑什么 / 内存 RSS / 对象数 / readRDS 审计 / 队列 / 检查点 / 日志尾巴。' },
   session_save:    { opt: '🧠 会话 · 存检查点', ph: '会话号 [检查点名]（会话号可留空）', hint: 'session_save：把会话对象落成 ckpt/<名>.rds（默认全部会话对象 + 时间戳名）。大对象会慢，但进程死了/换节点就靠它恢复。' },
@@ -19001,7 +19007,7 @@ function clusterNodeRow(spec, eff, isDefault) {
   function inh(v, dflt) { return (v == null || v === '') ? (dflt == null ? '空' : dflt) : v; }
   var hasAdv = !!(spec.port || spec.user || spec.key || spec.workdir || spec.scheduler);
   row.innerHTML =
-    '<input class="cc-node-name" placeholder="' + T('节点名 如 node1') + '" value="' + ccAttr(spec.name) + '">' +
+    '<input class="cc-node-name" placeholder="' + T('节点名 如 ssh3') + '" value="' + ccAttr(spec.name) + '">' +
     '<input class="cc-node-host" placeholder="' + T('host：节点地址') + '" value="' + ccAttr(spec.host) + '">' +
     '<input class="cc-node-proxy_jump" placeholder="' + T('跳板机（可空；经登录口再跳填 user@IP）') + '" value="' + ccAttr(spec.proxy_jump) + '">' +
     '<input class="cc-node-note" placeholder="' + T('备注（可空，中文写这里）') + '" value="' + ccAttr(spec.note) + '">' +
@@ -19254,7 +19260,7 @@ function cwValidateStep1() {
   var ok = true;
   var name = (document.getElementById('cw-name').value || '').trim();
   var host = (document.getElementById('cw-host').value || '').trim();
-  if (!name) { ok = cwFieldErr('cw-name', '必填：节点名是选机器用的名字（如 node1）') && ok; }
+  if (!name) { ok = cwFieldErr('cw-name', '必填：节点名是选机器用的名字（如 ssh3）') && ok; }
   else if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,47}$/.test(name)) { ok = cwFieldErr('cw-name', '只能用字母/数字/点/下划线/短横线（≤48 字符）') && ok; }
   else {
     var dup = ((_clusterCfg || {}).nodes || []).some(function (n) { return String(n.name).toLowerCase() === name.toLowerCase(); });
@@ -19263,7 +19269,7 @@ function cwValidateStep1() {
   ok = cwFieldErr('cw-host', host ? '' : '必填：节点的地址（主机名或 IP）') && ok;
   var jump = document.querySelector('input[name="cw-jump"]:checked');
   var jumpVal = (document.getElementById('cw-jumpval').value || '').trim();
-  if (jump && jump.value === 'jump') { ok = cwFieldErr('cw-jumpval', jumpVal ? '' : '必填：跳板 = 登录口地址，形如 user@10.0.0.1') && ok; }
+  if (jump && jump.value === 'jump') { ok = cwFieldErr('cw-jumpval', jumpVal ? '' : '必填：跳板 = 登录口地址，形如 user@192.168.61.11') && ok; }
   else { cwFieldErr('cw-jumpval', ''); }
   return ok;
 }
@@ -22653,7 +22659,7 @@ async function saveUpdateConfig(mode) {
       <label>登录节点 host<input id="cc-host" placeholder="cluster.example.edu"></label>
       <label>端口<input id="cc-port" placeholder="22"></label>
       <label>用户名<input id="cc-user" placeholder="yourname"></label>
-      <label>私钥路径<input id="cc-key" placeholder="<用户目录>/.ssh/id_ed25519"></label>
+      <label>私钥路径<input id="cc-key" placeholder="C:/Users/you/.ssh/id_ed25519"></label>
       <label>远端工作目录<input id="cc-workdir" placeholder="/home/you/project"></label>
       <label>调度器<select id="cc-scheduler">
         <option value="auto">auto（自动探测）</option>
@@ -22667,7 +22673,7 @@ async function saveUpdateConfig(mode) {
       <label>本地根目录<input id="cc-local-root" placeholder="E:/data"></label>
       <label>远端根目录<input id="cc-remote-root" placeholder="/home/you/data"></label>
       <label>超时秒<input id="cc-timeout" placeholder="300"></label>
-      <label>默认节点 default_node<input id="cc-default-node" placeholder="例 node1；填了它，说「用集群」就走它，想换就点名"></label>
+      <label>默认节点 default_node<input id="cc-default-node" placeholder="例 ssh3；填了它，说「用集群」就走它，想换就点名"></label>
       <label>没指定节点时<select id="cc-node-policy">
         <option value="ask">ask（多个节点时先问清用哪个）</option>
         <option value="auto">auto（暂未实现，按 ask 处理）</option>
@@ -22753,12 +22759,12 @@ async function saveUpdateConfig(mode) {
       <div id="cw-step1">
         <div class="cw-field" id="cw-f-name">
           <label>节点名 <b class="cw-req">*</b></label>
-          <input id="cw-name" type="text" placeholder="如 node1（字母/数字/._-，会进入作业名）" onkeydown="if(event.key==='Enter')cwNext()">
+          <input id="cw-name" type="text" placeholder="如 ssh3（字母/数字/._-，会进入作业名）" onkeydown="if(event.key==='Enter')cwNext()">
           <div class="cw-err" id="cw-name-err"></div>
         </div>
         <div class="cw-field" id="cw-f-host">
           <label>节点地址 <b class="cw-req">*</b></label>
-          <input id="cw-host" type="text" placeholder="如 login-host 或公网 IP" onkeydown="if(event.key==='Enter')cwNext()">
+          <input id="cw-host" type="text" placeholder="如 cngb-supermem-a15-3 或公网 IP" onkeydown="if(event.key==='Enter')cwNext()">
           <div class="cw-err" id="cw-host-err"></div>
         </div>
         <div class="cw-field">
