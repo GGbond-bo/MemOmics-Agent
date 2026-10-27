@@ -174,7 +174,9 @@ def _find_kb_root() -> Path:
     # 2. 相对路径
     cwd_path = Path("memomics/knowledge_base")
     if cwd_path.exists():
-        return cwd_path
+        # 2026-10-26：统一返回绝对路径（此前从安装目录启动时返回相对路径，
+        # 与 kb_roots/save_knowledge 的绝对路径形态不一致，排查时容易误判）
+        return cwd_path.resolve()
 
     # 3. 基于本文件位置推导
     this_file = Path(__file__).resolve()
@@ -184,23 +186,21 @@ def _find_kb_root() -> Path:
     if derived_path.exists():
         return derived_path
 
-    # 4. 基于项目根目录
-    # 可能是 <安装目录> 或 E:/MemOmics 等
-    project_root = this_file.parent.parent.parent
-    for candidate in [
-        project_root / "memomics" / "knowledge_base",
-        project_root / "MemOmics-Agent" / "memomics" / "knowledge_base",
-    ]:
-        if candidate.exists():
-            return candidate
+    # 4. 统一真源（2026-10-26）：kb_roots.kb_root_path 会顺带探测 cwd 变体与常见部署路径；
+    #    这里只返回"确实存在"的目录（创建交给 ensure_kb_root，写入端用）。
+    try:
+        from memomics.bio_tools.kb_roots import kb_root_path
+        unified = Path(kb_root_path())
+        if unified.exists():
+            return unified
+    except Exception:
+        pass
 
-    # 5. 常见部署路径（最后手段）
-    for fallback in [
-        Path("<安装目录>/memomics/knowledge_base"),
-        Path("E:/MemOmics/memomics/knowledge_base"),
-    ]:
-        if fallback.exists():
-            return fallback
+    # 5. 基于项目根目录（老口径保留：项目根/MemOmics-Agent 嵌套形态）
+    project_root = this_file.parent.parent.parent
+    candidate = project_root / "MemOmics-Agent" / "memomics" / "knowledge_base"
+    if candidate.exists():
+        return candidate
 
     return None  # 未找到
 
@@ -787,16 +787,18 @@ def kb_coverage(species: str = "", tissue: str = "", direction: str = "", assay:
                     _cd = os.path.join(_dir_base, _cat)
                     _fs = []
                     if os.path.isdir(_cd):
-                        if _cat == "03_测序方法":
-                            # 方法类目下按 assay 子目录组织 → 递归计数
-                            _fs = sorted(str(f.relative_to(_cd)).replace("\\", "/")
-                                         for f in Path(_cd).rglob("*.yaml") if f.is_file())
-                        else:
-                            _fs = sorted(f for f in os.listdir(_cd) if f.endswith((".yaml", ".yml", ".md")))
+                        # 2026-10-26 修复：五级目录下条目统一落在 <category>/<assay>/，
+                        # 此前 01/02 用非递归 listdir → 子目录里的条目被数成 0
+                        # （用户实测：已有 1 条生物学知识却显示缺）。统一递归计数。
+                        _fs = sorted(str(f.relative_to(_cd)).replace("\\", "/")
+                                     for f in Path(_cd).rglob("*")
+                                     if f.is_file() and f.suffix.lower() in (".yaml", ".yml", ".md"))
                     found["categories"][_cat] = {"count": len(_fs), "sample": _fs[:6]}
                 _md = os.path.join(_dir_base, "03_测序方法", _seg_assay)
                 if os.path.isdir(_md):
-                    _fs = sorted(f for f in os.listdir(_md) if f.endswith((".yaml", ".yml")))
+                    _fs = sorted(str(f.relative_to(_md)).replace("\\", "/")
+                                 for f in Path(_md).rglob("*")
+                                 if f.is_file() and f.suffix.lower() in (".yaml", ".yml"))
                     found["assay"][_seg_assay] = {"count": len(_fs), "sample": _fs[:6]}
 
     if not found["species"] and _seg_species:

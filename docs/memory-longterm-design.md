@@ -132,7 +132,7 @@ protect_last_n                       # 保留尾部最近 N 条
 | 现有能力 | 跨会话作用 |
 |---|---|
 | MEMORY.md 全量注入（volatile 段） | 用户级稳定事实（语言/工具偏好/项目方向）每会话在场 |
-| memory_tool add/replace/remove | 会话中 agent 主动沉淀"用户级事实"（如"用户做人类骨骼肌衰老，用 R"） |
+| memory_tool add/replace/remove | 会话中 agent 主动沉淀"用户级事实"（如"用户做某类组织衰老，用 R"） |
 | skill_evolution（record_run/query_logs） | 脚本经验沉淀（参数+产出物路径） |
 | search_knowledge | 知识库检索 |
 

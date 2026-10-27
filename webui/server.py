@@ -415,6 +415,12 @@ async def _start_runtime_maintenance():
         print("[mem] 慢循环看门狗 + 数据库保养已启动", flush=True)
     except Exception as _e:  # noqa: BLE001
         print("[mem] 看门狗/保养启动跳过: %r" % (_e,), flush=True)
+    # 2026-10-26：知识库自愈 —— 确保 <安装目录>/memomics/knowledge_base 存在，
+    # 并把历史上误落进技能目录的条目搬回（读写同源，防"提取成功却看不见"复发）。
+    try:
+        _kb_boot_migrate()
+    except Exception as _e:  # noqa: BLE001
+        print("[KB] 启动自愈跳过: %r" % (_e,), flush=True)
 
 
 async def _slow_loop_heartbeat(_wd) -> None:
@@ -4485,7 +4491,42 @@ for p in _CHINA_PROVIDERS:
         _preset_models.append({"id": m["id"], "name": m["name"] + " (" + _pname + ")", "provider": "openai", "provider_id": p["id"], "base_url": p["api"], "provider_name": _pname})
 
 SKILLS_DIR = os.path.join(MEMOMICS_DIR, "skills")
-KB_DIR = os.path.join(MEMOMICS_DIR, "memomics", "knowledge_base")
+# 2026-10-26：知识库根目录改为"唯一真源"（memomics/bio_tools/kb_roots）——
+# 此前这里硬编码 <安装目录>/memomics/knowledge_base，而写入端在目录不存在时会兜底写到
+# memomics_home/skills → 读写分裂（用户实测：一键提取成功但浏览页看不见）。
+# 现在两端同源；启动时若发现历史误落盘条目会自动搬回知识库（见 _kb_boot_migrate）。
+try:
+    from memomics.bio_tools.kb_roots import kb_root_path as _kb_root_path
+    KB_DIR = _kb_root_path()
+except Exception:
+    KB_DIR = os.path.join(MEMOMICS_DIR, "memomics", "knowledge_base")
+
+# 知识面包（模型自带知识）——保留原名避免与用户知识库混淆；目录随应用走，缺失时不报错。
+try:
+    KB_BUNDLE_DIR = os.path.join(MEMOMICS_DIR, "knowledge-base-bundle")
+except Exception:
+    KB_BUNDLE_DIR = ""
+
+
+def _kb_boot_migrate():
+    """启动时把历史误落进技能目录的知识库条目搬回 <安装目录>/memomics/knowledge_base。
+
+    只搬 `type: kb_entry` 的 YAML（技能文件不动）；失败不影响启动。
+    """
+    try:
+        from memomics.bio_tools.kb_roots import ensure_kb_root, migrate_misplaced_entries
+        root = ensure_kb_root()
+        if not root:
+            return
+        rep = migrate_misplaced_entries(kb_root=root)
+        if rep.get("moved"):
+            print(f"[KB] 已把 {rep['moved']} 条误落盘知识条目搬回 {root}"
+                  f"（冲突 {rep.get('conflicts', 0)}）")
+    except Exception as _e:
+        try:
+            print(f"[KB] 启动迁移跳过: {_e}")
+        except Exception:
+            pass
 _lit_cache = {}  # P5: literature dedup cache { query_hash: (timestamp, results_json) }
 # P6-3 路径可移植：work/results 默认就在安装目录下（解压到哪就是哪，不绑定任何开发机路径）；
 # 需要把数据放到大盘/独立卷时，设置环境变量 MEMOMICS_DATA_DIR 即可（代码目录仍固定在安装位置）。
@@ -7462,6 +7503,8 @@ _REPLY_STYLE = """
 - 禁止半截交付：最终回答必须自成一体——用户只看最后这一条也能完全看懂结果。
 - 禁止「整轮正文为空」：中间回合不写正文 = 用户看不到任何进度（思考通道不显示），也拿不到「阶段小结」折叠层；每轮至少 2–3 句阶段小结。
 - 最终回答**以结论开头**，不要带「阶段小结」标记、也不要出现「阶段小结」字样；**交付最终结论后不要再调用工具**（要落盘 / 归档 / 记录就放在交付之前），避免「结论后面又补一句收尾话」把真正的结论挤成过程。
+- **思考通道不是交付通道**：思考内容再多也不等于给了用户答案。结论必须写在**正文**里；若本轮思考已很长的，先收住思考、立刻把最终答案写进正文（否则输出预算被思考吃光，用户就只看到阶段小结）。
+- **停下之前先自检**：本次回复若还不是"用户只看这一条就完全看懂结果"的最终答案，就不要停——要么继续调工具把事情做完，要么在本轮正文里把结论写清楚。
 """
 
 
@@ -9926,6 +9969,83 @@ def _ctx_window_info(session, agent=None) -> dict:
     return {"effective": effective, "override": override, "source": source,
             "provider": provider, "provider_name": _ctx_provider_name(base_url),
             "base_url": base_url, "model": model}
+
+
+def _is_stage_summary_text(text: str) -> bool:
+    """这段文字是不是「阶段小结」（不该当作最终结论）。"""
+    t = (text or "").lstrip()
+    for p in ("**阶段小结**", "阶段小结**", "阶段小结：", "**阶段小结：**", "阶段小结"):
+        if t.startswith(p):
+            return True
+    return False
+
+
+# 2026-10-27（用户实测）：回合"结束"判定太早 —— 模型这一轮没交付最终结论就发 complete，
+# 前端随即关掉"运行中"、把输入框交还，用户看到的就是「还没完成却已显示结束」；
+# 若思考内容吃满输出预算，正文只剩阶段小结，任务就"结束"在小结上。
+# 判据刻意保守：只有"完全没正文"或"正文就是阶段小结"才算没交付；
+# 短回复（如用户要求只回两个字）、空回复（另有重试通道）、工具摘要都不误伤。
+_DELIVERY_MIN_CHARS = 80
+
+
+def _answer_delivered(result: str) -> bool:
+    """本回合是否已经向用户交付了实质结论（用于决定能不能发 complete）。"""
+    t = (result or "").strip()
+    if not t:
+        return False                      # 完全没正文（结论写进了思考通道）→ 未交付
+    if _is_stage_summary_text(t):
+        return False                      # 正文只是阶段小结 → 未交付
+    if len(t) < _DELIVERY_MIN_CHARS:
+        return False                      # 短到不可能自成一体的交付
+    return True
+
+
+# 用户明确要"短"时不要补：实测「只回四个字」会被误判未交付 → 补一轮 → 正文重复。
+_USER_WANTS_SHORT_RE = re.compile(
+    r"只回(复)?[一二三四五六七八九十两0-9]+个字|只回(复)?(一|两)句|"
+    r"简短|简洁|一句话(回答|说)|不要多说|别多说|无需(解释|说明)|只要(结果|结论)|"
+    r"短一点|短答|用一句话|reply with (one|a few) words", re.I)
+
+
+def _user_wants_short(user_text: str) -> bool:
+    return bool(_USER_WANTS_SHORT_RE.search(str(user_text or "")))
+
+
+def _should_nudge_final_answer(result: str, tool_calls=None, user_text: str = "") -> bool:
+    """要不要触发"补齐最终结论"（2026-10-27 v2 判据，刻意保守）。
+
+    只在以下三种情况触发：
+      1) 正文为空（内容全写进思考通道，用户什么都看不到）；
+      2) 正文就是「阶段小结」（用户实测的"结束在小结上"）；
+      3) 本回合**调过工具**、但正文过短（干了活却没给结论）。
+    纯短回复（用户明确要简短、且没调工具）一律不触发，避免把正常短答判成未交付。
+    """
+    t = (result or "").strip()
+    if _user_wants_short(user_text):
+        return False
+    if not t:
+        return True
+    if _is_stage_summary_text(t):
+        return True
+    if tool_calls and len(t) < _DELIVERY_MIN_CHARS:
+        return True
+    return False
+
+
+def _final_answer_nudge_text() -> str:
+    """交付补齐指令（内联补跑那一轮的输入，2026-10-27 v2）。
+
+    v1 把它交给自检唤醒调度器 → 实测调度器闸门太多，根本不触发，回合会永久挂起；
+    现在由回合收尾处**当场内联执行**，所以这里只负责给出指令文本。
+    """
+    return (
+        "【交付补齐】系统检查到：你刚结束的这一轮没有给出最终结论"
+        "（正文为空，或只有「阶段小结」/工具调用摘要）。\n"
+        "现在**不要再调用任何工具**，直接用正文写出本任务的最终结论：\n"
+        "1) 一句话答案（加粗）；2) 结果要点（产物路径/关键指标/结论）；"
+        "3) 关键过程 ≤3 行；4) 可选后续建议。\n"
+        "禁止再以「阶段小结：」开头，禁止空正文（思考通道里的内容用户看不到）。"
+    )
 
 
 @app.get("/api/models")
@@ -16421,6 +16541,17 @@ async def serve_paper_page(path: str = "", page: int = 0, dpi: int = 150):
 @app.get("/api/kb")
 async def list_kb(path: str = ""):
     """浏览知识库"""
+    # 2026-10-26：老进程持有的 KB_DIR 可能指向"还不存在"的目录（旧代码导入时的值）；
+    # 这里惰性重解析一次并顺手创建，避免"提取成功却看不见"需要重启才恢复。
+    global KB_DIR
+    if not os.path.isdir(KB_DIR) and not path:
+        try:
+            from memomics.bio_tools.kb_roots import ensure_kb_root
+            _fresh = ensure_kb_root()
+            if _fresh:
+                KB_DIR = _fresh
+        except Exception:
+            pass
     if not path:
         path = KB_DIR
     if not os.path.isdir(path):
@@ -20939,6 +21070,7 @@ async def ws_endpoint(ws: WebSocket):
                 # 回调
                 has_delta = False  # 追踪是否已通过流式发送过文本
                 session.pop("_narration", None)   # 2026-10-23：阶段小结提醒按回合重置
+                session.pop("_final_nudge_used", None)   # 2026-10-27：交付补齐每用户回合最多 1 次
 
                 def stream_cb(delta, _s=session):
                     nonlocal has_delta
@@ -22382,8 +22514,60 @@ async def ws_endpoint(ws: WebSocket):
 
                         # 发送进度完成
                         _session_emit(_session, {"type": "progress", "step": _pt(_session, "complete"), "status": "done", "detail": _pt(_session, "reply_generated"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
+                        # 2026-10-27 交付闸 v2：本轮没有实质结论（正文为空 / 只有阶段小结 / 过短）→
+                        # **当场内联补跑一轮**「只写最终结论、不调工具」，再宣布结束。
+                        # v1 曾把它交给自检唤醒调度器，实测调度器闸门太多（无 results_dir / RunGate 未武装等）
+                        # 根本不触发 → 回合永久挂起（用户实际遇到）。内联执行确定性更强。
+                        # 每用户回合最多补 1 次（_final_nudge_used，新回合重置）；补跑失败也照常收尾，绝不挂死。
+                        _final_retry_done = False
+                        if _should_nudge_final_answer(result, _tool_call_log, user_text) \
+                                and not _session.get("_final_nudge_used"):
+                            _session["_final_nudge_used"] = True
+                            _nudge_text = _final_answer_nudge_text()
+                            try:
+                                _session.setdefault("messages", []).append({
+                                    "role": "system", "content": _nudge_text,
+                                    "time": datetime.now().strftime("%H:%M:%S"),
+                                    "source": "final_answer_nudge"})
+                            except Exception:
+                                pass
+                            try:
+                                _session_emit(_session, {"type": "info",
+                                    "content": "🧾 本轮还没有最终结论，正在让模型补写（只写结论、不调工具）——请稍等这一轮结束",
+                                    "session_id": _session["id"]})
+                            except Exception:
+                                pass
+                            logger.info("[MemOmics] 交付闸生效：内联补跑一轮交付最终结论")
+                            try:
+                                _retry_res = await asyncio.wait_for(
+                                    loop.run_in_executor(
+                                        None,
+                                        lambda: _agent.run_conversation(
+                                            _nudge_text, task_id=_session["id"])),
+                                    timeout=900)
+                                _retry_final = (""
+                                                if _retry_res is None else
+                                                (_retry_res.get("final_response", "")
+                                                 if isinstance(_retry_res, dict) else str(_retry_res)))
+                                if _retry_final and _retry_final.strip():
+                                    result = _retry_final
+                                    # 注意：不要给 has_delta 赋值 —— 它在更外层作用域，
+                                    # 在这里赋值会把它变成内层局部变量（实测 UnboundLocalError）。
+                                    _final_retry_done = True
+                                    try:
+                                        _session.setdefault("messages", []).append({
+                                            "role": "assistant", "content": _retry_final,
+                                            "time": datetime.now().strftime("%H:%M:%S"),
+                                            "source": "final_answer_round"})
+                                    except Exception:
+                                        pass
+                                    logger.info("[MemOmics] 交付补齐完成：%d 字", len(_retry_final))
+                                else:
+                                    logger.warning("[MemOmics] 交付补齐未产出正文（照常收尾）")
+                            except Exception as _e_r:
+                                logger.warning("[MemOmics] 交付补齐失败（照常收尾，不阻塞）: %s", _e_r)
                         # 聊天框内容：有文本回复就用文本，纯工具调用时生成操作摘要
-                        if has_delta:
+                        if has_delta or _final_retry_done:
                             _chat_content = ""  # 已通过 delta 流式发送，不重复
                         elif result and result.strip():
                             _chat_content = result

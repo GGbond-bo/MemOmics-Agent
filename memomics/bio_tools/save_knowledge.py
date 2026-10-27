@@ -163,7 +163,21 @@ def canonical_species(name: str) -> str:
 
 
 def _kb_root():
-    """KB 根目录：MEMOMICS_KB_DIR → kb_search 推导 → memomics_home/skills。"""
+    """KB 根目录（唯一真源：kb_roots.kb_root_path → 不存在则创建）。
+
+    2026-10-26 修复：此前找不到 `memomics/knowledge_base` 时会兜底到
+    `memomics_home/skills`（agent 技能目录）—— 全新安装（包内不带该目录）时
+    条目就写进了技能树，而浏览页/图谱只读 `memomics/knowledge_base`，
+    于是"提取成功却看不见"。现在统一为权威路径并自动建目录，不再往技能目录写。
+    """
+    try:
+        from memomics.bio_tools.kb_roots import ensure_kb_root
+        root = ensure_kb_root()
+        if root:
+            return root
+    except Exception:
+        logger.warning("save_knowledge: ensure_kb_root 失败，回退 _find_kb_root", exc_info=True)
+
     try:
         from memomics.bio_tools.kb_search import _find_kb_root
         root = _find_kb_root()
@@ -174,14 +188,6 @@ def _kb_root():
     env_dir = os.environ.get("MEMOMICS_KB_DIR")
     if env_dir and os.path.isdir(env_dir):
         return env_dir
-    # 最后兜底：memomics_home/skills（agent 实际加载的技能目录）
-    here = os.path.dirname(os.path.abspath(__file__))
-    for _cand in (
-        os.path.normpath(os.path.join(here, "..", "..", "memomics_home", "skills")),
-        "<安装目录>/memomics_home/skills",
-    ):
-        if os.path.isdir(_cand):
-            return _cand
     return None
 
 
