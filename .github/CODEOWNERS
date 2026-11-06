@@ -1,0 +1,3 @@
+# 任何改动都归 @GGbond-bo，PR 一创建即自动请求其 review（用于 PR 邮件/推送通知兜底）
+# https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+*   @GGbond-bo
