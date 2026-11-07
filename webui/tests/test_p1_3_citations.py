@@ -255,10 +255,12 @@ def test_frontend_citations_wired():
                "function renderCitation(", "function closeCitation()",
                "function citeOpenKb()", "function citeOpenUrl()", "function citeCopy("):
         assert fn in html, fn
-    # 三条数据通道：解析接口 / 助手消息 / 流式输出
+    # 三条数据通道：解析接口 / 常规助手消息 / 流式输出与收尾合并。
+    # 流式渲染已改成 segment 管线，不能再钉住早期 fullText 变量名。
     assert "'/api/citations/resolve'" in html
     assert "_citeWrapHtml(renderMarkdown(text))" in html, "助手消息没接引用渲染"
-    assert "_citeWrapHtml(renderMarkdown(fullText))" in html, "流式输出没接引用渲染"
+    assert "return _citeWrapHtml(renderTextSegment(_stripMachinePreamble(seg.raw)));" in html, "流式输出没接引用渲染"
+    assert "_citeWrapHtml(renderMarkdown(concl))" in html, "收尾合并消息没接引用渲染"
     # 深度思考面板的锚点也可点
     assert "onclick=\"openCitation(this)\"" in html
     assert "data-cite=" in html

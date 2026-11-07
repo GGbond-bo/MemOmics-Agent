@@ -15,7 +15,7 @@
 
 ---
 
-## 01_RNA - 单细胞转录组 (46 skills)
+## 01_RNA - 单细胞转录组 (43 skills)
 
 | # | Skill | 使用场景 | 触发词 | Trigger |
 |---|---|---|---|---|
@@ -26,43 +26,42 @@
 | 5 | annotate_celltype_scRNA | When you need annotate celltype scRNA analysis | annotate_celltype_scRNA, annotate celltype scRNA, annotate, celltype | YEL 讨论触发 |
 | 6 | annotate_celltype_with_panhumanpy | When you need annotate celltype with panhumanpy analysis | annotate, celltype, panhumanpy | YEL 讨论触发 |
 | 7 | cell-cell-communication | Infer and visualize cell-cell communication networks from scRNA-seq data using CellChat v2 ligand-receptor interaction analysis. | cell-cell-communication, cell cell communication, communication | YEL 讨论触发 |
-| 8 | cellbender-| 9 | cellchat-v2 | 适用于: 多细胞类型, disease, aging, development | CellChat, 细胞通讯, cellchat-v2, cellchat v2 | RED 必触发 |
-| 10 | coexpression-network | Build gene co-expression networks to identify modules and hub genes from RNA-seq data. | coexpression-network, coexpression network, coexpression, network | YEL 讨论触发 |
-| 11 | create_harmony_embeddings_scRNA | When you need create harmony embeddings scRNA analysis | harmony, embeddings | YEL 讨论触发 |
-| 12 | create_scvi_embeddings_scRNA | When you need create scvi embeddings scRNA analysis | scvi, embeddings | YEL 讨论触发 |
-| 13 | cross-contrast-deg-integration | 多对比 DEG 结果表的整合分析——手里已有 ≥2 套算好的 DEG（多条件 × 多对比、配对供体） 要回答「共同响应基因」「干预逆转某条件的重合基因」「条件特异响应」「响应是否随条件衰减」时用本 skill。 核心是四条:交集必须方向感知（同向=加剧、反向=逆转）、原始交集数必须先减随机期望 E=/A/×/B//N 并改报 OR/Fisher/Jaccard、交集前先查各对比的功效（一边个位数则 | cross, contrast, deg | YEL 讨论触发 |
-| 14 | deg-analysis | 适用于: 有分组的scRNA-seq —— Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正 | DEG, 差异分析, 差异基因, deg-analysis, deg analysis | RED 必触发 |
-| 15 | dimred-representation-comparison | 降维/embedding 表示对比与分群质量定级（PCA vs scVI vs Harmony 等）。触发:'哪个分群更干净'、'scVI 和 PCA 对比'、'换个 embedding 会不会更好'、'降维方法对比'、'embedding 对比'、'用 scVI 做个 embedding 和 PCA 的 UMAP 比一下'。含严格同参原则、输入路线解耦归因、指标集与 sklearn 陷阱、多 s | dimred, representation, comparison | YEL 讨论触发 |
-| 16 | disease-progression-longitudinal | 当你需要 纵向疾病进展 时触发 —— 纵向数据: LME → 轨迹建模 | disease, progression, longitudinal | YEL 讨论触发 |
-| 17 | doublet-detection | 双细胞（doublet）检测与判定:scDblFinder / DoubletFinder（R）与 scrublet（Python）选型与执行，含多样本·每样本细胞数少的数据策略决策、双细胞率判读区间、'要不要剔除'的判定准则与交付口径。触发:'检测双细胞' / '双细胞比例高不高' / '要不要剔除 doublet' / 'doublet rate' / '去双胞'。 | doublet-detection, doublet detection, doublet, detection | YEL 讨论触发 |
-| 18 | doublet-detection-validation | 双细胞检测结果的**可信度验证与剔除决策**。触发:检测一下双细胞 / 双细胞比例高不高 / 要不要剔除 / doublet 比例 / DoubletFinder、scrublet、scDblFinder 的结果怎么解读 / 两个方法结论不一致。核心立场:双细胞检出率是需要被验证的量，不是能直接读出来的量 —— 弱信号数据上算法标签可错到 F1≈0.3，据标签直接剔除等于删掉约 2/3 真细胞。 | doublet, detection, validation | YEL 讨论触发 |
-| 19 | doubletfinder-remove-doublets | scRNA-seq数据需去除双细胞 —— DoubletFinder双细胞检测: Seurat → 人工双胞 → 检测 → 过滤 | doubletfinder, remove doublets, doublets | YEL 讨论触发 |
-| 20 | estimate_cell_cycle_phase_durations | When you need estimate cell cycle phase durations analysis | estimate, cell cycle, cycle, phase | YEL 讨论触发 |
-| 21 | functional-enrichment | 当你需要 功能富集 (GSEA + ORA) 时触发 —— GSEA/ORA功能富集分析。clusterProfiler/gseapy。GO/KEGG/Reactome/MSigDB | 富集分析, GO, KEGG, pathway, functional-enrichment, functional enrichment, functional, enrichment | RED 必触发 |
-| 22 | gene-essentiality | Guidance for interpreting DepMap essentiality scores and correlations correctly. | gene-essentiality, gene essentiality, gene, essentiality | YEL 讨论触发 |
-| 23 | gene_set_enrichment_analysis | When you need gene set enrichment analysis analysis | gene, set, enrichment | YEL 讨论触发 |
-| 24 | get_gene_set_enrichment_analysis_supported_database_list | When you need get gene set enrichment analysis supported database list analysis | gene, set, enrichment, supported | YEL 讨论触发 |
-| 25 | get_rna_seq_archs4 | When you need get rna seq archs4 analysis | get_rna_seq_archs4, get rna seq archs4, seq, archs4 | YEL 讨论触发 |
-| 26 | grn-pyscenic | 当你需要 基因调控网络 (pySCENIC) 时触发 —— pySCENIC基因调控网络推断。TF调控子/aUCell活性评分 | grn-pyscenic, grn pyscenic, grn, pyscenic | YEL 讨论触发 |
-| 27 | hdwgcna | 适用于: 异质性高, >5K细胞, disease, aging | hdwgcna | YEL 讨论触发 |
-| 28 | immune-deconvolution | 适用于: disease, tumor, immune —— CIBERSORTx+xCell+MCP-counter多方法免疫细胞比例估计 | immune-deconvolution, immune deconvolution, immune, deconvolution | YEL 讨论触发 |
-| 29 | infercnv | 当你需要 单细胞CNV推断 时触发 —— inferCNV肿瘤细胞CNV推断+恶性细胞鉴定 | infercnv | YEL 讨论触发 |
-| 30 | lasso-biomarker-panel | 当你需要 LASSO 生物标志物 时触发 —— LASSO特征选择 → 生物标志物Panel | lasso-biomarker-panel, lasso biomarker panel, lasso, biomarker, panel | YEL 讨论触发 |
-| 31 | pathway-enrichment | Guidance for choosing ORA vs GSEA and interpreting enriched pathways correctly. | pathway-enrichment, pathway enrichment, pathway, enrichment | YEL 讨论触发 |
-| 32 | quantify_and_cluster_cell_motility | When you need quantify and cluster cell motility analysis | quantify, cluster, cell motility, motility | YEL 讨论触发 |
-| 33 | sasp-scoring | 适用于: aging —— SASP gene set scoring + heatmap + group comparison | sasp-scoring, sasp scoring, sasp, scoring | YEL 讨论触发 |
-| 34 | scrna-clustering | 适用于: 所有scRNA-seq —— 从原始数据到细胞注释的完整Seurat v5工作流。含SoupX/DoubletFinder/SCTransform/Harmony/CCA/Pseudobulk DE | 聚类, 分群, cluster, scrna-clustering, scrna clustering, clustering | RED 必触发 |
-| 35 | scrna-eda | 有 h5ad 数据但还没做 QC，或用户说'看看数据'/'数据长什么样'/'数据探索'/'概览'时触发 | EDA, 数据探索, 看看数据, 概览, scrna-eda, scrna eda | RED 必触发 |
-| 36 | scrna-qc | 适用于: 所有scRNA-seq —— 质控+Doublet去除+Ambient RNA去除, 支持人/鼠, 自动推荐阈值 | QC, 质控, scrna-qc, scrna qc, 线粒体, 批次校正, 批次效应 | RED 必触发 |
-| 37 | scrnaseq-scanpy-core-analysis | Scanpy单细胞核心分析:10X数据→QC→归一化→HVG→PCA→邻居图→UMAP→Leiden聚类→marker→注释 | Scanpy, Scanpy流程 | RED 必触发 |
-| 38 | scrnaseq-seurat-core-analysis | 用户有scRNA-seq数据需要R/Seurt基础分析 —— Seurat v5 标准分析: QC → SCTransform → PCA → UMAP → 聚类 → 注释 | Seurat, SCTransform, NormalizeData, Seurat流程 | RED 必触发 |
-| 39 | sctour-trajectory-inference | scTour VAE 深度潜在时间推断 + 向量场 + 跨数据集预测。无需指定起点，无监督学习细胞动力学。 | sctour, trajectory, inference | YEL 讨论触发 |
-| 40 | senescence-detection | 适用于: aging, fibrosis —— SASP scoring + p16/p21 + senescent subpopulation | senescence-detection, senescence detection, senescence, detection | YEL 讨论触发 |
-| 41 | single-cell-cellcycle-scoring | 单细胞/单核细胞周期打分的判读与验证（Seurat CellCycleScoring / cc.genes.updated.2019）:先做真实增殖 marker 阴性对照，再决定能否解读相位标签；含推断单位（ICC/设计效应）、供体级置换、n 核重抽样 bootstrap、BH 校正与结论口径。触发:细胞周期打分 / CellCycleScoring / cc.genes / S.Score | single, cellcycle, scoring | YEL 讨论触发 |
-| 42 | soupx-| 43 | stratified-subsampling | 分层抽样下采样:大数据集→分层(细胞类型/样本)→均衡下采样→代表性数据子集 | stratified-subsampling, stratified subsampling, stratified, subsampling | YEL 讨论触发 |
-| 44 | trajectory-analysis | 适用于: development, regeneration, differentiation | 轨迹, trajectory, 拟时序, pseudotime, Monocle, Slingshot, RNA velocity, scVelo | RED 必触发 |
-| 45 | trajectory-conclusion-validation | 轨迹/拟时序类结论的定稿前验证（换根枚举、换嵌入独立性、供体级配对统计、固定多重检验族、结论分级措辞）。触发:Monocle3/Slingshot/scVelo 跑出伪时间后要下结论、运动或处理前后细胞在轨迹上的位置比较、判断伪时间轴是「分化轨迹」还是「细胞身份差异」、辩论/审稿要求补稳健性检验。 | trajectory, conclusion, validation | YEL 讨论触发 |
-| 46 | upstream-regulator-analysis | 当你需要 上游调控因子分析 时触发 —— 上游调控预测: DEGs → DoRothEA → TF/激酶活性 | upstream, regulator | YEL 讨论触发 |
+| 8 | cellchat-v2 | 适用于: 多细胞类型, disease, aging, development | CellChat, 细胞通讯, cellchat-v2, cellchat v2 | RED 必触发 |
+| 9 | coexpression-network | Build gene co-expression networks to identify modules and hub genes from RNA-seq data. | coexpression-network, coexpression network, coexpression, network | YEL 讨论触发 |
+| 10 | create_harmony_embeddings_scRNA | When you need create harmony embeddings scRNA analysis | harmony, embeddings | YEL 讨论触发 |
+| 11 | create_scvi_embeddings_scRNA | When you need create scvi embeddings scRNA analysis | scvi, embeddings | YEL 讨论触发 |
+| 12 | cross-contrast-deg-integration | 多对比 DEG 结果表的整合分析——手里已有 ≥2 套算好的 DEG（多条件 × 多对比、配对供体） 要回答「共同响应基因」「干预逆转某条件的重合基因」「条件特异响应」「响应是否随条件衰减」时用本 skill。 核心是四条:交集必须方向感知（同向=加剧、反向=逆转）、原始交集数必须先减随机期望 E=/A/×/B//N 并改报 OR/Fisher/Jaccard、交集前先查各对比的功效（一边个位数则 | cross, contrast, deg | YEL 讨论触发 |
+| 13 | deg-analysis | 适用于: 有分组的scRNA-seq —— Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正 | DEG, 差异分析, 差异基因, deg-analysis, deg analysis | RED 必触发 |
+| 14 | dimred-representation-comparison | 降维/embedding 表示对比与分群质量定级（PCA vs scVI vs Harmony 等）。触发:'哪个分群更干净'、'scVI 和 PCA 对比'、'换个 embedding 会不会更好'、'降维方法对比'、'embedding 对比'、'用 scVI 做个 embedding 和 PCA 的 UMAP 比一下'。含严格同参原则、输入路线解耦归因、指标集与 sklearn 陷阱、多 s | dimred, representation, comparison | YEL 讨论触发 |
+| 15 | disease-progression-longitudinal | 当你需要 纵向疾病进展 时触发 —— 纵向数据: LME → 轨迹建模 | disease, progression, longitudinal | YEL 讨论触发 |
+| 16 | doublet-detection | 双细胞（doublet）检测与判定:scDblFinder / DoubletFinder（R）与 scrublet（Python）选型与执行，含多样本·每样本细胞数少的数据策略决策、双细胞率判读区间、'要不要剔除'的判定准则与交付口径。触发:'检测双细胞' / '双细胞比例高不高' / '要不要剔除 doublet' / 'doublet rate' / '去双胞'。 | doublet-detection, doublet detection, doublet, detection | YEL 讨论触发 |
+| 17 | doublet-detection-validation | 双细胞检测结果的**可信度验证与剔除决策**。触发:检测一下双细胞 / 双细胞比例高不高 / 要不要剔除 / doublet 比例 / DoubletFinder、scrublet、scDblFinder 的结果怎么解读 / 两个方法结论不一致。核心立场:双细胞检出率是需要被验证的量，不是能直接读出来的量 —— 弱信号数据上算法标签可错到 F1≈0.3，据标签直接剔除等于删掉约 2/3 真细胞。 | doublet, detection, validation | YEL 讨论触发 |
+| 18 | doubletfinder-remove-doublets | scRNA-seq数据需去除双细胞 —— DoubletFinder双细胞检测: Seurat → 人工双胞 → 检测 → 过滤 | doubletfinder, remove doublets, doublets | YEL 讨论触发 |
+| 19 | estimate_cell_cycle_phase_durations | When you need estimate cell cycle phase durations analysis | estimate, cell cycle, cycle, phase | YEL 讨论触发 |
+| 20 | functional-enrichment | 当你需要 功能富集 (GSEA + ORA) 时触发 —— GSEA/ORA功能富集分析。clusterProfiler/gseapy。GO/KEGG/Reactome/MSigDB | 富集分析, GO, KEGG, pathway, functional-enrichment, functional enrichment, functional, enrichment | RED 必触发 |
+| 21 | gene-essentiality | Guidance for interpreting DepMap essentiality scores and correlations correctly. | gene-essentiality, gene essentiality, gene, essentiality | YEL 讨论触发 |
+| 22 | gene_set_enrichment_analysis | When you need gene set enrichment analysis analysis | gene, set, enrichment | YEL 讨论触发 |
+| 23 | get_gene_set_enrichment_analysis_supported_database_list | When you need get gene set enrichment analysis supported database list analysis | gene, set, enrichment, supported | YEL 讨论触发 |
+| 24 | get_rna_seq_archs4 | When you need get rna seq archs4 analysis | get_rna_seq_archs4, get rna seq archs4, seq, archs4 | YEL 讨论触发 |
+| 25 | grn-pyscenic | 当你需要 基因调控网络 (pySCENIC) 时触发 —— pySCENIC基因调控网络推断。TF调控子/aUCell活性评分 | grn-pyscenic, grn pyscenic, grn, pyscenic | YEL 讨论触发 |
+| 26 | hdwgcna | 适用于: 异质性高, >5K细胞, disease, aging | hdwgcna | YEL 讨论触发 |
+| 27 | immune-deconvolution | 适用于: disease, tumor, immune —— CIBERSORTx+xCell+MCP-counter多方法免疫细胞比例估计 | immune-deconvolution, immune deconvolution, immune, deconvolution | YEL 讨论触发 |
+| 28 | infercnv | 当你需要 单细胞CNV推断 时触发 —— inferCNV肿瘤细胞CNV推断+恶性细胞鉴定 | infercnv | YEL 讨论触发 |
+| 29 | lasso-biomarker-panel | 当你需要 LASSO 生物标志物 时触发 —— LASSO特征选择 → 生物标志物Panel | lasso-biomarker-panel, lasso biomarker panel, lasso, biomarker, panel | YEL 讨论触发 |
+| 30 | pathway-enrichment | Guidance for choosing ORA vs GSEA and interpreting enriched pathways correctly. | pathway-enrichment, pathway enrichment, pathway, enrichment | YEL 讨论触发 |
+| 31 | quantify_and_cluster_cell_motility | When you need quantify and cluster cell motility analysis | quantify, cluster, cell motility, motility | YEL 讨论触发 |
+| 32 | sasp-scoring | 适用于: aging —— SASP gene set scoring + heatmap + group comparison | sasp-scoring, sasp scoring, sasp, scoring | YEL 讨论触发 |
+| 33 | scrna-clustering | 适用于: 所有scRNA-seq —— 从原始数据到细胞注释的完整Seurat v5工作流。含SoupX/DoubletFinder/SCTransform/Harmony/CCA/Pseudobulk DE | 聚类, 分群, cluster, scrna-clustering, scrna clustering, clustering | RED 必触发 |
+| 34 | scrna-eda | 有 h5ad 数据但还没做 QC，或用户说'看看数据'/'数据长什么样'/'数据探索'/'概览'时触发 | EDA, 数据探索, 看看数据, 概览, scrna-eda, scrna eda | RED 必触发 |
+| 35 | scrna-qc | 适用于: 所有scRNA-seq —— 质控+Doublet去除+Ambient RNA去除, 支持人/鼠, 自动推荐阈值 | QC, 质控, scrna-qc, scrna qc, 线粒体, 批次校正, 批次效应 | RED 必触发 |
+| 36 | scrnaseq-scanpy-core-analysis | Scanpy单细胞核心分析:10X数据→QC→归一化→HVG→PCA→邻居图→UMAP→Leiden聚类→marker→注释 | Scanpy, Scanpy流程 | RED 必触发 |
+| 37 | scrnaseq-seurat-core-analysis | 用户有scRNA-seq数据需要R/Seurt基础分析 —— Seurat v5 标准分析: QC → SCTransform → PCA → UMAP → 聚类 → 注释 | Seurat, SCTransform, NormalizeData, Seurat流程 | RED 必触发 |
+| 38 | sctour-trajectory-inference | scTour VAE 深度潜在时间推断 + 向量场 + 跨数据集预测。无需指定起点，无监督学习细胞动力学。 | sctour, trajectory, inference | YEL 讨论触发 |
+| 39 | senescence-detection | 适用于: aging, fibrosis —— SASP scoring + p16/p21 + senescent subpopulation | senescence-detection, senescence detection, senescence, detection | YEL 讨论触发 |
+| 40 | single-cell-cellcycle-scoring | 单细胞/单核细胞周期打分的判读与验证（Seurat CellCycleScoring / cc.genes.updated.2019）:先做真实增殖 marker 阴性对照，再决定能否解读相位标签；含推断单位（ICC/设计效应）、供体级置换、n 核重抽样 bootstrap、BH 校正与结论口径。触发:细胞周期打分 / CellCycleScoring / cc.genes / S.Score | single, cellcycle, scoring | YEL 讨论触发 |
+| 41 | trajectory-analysis | 适用于: development, regeneration, differentiation | 轨迹, trajectory, 拟时序, pseudotime, Monocle, Slingshot, RNA velocity, scVelo | RED 必触发 |
+| 42 | trajectory-conclusion-validation | 轨迹/拟时序类结论的定稿前验证（换根枚举、换嵌入独立性、供体级配对统计、固定多重检验族、结论分级措辞）。触发:Monocle3/Slingshot/scVelo 跑出伪时间后要下结论、运动或处理前后细胞在轨迹上的位置比较、判断伪时间轴是「分化轨迹」还是「细胞身份差异」、辩论/审稿要求补稳健性检验。 | trajectory, conclusion, validation | YEL 讨论触发 |
+| 43 | upstream-regulator-analysis | 当你需要 上游调控因子分析 时触发 —— 上游调控预测: DEGs → DoRothEA → TF/激酶活性 | upstream, regulator | YEL 讨论触发 |
 
 ## 02_ATAC - ATAC/染色质 (11 skills)
 
@@ -292,32 +291,35 @@
 | 90 | windows-bioinformatics-batch-processing | 在Windows上启动长时间运行的生信批量任务（10+样本，每样本>5分钟）时加载，确保进程不因会话中断而死亡，LLM主动监控进度。系统唤醒(#N)主线进度检查也适用 — 协议见 references/agent-side-wakeup-check.md | windows, batch, processing | YEL 讨论触发 |
 | 91 | windows-com-app-automation | 用 Windows COM + 脚本引擎确定性地驱动桌面应用（Illustrator/Photoshop/InDesign/Word/Excel）:cscript→VBScript→CreateObject→DoJavaScriptFile/DoScript 桥，ExtendScript ES3 手拼 JSON、隔离文档写操作的安全模式、可复制的 doctor/探测脚手架。 | Illustrator自动化, 操控Illustrator, 批量改Illustrator, Illustrator脚本, ExtendScript, JSX脚本, COM自动化, Photoshop自动化, InDesign自动化, 脚本控制软件, 软件没有CLI, 桌面软件自动化, 图内文字批量改, cscript, DoJavaScriptFile, 画板操作 | RED 必触发 |
 
-## 09_内置 - MemOmics系统 (22 skills)
+## 09_内置 - MemOmics系统 (25 skills)
 
 | # | Skill | 使用场景 | 触发词 | Trigger |
 |---|---|---|---|---|
 | 1 | adaptyv-api | Complete API reference for Adaptyv Bio's protein characterization platform. Use when the user wants to run experiments on Adaptyv. | adaptyv-api, adaptyv api, adaptyv, api | GRN 按需触发 |
 | 2 | adobe-illustrator | 用户提到 Illustrator / 操控AI / 操作AI / AI文件 / 画板 / ExtendScript / JSX脚本，或要在 Adobe Illustrator 里画图、改字、批量统一字号、导入 PDF/SVG 面板排版、导出 PNG/PDF/SVG、看图后调整时加载… | Illustrator, 操控AI, 操作AI, AI里, AI文件, AI脚本, AI画板, 画板, ExtendScript, JSX脚本 | RED 必触发 |
 | 3 | analysis-output-validity-gates | 生信流程「跑完 ≠ 结果有效」的产出有效性自证门 + 失败归因（内存 vs 代码）。覆盖静默无效产出（exit 0、日志全 ✓、文件齐全但数值全是垃圾，如 AUCell 矩阵全 0、regulon 基因变单字符）与归因错层（把 dask worker OOM 当代码 bug 反复改）。触发:跑完了/为什么全是0/结果可疑/AUCell全0/产出无效/exit 0 但没结果/FutureCancel | output, validity, gates | YEL 讨论触发 |
-| 4 | cli-anything | 通过 CLI-Anything（HKUDS）把桌面/后端软件变成 agent-native CLI 来操控:用 cli-hub 装现成 CLI（gimp/inkscape/blender/freecad/qgis/zotero/obsidian/blender…71 个），或按官方 7 阶段规范自建 harness（含 Illustrator COM/ExtendScript 实战范例）… | CLI-Anything, cli-hub, 操控, 软件自动化, 批量控制桌面软件, agent-native CLI, harness, 做个CLI, 做个命令行, 包装成CLI, 批量改, 统一字号, inkscape, 矢量图批量, 批处理软件, Illustrator自动化 | RED 必触发 |
-| 5 | code-writer | 当你需要 代码编写 时触发 —— 编写Python/R脚本，数据分析代码，函数封装，程序开发 | code-writer, code writer, code, writer | GRN 按需触发 |
-| 6 | computer-use | 用户要截屏、看屏幕、点按钮、在桌面软件里输入文字、切换窗口时触发；唯一入口是 MemOmics 的 computer_use 工具 | computer-use, computer use, computer, 截屏, 截图, 截个屏, 屏幕截图, 看屏幕, 操作电脑, 控制电脑, 桌面软件, 键盘输入, 点击按钮 | GRN 按需触发 |
-| 7 | create-bio-skill | 当 skill_view 返回 not found 且没有相似 skill，或用户指定了特定包需要创建新 skill 时触发 | 安装, 创建skill, 没有这个工具, 新工具, 做一个skill, 建个skill, 没有对应的skill, create-bio-skill | RED 必触发 |
-| 8 | data-analysis-best-practices | Best practices for data analyses with focused on user supplied data. | 最佳实践, best practice, guideline, practices | RED 必触发 |
-| 9 | data-viz | 当你需要 数据可视化 时触发 —— 绘制高质量数据可视化图表:UMAP/tSNE/热图/火山图/小提琴图等 | data-viz, data viz, viz | GRN 按需触发 |
-| 10 | dcs-cloud | 用户提到 云平台 / DCS / DCS 云 / GenPilot / 华大云 / 云上跑 / 在云上 / 投递任务 / 云端任务 / 云容器 / 上传到云 / 云上数据，或说明数据的算力在 DCS Cloud 时加载… | 云平台, DCS, DCS云, GenPilot, 华大云, 云上跑, 在云上跑分析, 投递任务, 云容器, 上传到云, 云上数据, DCS Cloud, 云上, 在云上, 云上分析, 云端任务 | RED 必触发 |
-| 11 | deg-updown-counts-by-subcluster | 已有算好的「比较组 × 亚群 × 方向」基因计数矩阵，要出各亚群上下调基因数量对比柱状图（如 5 个比较组并排展示） | DEG 各比较组亚群基因数量图, updown 8sub 柱状图, 上调下调数量柱状图, 五面板统一 symlog 柱状图 | GRN 按需触发 |
-| 12 | deg-volcano-5comps-8sub-R | 已有多个比较组的 DEG 表（每 sheet 一对比），要出「一对比一张、图内含 8 个亚群色块」的火山图；或需要给某基因补标 | 火山图 R 版, 5 比较组 8 亚群火山图, DEG 火山图带亚群标签块, volcano 8sub FINAL | GRN 按需触发 |
-| 13 | error-recovery | 当终端运行脚本报错，或用户说'报错了'/'error'/'出错了'/'报错怎么修'/'这什么错'时触发 | 报错, 报错信息, 出错, 报错怎么修, 不工作, 跑不了, 调试, traceback, error message | RED 必触发 |
-| 14 | experimental-design-statistics | 当你需要 实验设计统计 时触发 —— 实验设计+统计检验: 样本量估算 → 方法选择 → 结果检验 | 样本量, 功效分析, power analysis, 实验设计, 统计方法, 统计检验 | RED 必触发 |
-| 15 | fig-split-program-heatmap-R | 用户要求把 fig_split_v10.py 式矩阵热图（18 程序打分 × 6组/5效应/亚群）转成 R，或直接用 R 出这套图 | fig_split_v10 的 R 版, 18 程序打分热图出 R 版, 6组×亚群矩阵热图 R | GRN 按需触发 |
-| 16 | file-convert | 当你需要 格式转换 时触发 —— 数据格式转换:CSV/Excel/TSV/H5AD/MTX等常见格式互转 | file-convert, file convert, file, convert | GRN 按需触发 |
-| 17 | find-skill | 智能搜索可用技能:当用户需要某个分析功能但不确定有没有现成技能时，自动搜索239个内置技能+外部蓝图，找到最匹配的并推荐安装。也支持用户说'有没有XXX的技能'时触发。 | find-skill, find skill, find | GRN 按需触发 |
-| 18 | heart-conference-monitor | 心脏会议监控:追踪心脏病学会议→提取关键发现→监控研究趋势→生成报告 | heart-conference-monitor, heart conference monitor, heart, conference, monitor | GRN 按需触发 |
-| 19 | ml-classification | 适用于: disease, 有标签数据, 分类/预测 —— LASSO+RandomForest+SVM+SHAP解释, 支持bulk和scRNA | ml-classification, ml classification, classification | GRN 按需触发 |
-| 20 | phylo-create-skill | Create, test, package, and present reusable skills for Phylo's Biomni platform and bioinformatics workflows. | phylo-create-skill, phylo create skill, phylo | GRN 按需触发 |
-| 21 | remote-cluster-execution | 远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收；含常驻 R 会话（kernel 式持久化，大 rds 读一次一直用:session_start/exec/save/restore/status/stop）。触发:集群/node1/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub/常驻会话/读一次一直用/不要每次重新读取。 | 集群, 远端集群, 集群环境, 集群有哪些环境, 帮我看看集群, node1, 用集群跑, 在集群上跑, 投递任务, qsub, slurm, sge, 常驻会话, 读一次一直用, 不要重复读取 rds, kernel 式持久化 | RED 必触发 |
-| 22 | self-improving-agent | 自进化能力:分析成功后自动沉淀经验为新技能；分析失败后自动学习错误模式避免重复犯错；根据使用频率自动优化参数。包括技能沉淀、错误学习、参数进化三大子系统。 | self-improving-agent, self improving agent, self, improving, agent | GRN 按需触发 |
+| 4 | cellbender-remove-background | 10x scRNA-seq数据有环境RNA污染(高线粒体、跨类型标记共表达、组织解离样本) | CellBender, 去背景, ambient RNA, filtered.h5, ptrepack, 空滴, 背景RNA, 环境RNA | RED 必触发 |
+| 5 | cli-anything | 通过 CLI-Anything（HKUDS）把桌面/后端软件变成 agent-native CLI 来操控:用 cli-hub 装现成 CLI（gimp/inkscape/blender/freecad/qgis/zotero/obsidian/blender…71 个），或按官方 7 阶段规范自建 harness（含 Illustrator COM/ExtendScript 实战范例）… | CLI-Anything, cli-hub, 操控, 软件自动化, 批量控制桌面软件, agent-native CLI, harness, 做个CLI, 做个命令行, 包装成CLI, 批量改, 统一字号, inkscape, 矢量图批量, 批处理软件, Illustrator自动化 | RED 必触发 |
+| 6 | code-writer | 当你需要 代码编写 时触发 —— 编写Python/R脚本，数据分析代码，函数封装，程序开发 | code-writer, code writer, code, writer | GRN 按需触发 |
+| 7 | computer-use | 用户要截屏、看屏幕、点按钮、在桌面软件里输入文字、切换窗口时触发；唯一入口是 MemOmics 的 computer_use 工具 | computer-use, computer use, computer, 截屏, 截图, 截个屏, 屏幕截图, 看屏幕, 操作电脑, 控制电脑, 桌面软件, 键盘输入, 点击按钮 | GRN 按需触发 |
+| 8 | create-bio-skill | 当 skill_view 返回 not found 且没有相似 skill，或用户指定了特定包需要创建新 skill 时触发 | 安装, 创建skill, 没有这个工具, 新工具, 做一个skill, 建个skill, 没有对应的skill, create-bio-skill | RED 必触发 |
+| 9 | data-analysis-best-practices | Best practices for data analyses with focused on user supplied data. | 最佳实践, best practice, guideline, practices | RED 必触发 |
+| 10 | data-viz | 当你需要 数据可视化 时触发 —— 绘制高质量数据可视化图表:UMAP/tSNE/热图/火山图/小提琴图等 | data-viz, data viz, viz | GRN 按需触发 |
+| 11 | dcs-cloud | 用户提到 云平台 / DCS / DCS 云 / GenPilot / 华大云 / 云上跑 / 在云上 / 投递任务 / 云端任务 / 云容器 / 上传到云 / 云上数据，或说明数据的算力在 DCS Cloud 时加载… | 云平台, DCS, DCS云, GenPilot, 华大云, 云上跑, 在云上跑分析, 投递任务, 云容器, 上传到云, 云上数据, DCS Cloud, 云上, 在云上, 云上分析, 云端任务 | RED 必触发 |
+| 12 | deg-updown-counts-by-subcluster | 已有算好的「比较组 × 亚群 × 方向」基因计数矩阵，要出各亚群上下调基因数量对比柱状图（如 5 个比较组并排展示） | DEG 各比较组亚群基因数量图, updown 8sub 柱状图, 上调下调数量柱状图, 五面板统一 symlog 柱状图 | GRN 按需触发 |
+| 13 | deg-volcano-5comps-8sub-R | 已有多个比较组的 DEG 表（每 sheet 一对比），要出「一对比一张、图内含 8 个亚群色块」的火山图；或需要给某基因补标 | 火山图 R 版, 5 比较组 8 亚群火山图, DEG 火山图带亚群标签块, volcano 8sub FINAL | GRN 按需触发 |
+| 14 | error-recovery | 当终端运行脚本报错，或用户说'报错了'/'error'/'出错了'/'报错怎么修'/'这什么错'时触发 | 报错, 报错信息, 出错, 报错怎么修, 不工作, 跑不了, 调试, traceback, error message | RED 必触发 |
+| 15 | experimental-design-statistics | 当你需要 实验设计统计 时触发 —— 实验设计+统计检验: 样本量估算 → 方法选择 → 结果检验 | 样本量, 功效分析, power analysis, 实验设计, 统计方法, 统计检验 | RED 必触发 |
+| 16 | fig-split-program-heatmap-R | 用户要求把 fig_split_v10.py 式矩阵热图（18 程序打分 × 6组/5效应/亚群）转成 R，或直接用 R 出这套图 | fig_split_v10 的 R 版, 18 程序打分热图出 R 版, 6组×亚群矩阵热图 R | GRN 按需触发 |
+| 17 | file-convert | 当你需要 格式转换 时触发 —— 数据格式转换:CSV/Excel/TSV/H5AD/MTX等常见格式互转 | file-convert, file convert, file, convert | GRN 按需触发 |
+| 18 | find-skill | 智能搜索可用技能:当用户需要某个分析功能但不确定有没有现成技能时，自动搜索239个内置技能+外部蓝图，找到最匹配的并推荐安装。也支持用户说'有没有XXX的技能'时触发。 | find-skill, find skill, find | GRN 按需触发 |
+| 19 | heart-conference-monitor | 心脏会议监控:追踪心脏病学会议→提取关键发现→监控研究趋势→生成报告 | heart-conference-monitor, heart conference monitor, heart, conference, monitor | GRN 按需触发 |
+| 20 | ml-classification | 适用于: disease, 有标签数据, 分类/预测 —— LASSO+RandomForest+SVM+SHAP解释, 支持bulk和scRNA | ml-classification, ml classification, classification | GRN 按需触发 |
+| 21 | phylo-create-skill | Create, test, package, and present reusable skills for Phylo's Biomni platform and bioinformatics workflows. | phylo-create-skill, phylo create skill, phylo | GRN 按需触发 |
+| 22 | remote-cluster-execution | 远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收；含常驻 R 会话（kernel 式持久化，大 rds 读一次一直用:session_start/exec/save/restore/status/stop）。触发:集群/node1/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub/常驻会话/读一次一直用/不要每次重新读取。 | 集群, 远端集群, 集群环境, 集群有哪些环境, 帮我看看集群, node1, 用集群跑, 在集群上跑, 投递任务, qsub, slurm, sge, 常驻会话, 读一次一直用, 不要重复读取 rds, kernel 式持久化 | RED 必触发 |
+| 23 | self-improving-agent | 自进化能力:分析成功后自动沉淀经验为新技能；分析失败后自动学习错误模式避免重复犯错；根据使用频率自动优化参数。包括技能沉淀、错误学习、参数进化三大子系统。 | self-improving-agent, self improving agent, self, improving, agent | GRN 按需触发 |
+| 24 | soupx-remove-background | 需去除环境RNA但无GPU，或CellBender的替代/补充 | soupx-remove-background, soupx remove background, soupx, 环境rna | YEL 讨论触发 |
+| 25 | stratified-subsampling | 分层抽样下采样:大数据集→分层(细胞类型/样本)→均衡下采样→代表性数据子集 | stratified-subsampling, stratified subsampling, stratified, subsampling | YEL 讨论触发 |
 
 ## 10_多组学整合 - 多组学整合 (11 skills)
 

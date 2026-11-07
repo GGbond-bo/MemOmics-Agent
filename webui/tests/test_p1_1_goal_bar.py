@@ -326,15 +326,22 @@ def test_frontend_goal_bar_wired():
     assert "function applyGoalPayload" in html
     # 目标条的待办必须复用同一份数据（WS todos_update 的唯一落点）
     assert "_goalBar.todos = Array.isArray(todos)" in html, "renderTodos 未同步目标条"
-    # 三条来源都要接上：WS goal_update / /progress 兜底 / 面板刷新
-    assert "msg.type === 'goal_update'" in html, "WS goal_update 分支缺失"
+    # 三条来源都要接上：WS goal/todos、/progress 兜底、会话切换后的刷新。
+    # WS 不能直接覆盖可见条，必须先核对消息所属 sid；否则切换聊天后旧事件会串屏。
+    assert "_goalRenderTodosForSession(msg.session_id, msg.todos);" in html
+    assert "_goalApplyPayloadForSession(msg.session_id, msg);" in html
     assert "applyGoalPayload(d);" in html, "progress 兜底未恢复目标"
-    # 请求路径必须与后端一致
-    assert "'/api/sessions/' + currentSid + '/goal'" in html
+    assert "function _goalBarEnsureSession(sid)" in html
+    assert "String(currentSid || '') !== sid" in html
+    assert "function _goalMutationViewIsCurrent(sid, epoch)" in html
+    assert "if (_goalMutationViewIsCurrent(sid, epoch))" in html
+    # 请求绑定发起时捕获的 sid，且对 URL 编码；不可在异步回调里重新取 currentSid。
+    assert "'/api/sessions/' + encodeURIComponent(sid) + '/goal'" in html
+    assert "'/api/sessions/' + currentSid + '/goal'" not in html
     # 2026-09-24：待办段的关闭入口 + 宽度对齐输入框
     assert 'id="gb-clear-todos"' in html, "清空待办按钮缺失"
     assert "function clearTodos" in html, "清空待办未接线"
-    assert "'/api/sessions/' + currentSid + '/todos'" in html, "清空待办请求路径与后端不一致"
+    assert "'/api/sessions/' + encodeURIComponent(sid) + '/todos'" in html, "清空待办请求路径与后端不一致"
     assert "function _syncGoalBarWidth" in html, "目标条宽度未对齐输入框"
     assert "autoDoneSig" in html, "全部完成后自动收起未实现"
 
@@ -375,8 +382,21 @@ def test_should_emit_todos_pushes_the_clear():
 
 def test_todos_emit_site_uses_should_emit_helper():
     """接线检查：推送点必须真的用上判定函数（别再退回 len(todos) > 0）。"""
+    import ast
+
     src = open(os.path.join(os.path.dirname(server.__file__), "server.py"), encoding="utf-8").read()
-    assert "_should_emit_todos(todos, session.get(\"todos\"))" in src
+    calls = []
+    for node in ast.walk(ast.parse(src)):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+            continue
+        if node.func.id != "_should_emit_todos" or len(node.args) != 2:
+            continue
+        prev = node.args[1]
+        if (isinstance(prev, ast.Call) and isinstance(prev.func, ast.Attribute) and
+                prev.func.attr == "get" and len(prev.args) == 1 and
+                isinstance(prev.args[0], ast.Constant) and prev.args[0].value == "todos"):
+            calls.append(node)
+    assert calls, "待办推送必须把当前会话的上一份 todos 交给 _should_emit_todos"
     assert "if todos and len(todos) > 0:" not in src, "旧的 len(todos) > 0 判定又回来了"
 
 

@@ -52,12 +52,50 @@ def cleanup_session(sid):
 
 @pytest.fixture()
 def new_session(client):
-    """创建测试会话，测试后清理（内存 + state.db）"""
-    r = client.post("/api/sessions/new", params={"title": f"pytest-回归-{uuid.uuid4().hex[:6]}"})
-    assert r.status_code == 200
-    sid = r.json()["id"]
-    yield sid
-    cleanup_session(sid)
+    """Create one project-owned test chat, then clean session before project.
+
+    Production deliberately reuses one empty chat within the same project.  A
+    fixture must instead exercise the public project/session contract with a
+    fresh project id, otherwise independent tests can accidentally share that
+    reusable blank chat and invalidate concurrency assertions.
+    """
+    token = uuid.uuid4().hex[:10]
+    project_response = client.post("/api/projects", json={
+        "name": f"pytest-fixture-{token}",
+        "description": "pytest isolated session fixture",
+        "workdir": "",
+    })
+    assert project_response.status_code == 201
+    project_id = (project_response.json().get("project") or {}).get("id")
+    assert project_id
+    sid = None
+    try:
+        r = client.post("/api/sessions/new", json={
+            "title": f"pytest-回归-{token}",
+            "project_id": project_id,
+        })
+        assert r.status_code == 200
+        sid = r.json()["id"]
+        yield sid
+    finally:
+        cleanup_sids = {sid} if sid else set()
+        if not cleanup_sids:
+            # If a 200 response could not be parsed, recover the one unique
+            # project-owned test chat through the public list contract rather
+            # than leaving an orphaned SessionDB/metadata row behind.
+            listed = client.get("/api/sessions")
+            assert listed.status_code == 200
+            cleanup_sids = {
+                str(item.get("id") or "")
+                for item in (listed.json().get("sessions") or [])
+                if item.get("project_id") == project_id and item.get("id")
+            }
+        for cleanup_sid in cleanup_sids:
+            cleanup_session_response = client.delete(f"/api/sessions/{cleanup_sid}")
+            assert cleanup_session_response.status_code == 200
+            assert cleanup_session_response.json().get("ok") is True
+        cleanup = client.delete(f"/api/projects/{project_id}")
+        assert cleanup.status_code == 200
 
 
 @pytest.fixture()

@@ -79,9 +79,13 @@ _KEYS = {
         "lang_locked model_locked triggered message_count _msg_count _first_msg "
         "_last_msg _messages_loaded _late_steer"
     ),
-    "llm": "agent model_config running_agent running_task _api_calls _proc_hist",
+    "llm": (
+        "agent model_config running_agent running_task "
+        "_pending_global_model_config _reset_agent_after_turn _api_calls _proc_hist"
+    ),
     "turn": (
-        "_user_turn_active _turn_count _turn_start_ts _turn_activity_ts "
+        "_user_turn_active _turn_claim_request_id _active_request_id "
+        "_running_request_id _final_nudge_used _turn_count _turn_start_ts _turn_activity_ts "
         "_real_exec_this_turn _tool_dedup _force_tool_check _live_tool _live_tool_ts "
         "_live_tool_warned _stall_notice_last _stall_diag _stall_wake_active "
         "_stall_noevent_ts _self_check_count _self_check_last_sig _wakeup_retry_n "

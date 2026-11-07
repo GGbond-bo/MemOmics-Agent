@@ -65,13 +65,15 @@ def tick(force: bool = False, do_first_check: bool = True) -> dict:
     fresh = [j for j in jobs
              if do_first_check and not j.get("first_checked")
              and (now - float(j.get("started_at") or j.get("created_at") or now)) >= FIRST_CHECK]
-    # 2026-10-20 实测 bug 修复：必须按**作业自己的连接参数**（user/key/跳板）分组，
-    # 否则 ssh 缺少 -J/-i 会连不上 → 正在跑的作业被误判 lost（T3 实测踩到）。
+    # 每条记录都有自己的不可变连接快照。 不能只按 host 分组：同一登录机
+    # 上的不同账号、端口或密钥也可能看到完全不同的进程空间。
     groups = {}
     for j in jobs:
-        gk = (j.get("host") or "", j.get("user") or "", int(j.get("port") or 22),
-              j.get("key") or "", tuple(j.get("extra_opts") or []))
-        groups.setdefault(gk, {})[j["job_id"]] = j
+        connection = ns._connection_for_record(j)
+        gk = (connection["host"], connection["user"], connection["port"],
+              connection["key"], tuple(connection["extra_opts"]))
+        record_key = str(j.get("_record_key") or j.get("job_id") or "")
+        groups.setdefault(gk, {})[record_key] = j
     ssh_calls = 0
     polled = {}
     for (h, u, pt, kk, ex), gjobs in groups.items():
@@ -98,11 +100,13 @@ def tick(force: bool = False, do_first_check: bool = True) -> dict:
             else:
                 txt = f"⏹ 集群作业已取消：{j['job_id']}"
             append_notification(sid, j, txt)
-            ns.update_job(j["job_id"], notified=True, notified_at=now)
+            ns.update_job(j["job_id"], record_key=j.get("_record_key"),
+                          notified=True, notified_at=now)
             notified.append({"job_id": j["job_id"], "status": j["status"], "session": sid})
     for j in fresh:
         if j.get("status") in ("running", "starting"):
-            ns.update_job(j["job_id"], first_checked=True, first_checked_at=now)
+            ns.update_job(j["job_id"], record_key=j.get("_record_key"),
+                          first_checked=True, first_checked_at=now)
     try:
         promo = ns.promote_queued()
     except Exception as exc:

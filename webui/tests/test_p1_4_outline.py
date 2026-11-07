@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-"""P1-4 回归：会话大纲（一轮 = 一条提问 + 它之后的回答，可点跳转）。
+"""P1-4 回归：会话问题导航（一刻度 = 一条用户提问，可点跳转）。
 
+后端 outline 接口仍保留给旧客户端；当前 WebUI 契约是左侧居中的问题刻度。
 覆盖五层：
 A 纯函数（摘要清洗、轮次切分、过滤规则、角标统计）
 B 接口（GET /api/sessions/{sid}/outline、messages 里的 turn 字段）
 C 一致性（目录轮次号 == messages 轮次号，跳转才对得上）
-D 前端接线静态守卫（DOM 挂轮次、目录渲染、跳转、滚动高亮、转义）
+D 前端接线静态守卫（用户问题刻度、会话隔离、跳转、滚动高亮、安全摘要）
 E 极端输入（几百轮、十万字提问、超长会话、并发、脏数据）
 """
 import json
@@ -220,12 +221,16 @@ def _fe():
         return f.read()
 
 
-def test_panel_has_outline_section():
+def test_chat_has_question_rail_not_legacy_outline_panel():
     html = _fe()
-    assert 'id="outline-list"' in html
-    assert 'id="outline-count"' in html
-    assert "会话大纲" in html
-    assert "'outline':'会话大纲'" in html and "'outline':'Chat Outline'" in html
+    # 用户明确把旧的右侧会话大纲换成 Codex 风格的左侧问题刻度。
+    assert 'id="outline-list"' not in html
+    assert 'id="outline-count"' not in html
+    shell_at = html.index('class="chat-history-shell"')
+    rail_at = html.index('<nav id="turn-nav"', shell_at)
+    messages_at = html.index('<div class="chat-messages" id="messages">', rail_at)
+    assert shell_at < rail_at < messages_at, "导航必须在原消息滚动容器左侧，而不是消息内容内"
+    assert 'id="turn-nav-list"' in html
 
 
 def test_message_renderers_attach_turn():
@@ -239,13 +244,14 @@ def test_message_renderers_attach_turn():
     assert "if (t < 1) t = 0;" in html
 
 
-def test_outline_render_and_jump_are_wired():
+def test_question_rail_render_and_jump_are_wired():
     html = _fe()
-    for frag in ("function refreshOutline()", "function jumpToTurn(turn)", "function _outlineTurns()",
-                 "function _markActiveTurn()", "function _syncActiveTurnFromScroll()"):
+    for frag in ("function refreshOutline(expectedSid, expectedEpoch)", "function jumpToTurn(turn)", "function _outlineTurns()",
+                 "function _markActiveTurn()", "function _syncActiveTurnFromScroll(expectedSid, expectedEpoch)"):
         assert frag in html, frag
-    assert "onclick=\"jumpToTurn(' + item.turn + ')\"" in html
-    assert "if (typeof refreshOutline === 'function') refreshOutline();" in html
+    assert "tick.onclick = function() { jumpToTurn(item.turn); };" in html
+    assert "if (expectedSid !== undefined && String(expectedSid || '') !== sid) return;" in html
+    assert "if (expectedEpoch !== undefined && expectedEpoch !== _outlineViewEpoch) return;" in html
     # 跳转要停掉自动滚动，否则流式输出会把用户拽回底部
     jump = html.split("function jumpToTurn(turn)")[1].split("function _markActiveTurn")[0]
     assert "_autoScroll = false;" in jump
@@ -253,21 +259,40 @@ def test_outline_render_and_jump_are_wired():
     assert "turn-flash" in jump
 
 
-def test_outline_render_escapes_text():
+def test_question_rail_tracks_only_users_and_resets_on_session_switch():
     html = _fe()
-    blk = html.split("function refreshOutline()")[1].split("function jumpToTurn(")[0]
-    assert "escapeHtml(q || T('（无提问）'))" in blk
-    assert "escapeHtml(a.length > 90" in blk
-    # 摘要不能裸拼进 innerHTML
-    assert ">'+ q +" not in blk and ">'+ a +" not in blk
+    register = html.split("function _registerTurnEl(el, turn, role)")[1].split("function _outlineDirty()")[0]
+    assert "if (role === 'user' && t > 0) _outlineDirty();" in register
+    render = html.split("function _outlineTurns()")[1].split("function _turnRailTitle")[0]
+    assert "box.querySelectorAll('.message.user[data-turn]')" in render
+    reset = html.split("function _resetConversationRail(sid)")[1].split("// 气泡正文")[0]
+    assert "_outlineViewEpoch++;" in reset
+    assert "list.innerHTML = '';" in reset
+    assert "_resetConversationRail(sid)" in html, "切换会话时必须立即清掉上一会话的刻度"
 
 
-def test_outline_css_present():
+def test_question_rail_summary_uses_safe_dom_apis():
     html = _fe()
-    assert "#outline-list .out-row.active" in html
+    render = html.split("function refreshOutline(expectedSid, expectedEpoch)")[1].split("function jumpToTurn(")[0]
+    # 摘要作为 DOM 属性/title 写入，不拼接为 HTML；因此问题中的 <script> 只能是文字。
+    assert "var tick = document.createElement('button');" in render
+    assert "tick.textContent = '';" in render
+    assert "tick.setAttribute('data-summary', summary);" in render
+    assert "tick.title = _turnRailTitle(item.turn, summary);" in render
+    assert "tick.setAttribute('aria-label', tick.title);" in render
+    inner_html_lines = [line.strip() for line in render.splitlines() if "innerHTML" in line]
+    assert inner_html_lines == ["list.innerHTML = '';"], inner_html_lines
+
+
+def test_question_rail_css_present():
+    html = _fe()
+    assert "#turn-nav {" in html
+    assert "#turn-nav-list {" in html
+    assert ".turn-nav-tick:hover, .turn-nav-tick:focus-visible, .turn-nav-tick.active" in html
+    assert ".turn-nav-tick.active.streaming" in html
+    assert "@media (max-width:760px) { #turn-nav { display:none; }" in html
     assert ".message.turn-flash .bubble" in html
     assert "@keyframes turnFlash" in html
-    assert "#outline-list .out-title" in html
 
 
 # --- D. 极端输入 ------------------------------------------------------------
