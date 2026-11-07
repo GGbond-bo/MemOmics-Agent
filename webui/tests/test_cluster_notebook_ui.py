@@ -36,6 +36,30 @@ def _html() -> str:
         return f.read()
 
 
+def _complete_div(html: str, opening: str) -> str:
+    """Return a div fragment through the close that matches ``opening``.
+
+    The chat header used to be followed directly by ``.chat-messages``.  It is
+    now followed by a separate history shell, so string-slicing until the next
+    messages div would incorrectly leave that shell's opening div unmatched.
+    Keep the structural checks scoped to the complete element they describe.
+    """
+    start = html.index(opening)
+    assert html.startswith("<div", start), "div 边界必须从开标签开始：%s" % opening
+    depth = 0
+    for match in re.finditer(r"<!--.*?-->|</?div\b[^>]*>", html[start:], re.I | re.S):
+        tag = match.group(0)
+        if tag.startswith("<!--"):
+            continue
+        if tag.startswith("</"):
+            depth -= 1
+        elif not tag.rstrip().endswith("/>"):
+            depth += 1
+        if depth == 0:
+            return html[start:start + match.end()]
+    raise AssertionError("未找到 div 的匹配闭合标签：%s" % opening)
+
+
 def _fn(html: str, name: str) -> str:
     m = re.search(r"function %s\([^)]*\) \{.*?\n\}" % re.escape(name), html, re.S)
     assert m, "index.html 里找不到 %s —— Notebook 总端被改坏或删了" % name
@@ -89,11 +113,11 @@ def test_notebook_entry_lives_in_top_bar_next_to_tasks():
     """用户口径（2026-10-09 修正）：入口放**最上面**，在「后台任务」旁边，不是在输入框上方。"""
     html = _html()
     assert 'id="nav-bar"' not in html  # 防呆：不要出现和已有 id 冲突的名字
-    i_chip = html.index('id="nav-notebook"')
-    i_tasks = html.index('id="nav-tasks"')
-    i_header_end = html.index('</div>\n    <div class="chat-messages"', i_tasks)
-    assert i_tasks < i_chip < i_header_end, "「📓 总端」应在顶部横栏里、且排在「后台任务」后面"
-    assert 'onclick="openNotebook()"' in html[i_chip - 200:i_chip + 400]
+    header = _complete_div(html, '<div class="chat-header">')
+    i_chip = header.index('id="nav-notebook"')
+    i_tasks = header.index('id="nav-tasks"')
+    assert i_tasks < i_chip, "「📓 总端」应在顶部横栏里、且排在「后台任务」后面"
+    assert 'onclick="openNotebook()"' in header[i_chip - 200:i_chip + 400]
     for token in ('class="nb-dot" id="nb-dot"', 'id="nb-session-mini"', 'id="nb-badge"',
                   "data-i18n=\"nav_notebook\"", 'id="nb-mask"', 'id="nb-cells"', 'id="nb-code"',
                   'id="nb-session-sel"'):
@@ -103,6 +127,16 @@ def test_notebook_entry_lives_in_top_bar_next_to_tasks():
     # 两套 i18n 词典都要有键
     assert "'nav_notebook':" in html, "i18n 少了 nav_notebook"
     assert html.count("'nav_notebook':") >= 2, "中英两套词典都要有 nav_notebook"
+
+
+def test_notebook_header_boundary_excludes_history_shell():
+    """会话历史壳新增后，顶部横栏边界仍只覆盖顶部胶囊。"""
+    html = _html()
+    header = _complete_div(html, '<div class="chat-header">')
+    shell = _complete_div(html, '<div class="chat-history-shell">')
+    assert 'id="nav-notebook"' in header
+    assert 'chat-history-shell' not in header
+    assert 'id="turn-nav"' in shell and 'id="messages"' in shell
 
 
 def test_notebook_only_uses_existing_cluster_actions():
@@ -182,10 +216,15 @@ class _DomChecker(HTMLParser):
 def test_notebook_dom_is_well_formed():
     """新插的胶囊/面板/放大层不能把 index.html 的标签结构搞坏（整页白屏级别的风险）。"""
     html = _html()
-    i_head = html.index('<div class="chat-header">')
-    seg_chip = html[i_head:html.index('<div class="chat-messages"', i_head)]
-    seg_panel = html[html.index('<!-- === 📓 Notebook 总端（2026-10-09）'):html.index('<!-- === 添加节点向导')]
-    for name, seg in (("顶部胶囊", seg_chip), ("面板", seg_panel)):
+    seg_chip = _complete_div(html, '<div class="chat-header">')
+    seg_shell = _complete_div(html, '<div class="chat-history-shell">')
+    # Extract complete, stable Notebook elements rather than slicing to the
+    # retired add-node wizard.  This keeps the checks focused on the panel
+    # and its zoom layer, while still validating every opening/closing div.
+    seg_panel = _complete_div(html, '<div class="nb-mask" id="nb-mask">')
+    seg_zoom = _complete_div(html, '<div class="nb-zoom" id="nb-zoom"')
+    assert 'id="turn-nav"' in seg_shell and 'id="messages"' in seg_shell
+    for name, seg in (("顶部胶囊", seg_chip), ("会话历史壳", seg_shell), ("面板", seg_panel), ("放大层", seg_zoom)):
         c = _DomChecker()
         c.feed(seg)
         assert c.problems == [], "%s 的 DOM 结构有问题：%s" % (name, c.problems)

@@ -10,7 +10,7 @@
 
 边界：
   · ssh 进程活着 = 内核活着；ssh 断了变量就没了（会明确提示"需重新加载"）
-  · 需要密钥登录（BatchMode），密码交互不支持
+  · 目录管理的密码连接使用本机加密保存的账号密码；旧版手工连接仍可使用 BatchMode 密钥登录
   · 未配置集群时可用 local=True 走本地进程（用于自测/离线验证协议）
 
 工具：cluster_kernel(action=start|exec|status|stop, code=..., timeout=...)
@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import shlex
 import subprocess
@@ -29,6 +30,72 @@ WORKER_NAME = "_kernel_worker.py"
 REMOTE_DIR = "memomics_kernel"
 _session_kernels = {}          # (key) -> ClusterKernel
 _lock = threading.Lock()
+
+
+def _catalog_v4_route_enabled(value) -> bool:
+    """Accept only a normalized V4 ledger flag or the exact public marker."""
+    from memomics.bio_tools import remote_cluster
+    if isinstance(value, str):
+        return remote_cluster.catalog_v4_ssh_route_required(value)
+    return remote_cluster.catalog_v4_route_required(value)
+
+
+def _catalog_v5_route_enabled(value) -> bool:
+    from memomics.bio_tools import remote_cluster
+    if isinstance(value, str):
+        return remote_cluster.catalog_v5_ssh_route_required(value)
+    return remote_cluster.catalog_v5_route_required(value)
+
+
+def _v5_ssh_invocation(host, user, port, key, extra_opts, v5_profile):
+    """Build a fixed System32 password-only SSH argv/env pair."""
+    from memomics.bio_tools import remote_cluster
+    if not isinstance(v5_profile, dict):
+        raise RuntimeError("catalog V5 password profile is unavailable")
+    profile = dict(v5_profile)
+    profile.update({
+        "host": host, "user": user, "port": int(port or 22), "key": key or "",
+        "extra_ssh_options": list(extra_opts or []),
+    })
+    if profile.get("key"):
+        raise RuntimeError("catalog V5 password profile cannot use a key fallback")
+    _candidate, config_args, runtime = remote_cluster.catalog_v5_process_runtime(profile)
+    return ([str(remote_cluster._password_ssh.system_openssh_executable("ssh.exe")), *config_args,
+             "-o", "BatchMode=no", "-o", "ConnectTimeout=15",
+             "%s@%s" % (user, runtime.target_alias)], runtime.env)
+
+
+def _v4_managed_ssh_options(host, user, port, key, extra_opts, *, catalog_v4_route=False):
+    """Verify/pin a catalog V4 route before every independent SSH argv build.
+
+    Import lazily to keep the historical local-kernel path dependency-free and
+    to avoid a module-import cycle.  Legacy option lists have no managed -F
+    proof and retain their established behavior.
+    """
+    from memomics.bio_tools.remote_cluster import validate_catalog_ssh_policy
+    return validate_catalog_ssh_policy(
+        extra_opts or [], host=str(host or ""), user=str(user or ""),
+        port=int(port or 22), key=str(key or ""),
+        require_managed=_catalog_v4_route_enabled(catalog_v4_route),
+    )
+
+
+def _ssh_cmd_for_policy(host="", user="", port=22, key="", extra_opts=None, *,
+                        catalog_v4_route: bool = False, catalog_v5_profile=None) -> list:
+    """Preserve legacy call shape unless durable V4 provenance requires proof."""
+    if catalog_v5_profile is not None:
+        return _v5_ssh_invocation(host, user, port, key, extra_opts, catalog_v5_profile)[0]
+    if _catalog_v4_route_enabled(catalog_v4_route):
+        return _ssh_cmd(host, user, port, key, extra_opts, catalog_v4_route=True)
+    return _ssh_cmd(host, user, port, key, extra_opts)
+
+
+def _ssh_invocation_for_policy(host="", user="", port=22, key="", extra_opts=None, *,
+                               catalog_v4_route: bool = False, catalog_v5_profile=None):
+    if catalog_v5_profile is not None:
+        return _v5_ssh_invocation(host, user, port, key, extra_opts, catalog_v5_profile)
+    return _ssh_cmd_for_policy(host, user, port, key, extra_opts,
+                               catalog_v4_route=catalog_v4_route), None
 
 
 def _worker_path() -> str:
@@ -86,7 +153,8 @@ class ClusterKernel:
     def __init__(self, host: str = "", user: str = "", port: int = 22, workdir: str = "~",
                  key: str = "", python: str = "python3", timeout: float = 300.0,
                  extra_opts=None, local: bool = False, lang: str = "python",
-                 purpose: str = "RNA", seed: int = None, max_rss_mb: int = 24000):
+                 purpose: str = "RNA", seed: int = None, max_rss_mb: int = 24000,
+                 catalog_v4_route: bool = False, catalog_v5_profile=None):
         self.lang = "R" if str(lang).lower().startswith("r") else "python"
         self.purpose = purpose or "RNA"
         # 2026-10-18（科研可复现）：默认固定种子；启动时自动设进内核并记录
@@ -110,6 +178,11 @@ class ClusterKernel:
         self.python = python or "python3"
         self.timeout = float(timeout or 300)
         self.extra_opts = list(extra_opts or [])
+        self.catalog_v4_route = _catalog_v4_route_enabled(catalog_v4_route)
+        self.catalog_v5_profile = dict(catalog_v5_profile) if isinstance(catalog_v5_profile, dict) else None
+        self.catalog_v5_route = self.catalog_v5_profile is not None
+        if self.catalog_v5_route and self.key:
+            raise RuntimeError("catalog V5 password kernel cannot use a key fallback")
         self.local = bool(local) or not self.host
         self.proc = None
         self._seq = 0
@@ -121,14 +194,31 @@ class ClusterKernel:
 
     # ---------- 连接构造 ----------
     def _ssh_prefix(self):
+        if self.catalog_v5_route:
+            return _v5_ssh_invocation(
+                self.host, self.user, self.port, self.key, self.extra_opts, self.catalog_v5_profile,
+            )[0]
+        config_args, extra_opts, _digest = _v4_managed_ssh_options(
+            self.host, self.user, self.port, self.key, self.extra_opts,
+            catalog_v4_route=self.catalog_v4_route,
+        )
         opts = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=15",
                 "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=6",
                 "-p", str(self.port)]
         if self.key:
             opts += ["-i", self.key]
-        opts += self.extra_opts
+        opts += extra_opts
         target = f"{self.user}@{self.host}" if self.user else self.host
-        return ["ssh", *opts, target]
+        # -F must be first so OpenSSH forwards the controlled configuration to
+        # its ordinary ProxyJump child; outer -o flags are not inherited.
+        return ["ssh", *config_args, *opts, target]
+
+    def _ssh_invocation(self):
+        if self.catalog_v5_route:
+            return _v5_ssh_invocation(
+                self.host, self.user, self.port, self.key, self.extra_opts, self.catalog_v5_profile,
+            )
+        return self._ssh_prefix(), None
 
     def _worker_file(self) -> str:
         return "_kernel_worker.R" if self.lang == "R" else WORKER_NAME
@@ -150,9 +240,10 @@ class ClusterKernel:
                 _src_path = _worker_path()
             src = open(_src_path, "rb").read()
             remote = f'$HOME/{REMOTE_DIR}'
-            cmd = self._ssh_prefix() + [
+            prefix, env = self._ssh_invocation()
+            cmd = prefix + [
                 f'mkdir -p {remote} && cat > {remote}/{_wf} && echo UPLOAD_OK']
-            p = subprocess.run(cmd, input=src, capture_output=True, timeout=120)
+            p = subprocess.run(cmd, input=src, capture_output=True, timeout=120, env=env)
             ok = b"UPLOAD_OK" in (p.stdout or b"")
             self._uploaded = ok
             return ok
@@ -170,7 +261,7 @@ class ClusterKernel:
             return {"ok": True, "already": True, "pid": self.proc.pid, "local": self.local}
         if not self.local and not self._uploaded:
             if not self.upload_worker():
-                return {"ok": False, "error": "worker 上传失败（检查 host/user/密钥/网络）"}
+                return {"ok": False, "error": "worker 上传失败（检查 host/user/本机保存的密码或密钥/网络）"}
         try:
             if self.local:
                 cmd = [sys.executable, "-u", _worker_path()]
@@ -182,11 +273,12 @@ class ClusterKernel:
                 remote_cmd = (f'cd {self.workdir} && echo $$ > {self._pidfile} && exec {_exe} '
                               + (f'{self._remote_worker()}' if self.lang == "R"
                                  else f'-u {self._remote_worker()}'))
-                cmd = self._ssh_prefix() + [remote_cmd]
+                prefix, env = self._ssh_invocation()
+                cmd = prefix + [remote_cmd]
                 cwd = None
             self.proc = subprocess.Popen(
                 cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                cwd=cwd, bufsize=0)
+                cwd=cwd, bufsize=0, env=(env if not self.local else None))
             self.last_use = time.time()
             try:
                 _reg_touch(self)     # 落盘登记 → 下一次对话 action=list 能看到
@@ -265,9 +357,12 @@ class ClusterKernel:
         if self.local or not self.host:
             return None
         try:
-            p = subprocess.run(_ssh_cmd(self.host, self.user, self.port, self.key, self.extra_opts)
-                               + [f"cat {self._pidfile} 2>/dev/null"],
-                               capture_output=True, text=True, timeout=60)
+            prefix, env = _ssh_invocation_for_policy(
+                self.host, self.user, self.port, self.key, self.extra_opts,
+                catalog_v4_route=self.catalog_v4_route, catalog_v5_profile=self.catalog_v5_profile,
+            )
+            p = subprocess.run(prefix + [f"cat {self._pidfile} 2>/dev/null"],
+                               capture_output=True, text=True, timeout=60, env=env)
             v = (p.stdout or "").strip()
             return int(v) if v.isdigit() else None
         except Exception:
@@ -286,9 +381,12 @@ class ClusterKernel:
         if not self.remote_pid:
             return None
         try:
-            p = subprocess.run(_ssh_cmd(self.host, self.user, self.port, self.key, self.extra_opts)
-                               + [f"ps -o rss= -p {self.remote_pid} | awk '{{print int($1/1024)}}'"],
-                               capture_output=True, text=True, timeout=60)
+            prefix, env = _ssh_invocation_for_policy(
+                self.host, self.user, self.port, self.key, self.extra_opts,
+                catalog_v4_route=self.catalog_v4_route, catalog_v5_profile=self.catalog_v5_profile,
+            )
+            p = subprocess.run(prefix + [f"ps -o rss= -p {self.remote_pid} | awk '{{print int($1/1024)}}'"],
+                               capture_output=True, text=True, timeout=60, env=env)
             v = (p.stdout or "").strip().splitlines()
             return float(v[-1]) if v and v[-1].strip().isdigit() else None
         except Exception:
@@ -364,16 +462,37 @@ class ClusterKernel:
 # ---------------- 会话级内核注册表 ----------------
 def get_kernel(key: str = "", host: str = "", user: str = "", port: int = 22,
                workdir: str = "~", key_file: str = "", python: str = "python3",
-               local: bool = False) -> ClusterKernel:
+               local: bool = False, extra_opts=None, lang: str = "python",
+               purpose: str = "RNA", catalog_v4_route: bool = False,
+               catalog_v5_profile=None) -> ClusterKernel:
     k = key or "default"
     with _lock:
         kern = _session_kernels.get(k)
         if kern is None:
             kern = ClusterKernel(host=host, user=user, port=port, workdir=workdir,
-                                 key=key_file, python=python, local=local)
+                                 key=key_file, python=python, local=local,
+                                 extra_opts=extra_opts, lang=lang, purpose=purpose,
+                                 catalog_v4_route=catalog_v4_route,
+                                 catalog_v5_profile=catalog_v5_profile)
             kern.kernel_id = k
             _session_kernels[k] = kern
         return kern
+
+
+def invalidate_server_kernels(server_id: str) -> int:
+    """Stop cached kernels for an edited or removed durable server profile."""
+    marker = ":%s:" % str(server_id or "")
+    removed = []
+    with _lock:
+        for key in list(_session_kernels):
+            if marker in (":" + key + ":"):
+                removed.append(_session_kernels.pop(key))
+    for kernel in removed:
+        try:
+            kernel.stop()
+        except Exception:
+            pass
+    return len(removed)
 
 
 def kernel_status(key: str = "") -> dict:
@@ -418,23 +537,95 @@ SCHEMA = {
 }
 
 
-def _resolve_target(host_override: str = "", workdir_override: str = ""):
-    """解析真正的执行目标：优先 remote.nodes[default_node]（计算节点）+ proxy_jump。
+def _target_error(error: str) -> dict:
+    try:
+        parsed = json.loads(error)
+    except Exception:
+        parsed = {"status": "error", "error": str(error)}
+    parsed.setdefault("status", "error")
+    return {"error_payload": parsed, "host": "", "user": "", "port": 22,
+            "key": "", "extra_opts": [], "workdir": "~", "node": ""}
 
-    ⚠️ remote.host 是**跳板/登录节点**，不能用来跑分析或取指纹（2026-10-18 实测：
-    登录节点 not a submit host，R 也不在那里）。
+
+def _resolve_target(host_override: str = "", workdir_override: str = "", session_id: str = "",
+                    recorded_target: bool = False):
+    """Resolve one effective node, including chat-server binding and overrides.
+
+    The old implementation read global ``default_node`` and then mixed node
+    host with global user/port/key.  This version delegates selection to
+    ``remote_cluster`` and consumes its fully expanded node entry so every
+    node-level SSH override is honored.
     """
     cfg = _cluster_cfg()
-    node_name = str(cfg.get("default_node") or "")
-    node = ((cfg.get("nodes") or {}).get(node_name) or {}) if isinstance(cfg.get("nodes"), dict) else {}
-    host = host_override or node.get("host") or cfg.get("host") or ""
-    pj = node.get("proxy_jump") or cfg.get("proxy_jump") or ""
-    extra = ["-J", pj] if pj else []
-    extra += list(cfg.get("extra_ssh_options") or [])
-    return {"host": host, "user": cfg.get("user") or "", "port": int(cfg.get("port") or 22),
-            "key": cfg.get("key") or "", "extra_opts": extra,
-            "workdir": workdir_override or node.get("workdir") or cfg.get("workdir") or "~",
-            "node": node_name, "proxy_jump": pj}
+    try:
+        from memomics.bio_tools import remote_cluster as _rc
+        node, node_name, err = _rc.select_node_for_session(
+            cfg, str(host_override or ""), session_id, recorded_target=recorded_target
+        )
+    except Exception as exc:
+        return _target_error(str(exc))
+    if err:
+        return _target_error(err)
+    node = dict(node or {})
+    try:
+        port = int(node.get("port") or 22)
+    except Exception:
+        port = 22
+    extra = list(node.get("extra_ssh_options") or [])
+    workdir = str(workdir_override or node.get("workdir") or "~")
+    # A config edit must never reuse an ssh worker pointed at the old endpoint.
+    # Do not expose the fingerprint; it is only a cache namespace component.
+    catalog_v4_route = _rc.catalog_v4_ssh_route_required(node.get("catalog_v4_ssh_route"))
+    catalog_v5_route = _rc.catalog_v5_password_profile(node)
+    if catalog_v4_route and catalog_v5_route:
+        return _target_error("a catalog profile cannot use both V4 and V5 authentication")
+    if catalog_v5_route and str(node.get("key") or ""):
+        return _target_error("catalog V5 password profile cannot use a key fallback")
+    catalog_v5_profile = None
+    if catalog_v5_route:
+        # The snapshot contains route/account identifiers and endpoint data
+        # only.  It deliberately has no password: every native process reads
+        # the current account secret from Windows Credential Manager.
+        catalog_v5_profile = {
+            "auth_mode": node.get("auth_mode"),
+            "catalog_account_id": node.get("catalog_account_id"),
+            "gateway_account_id": node.get("gateway_account_id"),
+            "catalog_v5_ssh_route": node.get("catalog_v5_ssh_route"),
+            "catalog_v5_target_alias": node.get("catalog_v5_target_alias"),
+            "catalog_v5_gateway_alias": node.get("catalog_v5_gateway_alias"),
+            "catalog_v5_gateway_host": node.get("catalog_v5_gateway_host"),
+            "catalog_v5_gateway_user": node.get("catalog_v5_gateway_user"),
+            "catalog_v5_gateway_port": node.get("catalog_v5_gateway_port"),
+            "host": str(node.get("host") or ""), "user": str(node.get("user") or ""),
+            "port": port, "key": "", "workdir": workdir,
+            "job_dir": str(node.get("job_dir") or ""),
+            "local_root": str(node.get("local_root") or ""),
+            "remote_root": str(node.get("remote_root") or ""),
+            "timeout": int(node.get("timeout") or 300),
+            "scheduler": str(node.get("scheduler") or "auto"),
+            "partition": str(node.get("partition") or ""),
+            "queue": str(node.get("queue") or ""),
+            "extra_ssh_options": extra,
+        }
+    fingerprint_payload = {
+        "host": str(node.get("host") or ""), "user": str(node.get("user") or ""),
+        "port": port, "key": str(node.get("key") or ""), "workdir": workdir,
+        "extra_opts": extra,
+    }
+    # Keep the cache namespace of legacy targets exactly as it was before V4.
+    if catalog_v4_route:
+        fingerprint_payload["catalog_v4_route"] = True
+    if catalog_v5_route:
+        fingerprint_payload["catalog_v5_profile"] = catalog_v5_profile
+    fp_source = json.dumps(fingerprint_payload, sort_keys=True, ensure_ascii=False)
+    return {"host": str(node.get("host") or ""), "user": str(node.get("user") or ""),
+            "port": port, "key": str(node.get("key") or ""), "extra_opts": extra,
+            "workdir": workdir, "node": node_name, "server_id": node_name,
+            "connection_fingerprint": hashlib.sha256(fp_source.encode("utf-8")).hexdigest()[:16],
+            "proxy_jump": str(node.get("proxy_jump") or ""),
+            "catalog_v4_route": catalog_v4_route,
+            "catalog_v5_route": catalog_v5_route,
+            "catalog_v5_profile": catalog_v5_profile}
 
 
 def _cluster_cfg() -> dict:
@@ -443,6 +634,152 @@ def _cluster_cfg() -> dict:
         return _load_remote_config() or {}
     except Exception:
         return {}
+
+
+def _kernel_key(session_id: str, target: dict, lang: str, purpose: str) -> str:
+    return "cluster:%s:%s:%s:%s:%s" % (
+        session_id or "default", target.get("server_id") or target.get("node") or "local",
+        target.get("connection_fingerprint") or "local", str(lang or "python").lower(),
+        str(purpose or "RNA").upper(),
+    )
+
+
+def _target_result_or_error(target: dict):
+    if target.get("error_payload"):
+        return json.dumps(target["error_payload"], ensure_ascii=False)
+    return None
+
+
+def _target_from_job_record(record: dict, fallback: dict) -> dict:
+    """Use the connection snapshot written with a submitted job for re-entry."""
+    if not record:
+        return fallback
+    fallback = dict(fallback or {})
+    host = str(record.get("host") or "").strip()
+    if not host:
+        return fallback
+    # Field presence (not truthiness) is the snapshot version boundary.  A
+    # deliberately empty key or extra_opts list must not borrow credentials or
+    # a ProxyJump from a newly edited current profile.  Older records simply
+    # lack these fields and retain the previous fallback behavior.
+    def _saved(field, default=None, aliases=()):
+        for name in (field, *aliases):
+            if name in record:
+                return record.get(name)
+        return fallback.get(field, default)
+
+    out = {k: v for k, v in fallback.items() if k != "error_payload"}
+    raw_port = _saved("port", 22)
+    try:
+        port = int(raw_port or 22)
+    except Exception:
+        port = 22
+    raw_extra = _saved("extra_opts", [], aliases=("extra_ssh_options",))
+    if isinstance(raw_extra, (list, tuple)):
+        extra_opts = list(raw_extra)
+    elif raw_extra in (None, ""):
+        extra_opts = []
+    else:
+        extra_opts = [str(raw_extra)]
+    server_id = _saved("server_id", "")
+    node = _saved("node", "")
+    if "catalog_v4_route" in record:
+        catalog_v4_route = _catalog_v4_route_enabled(record.get("catalog_v4_route"))
+    elif "catalog_v4_ssh_route" in record:
+        catalog_v4_route = _catalog_v4_route_enabled(record.get("catalog_v4_ssh_route"))
+    else:
+        catalog_v4_route = _catalog_v4_route_enabled(fallback.get("catalog_v4_route"))
+    raw_v5 = _saved("catalog_v5_route", None, aliases=("catalog_v5_ssh_route",))
+    if isinstance(raw_v5, bool):
+        catalog_v5_route = _catalog_v5_route_enabled(raw_v5)
+    else:
+        from memomics.bio_tools import remote_cluster as _rc
+        catalog_v5_route = _rc.catalog_v5_ssh_route_required(raw_v5)
+    if catalog_v4_route and catalog_v5_route:
+        raise RuntimeError("a catalog job cannot use both V4 and V5 authentication")
+    catalog_v5_profile = None
+    if catalog_v5_route:
+        if str(_saved("key", "") or ""):
+            raise RuntimeError("catalog V5 password job cannot use a key fallback")
+        catalog_v5_profile = {
+            "auth_mode": _saved("auth_mode", ""),
+            "catalog_account_id": _saved("catalog_account_id", ""),
+            "gateway_account_id": _saved("gateway_account_id", ""),
+            "catalog_v5_ssh_route": _saved("catalog_v5_ssh_route", ""),
+            "catalog_v5_target_alias": _saved("catalog_v5_target_alias", ""),
+            "catalog_v5_gateway_alias": _saved("catalog_v5_gateway_alias", ""),
+            "catalog_v5_gateway_host": _saved("catalog_v5_gateway_host", ""),
+            "catalog_v5_gateway_user": _saved("catalog_v5_gateway_user", ""),
+            "catalog_v5_gateway_port": _saved("catalog_v5_gateway_port", ""),
+        }
+    out.update({
+        "host": host,
+        "user": str(_saved("user", "") or ""),
+        "port": port,
+        "key": str(_saved("key", "") or ""),
+        "extra_opts": extra_opts,
+        "workdir": str(_saved("workdir", "~") or "~"),
+        "server_id": str(server_id or node or ""),
+        "node": str(node or server_id or ""),
+        "proxy_jump": str(_saved("proxy_jump", "") or ""),
+        "catalog_v4_route": catalog_v4_route,
+        "catalog_v5_route": catalog_v5_route,
+        "catalog_v5_profile": catalog_v5_profile,
+    })
+    fingerprint_payload = {k: out.get(k) for k in ("host", "user", "port", "key", "workdir", "extra_opts")}
+    if catalog_v4_route:
+        fingerprint_payload["catalog_v4_route"] = True
+    if catalog_v5_route:
+        fingerprint_payload["catalog_v5_profile"] = catalog_v5_profile
+    raw = json.dumps(fingerprint_payload, sort_keys=True, ensure_ascii=False)
+    out["connection_fingerprint"] = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+    return out
+
+
+def _job_record_summary(record: dict) -> dict:
+    """Expose only routing diagnostics when a scheduler id is ambiguous."""
+    return {
+        "server_id": str(record.get("server_id") or ""),
+        "node": str(record.get("node") or ""),
+        "host": str(record.get("host") or ""),
+        "session_id": str(record.get("session_id") or ""),
+        "created_at": record.get("created_at"),
+    }
+
+
+def _select_job_record(records, job_id: str, *, requested: str = "", session_id: str = ""):
+    """Return one node_state record without guessing across duplicate ids."""
+    wanted = str(job_id or "").strip()
+    candidates = [dict(item) for item in (records or [])
+                  if str(item.get("job_id") or "") == wanted]
+    if not candidates:
+        return None, None
+    target = str(requested or "").strip().lower()
+    if target:
+        matched = [item for item in candidates if target in {
+            str(item.get("server_id") or "").strip().lower(),
+            str(item.get("node") or "").strip().lower(),
+            str(item.get("host") or "").strip().lower(),
+        }]
+        if not matched:
+            return None, {
+                "status": "job_target_mismatch", "job_id": wanted,
+                "error": "the requested host does not match the recorded job target",
+                "candidates": [_job_record_summary(item) for item in candidates[:12]],
+            }
+        candidates = matched
+    if session_id:
+        owned = [item for item in candidates
+                 if str(item.get("session_id") or "") == str(session_id)]
+        if owned:
+            candidates = owned
+    if len(candidates) == 1:
+        return candidates[0], None
+    return None, {
+        "status": "ambiguous_job", "job_id": wanted,
+        "error": "the scheduler job id occurs on multiple recorded targets; specify the owning host or chat",
+        "candidates": [_job_record_summary(item) for item in candidates[:12]],
+    }
 
 
 def cluster_kernel_tool(action: str = "status", code: str = "", timeout: float = 300,
@@ -457,7 +794,40 @@ def cluster_kernel_tool(action: str = "status", code: str = "", timeout: float =
     except Exception:
         sid = ""
     cfg = _cluster_cfg()
-    key = f"cluster:{sid or 'default'}"
+
+    def _target(recorded_target: bool = False):
+        # A completely unconfigured kernel still supports its documented local
+        # simulation mode for offline testing and recovery.  That shortcut is
+        # only safe after a chat session has been proved *unbound*.  In
+        # particular, a deleted profile (or a failed metadata read) must not
+        # turn a bound chat's next kernel action into a local process.
+        must_resolve_bound_target = False
+        if sid and not recorded_target:
+            try:
+                from memomics.bio_tools import remote_cluster as _rc
+                must_resolve_bound_target = bool(_rc.bound_server_for_session(sid))
+            except Exception:
+                # _resolve_target delegates to select_node_for_session, which
+                # emits the structured binding_unavailable error.  Treat an
+                # unreadable durable binding as unsafe rather than assuming
+                # the chat is eligible for local simulation.
+                must_resolve_bound_target = True
+        if (not host and not (cfg.get("host") or cfg.get("nodes"))
+                and not must_resolve_bound_target):
+            raw = "local"
+            return {"host": "", "user": "", "port": 22, "key": "", "extra_opts": [],
+                    "workdir": workdir or "~", "node": "local", "server_id": "local",
+                    "connection_fingerprint": hashlib.sha256(raw.encode()).hexdigest()[:16],
+                    "proxy_jump": ""}
+        return _resolve_target(host, workdir, sid, recorded_target=recorded_target)
+
+    # list/attach with an explicit kernel id do not choose a remote target.
+    if action == "list":
+        return json.dumps({"ok": True, "kernels": list_kernels(),
+                           "note": "alive/attachable 只在当前服务进程内有效；服务重启后 ssh 管道断，变量必然丢失"}, ensure_ascii=False, indent=1)
+    if action == "attach":
+        return json.dumps(attach_kernel(kernel_id, sid), ensure_ascii=False)
+
     if action in ("jobs", "logs", "cancel"):
         from memomics.bio_tools import node_state as _ns
         try:
@@ -465,8 +835,25 @@ def cluster_kernel_tool(action: str = "status", code: str = "", timeout: float =
             _sid_now = _gss() or ""
         except Exception:
             _sid_now = ""
-        _t = _resolve_target(host, workdir)
+        jid = job_id or kernel_id
+        rec = None
+        if jid and action in ("logs", "cancel"):
+            rec, job_lookup_error = _select_job_record(
+                _ns.list_jobs(limit=80), jid, requested=host, session_id=(_sid_now or sid),
+            )
+            if job_lookup_error:
+                return json.dumps(job_lookup_error, ensure_ascii=False)
         if action == "jobs":
+            # Job records contain their own connection snapshots.  A current
+            # chat binding that was deleted or cannot be read must not prevent
+            # polling/listing those historical resources.  A resolved current
+            # target remains a compatibility fallback for older partial
+            # records, but a target error is deliberately non-fatal here.
+            _t = _target()
+            _target_err = _target_result_or_error(_t)
+            if _target_err:
+                _t = {"host": "", "user": "", "port": 22, "key": "", "extra_opts": [],
+                      "workdir": "~", "node": "recorded", "server_id": "recorded"}
             # 2026-10-18：每次查作业时顺带推进排队队列（资源松了就自动开跑）
             _promo = {}
             try:
@@ -474,60 +861,102 @@ def cluster_kernel_tool(action: str = "status", code: str = "", timeout: float =
             except Exception as _e:
                 _promo = {"error": str(_e)}
             try:
-                _ns.poll_jobs(_t["host"], _t["user"], _t["port"], _t["key"], _t["extra_opts"])
+                if _t.get("catalog_v5_route"):
+                    _ns.poll_jobs(_t["host"], _t["user"], _t["port"], _t["key"], _t["extra_opts"],
+                                  catalog_v5_profile=_t.get("catalog_v5_profile"))
+                elif _t.get("catalog_v4_route"):
+                    _ns.poll_jobs(_t["host"], _t["user"], _t["port"], _t["key"], _t["extra_opts"],
+                                  catalog_v4_route=True)
+                else:
+                    _ns.poll_jobs(_t["host"], _t["user"], _t["port"], _t["key"], _t["extra_opts"])
             except Exception:
                 pass
             _scope = str(locals().get("_scope_arg") or "session").lower()
             _mine = _ns.list_jobs() if _scope == "all" else _ns.list_jobs(session_id=(_sid_now or None))
             _others = len(_ns.list_jobs()) - len(_mine)
+            # node_state exposes _record_key only for precise internal writes;
+            # do not make that storage identity part of the user-facing job
+            # protocol (which remains the scheduler's job_id).
+            _public_jobs = [{key: value for key, value in item.items() if key != "_record_key"}
+                            for item in _mine]
             return json.dumps({"ok": True, "node": _t["node"], "promoted": _promo,
-                               "session_id": _sid_now, "jobs": _mine,
+                               "session_id": _sid_now, "jobs": _public_jobs,
                                "other_sessions": _others,
+                               "target_fallback": "recorded" if _target_err else "current",
                                "hint": ("其它会话还有 %d 个作业；scope=all 可看全部" % _others) if _others else ""},
                               ensure_ascii=False, indent=1)
+        if rec and action in ("logs", "cancel") and str(rec.get("host") or "").strip():
+            # A job may outlive a later chat binding change.  Logs/cancel must
+            # use its own submitted connection snapshot.
+            _t = _target_from_job_record(rec, {})
+        else:
+            _t = _target()
+            err = _target_result_or_error(_t)
+            if err:
+                return err
         if action == "logs":
-            jid = job_id or kernel_id
-            rec = next((j for j in _ns.list_jobs(limit=80) if j.get("job_id") == jid), None)
             if not rec:
                 return json.dumps({"ok": False, "error": f"没有作业 {jid}"}, ensure_ascii=False)
             import subprocess as _sp
             lg = (rec.get("log") or "").replace("$HOME", "/home/%s" % _t["user"])
             try:
-                _q = _sp.run(_ssh_cmd(_t["host"], _t["user"], _t["port"], _t["key"], _t["extra_opts"])
-                             + [f"bash -lc {('tail -c 20000 ' + lg + ' 2>/dev/null')!r}"],
-                             capture_output=True, text=True, timeout=90)
+                _argv, _env = _ssh_invocation_for_policy(
+                    _t["host"], _t["user"], _t["port"], _t["key"], _t["extra_opts"],
+                    catalog_v4_route=bool(_t.get("catalog_v4_route")),
+                    catalog_v5_profile=_t.get("catalog_v5_profile") if _t.get("catalog_v5_route") else None,
+                )
+                _q = _sp.run(_argv + [f"bash -lc {('tail -c 20000 ' + lg + ' 2>/dev/null')!r}"],
+                             capture_output=True, text=True, timeout=90, env=_env)
                 return json.dumps({"ok": True, "job_id": jid, "status": rec.get("status"),
                                    "log_tail": (_q.stdout or "")[-20000:]}, ensure_ascii=False)
             except Exception as exc:
                 return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
         # cancel
-        jid = job_id or kernel_id
-        rec = next((j for j in _ns.list_jobs(limit=80) if j.get("job_id") == jid), None)
         if not rec:
             return json.dumps({"ok": False, "error": f"没有作业 {jid}"}, ensure_ascii=False)
         import subprocess as _sp
         try:
-            _sp.run(_ssh_cmd(_t["host"], _t["user"], _t["port"], _t["key"], _t["extra_opts"])
-                    + [f"bash -lc 'kill -TERM {rec.get('pid')} 2>/dev/null; sleep 1; kill -9 {rec.get('pid')} 2>/dev/null; echo KILLED'"],
-                    capture_output=True, text=True, timeout=60)
-            _ns.update_job(jid, status="cancelled", finished_at=__import__("time").time())
+            _argv, _env = _ssh_invocation_for_policy(
+                _t["host"], _t["user"], _t["port"], _t["key"], _t["extra_opts"],
+                catalog_v4_route=bool(_t.get("catalog_v4_route")),
+                catalog_v5_profile=_t.get("catalog_v5_profile") if _t.get("catalog_v5_route") else None,
+            )
+            _sp.run(_argv + [f"bash -lc 'kill -TERM {rec.get('pid')} 2>/dev/null; sleep 1; kill -9 {rec.get('pid')} 2>/dev/null; echo KILLED'"],
+                    capture_output=True, text=True, timeout=60, env=_env)
+            _ns.update_job(jid, record_key=rec.get("_record_key"), status="cancelled",
+                           finished_at=__import__("time").time())
             return json.dumps({"ok": True, "job_id": jid, "cancelled": True}, ensure_ascii=False)
         except Exception as exc:
             return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
 
+    tgt = _target()
+    err = _target_result_or_error(tgt)
+    if err:
+        return err
+    key = _kernel_key(sid, tgt, lang, purpose)
     if action == "submit":
-        tgt3 = _resolve_target(host, workdir)
-        return json.dumps(submit_job(
-            code, lang, purpose, slots=4, job_name="mmjob",
-            host=tgt3["host"], user=tgt3["user"], port=tgt3["port"],
-            key=tgt3["key"], extra_opts=tgt3["extra_opts"],
-            workdir=tgt3["workdir"], mem_gb=mem_gb, disk_gb=disk_gb, force=force),
+        _submit_args = {
+            "slots": 4, "job_name": "mmjob", "host": tgt["host"], "user": tgt["user"],
+            "port": tgt["port"], "key": tgt["key"], "extra_opts": tgt["extra_opts"],
+            "workdir": tgt["workdir"], "mem_gb": mem_gb, "disk_gb": disk_gb, "force": force,
+            "server_id": tgt.get("server_id") or tgt.get("node"),
+        }
+        if tgt.get("catalog_v4_route"):
+            _submit_args["catalog_v4_route"] = True
+        if tgt.get("catalog_v5_route"):
+            _submit_args["catalog_v5_profile"] = tgt.get("catalog_v5_profile")
+        return json.dumps(submit_job(code, lang, purpose, **_submit_args),
             ensure_ascii=False, indent=1)
     if action == "env":
-        tgt = _resolve_target(host)
-        fp = verify_env_fingerprint(lang, purpose,
-                                    host=tgt["host"], user=tgt["user"], port=tgt["port"],
-                                    key=tgt["key"], extra_opts=tgt["extra_opts"])
+        _fp_args = {
+            "host": tgt["host"], "user": tgt["user"], "port": tgt["port"],
+            "key": tgt["key"], "extra_opts": tgt["extra_opts"],
+        }
+        if tgt.get("catalog_v4_route"):
+            _fp_args["catalog_v4_route"] = True
+        if tgt.get("catalog_v5_route"):
+            _fp_args["catalog_v5_profile"] = tgt.get("catalog_v5_profile")
+        fp = verify_env_fingerprint(lang, purpose, **_fp_args)
         fp["target"] = {k: tgt[k] for k in ("host", "node", "proxy_jump")}
         return json.dumps({"ok": True, "source": "memomics_home/cluster_envs.json",
                            "envs": env_summary(), "fingerprint_check": fp},
@@ -540,25 +969,23 @@ def cluster_kernel_tool(action: str = "status", code: str = "", timeout: float =
         if action == "rss":
             return json.dumps(kern.check_memory(force=True), ensure_ascii=False)
         return json.dumps(kern.reseed(seed if seed is not None else kern.seed), ensure_ascii=False)
-    if action == "list":
-        return json.dumps({"ok": True, "kernels": list_kernels(),
-                           "note": "alive/attachable 只在当前服务进程内有效；服务重启后 ssh 管道断，变量必然丢失"}, ensure_ascii=False, indent=1)
-    if action == "attach":
-        return json.dumps(attach_kernel(kernel_id or key, sid), ensure_ascii=False)
     if action == "stop":
         return json.dumps(stop_kernel_by_id(kernel_id) if kernel_id else stop_kernel(key),
                           ensure_ascii=False)
     if action == "status":
         return json.dumps(kernel_status(key), ensure_ascii=False)
-    _tgt = _resolve_target(host, workdir)
-    kern = get_kernel(
-        f"cluster:{sid or 'default'}:{lang}:{purpose}",
-        host=_tgt["host"], user=_tgt["user"], port=_tgt["port"],
-        workdir=_tgt["workdir"], key_file=_tgt["key"],
-        python=(resolve_interpreter(lang, purpose) or cfg.get("python") or "python3"),
-        local=bool(not _tgt["host"]),   # 没配集群 → 本地模拟（同一套协议）
-        lang=lang, purpose=purpose, extra_opts=_tgt["extra_opts"],
-    )
+    _kernel_args = {
+        "host": tgt["host"], "user": tgt["user"], "port": tgt["port"],
+        "workdir": tgt["workdir"], "key_file": tgt["key"],
+        "python": (resolve_interpreter(lang, purpose) or cfg.get("python") or "python3"),
+        "local": bool(not tgt["host"]),  # 没配集群 → 本地模拟（同一套协议）
+        "lang": lang, "purpose": purpose, "extra_opts": tgt["extra_opts"],
+    }
+    if tgt.get("catalog_v4_route"):
+        _kernel_args["catalog_v4_route"] = True
+    if tgt.get("catalog_v5_route"):
+        _kernel_args["catalog_v5_profile"] = tgt.get("catalog_v5_profile")
+    kern = get_kernel(key, **_kernel_args)
     if action == "start":
         return json.dumps(kern.start(), ensure_ascii=False)
     if action == "exec":
@@ -576,11 +1003,14 @@ def _register():
             toolset="memomics",
             schema=SCHEMA,
             handler=lambda args, **kw: cluster_kernel_tool(
-                args.get("action", "status"), args.get("code", ""),
-                float(args.get("timeout") or 300), args.get("host", ""), args.get("workdir", ""),
-                args.get("kernel_id", ""), args.get("lang", "python"), args.get("purpose", "RNA"),
-                args.get("job_id", ""), args.get("mem_gb"), args.get("disk_gb"), bool(args.get("force")),
-                (int(args["seed"]) if args.get("seed") is not None else None)),
+                action=args.get("action", "status"), code=args.get("code", ""),
+                timeout=float(args.get("timeout") or 300), host=args.get("host", ""),
+                workdir=args.get("workdir", ""), kernel_id=args.get("kernel_id", ""),
+                lang=args.get("lang", "python"), purpose=args.get("purpose", "RNA"),
+                seed=(int(args["seed"]) if args.get("seed") is not None else None),
+                job_id=args.get("job_id", ""), mem_gb=args.get("mem_gb"),
+                disk_gb=args.get("disk_gb"), force=bool(args.get("force")),
+            ),
         )
     except Exception:
         pass
@@ -704,19 +1134,23 @@ def guard_heavy_on_login(host: str, purpose: str = "RNA") -> dict:
             "hint": "cluster_kernel 仅做交互；重活走 qsub"}
 
 
-def _ssh_cmd(host="", user="", port=22, key="", extra_opts=None) -> list:
+def _ssh_cmd(host="", user="", port=22, key="", extra_opts=None, *, catalog_v4_route=False) -> list:
     """构造 ssh 命令前缀（与 ClusterKernel 一致，便于指纹等一次性远端查询）。"""
+    config_args, remaining_opts, _digest = _v4_managed_ssh_options(
+        host, user, port, key, extra_opts, catalog_v4_route=catalog_v4_route,
+    )
     opts = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "-p", str(port or 22)]
     if key:
         opts += ["-i", key]
-    opts += list(extra_opts or [])
+    opts += remaining_opts
     target = f"{user}@{host}" if user else host
-    return ["ssh", *opts, target]
+    return ["ssh", *config_args, *opts, target]
 
 
 def verify_env_fingerprint(lang: str = "R", purpose: str = "RNA", host: str = "",
                            user: str = "", port: int = 22, key: str = "",
-                           extra_opts=None) -> dict:
+                           extra_opts=None, *, catalog_v4_route: bool = False,
+                           catalog_v5_profile=None) -> dict:
     """决策4：环境指纹校验 —— 现取 R/python 版本与关键包，和记录比对。"""
     rec = _envs_record()
     ent = ((rec.get("envs") or {}).get(str(purpose).upper()) or {})
@@ -737,9 +1171,12 @@ def verify_env_fingerprint(lang: str = "R", purpose: str = "RNA", host: str = ""
             # 集群环境：必须走 ssh 执行，本地 subprocess 取不到远端版本（原实现的缺陷）
             import shlex as _shlex
             _inner = " ".join(_shlex.quote(str(a)) for a in argv)   # 引号必须保留，否则 R 代码被 shell 拆解
-            cmd = _ssh_cmd(host, user, port, key, extra_opts) + [
-                f'cd "$HOME" && {_inner}']
-            p = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+            cmd, process_env = _ssh_invocation_for_policy(
+                host, user, port, key, extra_opts, catalog_v4_route=catalog_v4_route,
+                catalog_v5_profile=catalog_v5_profile,
+            )
+            p = subprocess.run(cmd + [f'cd "$HOME" && {_inner}'], capture_output=True,
+                               text=True, timeout=180, env=process_env)
             out = (p.stdout or "").strip() or (p.stderr or "").strip()[-300:]
             where = f"{user}@{host}" if user else host
         else:
@@ -761,12 +1198,20 @@ def submit_job(code: str, lang: str = "R", purpose: str = "RNA", slots: int = 4,
                queue: str = "", job_name: str = "mmjob", host: str = "", user: str = "",
                port: int = 22, key: str = "", extra_opts=None, workdir: str = "",
                script: str = "", mem_gb: float = None, disk_gb: float = None,
-               force: bool = False, input_paths=None, job_key: str = "") -> dict:
+               force: bool = False, input_paths=None, job_key: str = "",
+               server_id: str = "", catalog_v4_route: bool = False,
+               catalog_v5_profile=None) -> dict:
     """把一段分析代码变成 SGE 作业提交（登录节点禁跑重分析的"正确出口"）。
 
     流程：写脚本到集群 ~/memomics_jobs/scripts/<name>.<ext> → qsub -cwd -j y -o <log>
           -N <name> -pe smp <slots> <script> → 返回作业号。
     """
+    catalog_v4_route = _catalog_v4_route_enabled(catalog_v4_route)
+    password_route = catalog_v5_profile is not None
+    if catalog_v4_route and password_route:
+        return {"ok": False, "error": "a catalog job cannot use both V4 and V5 authentication"}
+    if password_route and key:
+        return {"ok": False, "error": "catalog V5 password job cannot use a key fallback"}
     if not code.strip() and not script:
         return {"ok": False, "error": "需要 code（要跑的分析代码）"}
     if not host:
@@ -778,7 +1223,14 @@ def submit_job(code: str, lang: str = "R", purpose: str = "RNA", slots: int = 4,
     from memomics.bio_tools import node_state as _ns
     _req = _ns.estimate_mem_gb(paths=input_paths, declared=mem_gb)
     _disk_req = float(disk_gb if disk_gb is not None else 20.0)
-    _state = _ns.node_state(host, user, port, key, extra_opts, workdir)
+    if password_route:
+        _state = _ns.node_state(host, user, port, key, extra_opts, workdir,
+                                catalog_v5_profile=catalog_v5_profile)
+    elif catalog_v4_route:
+        _state = _ns.node_state(host, user, port, key, extra_opts, workdir,
+                                catalog_v4_route=True)
+    else:
+        _state = _ns.node_state(host, user, port, key, extra_opts, workdir)
     _verdict = _ns.decide(_state, _req["mem_gb"], _disk_req)
     if _verdict["zone"] == "unknown" and not force:
         return {"ok": False, "need_confirm": True, "zone": "unknown",
@@ -793,13 +1245,21 @@ def submit_job(code: str, lang: str = "R", purpose: str = "RNA", slots: int = 4,
             _qext = "R" if str(lang).lower().startswith("r") else "py"
             _qscript = f"$HOME/memomics_jobs/scripts/{_qname}_{_qstamp}.{_qext}"
             _qid = f"q{_qstamp}_{_qname}"
-            _ns.queue_job(_qid, host=host, user=user, port=port, key=key, extra_opts=extra_opts,
-                          workdir=workdir or "~", exe=exe, script=_qscript,
-                          log=f"$HOME/memomics_jobs/logs/{_qname}_{_qstamp}.log",
-                          exit_file=_qscript + ".exit", lang=lang, purpose=purpose,
-                          mem_gb=_req["mem_gb"], disk_gb=_disk_req, zone="red",
-                          code=code, need_upload=True,
-                          message=_verdict.get("message"))
+            _queue_fields = {
+                "host": host, "user": user, "port": port, "key": key, "extra_opts": extra_opts,
+                "workdir": workdir or "~", "exe": exe, "script": _qscript,
+                "log": f"$HOME/memomics_jobs/logs/{_qname}_{_qstamp}.log",
+                "exit_file": _qscript + ".exit", "lang": lang, "purpose": purpose,
+                "mem_gb": _req["mem_gb"], "disk_gb": _disk_req, "zone": "red",
+                "code": code, "need_upload": True, "message": _verdict.get("message"),
+                "server_id": server_id, "connection_snapshot_version": 1,
+            }
+            if catalog_v4_route:
+                _queue_fields["catalog_v4_route"] = True
+            if password_route:
+                _queue_fields["catalog_v5_route"] = True
+                _queue_fields.update(dict(catalog_v5_profile or {}))
+            _ns.queue_job(_qid, **_queue_fields)
         except Exception as _exc:
             return {"ok": False, "queued": False, "zone": "red",
                     "message": (_verdict.get("message") or "") + f"（入队失败: {_exc}）",
@@ -825,12 +1285,20 @@ def submit_job(code: str, lang: str = "R", purpose: str = "RNA", slots: int = 4,
     else:
         header = f"#!{exe}\n" if not code.startswith("#!") else ""
     payload = (header + body).encode("utf-8")
-    ssh = _ssh_cmd(host, user, port, key, extra_opts)
+    def _next_ssh():
+        # Credential revisions and the bounded ASKPASS map are intentionally
+        # fresh for each native process.  A password update/deletion must not
+        # be hidden by a previously assembled argv/environment pair.
+        return _ssh_invocation_for_policy(
+            host, user, port, key, extra_opts, catalog_v4_route=catalog_v4_route,
+            catalog_v5_profile=catalog_v5_profile if password_route else None,
+        )
     try:
         # 1) 落脚本（cat 覆盖写，避免引号/编码问题）
+        ssh, process_env = _next_ssh()
         w = subprocess.run(ssh + [f"mkdir -p $HOME/memomics_jobs/{{scripts,logs}} && "
                                   f"cat > {remote_script} && chmod +x {remote_script} && echo WROTE"],
-                           input=payload, capture_output=True, timeout=120)
+                           input=payload, capture_output=True, timeout=120, env=process_env)
         if b"WROTE" not in (w.stdout or b""):
             return {"ok": False, "error": "写脚本失败", "stderr": (w.stderr or b"").decode("utf-8", "replace")[-300:]}
         # 2) qsub
@@ -842,7 +1310,8 @@ def submit_job(code: str, lang: str = "R", purpose: str = "RNA", slots: int = 4,
         qargs.append(remote_script)
         # 远端用 bash -lc 加载登录环境（SGE/PATH 依赖 profile），并加 timeout + </dev/null 防挂住
         _cmd = "bash -lc " + shlex.quote("timeout 90 " + " ".join(qargs) + " </dev/null 2>&1")
-        r = subprocess.run(ssh + [_cmd], capture_output=True, text=True, timeout=180)
+        ssh, process_env = _next_ssh()
+        r = subprocess.run(ssh + [_cmd], capture_output=True, text=True, timeout=180, env=process_env)
         out = ((r.stdout or "") + "\n" + (r.stderr or "")).strip()
         import re as _re
         # 失败识别（2026-10-18 实测踩坑：qmaster 不可达时输出里带 "port 6444"，
@@ -858,7 +1327,8 @@ def submit_job(code: str, lang: str = "R", purpose: str = "RNA", slots: int = 4,
                           f"echo EXIT:$? > {_exitf}")
                 _cmd2 = (f"bash -lc {shlex.quote('nohup bash -c ' + shlex.quote(_inner) +
                                                  ' >/dev/null 2>&1 & echo PID:$! && sleep 1 && ps -o lstart= -p $!')}")
-                _r2 = subprocess.run(ssh + [_cmd2], capture_output=True, text=True, timeout=120)
+                ssh, process_env = _next_ssh()
+                _r2 = subprocess.run(ssh + [_cmd2], capture_output=True, text=True, timeout=120, env=process_env)
                 _o2 = (_r2.stdout or "").strip()
                 _mp = _re.search(r"PID:\s*(\d+)", _o2)
                 if _mp:
@@ -870,14 +1340,24 @@ def submit_job(code: str, lang: str = "R", purpose: str = "RNA", slots: int = 4,
                     _lstart = " ".join(_lm.group(1).split()) if _lm else ""
                     _jid = job_key or f"mm{stamp}_{_pid}"
                     try:
-                        _ns.register_job(_jid, status="running", pid=_pid, lstart=_lstart,
-                                         host=host, user=user, port=port, key=key,
-                                         extra_opts=list(extra_opts or []),
-                                         node=_verdict.get("node") or host,
-                                         script=remote_script, log=remote_log, exit_file=_exitf,
-                                         workdir=workdir or "~", lang=lang, purpose=purpose,
-                                         mem_gb=_req["mem_gb"], mem_source=_req["source"],
-                                         zone=_verdict["zone"], kernel_id=kernel_id if "kernel_id" in dir() else "")
+                        _job_fields = {
+                            "status": "running", "pid": _pid, "lstart": _lstart,
+                            "host": host, "user": user, "port": port, "key": key,
+                            "extra_opts": list(extra_opts or []),
+                            "node": _verdict.get("node") or host, "server_id": server_id,
+                            "script": remote_script, "log": remote_log, "exit_file": _exitf,
+                            "workdir": workdir or "~", "lang": lang, "purpose": purpose,
+                            "mem_gb": _req["mem_gb"], "mem_source": _req["source"],
+                            "zone": _verdict["zone"],
+                            "kernel_id": kernel_id if "kernel_id" in dir() else "",
+                            "connection_snapshot_version": 1,
+                        }
+                        if catalog_v4_route:
+                            _job_fields["catalog_v4_route"] = True
+                        if password_route:
+                            _job_fields["catalog_v5_route"] = True
+                            _job_fields.update(dict(catalog_v5_profile or {}))
+                        _ns.register_job(_jid, **_job_fields)
                     except Exception:
                         pass
                     return {"ok": True, "mode": "nohup", "job_id": _jid, "pid": _pid,
@@ -894,11 +1374,20 @@ def submit_job(code: str, lang: str = "R", purpose: str = "RNA", slots: int = 4,
                 return {"ok": False, "error": f"提交失败: {exc}", "qsub_raw": out[:300]}
         if job_id:
             try:
-                _ns.register_job(job_id, status="running", host=host, user=user, port=port,
-                                 key=key, extra_opts=list(extra_opts or []),
-                                 node=_verdict.get("node") or host,
-                                 script=remote_script, log=remote_log, exit_file="", mode="qsub",
-                                 mem_gb=_req["mem_gb"], zone=_verdict["zone"])
+                _job_fields = {
+                    "status": "running", "host": host, "user": user, "port": port,
+                    "key": key, "extra_opts": list(extra_opts or []),
+                    "node": _verdict.get("node") or host, "server_id": server_id,
+                    "script": remote_script, "log": remote_log, "exit_file": "", "mode": "qsub",
+                    "workdir": workdir or "~", "mem_gb": _req["mem_gb"],
+                    "zone": _verdict["zone"], "connection_snapshot_version": 1,
+                }
+                if catalog_v4_route:
+                    _job_fields["catalog_v4_route"] = True
+                if password_route:
+                    _job_fields["catalog_v5_route"] = True
+                    _job_fields.update(dict(catalog_v5_profile or {}))
+                _ns.register_job(job_id, **_job_fields)
             except Exception:
                 pass
         return {"ok": bool(job_id), "job_id": job_id, "zone": _verdict["zone"],

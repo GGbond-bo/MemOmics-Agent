@@ -301,6 +301,27 @@ def _node_for(cfg: dict, node_name: str):
     return rc._select_node(cfg, node_name or "")
 
 
+def _snapshot_node_for_record(cfg: dict, rec: dict, node_hint: str = ""):
+    """Reconstruct the server that created a persisted R daemon.
+
+    A named server may later be edited or deleted.  Status/exec/stop for an
+    already-recorded daemon must use the complete connection snapshot rather
+    than today's default node or a freshly edited profile.
+    """
+    recorded_name = str(rec.get("node") or node_hint or "").strip()
+    base, _base_name, _err = _node_for(cfg, recorded_name)
+    # New records carry every field, including deliberate empty key/options.
+    # Older records fall back only for fields that were never persisted.
+    node = rc._apply_connection_snapshot(base or cfg, rec)
+    node["_name"] = recorded_name or str(node.get("host") or "")
+    node["_recorded_snapshot"] = True
+    if not str(node.get("host") or "").strip():
+        return None, "", rc._err("常驻会话记录缺少 host，无法安全回连")
+    if not str(node.get("user") or "").strip():
+        return None, "", rc._err("常驻会话记录缺少 user，无法安全回连")
+    return node, node["_name"], None
+
+
 def _default_session_root(node: dict) -> str:
     wd = str(node.get("workdir") or "~").rstrip("/")
     return posixpath.join(wd, "memomics_cache", "sessions")
@@ -521,7 +542,10 @@ def _resolve_session(cfg: dict, args: dict):
             hint=("用 action='session_list' 看现有会话；要新建用 "
                   "action='session_start'（可带 input=<rds 路径> 读一次大文件）。"
                   "会话记录在本机（memomics_home/remote/sessions.json），重启本机不会丢。"))
-    node, node_name, err = _node_for(cfg, rec.get("node") or node_hint)
+    if rec.get("host"):
+        node, node_name, err = _snapshot_node_for_record(cfg, rec, node_hint)
+    else:
+        node, node_name, err = _node_for(cfg, rec.get("node") or node_hint)
     if err:
         return None, None, "", err
     return rec, node, node_name, None
@@ -542,6 +566,14 @@ def action_start(cfg: dict, args: dict) -> str:
     sid = str(args.get("session_id") or "").strip() or _new_id()
     if not _valid_session_id(sid):
         return rc._err("session_id 非法（只允许字母数字 . _ -，≤%d 字符）: %r" % (_MAX_SESSION_ID, sid))
+    # A caller-supplied ID is durable.  Reusing it on another server would
+    # overwrite the local registry and make later status/stop ambiguous.
+    existing = find_session(sid)
+    if existing and str(existing.get("node") or "").strip() and str(existing.get("node")).strip() != node_name:
+        return rc._err("常驻会话 %r 已登记在服务器 %r；不能在 %r 上覆盖同名会话。"
+                       % (sid, existing.get("node"), node_name),
+                       status="session_target_conflict", session_id=sid,
+                       existing_node=existing.get("node"), requested_node=node_name)
     root = str(args.get("session_root") or sess.get("dir") or "").strip() or _default_session_root(node)
     sdir = posixpath.join(root.rstrip("/"), sid)
     bin_dir = _shared_bin_dir(node)
@@ -564,7 +596,10 @@ def action_start(cfg: dict, args: dict) -> str:
     if "MM_ALIVE:" in pre_out:
         alive_pid = pre_out.split("MM_ALIVE:", 1)[1].split()[0].strip()
         rec = _registry_touch(_registry_upsert({
-            "id": sid, "node": node_name, "dir": sdir, "env": env,
+            "id": sid, "node": node_name, "server_id": node_name,
+            **rc._connection_snapshot(node),
+            "connection_snapshot_version": 1,
+            "dir": sdir, "env": env,
             "created": rc._now(), "status": "active", "pid": alive_pid,
         }), status="active", pid=alive_pid)
         return rc._ok({
@@ -630,7 +665,9 @@ def action_start(cfg: dict, args: dict) -> str:
                        node=node_name, dir=sdir, log_tail=rc._truncate(launch_out, 3000))
 
     rec = _registry_upsert({
-        "id": sid, "node": node_name, "host": node.get("host"), "user": node.get("user"),
+        "id": sid, "node": node_name, "server_id": node_name,
+        **rc._connection_snapshot(node),
+        "connection_snapshot_version": 1,
         "dir": sdir, "root": root, "bin_dir": bin_dir, "env": env, "rscript": rscript,
         "r_version": probe.get("version") or state.get("r_version") or "",
         "input": input_path, "object": obj_name or "", "title": title,

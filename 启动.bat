@@ -237,6 +237,12 @@ if errorlevel 1 (
 )
 
 :deps_done
+
+REM BEGIN_MEMOMICS_SSH_DEPENDENCY_GUARD_V4
+REM Offline exact-version check for SSH password authorization.
+"%PYTHON%" -I -B -c "import importlib,pathlib,sys; site=pathlib.Path(r'%~dp0python\Lib\site-packages').resolve(); expected={'paramiko':'5.1.0','bcrypt':'5.0.0','nacl':'1.6.2','invoke':'3.0.3'}; modules={name:importlib.import_module(name) for name in expected}; sys.exit(0 if all(getattr(modules[name],'__version__','')==version and pathlib.Path(getattr(modules[name],'__file__','')).resolve().is_relative_to(site) for name,version in expected.items()) else 1)" >nul 2>&1
+if errorlevel 1 echo [WARN] SSH password authorization is unavailable: bundled SSH dependency check failed. Run verified offline dependency staging.
+REM END_MEMOMICS_SSH_DEPENDENCY_GUARD_V4
 echo [OK] ÒÀÀµ¾ÍÐ÷
 
 REM ============================================================
