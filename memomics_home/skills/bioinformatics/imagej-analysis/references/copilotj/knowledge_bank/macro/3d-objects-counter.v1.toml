@@ -1,0 +1,22 @@
+type = "macro"
+signature = "3d-objects-counter.v1"
+name = "3D Objects Counter"
+topic = ["3D image analysis", "object counting", "three dimensional analysis"]
+tags = ["3D", "object counting", "image analysis", "stack analysis"]
+
+description = "3D Objects Counter plugin macro usage guide for counting 3D objects in stack"
+
+data_type = "macro"
+
+[content]
+plugin_name = "3D Objects Counter"
+description = "Count 3D objects in stack. Parameter names use dots."
+
+correct_syntax = """
+run("3D Objects Counter", "threshold=128 slice=6 min.=10 max.=1000000 exclude_objects_on_edges \
+statistics");
+"""
+
+tips = ["Use 'min.' and 'max.' with dots, not 'min_size' or 'max_size'."]
+
+site = "https://imagej.net/plugins/3d-objects-counter"

@@ -1,0 +1,81 @@
+type = "task"
+signature = "analyze_neuron_morphology.v1"
+name = "analyze_neuron_morphology"
+topic = [
+  "neuron analysis",
+  "morphology",
+  "skeletonization",
+  "3d analysis",
+]
+tags = ["analyze_neuron_morphology"]
+
+description = """Performs a morphological analysis of a 3D neuron stack by preprocessing (3D filtering), segmenting (thresholding), visualizing (3D projection), and quantifying (skeleton analysis) key structural features like branch count and length."""
+
+question = """How can I analyze neuron morphology including branch count and length from 3D data?"""
+
+summary = """### Summary of ImageJ Task
+
+**1. Task Overview**
+The primary objective was to perform a quantitative morphological analysis of a neuron from a 3D image stack (`neuron.tif`). The user's request was a general "analysis this neuron," which was refined into a specific plan to measure structural features like branches and lengths.
+
+**2. Key Actions Taken**
+*   **Initial Perception**: The agent first used `imagej_perception` to analyze the image, correctly identifying it as a 16-bit, 576x576x128 3D grayscale stack suitable for morphological analysis.
+*   **Planning**: After determining that existing knowledge base workflows were unsuitable (focused on calcium imaging), the agent proposed a standard morphological analysis plan to the user: Preprocessing, Segmentation, Visualization, and Quantification. This plan was approved.
+*   **Preprocessing**: A macro was successfully executed to duplicate the image and apply a 3D Median filter, reducing noise and creating the `neuron_filtered` image.
+*   **Segmentation**: The `neuron_filtered` stack was successfully converted into a binary mask using the "Convert to Mask" command, isolating the neuron from the background.
+*   **Visualization**: A 3D projection of the segmented neuron was successfully generated to provide a clear visual representation of its structure.
+*   **Quantification Attempts**: The agent attempted the final analysis step using ImageJ macros.
+    *   The first attempt combined skeletonization and analysis, which failed.
+    *   Subsequent attempts to run skeletonization alone and even to save the intermediate file also failed.
+
+**3. Critical Results**
+*   The neuron image was successfully preprocessed and segmented, resulting in a clean, binary 3D representation of the neuron's structure.
+*   A 3D rotational projection of the neuron was generated for visual inspection.
+*   **No quantitative data was obtained.** The final analysis steps required to measure branch lengths, counts, and other morphological parameters could not be completed.
+
+**4. Error Handling**
+The workflow encountered persistent errors during the final, computationally intensive quantification stage:
+*   **Initial Error**: An attempt to run a macro combining skeletonization and analysis failed with a timeout error.
+*   **Resolution Attempt 1**: The agent correctly diagnosed that the command might be too complex and broke it down, attempting to run only the "Skeletonize (2D/3D)" command. This also resulted in a timeout.
+*   **Resolution Attempt 2**: Recognizing the persistent macro failures, the agent correctly decided to switch to a more robust Python-based approach. It first attempted to save the intermediate image to disk so a Python script could access it.
+*   **Final Failure**: The macro to save the file also timed out. After three consecutive, unrecoverable timeout failures with the `run_macro` tool, the agent concluded it could not proceed and handed the task over to the user.
+
+**5. Current State**
+The task is **incomplete**. While the initial image processing steps (filtering, segmentation, and visualization) were successfully completed, the core objective of quantitative morphological analysis was not achieved due to repeated tool execution failures. The process was halted before any measurements could be taken.
+
+**6. Technical Details**
+*   **Input File**: `<用户目录>/OneDrive/chatImageJ/pics/neuron.tif`
+*   **Image Properties**: 16-bit grayscale, 576x576x128 stack.
+*   **Preprocessing Filter**: 3D Median filter with a radius of 2 pixels in X, Y, and Z.
+*   **Failed Commands**: `run("Skeletonize (2D/3D)")` and `run("Analyze Skeleton (2D/3D)")`."""
+
+[[steps]]
+id = 1
+  [steps.action]
+  name = "run_macro"
+  script = """run("Duplicate...", "title=neuron_filtered duplicate");
+
+run("Median 3D...", "x=2 y=2 z=2");
+
+run("Convert to Mask");
+
+run("3D Project...", "projection=[Brightest Point] axis=Y-Axis slice=1 initial=0 total=360 rotation=10 lower=1 upper=255 opacity=0 surface=100 interior=50");
+"""
+
+
+data_type = """16-bit grayscale 3D stack (576x576x128) from fluorescence microscopy, showing a single bright neuron with visible soma and dendrites/axons on a dark background."""
+[requirements]
+bit_depth = [8, 16]
+min_size = [128, 128]
+channels = "single-channel grayscale"
+
+[defaults]
+median_3d_radius = "2"
+skeleton_pruning = "none"
+
+tips = [
+  """It is best practice to duplicate the original image before applying filters or segmentation to preserve the raw data.""",
+  """For complex analyses, present a multi-step plan to the user for approval before execution.""",
+  """If ImageJ macros for computationally intensive tasks like 3D skeletonization fail, switch to a Python-based approach using libraries like scikit-image.""",
+]
+

@@ -1,0 +1,47 @@
+{
+ "id": "imagej-analysis",
+ "name": "ImageJ 图像定量（本机 / 集群）",
+ "category": "bioinformatics",
+ "language": "Python+ImageJ-Macro",
+ "description": "ImageJ/Fiji 图像定量：路径配置、图片上传、厂商格式转换、肌纤维 CSA、颗粒计数与阳性面积占比。统一调用 imagej 工具，逐图产出 manifest 与验收结果。",
+ "starting_prompt": "使用 ImageJ 图像定量流程分析这些图片",
+ "source_dir": "skills/bioinformatics/imagej-analysis",
+ "memomics_module": "图像分析",
+ "chains_from": [],
+ "chains_to": [],
+ "tags": [
+  "imagej",
+  "fiji",
+  "bioformats",
+  "microscopy",
+  "muscle",
+  "csa",
+  "segmentation",
+  "particle-analysis"
+ ],
+ "aliases": [
+  "ImageJ",
+  "Fiji",
+  "Bio-Formats",
+  "肌纤维横截面",
+  "CSA"
+ ],
+ "trigger_level": "RED",
+ "trigger_keywords": [
+  "ImageJ",
+  "Fiji",
+  "Bio-Formats",
+  "肌纤维横截面",
+  "肌纤维 CSA",
+  "MinFeret",
+  "细胞核计数",
+  "颗粒计数",
+  "胶原面积",
+  "阳性面积占比",
+  "CZI",
+  "LIF",
+  "ND2",
+  "显微图像定量"
+ ],
+ "when_to_use": "用户要用 ImageJ/Fiji 做显微图像定量、肌纤维横截面测量、核/颗粒计数、阳性面积占比，或要把 CZI/LIF/ND2/VSI 转成 TIFF 时加载。"
+}

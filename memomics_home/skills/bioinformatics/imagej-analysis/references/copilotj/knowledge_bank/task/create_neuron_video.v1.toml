@@ -1,0 +1,89 @@
+type = "task"
+signature = "create_neuron_video.v1"
+name = "create_neuron_video"
+topic = [
+  "3D Visualization",
+  "Video Generation",
+  "Neuronal Imaging",
+]
+tags = ["create_neuron_video"]
+
+description = """Creates a rotating 3D animation video from a 3D image stack of a neuron using ImageJ's 3D Project plugin."""
+
+question = """How can I create a 3D rotating animation video from a neuron image stack?"""
+
+summary = """Here is a detailed summary of the ImageJ task execution:
+
+### Summary of ImageJ Task
+
+**1. Task Overview**
+The main objective was to generate a 3D visualization from a 3D image stack of a neuron (`neuron.tif`) and create a shareable video of the visualization for presentation purposes.
+
+**2. Key Actions Taken**
+*   **Initial Analysis**: The process began with `imagej_perception` to analyze the input image, identifying it as a 16-bit, 576x576x128 voxel 3D stack suitable for visualization.
+*   **Planning and Approval**: A three-step plan was proposed: (1) Pre-processing with a 3D Median filter, (2) 3D Visualization using the '3D Project...' plugin, and (3) Video Generation by saving the result as an AVI file. The plan was presented to and approved by the user via `user_manipulate`.
+*   **Pre-processing**: A `run_macro` command successfully applied a 3D Median filter (`x=2, y=2, z=2`) to the `neuron.tif` stack to reduce noise.
+*   **3D Projection**: A second `run_macro` command successfully executed the '3D Project...' function, creating a new 72-slice animation stack titled `Projections of neuron`.
+*   **Automated Saving Attempts**: Multiple attempts were made to save the resulting animation stack automatically:
+    *   Using `run_macro` to save as AVI, which failed due to a timeout.
+    *   Using `run_macro` with a corrected window title, which also timed out.
+    *   Switching strategy to save as a TIFF file using `run_macro`, which also failed.
+    *   Using `execute_python_script` to read the image data and save it with `imageio`, which failed as it could not detect the open image.
+*   **Manual Intervention**: After repeated failures indicated the ImageJ application had become unresponsive, the `user_manipulate` tool was used to provide the user with manual instructions to save the video.
+
+**3. Critical Results**
+*   A 3D projection animation of the neuron was successfully generated and displayed in a window titled `Projections of neuron`.
+*   The final video file was successfully saved by the user, fulfilling the core request of the task.
+
+**5. Current State**
+The task is **fully complete**. The 3D visualization was created, and the user has successfully saved the final video file manually.
+
+**6. Technical Details**
+*   **Input Image Path**: `<用户目录>/OneDrive/chatImageJ/pics/neuron.tif`
+*   **Pre-processing**: `Median 3D...` with a radius of 2 pixels in x, y, and z.
+*   **3D Projection Parameters**: `projection=[Brightest Point]`, `axis=Y-Axis`, `total=360` degrees, `rotation=5` degrees per frame.
+*   **Intermediate Window Name**: `Projections of neuron`
+*   **Final Output**: An AVI video file saved manually by the user to their desired location."""
+
+[[steps]]
+id = 1
+  [steps.action]
+  name = "run_macro"
+  script = """selectWindow("neuron.tif");
+
+run("Median 3D...", "x=2 y=2 z=2");
+"""
+
+[[steps]]
+id = 2
+  [steps.action]
+  name = "run_macro"
+  script = """selectWindow("neuron.tif");
+
+run("3D Project...", "projection=[Brightest Point] axis=Y-Axis slice=1 initial=0 total=360 rotation=5 lower=1 upper=255 opacity=0 surface=100 interior=50");
+"""
+
+[[steps]]
+id = 3
+  [steps.action]
+  name = "user_manipulate"
+  instructions = """run("AVI... ", "compression=JPEG frame=[] save=[C:/XXX/XXX.avi]");"""
+
+
+data_type = """16-bit grayscale 3D image stack (e.g., 576x576x128) of a neuron, likely from fluorescence microscopy."""
+[requirements]
+bit_depth = [8, 16]
+min_size = [128, 128]
+channels = "single-channel grayscale"
+
+[defaults]
+median_filter_radius = "2"
+projection_method = "Brightest Point"
+rotation_axis = "Y-Axis"
+rotation_angle_increment = "5"
+
+tips = [
+  """Pre-processing the stack with a 'Median 3D...' filter can significantly reduce noise and improve the final visualization quality.""",
+  """The '3D Project...' plugin is a straightforward and effective method for generating rotation animations directly within ImageJ.""",
+]
+

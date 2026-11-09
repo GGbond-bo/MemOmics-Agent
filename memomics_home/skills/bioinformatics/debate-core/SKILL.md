@@ -134,6 +134,21 @@ analysis → 结论前 L2、其余 L1。
    - 前置条件：无 error 且 confidence ≠ low；`reflow_skill` 配置了
      skill 名才写 skill.json（缺省只归档）
 
+### 3.0 统一证据账（2026-10-28，多领域证据链裁决）
+
+辩论的交付物不是多篇角色发言，而是**一张可核查的证据表 + 一个裁决 + 下一步验证**：
+
+- 角色只输出 `hypotheses`、`evidence_items`（`domain/claim/supports/against/source/verification/limitations`）
+  和 `missing_evidence`；`pro/con` 只是兼容槽位名，**不预设立场**。
+- 引擎把各域证据合并、去重并分配稳定 ID（BIO / STAT / METHOD / HIST 等），归档到
+  `evidence_ledger`；`assessment` 只能引用这些 `evidence_id`。
+- 裁判引用不存在的 ID 会被剔除并标 `basis_status`；没有可引用证据时强制
+  `assessment.label=unresolved`（暂不判断），**没有文献/marker ≠ 反证**。
+- `next_actions` 写入 `verification_plan`；写进结论前必须执行并回填结果，再用新证据复裁。
+- UI 顺序固定为：统一证据表 → 裁决 → 下一步；原始角色发言/模型/整理稿默认折叠。
+- 旧归档没有 `evidence_ledger` 时按原布局显示，不伪造证据账；缓存指纹已加
+  `result_schema=ledger_v1`，旧缓存不会伪装成新契约。
+
 ### 3.1 P0：裁决必须**能落地**（2026-09-22，反"证据不足先补数据"式空结论）
 
 裁决 JSON 必须带这五个字段（裁判提示词已强制要求；引擎在裁判漏字段时会从正文回填，

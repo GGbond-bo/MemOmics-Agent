@@ -1,0 +1,24 @@
+type = "macro"
+signature = "macro.snippet.for.rotating.an.v1"
+name = "Macro Snippet For Rotating An"
+topic = ["image rotation","ImageJ macro scripting","error prevention"]
+
+description = """Macro snippet for rotating an image, illustrating a common error in multi-step workflows related to active window management and dynamic title generation."""
+
+
+[content]
+plugin_name = "Rotate..."
+
+plugin_description = """Rotates the active image by a specified angle. The 'create' option opens the rotated image in a new window, typically with a modified title (e.g., '-rotated')."""
+
+correct_syntax = """open("/path/to/03_grayscale.tif"); selectWindow("03_grayscale.tif"); run("Rotate...", "angle=45 grid=1 interpolation=Bilinear create"); saveAs("Tiff", "/path/to/04_rotated.tif");"""
+
+tips = [
+  """Always ensure the target image window is open and active using `open("file_path")` followed by `selectWindow("Image Title")` before attempting to process it.""",
+  """When using `run('Rotate...', '... create')`, the newly created rotated image receives a dynamic title. To reliably select it for further operations or saving, use `selectWindow(getTitle());` immediately after the `run` command to capture its exact, current title.""",
+  """Avoid hardcoding dynamic window titles (like 'original-rotated') as they might not be consistent or the window might be closed/renamed unexpectedly.""",
+  """Regularly check the ImageJ Console for error messages and use `imagej_perception` to inspect the current state of open windows when debugging macro failures.""",
+]
+
+site = "https://imagej.net/plugins/process"
+

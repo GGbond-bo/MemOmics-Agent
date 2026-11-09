@@ -24,6 +24,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
+from memomics.bio_tools.evidence_chain import (
+    LEVELS as _EVIDENCE_LEVELS,
+    evidence_chain_stats as _evidence_chain_stats,
+    normalize_conclusion as _normalize_conclusion_item,
+    normalize_knowledge_evidence as _normalize_knowledge_evidence,
+    validation_locator as _validation_locator,
+    validation_text as _validation_text,
+)
+
 logger = logging.getLogger("memomics.literature_library")
 
 DOI_RE = re.compile(r"\b10\.\d{4,9}/[-._;()/:A-Za-z0-9]+\b")
@@ -1036,6 +1045,34 @@ _RULE_ASSAY = [("ATAC", ["atac", "chromatin accessibility", "peak"]),
                ("RNA", ["scrna", "single-cell", "single cell", "rna-seq", "transcriptom"]),
                ("bulk", ["bulk", "microarray"])]
 
+# AI / 科研智能体论文分类（2026-11-01）：独立 ai_agent/<子类>/，不塞进生物五级目录。
+_AI_STRONG_KW = ("agent", "agentic", "llm", "large language model", "language model",
+                 "multi-agent", "multi agent", "ai system", "artificial intelligence",
+                 "copilot", "autonomous")
+_AI_STRONG_RE = re.compile(
+    r"(?<![a-z0-9])(?:agents?|agentic|llms?|large language models?|language models?|"
+    r"multi[- ]agents?|ai systems?|artificial intelligence|copilot|autonomous)(?![a-z0-9])"
+)
+_AI_SUB_KW = [
+    ("overview", ["survey", "overview", "review", "taxonomy", "landscape"]),
+    ("benchmarks", ["benchmark", "evaluation suite", "test suite", "dataset"]),
+    ("evaluation", ["evaluation", "evaluate", "metric", "judge", "assessment", "benchmarking"]),
+    ("frameworks", ["framework", "architecture", "platform", "system", "pipeline"]),
+    ("agent_design", ["planning", "memory", "tool use", "tool-use", "reasoning", "reflection",
+                      "multi-agent", "agent design", "workflow"]),
+    ("systems", ["infrastructure", "orchestration", "runtime", "serving", "deployment"]),
+    ("applications", ["scientific discovery", "biomedical", "chemistry", "earth science",
+                      "application", "drug discovery"]),
+]
+
+
+def _rule_ai_subcategory(text: str) -> str:
+    tl = (text or "").lower()
+    for sub, kws in _AI_SUB_KW:
+        if any(k in tl for k in kws):
+            return sub
+    return "general"
+
 
 def _rule_classify(title: str) -> dict:
     tl = (title or "").lower()
@@ -1047,7 +1084,10 @@ def _rule_classify(title: str) -> dict:
         if any(k in tl for k in kws):
             assay = a
             break
-    return {"species": species, "tissue": tissue, "direction": direction, "assay": assay}
+    is_ai = bool(_AI_STRONG_RE.search(tl))
+    return {"species": species, "tissue": tissue, "direction": direction, "assay": assay,
+            "domain": "ai" if is_ai else "biology",
+            "ai_subcategory": _rule_ai_subcategory(title) if is_ai else ""}
 
 
 def _classify_papers(entries: list) -> dict:
@@ -1057,13 +1097,16 @@ def _classify_papers(entries: list) -> dict:
               "journal": (e.get("journal") or "")[:80]}
              for e in entries]
     prompt = (
-        "你是生物信息学文献分类器。对下列文献按科研维度打标签，输出 JSON 数组（不要任何其他文字）：\n"
+        "你是生物信息学/AI 文献分类器。对下列文献按科研维度打标签，输出 JSON 数组（不要任何其他文字）：\n"
         f"物种可选: {_SPECIES_VOCAB}\n方向可选: {_DIRECTION_VOCAB}\n"
         "组织用英文小写下划线（如 skeletal_muscle、liver，未知给空数组）\n"
         "assay 可选: RNA / ATAC / spatial / bulk（单细胞转录组=RNA）\n"
         "kb_category 可选: 01_生物学知识 / 02_质控参数 / 03_测序方法\n"
+        "domain 可选: biology / ai（AI agent、LLM、benchmark、evaluation、科研智能体论文=ai）\n"
+        "ai_subcategory 可选: frameworks / benchmarks / evaluation / agent_design / systems / applications / overview / general\n"
         "格式: [{\"file\":\"...\",\"species\":[\"mouse\"],\"tissue\":[\"skeletal_muscle\"],"
-        "\"direction\":[\"aging\"],\"assay\":\"RNA\",\"kb_category\":\"01_生物学知识\"}]\n"
+        "\"direction\":[\"aging\"],\"assay\":\"RNA\",\"kb_category\":\"01_生物学知识\","
+        "\"domain\":\"biology\",\"ai_subcategory\":\"\"}]\n"
         "文献列表:\n" + json.dumps(items, ensure_ascii=False)
     )
     try:
@@ -1082,6 +1125,8 @@ def _classify_papers(entries: list) -> dict:
                     "direction": it.get("direction") or [],
                     "assay": it.get("assay") or "RNA",
                     "kb_category": it.get("kb_category") or "01_生物学知识",
+                    "domain": it.get("domain") or "biology",
+                    "ai_subcategory": it.get("ai_subcategory") or "",
                 }
     except Exception as e:
         logger.warning(f"LLM classification failed, fallback to rules: {e}")
@@ -1097,6 +1142,29 @@ def _classify_single(title: str) -> dict:
         return r.get("__single__", _rule_classify(title))
     except Exception:
         return _rule_classify(title)
+
+
+def backfill_ai_tags() -> str:
+    """Backfill domain/ai_subcategory for existing library entries (no PDF re-extraction)."""
+    idx_file = os.path.join(_library_dir(), ".pdf_index.json")
+    idx = _load_index(idx_file)
+    changed = []
+    for e in idx:
+        auto = _rule_classify(e.get("title") or "")
+        if auto.get("domain") != "ai":
+            continue
+        tags = dict(e.get("tags") or {})
+        if tags.get("domain") == "ai" and tags.get("ai_subcategory") == auto.get("ai_subcategory"):
+            continue
+        tags["domain"] = "ai"
+        tags["ai_subcategory"] = auto.get("ai_subcategory") or "general"
+        e["tags"] = tags
+        changed.append({"file": e.get("file"), "title": e.get("title"),
+                        "ai_subcategory": tags["ai_subcategory"]})
+    if changed:
+        _save_index(idx_file, idx)
+    return json.dumps({"ok": True, "changed": len(changed), "papers": changed},
+                      ensure_ascii=False, indent=2)
 
 
 def kb_extract_from_paper(file_or_title: str, progress_cb=None, force: bool = False) -> str:
@@ -1116,8 +1184,9 @@ def kb_extract_from_paper(file_or_title: str, progress_cb=None, force: bool = Fa
             "ok": True, "paper": r.get("paper"), "doi": r.get("doi"),
             "file": r.get("file"), "written": r.get("written") or [],
             "rejected": r.get("rejected") or [],
+            "claims_written": r.get("claims_written"),
             "knowledge": r.get("knowledge") or {},
-            "note": ("结构化知识已入库：生物学知识(结论/marker/类器官/化学) → 01_生物学知识；"
+            "note": ("kb-evidence-v3 已入库：claim 级结论 → 01_生物学知识（含 quote/定位/L0-L3）；"
                      "生信知识(测序/流程/包/参数) → 03_测序方法；质控 → 02_质控参数。带 DOI 溯源。")},
             ensure_ascii=False, indent=2)
     return json.dumps(r, ensure_ascii=False)
@@ -1132,8 +1201,8 @@ def extract_all_papers(progress_cb=None) -> str:
     """
     r = json.loads(extract_all_knowledge(progress_cb=progress_cb))
     if r.get("ok"):
-        r["note"] = ("结构化知识(生物学+生信)已写入 papers/knowledge/ 与 knowledge_base "
-                     "五级目录，每篇 2-3 条，带 DOI 溯源。")
+        r["note"] = ("kb-evidence-v3 结构化知识已写入 papers/knowledge/ 与 knowledge_base "
+                     "五级目录；claim 级结论带 quote/定位/上下文，未通过门禁的保持可重试。")
     return json.dumps(r, ensure_ascii=False, indent=2)
 
 
@@ -1822,109 +1891,124 @@ def summarize_all_papers(progress_cb=None) -> str:
 
 
 # ── 方向3：结构化知识提取（生物学知识 + 生信知识，批O 2026-08-16）──
-# 2026-10-07 证据链升级（kb-evidence-v1）：生物学结论按 L0-L3 可信度分级，每条带验证方式；
+# 2026-10-31 证据链升级（kb-evidence-v2）：claim 级 quote/上下文/claim-specific validation；
 # 方法/参数类（测序/流程/软件/参数/QC/数据库）不做可信度分级，只要求 source 溯源。
-_EVIDENCE_LEVELS = {
-    "L0": "无文献来源（推测/常识性陈述）——仅作线索，待补源",
-    "L1": "有文献来源，但原文未做实验验证（综述转述/纯生信分析发现）——一定程度可信",
-    "L2": "有文献来源且原文做了实验验证（免疫荧光/细胞实验/动物模型等湿实验）——很可信",
-    "L3": "有文献来源且经大量验证或临床实验/临床队列验证——非常可信",
-}
-_EVIDENCE_ORDER = {"L0": 0, "L1": 1, "L2": 2, "L3": 3}
-# 湿实验证据关键词（辅助判定 L2/L3；提示词与校验共用一份口径）
-_EVIDENCE_WET_KW = ("immunofluorescence", "immunohistochemistry", "western blot", "qpcr", "rt-qpcr",
-                    "elisa", "flow cytometry", "in vivo", "mouse model", "animal model",
-                    "knockout", "overexpression", "cell culture", "organoid", "免疫荧光",
-                    "免疫组化", "细胞实验", "动物实验", "类器官", "敲除", "过表达")
-_EVIDENCE_CLINICAL_KW = ("clinical trial", "clinical cohort", "patient cohort", "randomized",
-                         "prospective", "临床实验", "临床试验", "临床队列", "患者队列")
-
-
-def _norm_evidence_level(v) -> str:
-    """任意输入 → L0/L1/L2/L3（无法识别时给 L1 = 有文献来源但未验证，最保守的文献级）。"""
-    s = str(v or "").strip().upper()
-    if s in _EVIDENCE_ORDER:
-        return s
-    m = re.search(r"L\s*([0-3])", s)
-    return f"L{m.group(1)}" if m else "L1"
-
-
-def _normalize_conclusion_item(it) -> dict:
-    """结论条目归一化为 {text, evidence_level, validation, locator}（兼容旧字符串格式 → L1）。"""
-    if isinstance(it, str):
-        return {"text": it.strip(), "evidence_level": "L1", "validation": "", "locator": ""}
-    if not isinstance(it, dict):
-        return {"text": str(it), "evidence_level": "L1", "validation": "", "locator": ""}
-    return {
-        "text": str(it.get("text") or it.get("conclusion") or "").strip(),
-        "evidence_level": _norm_evidence_level(it.get("evidence_level") or it.get("level")),
-        "validation": str(it.get("validation") or "").strip(),
-        "locator": str(it.get("locator") or "").strip(),
-    }
-
-
-def _conclusion_text(c: dict) -> str:
-    return (c or {}).get("text") or ""
-
-
-def _evidence_chain_stats(knowledge: dict) -> dict:
-    """汇总一篇文献的证据链：各级条数 + 最高级（写入 YAML 顶层 evidence_chain 字段）。"""
-    bio = (knowledge or {}).get("biology") or {}
-    dist = {"L0": 0, "L1": 0, "L2": 0, "L3": 0}
-    for c in bio.get("conclusions") or []:
-        dist[_norm_evidence_level((c or {}).get("evidence_level"))] += 1
-    max_lv = "L0"
-    for lv in ("L3", "L2", "L1"):
-        if dist[lv] > 0:
-            max_lv = lv
-            break
-    return {"standard": "kb-evidence-v1", "level_distribution": dist,
-            "max_level": max_lv,
-            "graded_conclusions": sum(dist.values()),
-            "level_meaning": _EVIDENCE_LEVELS}
-
-
-def _normalize_knowledge_evidence(knowledge: dict) -> dict:
-    """提炼结果定稿前统一走这里：结论升级为证据链对象（旧字符串格式 → L1），并做 L 级合理性校验。
-
-    校验（写实防虚高）：声称 L2 但 validation 为空且不含湿实验关键词 → 降级 L1；
-    声称 L3 但无临床/队列关键词 → 降级 L2。
-    """
-    bio = (knowledge or {}).get("biology") or {}
-    out = []
-    for raw in bio.get("conclusions") or []:
-        c = _normalize_conclusion_item(raw)
-        if not c["text"]:
-            continue
-        blob = (c["validation"] + " " + c["text"]).lower()
-        if c["evidence_level"] == "L2" and not (c["validation"] or any(k in blob for k in _EVIDENCE_WET_KW)):
-            c["evidence_level"] = "L1"
-        if c["evidence_level"] == "L3" and not any(k in blob for k in _EVIDENCE_CLINICAL_KW):
-            c["evidence_level"] = "L2"
-        out.append(c)
-    if "biology" in (knowledge or {}):
-        knowledge["biology"]["conclusions"] = out
-    return knowledge
+# kb-evidence-v2 的常量、归一化与校验统一在 evidence_chain.py；
+# 这里只保留渲染与入库适配，避免“提示词/后端各有一套等级规则”。
 
 
 _KNOWLEDGE_SCHEMA_HINT = (
-    '{"biology":{"conclusions":[{"text":"主要结论一句（中文）","evidence_level":"L0|L1|L2|L3（证据链分级：'
-    'L0=无文献来源的推测；L1=有文献来源但原文未做实验验证（综述转述/纯生信分析发现）；'
-    'L2=原文做了实验验证（免疫荧光/免疫组化/Western/qPCR/细胞实验/动物模型/类器官等湿实验）；'
-    'L3=经大量验证或临床实验/临床队列验证）","validation":"原文中支持该级别的验证方式描述'
-    '（如图3B 免疫荧光、队列 n=120；找不到验证描述时留空且级别只能给 L0/L1）",'
-    '"locator":"原文位置提示（章节/图号，如 Results 第2段 / Fig.3B）"}],'
-    '"gene_markers":[{"gene":"基因名","cell_type":"细胞类型","direction":"up/down/na","context":"说明"}],'
-    '"cell_types":["涉及的细胞类型"],"pathways":["关键通路/信号轴"],'
-    '"organoid":[{"name":"类器官名","species":"物种","media":"培养基","cytokines":["细胞因子"],'
-    '"matrix":"基质胶/支架","duration":"培养时长"}],'
-    '"chemicals":[{"compound":"化合物","target":"靶点","dose":"剂量","ic50":"IC50/EC50","model":"模型","effect":"效应"}]},'
-    '"bioinfo":{"sequencing":[{"tech":"测序技术(如 scRNA-seq 10x v3)","platform":"测序平台","library":"建库","read_depth":"测序深度/读数"}],'
+    '{"biology":{"conclusions":['
+    '{"id":"C01","text":"一个原子生物结论（中文，一句；不把方法、结果、推测混在一起）",'
+    '"evidence_level":"L0|L1|L2|L3",'
+    '"source":{"doi":"文章 DOI","locator":"章节/图号/页码，如 Results 第2段 / Fig.3B / p.7",'
+    '"quote":"支持该结论的英文原文原句（逐字复制，不翻译）","type":"primary|secondary"},'
+    '"assay":"与该结论直接相关的测序或实验技术（如 snRNA-seq / RNAscope / IF；不适用写原文未报告）",'
+    '"experimental_object":"物种、组织、细胞/模型（物种用 Homo_sapiens/Mus_musculus/Rattus_norvegicus 等专业名）",'
+    '"species":["Homo_sapiens|Mus_musculus|Rattus_norvegicus|Macaca_mulatta"],'
+    '"tissue":"skeletal_muscle",'
+    '"cohort":"样本量 n、分组、条件、独立队列；未报告写原文未报告",'
+    '"background":"该结论回答的具体科学问题（不要写套话）",'
+    '"validation":{"method":"针对该结论的直接验证方法；湿实验必须具体，计算证据写计算/组学方法",'
+    '"locator":"验证对应的图/表/章节","claim_specific":true,'
+    '"design":"wet_lab|computational|clinical|secondary|speculation"},'
+    '"evidence_type":"computational|wet_lab|clinical|secondary|speculation|observational",'
+    '"grading_reason":"为什么是该级；明确指出它不能支持什么"}'
+    '],'
+    '"markers":[{"gene":"基因名","cell_type":"被注释的细胞类型/区域","direction":"up|down|na",'
+    '"species":["Mus_musculus"],'
+    '"assay":"用于注释的实验/测序技术","context":"该 marker 的用途或限定条件",'
+    '"source":{"doi":"文章 DOI","locator":"章节/图号/页码","quote":"英文原句"}}],'
+    '"wet_lab":[{"experiment":"湿实验名称（如 CUBIC 全组织成像 / RNAscope / 动物干预）",'
+    '"model":"物种、组织、细胞/动物模型（专业物种名）","species":["Mus_musculus"],'
+    '"conditions":"分组、时间点、处理条件","reagents":[{"name":"试剂/抗体/探针","vendor":"厂商",'
+    '"catalog":"货号","dose":"浓度/稀释/剂量"}],"readout":"读数/定量指标","n":"样本量",'
+    '"source":{"doi":"文章 DOI","locator":"章节/图号/页码","quote":"英文原句"}}],'
+    '"organoids":[{"name":"类器官/3D 培养名称","species":["Homo_sapiens"],"tissue":"skeletal_muscle",'
+    '"model_type":"organoid","media":"培养基","cytokines":["细胞因子/生长因子"],"matrix":"基质胶/支架",'
+    '"duration":"培养时长","passage":"传代数","readout":"读数/应用",'
+    '"source":{"doi":"文章 DOI","locator":"章节/图号/页码","quote":"英文原句"}}]},'
+    '"bioinfo":{"sequencing":[{"tech":"测序技术(如 scRNA-seq 10x v3)","platform":"测序平台",'
+    '"library":"建库","read_depth":"测序深度/读数"}],'
     '"pipeline":["分析步骤1 → 步骤2 → ..."],'
     '"software":[{"name":"软件/包名","version":"版本","lang":"R/Python","purpose":"用途"}],'
     '"parameters":[{"tool":"所属工具","param":"参数名","value":"参数值","context":"使用场景"}],'
     '"qc_params":[{"param":"质控参数","value":"阈值","context":"说明"}],'
     '"reference_genome":"参考基因组","databases":[{"name":"数据库","purpose":"用途"}]}}'
+)
+
+_EVIDENCE_RULES = (
+    "硬规则（kb-evidence-v3，必须逐条遵守）：\n"
+    "① biology.conclusions 只从 RESULTS 小节（含其子标题）提取；SUMMARY/ABSTRACT/eTOC/"
+    "INTRODUCTION/DISCUSSION/METHODS/REFERENCES/图注不作为 claim 来源；Discussion 只允许 "
+    "Limitations 产 L0。若本片段不是 RESULTS，biology.conclusions 输出 []，只提 bioinfo。\n"
+    "② 每个片段只输出 3–6 条高价值、原子化的结论；优先不同图/不同实验的结论；同一句不要拆成"
+    "多条重复 claim；整篇最终 8–15 条。\n"
+    "③ 每条必须给 source.quote（英文原句，逐字复制）和 source.locator（必须含 Results 小节名 + "
+    "Fig.X/图号/页码）；没有图号或定位就删掉该条，不能改写或编造 quote。\n"
+    "④ L2 必须是针对该条结论的直接湿实验/功能验证，validation.claim_specific=true；"
+    "只有整篇论文有 IF/RNAscope/动物实验、但这条结论的 validation 是 snRNA/UMAP/聚类/差异表达/"
+    "CellChat/富集/相关分析 → 只能 L1。3D 成像、共聚焦、RNAscope、CUBIC、EdU、动物/细胞实验"
+    "都算湿实验，必须在 validation.method 写明。\n"
+    "⑤ L3 只给临床试验、随机/前瞻研究或足够规模（默认 n≥100）的独立临床验证；"
+    "人组织小样本（如 n=3–20）、观察性 bulk、公共芯片再分析不是 L3。\n"
+    "⑥ 综述/二手转述 source.type=secondary 最高 L1；预印本 source.type=preprint 最高 L1；"
+    "数据库注释（CellMarker/PanglaoDB 等）source.type=database 只算线索（L0）。"
+    "不要把综述引用的原始实验当成该综述自己的 L2。\n"
+    "⑦ L0 = 无来源或来源无法核实（没有 DOI、DOI 核不上、找不到原文、quote 回查不上）；"
+    "作者推测/未来工作同样归 L0。L0 只作线索，不得当结论。\n"
+    "⑦b L1 = 来源已核实：source.doi 真实且与本文一致、source.quote 逐字出现在原文、"
+    "source.locator 含 Results 小节名 + Fig.X/页码；任何一项核实不了就只能是 L0，不许写 L1。\n"
+    "⑦c 三件事必须分开写：①原文给出**相反**结论 → source.contradicted=true（系统记 contradicted）；"
+    "②原文只是“未来工作/推测/未验证” → 照常 L0（系统记 unsupported）；"
+    "③根本没查到出处 → 不写 source（系统记 no_source）。三者都不能说成“有证据”。\n"
+    "⑧ 每条必须写 assay、experimental_object、cohort、background；确实不适用写“不适用”，"
+    "未报告写“原文未报告”，不能留空。\n"
+    "⑨ 方法/参数/QC 只进 bioinfo，标 source_only，不参与 L0–L3。\n"
+    "⑩ bioinfo 只保留可复用的测序平台/建库/流程/软件/参数/QC；同一技术、软件或参数不要重复；"
+    "平台/版本/深度原文未报告时不要单独列一条；总数控制在 sequencing≤12、software≤20、"
+    "parameters≤25、qc_params≤15。\n"
+    "⑪ markers 只收文章明确用于注释/鉴定的 marker（gene → cell_type/region），必须有 assay 和"
+    "source；不要把所有差异基因倒进来，总数≤20。\n"
+    "⑫ wet_lab 只收真正的湿实验：写清 experiment、model、conditions、reagents（名称/厂商/货号/"
+    "浓度或稀释）、readout、n 和 source；总数≤8。没有湿实验就输出 []，不要编造。\n"
+    "⑬ 物种统一用专业名：Homo_sapiens / Mus_musculus / Rattus_norvegicus / Macaca_mulatta / "
+    "Macaca_fascicularis / Danio_rerio / Drosophila_melanogaster / Caenorhabditis_elegans / "
+    "Sus_scrofa / Oryctolagus_cuniculus；不要混用 human/mouse/rat/小鼠/大鼠。\n"
+    "⑭ 实验性文章同样按此 schema：有 marker 就填 markers，有湿实验就填 wet_lab；没有就空数组。\n"
+    "⑮ 类器官/3D 培养放 organoids：name、species、tissue、model_type=organoid、media、cytokines、"
+    "matrix、duration、passage、readout、source；没有就空数组。\n"
+    "⑯ 组织统一用受控名：skeletal_muscle / cardiac_muscle / smooth_muscle / liver / brain / lung / "
+    "kidney / heart / blood / pbmc / bone_marrow / spleen / intestine / colon / skin / adipose / "
+    "pancreas / retina / eye / bladder / uterus / prostate / ovary / testis / thymus / tumor / other；"
+    "model_type 统一用 in_vivo / ex_vivo / organoid / cell_line / primary_cells / human_sample / other。"
+)
+
+
+_AI_SCHEMA_HINT = (
+    '{"ai":{"problem":"论文要解决的 AI/科研智能体问题",'
+    '"method":"核心方法/系统/框架（一句）",'
+    '"architecture":["关键组件/模块/流程，最多 8 条"],'
+    '"contributions":["作者声称的贡献，最多 6 条"],'
+    '"benchmarks":[{"name":"benchmark/数据集","task":"任务","metric":"指标",'
+    '"result":"本文结果（数字必须原文原样）","baseline":"最强 baseline/对比",'
+    '"source":{"doi":"文章 DOI","locator":"章节/表/图/页码","quote":"英文原句"}}],'
+    '"results":["关键实验结果（数字原样）"],'
+    '"limitations":["作者承认或实验暴露的局限"],'
+    '"claims":[{"text":"可复核的 AI 结论（如某模块在什么设定下提升什么指标）",'
+    '"evidence_level":"L1|L2",'
+    '"source":{"doi":"文章 DOI","locator":"章节/表/图/页码","quote":"英文原句"},'
+    '"evaluation":"benchmark/消融/人工评审等证据类型"}]}}'
+)
+_AI_RULES = (
+    "AI 论文提炼硬规则：\n"
+    "① 只输出与 AI/科研智能体相关的问题、方法、架构、benchmark、结果、局限、claims；"
+    "不要提取生物 marker/湿实验/类器官。\n"
+    "② benchmark 的 name/task/metric/result/baseline 必须原文原样；数字不许改写或估算。\n"
+    "③ claims 只保留有 source.quote 和 locator 的结论；L2=有 benchmark/消融/人工评审直接支持，"
+    "L1=仅有方法描述或间接证据。\n"
+    "④ 不要把作者展望写成结果；limitations 只写作者承认或结果直接暴露的。\n"
+    "⑤ 分类子类由系统 tags 决定（frameworks/benchmarks/evaluation/agent_design/systems/applications/overview）。"
 )
 
 
@@ -1941,31 +2025,160 @@ def _md_table(rows: list, columns: list) -> str:
     return head + body
 
 
+def _unknown_value(value) -> bool:
+    s = str(value or "").strip().lower()
+    return (not s) or s in {"原文未报告", "未报告", "not reported", "n/a", "na", "none",
+                            "unknown", "—", "-", "未提供"} or "未报告" in s
+
+
+def _compact_rows(rows, keys, limit: int, drop_if: tuple = ()):
+    """Dedupe/cap bioinfo rows and drop generic rows that carry no reusable value."""
+    out, seen = [], set()
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        vals = {k: str(row.get(k) or "").strip() for k in keys}
+        if not vals.get(keys[0]) or _unknown_value(vals.get(keys[0])):
+            continue
+        if drop_if and all(_unknown_value(vals.get(k)) for k in drop_if):
+            continue
+        sig = tuple(vals[k].lower() for k in keys)
+        if sig in seen:
+            continue
+        seen.add(sig)
+        out.append({**row, **vals})
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _compact_bioinfo(bi: dict) -> dict:
+    """Keep the reusable methods/params, not a paper-wide dump of every table row."""
+    bi = dict(bi or {})
+    bi["sequencing"] = _compact_rows(
+        bi.get("sequencing"), ["tech", "platform", "library", "read_depth"], 12,
+        drop_if=("platform", "library", "read_depth"))
+    bi["software"] = _compact_rows(
+        bi.get("software"), ["name", "version", "lang", "purpose"], 20,
+        drop_if=("version", "lang", "purpose"))
+    bi["parameters"] = _compact_rows(
+        bi.get("parameters"), ["tool", "param", "value", "context"], 25,
+        drop_if=("value",))
+    bi["qc_params"] = _compact_rows(
+        bi.get("qc_params"), ["param", "value", "context"], 15,
+        drop_if=("value",))
+    bi["databases"] = _compact_rows(
+        bi.get("databases"), ["name", "purpose"], 8,
+        drop_if=("purpose",))
+    pipe, seen = [], set()
+    for step in bi.get("pipeline") or []:
+        s = str(step or "").strip()
+        if s and s not in seen:
+            seen.add(s)
+            pipe.append(s)
+        if len(pipe) >= 20:
+            break
+    bi["pipeline"] = pipe
+    return bi
+
+
+def _is_ai_tags(tags: dict) -> bool:
+    return str((tags or {}).get("domain") or "").lower() == "ai"
+
+
+def _merge_ai(base: dict, extra: dict) -> dict:
+    out = dict(base or {})
+    for key in ("architecture", "contributions", "results", "limitations", "benchmarks", "claims"):
+        vals = list(out.get(key) or [])
+        seen = {json.dumps(x, ensure_ascii=False, sort_keys=True) for x in vals}
+        for x in (extra or {}).get(key) or []:
+            sig = json.dumps(x, ensure_ascii=False, sort_keys=True)
+            if sig not in seen:
+                seen.add(sig)
+                vals.append(x)
+        out[key] = vals
+    for key in ("problem", "method"):
+        if not out.get(key) and (extra or {}).get(key):
+            out[key] = extra[key]
+    return out
+
+
+def _ai_to_markdown(ai: dict, title: str, meta_line: str) -> str:
+    ai = ai or {}
+    L = [f"# {title}", f"> {meta_line}", "", "## 🤖 AI / 科研智能体"]
+    if ai.get("problem"):
+        L.append(f"### 问题\n{ai['problem']}\n")
+    if ai.get("method"):
+        L.append(f"### 方法\n{ai['method']}\n")
+    for label, key in (("关键组件", "architecture"), ("贡献", "contributions"),
+                       ("结果", "results"), ("局限", "limitations")):
+        vals = ai.get(key) or []
+        if vals:
+            L.append(f"### {label}\n" + "\n".join(f"- {v}" for v in vals) + "\n")
+    benches = ai.get("benchmarks") or []
+    if benches:
+        L.append("### Benchmark\n" + _md_table(
+            benches, ["name", "task", "metric", "result", "baseline"]) + "\n")
+    claims = ai.get("claims") or []
+    if claims:
+        L.append("### 可复核 claim")
+        for c in claims:
+            src = c.get("source") or {}
+            L.append(f"- **[{c.get('evidence_level') or 'L1'}]** {c.get('text') or ''}")
+            if src.get("quote"):
+                L.append(f"  - 原文：{src['quote']}")
+            L.append(f"  - 位置：{src.get('locator') or '—'} ｜ 评估：{c.get('evaluation') or '—'}")
+        L.append("")
+    return "\n".join(L)
+
+
 def _knowledge_to_markdown(k: dict, title: str, meta_line: str) -> str:
     """结构化知识 JSON → 人类可读 Markdown（knowledge/<stem>.md）。"""
     bio = k.get("biology") or {}
     bi = k.get("bioinfo") or {}
     L = [f"# {title}", f"> {meta_line}", ""]
     L.append("## 🧬 生物学知识")
-    # 证据链（kb-evidence-v1）：结论带 [L0-L3] 可信度级别 + 验证方式 + 原文位置
+    # 证据链（kb-evidence-v2）：结论带 [L0-L3] 级别 + claim 级 quote/上下文/验证
     _concs = [_normalize_conclusion_item(c) for c in (bio.get("conclusions") or [])]
     _concs = [c for c in _concs if c["text"]]
     if _concs:
         _stats = _evidence_chain_stats(k)
         _dist = _stats["level_distribution"]
-        L.append("### 📌 结论（证据链分级 L0 无来源 → L1 有来源未验证 → L2 实验验证 → L3 临床级）")
+        L.append("### 📌 原子结论（kb-evidence-v2：L0 无来源或核不了 / L1 来源已核实 / L2 原文有实验验证 / L3 临床验证）")
         L.append(f"> 本篇证据分布：L3×{_dist['L3']} · L2×{_dist['L2']} · L1×{_dist['L1']} · L0×{_dist['L0']}"
-                 f"（最高 {_stats['max_level']}）\n")
+                 f"（最高 {_stats['max_level']}；quote 已验证 {_stats.get('source_verified', 0)} 条，"
+                 f"可入库 claim {_stats.get('kb_eligible', 0)} 条，待复核 {_stats.get('review_required', 0)} 条）\n")
         for c in _concs:
-            _line = f"- **[{c['evidence_level']}]** {c['text']}"
-            _meta = []
-            if c.get("validation"):
-                _meta.append(f"验证：{c['validation']}")
-            if c.get("locator"):
-                _meta.append(f"位置：{c['locator']}")
-            if _meta:
-                _line += "　（" + " ｜ ".join(_meta) + "）"
-            L.append(_line)
+            _src = c.get("source") or {}
+            _val = _validation_text(c)
+            _vloc = _validation_locator(c)
+            L.append(f"- **[{c['evidence_level']}]** {c['text']}")
+            if _src.get("quote"):
+                L.append(f"  - 原文：{_src['quote']}")
+            _ctx = []
+            if _src.get("locator"):
+                _ctx.append(f"位置：{_src['locator']}")
+            if c.get("assay"):
+                _ctx.append(f"技术：{c['assay']}")
+            if c.get("experimental_object"):
+                _ctx.append(f"对象：{c['experimental_object']}")
+            if c.get("species"):
+                _ctx.append("物种：" + ", ".join(c["species"]))
+            if c.get("tissue"):
+                _ctx.append(f"组织：{c['tissue']}")
+            if c.get("cohort"):
+                _ctx.append(f"队列：{c['cohort']}")
+            if _ctx:
+                L.append("  - " + " ｜ ".join(_ctx))
+            if _val or c.get("background"):
+                _meta = []
+                if _val:
+                    _meta.append(f"验证：{_val}" + (f"（{_vloc}）" if _vloc else ""))
+                if c.get("background"):
+                    _meta.append(f"背景：{c['background']}")
+                L.append("  - " + " ｜ ".join(_meta))
+            if c.get("review_required"):
+                L.append(f"  - ⚠️ 待复核：{c.get('level_cap_reason') or '来源/上下文不完整'}")
         L.append("")
     for label, key in (("🫁 细胞类型", "cell_types"), ("🔀 通路", "pathways")):
         vals = bio.get(key) or []
@@ -1975,6 +2188,40 @@ def _knowledge_to_markdown(k: dict, title: str, meta_line: str) -> str:
     if markers:
         L.append("### 🧬 基因 Marker\n" + _md_table(
             markers, ["gene", "cell_type", "direction", "context"]))
+    new_markers = bio.get("markers") or []
+    if new_markers:
+        L.append("### 🧬 注释 Marker（文章明确用于注释/鉴定）")
+        for m in new_markers:
+            src = m.get("source") or {}
+            L.append(f"- **{m.get('gene')}** → {m.get('cell_type') or '—'}（{m.get('direction') or 'na'}）"
+                     f" ｜ 技术：{m.get('assay') or '—'} ｜ {m.get('context') or ''}"
+                     f" ｜ 来源：{src.get('locator') or '—'}")
+        L.append("")
+    wet = bio.get("wet_lab") or []
+    if wet:
+        L.append("### 🧪 湿实验条件与试剂")
+        for w in wet:
+            src = w.get("source") or {}
+            L.append(f"- **{w.get('experiment')}** ｜ 模型：{w.get('model') or '—'} ｜ "
+                     f"条件：{w.get('conditions') or '—'} ｜ n：{w.get('n') or '—'}")
+            if w.get("reagents"):
+                L.append("  - 试剂：" + "；".join(
+                    f"{r.get('name') or '—'}（{r.get('vendor') or '—'} {r.get('catalog') or ''}，"
+                    f"{r.get('dose') or '剂量未报告'}）" for r in w["reagents"]))
+            L.append(f"  - 读数：{w.get('readout') or '—'} ｜ 来源：{src.get('locator') or '—'}")
+        L.append("")
+    organoids = bio.get("organoids") or []
+    if organoids:
+        L.append("### 🧫 类器官/3D 培养")
+        for o in organoids:
+            src = o.get("source") or {}
+            L.append(f"- **{o.get('name')}** ｜ 物种：{', '.join(o.get('species') or []) or '—'} ｜ "
+                     f"组织：{o.get('tissue') or '—'} ｜ 类型：{o.get('model_type') or 'organoid'}")
+            L.append(f"  - 培养基：{o.get('media') or '—'} ｜ 细胞因子：{', '.join(o.get('cytokines') or []) or '—'}"
+                     f" ｜ 基质：{o.get('matrix') or '—'} ｜ 时长：{o.get('duration') or '—'}"
+                     f" ｜ 传代：{o.get('passage') or '—'}")
+            L.append(f"  - 读数：{o.get('readout') or '—'} ｜ 来源：{src.get('locator') or '—'}")
+        L.append("")
     organoid = bio.get("organoid") or []
     if organoid:
         L.append("### 🧫 类器官/培养条件\n" + _md_table(
@@ -1984,7 +2231,8 @@ def _knowledge_to_markdown(k: dict, title: str, meta_line: str) -> str:
         L.append("### ⚗️ 化合物/化学信息\n" + _md_table(
             chems, ["compound", "target", "dose", "ic50", "model", "effect"]))
     if not any(bio.get(x) for x in ("conclusions", "cell_types", "pathways",
-                                    "gene_markers", "organoid", "chemicals")):
+                                    "gene_markers", "markers", "wet_lab", "organoids",
+                                    "organoid", "chemicals")):
         L.append("（未提及）\n")
     L.append("## 💻 生信知识")
     seqs = bi.get("sequencing") or []
@@ -2101,9 +2349,9 @@ def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> t
     bio = k.get("biology") or {}
     bi = k.get("bioinfo") or {}
     assay = str(tags.get("assay") or "RNA").upper()
-    # 证据链汇总（kb-evidence-v1）：生物条目带 L0-L3 分布；方法/参数类按用户规则只做来源标注
-    chain = _evidence_chain_stats(k)
-    chain_source_only = {"standard": "kb-evidence-v1", "grading": "source_only",
+
+    # 证据链汇总（kb-evidence-v2）：只统计可入库 claim；review-only 留在报告/索引
+    chain_source_only = {"standard": "kb-evidence-v2", "grading": "source_only",
                          "note": "方法/参数/质控类知识不做可信度分级，来源见 evidence 字段"}
 
     def _record(r, extra_note: str = ""):
@@ -2112,59 +2360,160 @@ def _write_knowledge_entries(hit: dict, k: dict, tags: dict, evidence: str) -> t
             rec["note"] = extra_note
         (written if r.get("status") == "success" else rejected).append(rec)
 
-    # 1) 生物学知识条目 —— 每个物种一份（跨物种拆分）
-    bio_parts = []
-    # 证据链（kb-evidence-v1）：结论逐条带 [L0-L3] 级别 + 验证方式 + 原文位置
+    # AI / 科研智能体论文：独立 ai_agent/<子类>/，不写进生物五级目录。
+    if _is_ai_tags(tags):
+        ai = k.get("ai") or {}
+        sub = (tags.get("ai_subcategory") or _rule_ai_subcategory(hit.get("title") or "")
+               or "general")
+        content = _ai_to_markdown(
+            ai, hit.get("title") or hit.get("file") or "AI paper",
+            f"DOI {hit.get('doi') or '—'} · {hit.get('journal') or '—'} · 提取于 "
+            f"{datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        r = json.loads(save_knowledge(
+            name=_safe_kb_name(stem, "paper_ai"),
+            content=content, source="literature", evidence=evidence,
+            verified="partially_verified", domain="ai", direction=sub,
+            evidence_chain={"standard": "kb-ai-v1", "grading": "source_only",
+                            "note": "AI 论文：benchmark/消融/人工评审证据；不套用生物 L0-L3"},
+            claims=ai.get("claims") or []))
+        _record(r, f"domain=ai/{sub}")
+        return written, rejected
+
+    # 1) 生物学知识条目 —— 每个物种一份（按 claim 的 species 过滤，避免把小鼠结论写到人条目）
     conclusions = [_normalize_conclusion_item(c) for c in (bio.get("conclusions") or [])]
-    conclusions = [c for c in conclusions if c["text"]]
-    if conclusions:
-        _lines = []
-        for c in conclusions:
-            _seg = f"- **[{c['evidence_level']}]** {c['text']}"
-            _meta = []
-            if c.get("validation"):
-                _meta.append(f"验证：{c['validation']}")
-            if c.get("locator"):
-                _meta.append(f"位置：{c['locator']}")
-            if _meta:
-                _seg += "　（" + " ｜ ".join(_meta) + "）"
-            _lines.append(_seg)
-        bio_parts.append("## 结论（证据链分级：L0 无来源 / L1 有来源未验证 / L2 实验验证 / L3 临床级）\n"
-                         + "\n".join(_lines))
-    for label, key in (("细胞类型", "cell_types"), ("通路", "pathways")):
-        vals = bio.get(key) or []
-        if vals:
-            bio_parts.append(f"## {label}\n" + "\n".join(f"- {v}" for v in vals))
-    markers = bio.get("gene_markers") or []
-    if markers:
-        lines = [f"- {m.get('gene')}：{m.get('cell_type') or '—'}，{m.get('direction') or '—'}，{m.get('context') or ''}"
-                 for m in markers if isinstance(m, dict)]
-        bio_parts.append("## 基因 Marker\n" + "\n".join(lines))
-    organoid = bio.get("organoid") or []
-    if organoid:
-        lines = [f"- {o.get('name')}：{o.get('species') or ''} | 培养基 {o.get('media') or '—'} | "
-                 f"细胞因子 {', '.join(o.get('cytokines') or [])} | 基质 {o.get('matrix') or '—'} | {o.get('duration') or '—'}"
-                 for o in organoid if isinstance(o, dict)]
-        bio_parts.append("## 类器官/培养条件\n" + "\n".join(lines))
+    conclusions = [c for c in conclusions if c["text"] and c.get("kb_eligible") is True]
+    review_only = [c for c in (_normalize_conclusion_item(x) for x in (bio.get("conclusions") or []))
+                   if c.get("text") and c.get("kb_eligible") is not True]
+    if review_only:
+        rejected.append({
+            "status": "rejected", "name": "claims",
+            "error": f"{len(review_only)} 条 claim 未进入正式知识库（quote/上下文/定位未通过）",
+            "claim_ids": [c.get("id") for c in review_only],
+            "reasons": [c.get("level_cap_reason") for c in review_only][:10],
+        })
+    new_markers = bio.get("markers") or []
+    wet = bio.get("wet_lab") or []
+    organoids = bio.get("organoids") or []
     chems = bio.get("chemicals") or []
-    if chems:
-        lines = [f"- {c.get('compound')}：靶点 {c.get('target') or '—'} | 剂量 {c.get('dose') or '—'} | "
-                 f"IC50 {c.get('ic50') or '—'} | 模型 {c.get('model') or '—'} | {c.get('effect') or ''}"
-                 for c in chems if isinstance(c, dict)]
-        bio_parts.append("## 化合物/化学信息\n" + "\n".join(lines))
-    if bio_parts:
-        content = "\n\n".join(bio_parts)
-        multi = len(species_list) > 1
-        for sp in species_list:
-            r = json.loads(save_knowledge(
-                name=_safe_kb_name(stem, "paper_bio") + (f"_{sp.lower()}" if multi else ""),
-                content=content,
-                source="literature", evidence=evidence,
-                verified="partially_verified",
-                species=sp, tissue=ti, direction=dr,
-                kb_category="01_生物学知识", assay_type=assay,
-                evidence_chain=chain))
-            _record(r, f"species={sp}")
+
+    def _render_bio(sp_claims, sp_markers, sp_wet, sp_organoids):
+        parts = []
+        if sp_claims:
+            _lines = []
+            for c in sp_claims:
+                _src = c.get("source") or {}
+                _val = _validation_text(c)
+                _vloc = _validation_locator(c)
+                _lines.append(f"- **[{c['evidence_level']}]** {c['text']}")
+                if _src.get("quote"):
+                    _lines.append(f"  - 原文：{_src['quote']}")
+                _ctx = []
+                if _src.get("doi"):
+                    _ctx.append(f"DOI：{_src['doi']}")
+                if _src.get("locator"):
+                    _ctx.append(f"位置：{_src['locator']}")
+                if c.get("assay"):
+                    _ctx.append(f"技术：{c['assay']}")
+                if c.get("experimental_object"):
+                    _ctx.append(f"对象：{c['experimental_object']}")
+                if c.get("species"):
+                    _ctx.append("物种：" + ", ".join(c["species"]))
+                if c.get("tissue"):
+                    _ctx.append(f"组织：{c['tissue']}")
+                if c.get("cohort"):
+                    _ctx.append(f"队列：{c['cohort']}")
+                if _ctx:
+                    _lines.append("  - " + " ｜ ".join(_ctx))
+                _meta = []
+                if _val:
+                    _meta.append(f"验证：{_val}" + (f"（{_vloc}）" if _vloc else ""))
+                if c.get("background"):
+                    _meta.append(f"背景：{c['background']}")
+                if _meta:
+                    _lines.append("  - " + " ｜ ".join(_meta))
+                if c.get("review_required"):
+                    _lines.append(f"  - ⚠️ 待复核：{c.get('level_cap_reason') or '来源/上下文不完整'}")
+            parts.append("## 原子结论（kb-evidence-v2：L0 推测 / L1 有来源未验证 / "
+                         "L2 claim-specific 湿实验 / L3 临床级）\n" + "\n".join(_lines))
+        if sp_markers:
+            _lines = []
+            for m in sp_markers:
+                _src = m.get("source") or {}
+                _lines.append(f"- **{m.get('gene')}** → {m.get('cell_type') or '—'}（{m.get('direction') or 'na'}）"
+                              f" ｜ 技术：{m.get('assay') or '—'} ｜ {m.get('context') or ''}"
+                              f" ｜ 来源：{_src.get('locator') or '—'}")
+            parts.append("## 注释 Marker（文章明确用于注释/鉴定）\n" + "\n".join(_lines))
+        if sp_wet:
+            _lines = []
+            for w in sp_wet:
+                _src = w.get("source") or {}
+                _lines.append(f"- **{w.get('experiment')}** ｜ 模型：{w.get('model') or '—'} ｜ "
+                              f"条件：{w.get('conditions') or '—'} ｜ n：{w.get('n') or '—'}")
+                if w.get("reagents"):
+                    _lines.append("  - 试剂：" + "；".join(
+                        f"{r.get('name') or '—'}（{r.get('vendor') or '—'} {r.get('catalog') or ''}，"
+                        f"{r.get('dose') or '剂量未报告'}）" for r in w["reagents"]))
+                _lines.append(f"  - 读数：{w.get('readout') or '—'} ｜ 来源：{_src.get('locator') or '—'}")
+            parts.append("## 湿实验条件与试剂\n" + "\n".join(_lines))
+        if sp_organoids:
+            _lines = []
+            for o in sp_organoids:
+                _src = o.get("source") or {}
+                _lines.append(f"- **{o.get('name')}** ｜ 物种：{', '.join(o.get('species') or []) or '—'} ｜ "
+                              f"组织：{o.get('tissue') or '—'} ｜ 类型：{o.get('model_type') or 'organoid'}")
+                _lines.append(f"  - 培养基：{o.get('media') or '—'} ｜ 细胞因子："
+                              f"{', '.join(o.get('cytokines') or []) or '—'} ｜ 基质：{o.get('matrix') or '—'}"
+                              f" ｜ 时长：{o.get('duration') or '—'} ｜ 传代：{o.get('passage') or '—'}")
+                _lines.append(f"  - 读数：{o.get('readout') or '—'} ｜ 来源：{_src.get('locator') or '—'}")
+            parts.append("## 类器官/3D 培养\n" + "\n".join(_lines))
+        for label, key in (("细胞类型", "cell_types"), ("通路", "pathways")):
+            vals = bio.get(key) or []
+            if vals:
+                parts.append(f"## {label}\n" + "\n".join(f"- {v}" for v in vals))
+        old_markers = bio.get("gene_markers") or []
+        if old_markers:
+            parts.append("## 基因 Marker\n" + "\n".join(
+                f"- {m.get('gene')}：{m.get('cell_type') or '—'}，{m.get('direction') or '—'}，{m.get('context') or ''}"
+                for m in old_markers if isinstance(m, dict)))
+        organoid = bio.get("organoid") or []
+        if organoid:
+            parts.append("## 类器官/培养条件\n" + "\n".join(
+                f"- {o.get('name')}：{o.get('species') or ''} | 培养基 {o.get('media') or '—'} | "
+                f"细胞因子 {', '.join(o.get('cytokines') or [])} | 基质 {o.get('matrix') or '—'} | {o.get('duration') or '—'}"
+                for o in organoid if isinstance(o, dict)))
+        chems = bio.get("chemicals") or []
+        if chems:
+            parts.append("## 化合物/化学信息\n" + "\n".join(
+                f"- {c.get('compound')}：靶点 {c.get('target') or '—'} | 剂量 {c.get('dose') or '—'} | "
+                f"IC50 {c.get('ic50') or '—'} | 模型 {c.get('model') or '—'} | {c.get('effect') or ''}"
+                for c in chems if isinstance(c, dict)))
+        return "\n\n".join(parts)
+
+    multi = len(species_list) > 1
+    for sp in species_list:
+        # Claims/markers/wet-lab are species-scoped when the model supplied species;
+        # ambiguous (no species) items fall back to all species only for single-species papers.
+        any_claim_sp = any(c.get("species") for c in conclusions)
+        sp_claims = [c for c in conclusions if sp in (c.get("species") or [])] if any_claim_sp else conclusions
+        any_m_sp = any(m.get("species") for m in new_markers)
+        sp_markers = [m for m in new_markers if sp in (m.get("species") or [])] if any_m_sp else new_markers
+        any_w_sp = any(w.get("species") for w in wet)
+        sp_wet = [w for w in wet if sp in (w.get("species") or [])] if any_w_sp else wet
+        any_o_sp = any(o.get("species") for o in organoids)
+        sp_organoids = [o for o in organoids if sp in (o.get("species") or [])] if any_o_sp else organoids
+        if not (sp_claims or sp_markers or sp_wet or sp_organoids):
+            continue
+        chain = _evidence_chain_stats({"biology": {"conclusions": sp_claims}})
+        r = json.loads(save_knowledge(
+            name=_safe_kb_name(stem, "paper_bio") + (f"_{sp.lower()}" if multi else ""),
+            content=_render_bio(sp_claims, sp_markers, sp_wet, sp_organoids),
+            source="literature", evidence=evidence,
+            verified="partially_verified",
+            species=sp, tissue=ti, direction=dr,
+            kb_category="01_生物学知识", assay_type=assay,
+            evidence_chain=chain, claims=sp_claims,
+            markers=sp_markers, wet_lab=sp_wet, organoids=sp_organoids))
+        _record(r, f"species={sp}")
 
     # 2) 生信知识条目 —— 物种无关，common 域一份
     bi_parts = []
@@ -2269,50 +2618,63 @@ def extract_paper_knowledge(file_or_title: str, progress_cb=None, force: bool = 
     if not md_text.strip():
         return json.dumps({"ok": False, "error": "PDF 无文字层且 OCR 不可用"}, ensure_ascii=False)
     tags = hit.get("tags") or _classify_single(hit.get("title") or "")
-    base = (
-        "你是生信文献知识提炼专家。从文献中提取**可直接复用的知识**（给 AI 分析系统检索使用），"
-        "输出 JSON 对象（不要其他文字）：\n"
-        + _KNOWLEDGE_SCHEMA_HINT + "\n"
-        "规则：① 只提取文献明确给出的信息，没有的字段给空数组/空串，禁止编造 ② 基因名/参数值/"
-        "阈值/版本号必须原文原样 ③ 参数要带 tool 和 context（如 resolution=0.8 用于聚类）"
-        " ④ 化学信息要给剂量/IC50/模型 ⑤ 类器官要给培养基/细胞因子/基质条件。\n"
-        "⑥ 证据链（kb-evidence-v1，重要）：biology.conclusions 每条必须判 evidence_level——"
-        "只根据原文写实判定：原文明确描述了湿实验验证（免疫荧光/免疫组化/Western blot/qPCR/"
-        "细胞实验/动物模型/类器官等）才能给 L2，且 validation 字段必须写出验证方式与图号；"
-        "有临床实验/大队列验证才给 L3；只是作者声称或纯组学分析发现的给 L1；"
-        "没有文献依据的推测给 L0。禁止为了显得可信而拔高级别。"
-        "方法类内容（测序/流程/软件/参数/QC/数据库）不做可信度分级，只需如实提取并带来源。\n"
-        f"文献标题: {hit.get('title')} | 期刊: {hit.get('journal')} | DOI: {hit.get('doi')}\n"
-        f"预分类: {json.dumps(tags, ensure_ascii=False)}\n"
-    )
+    if "domain" not in tags:
+        _auto = _rule_classify(hit.get("title") or "")
+        tags = {**tags, "domain": _auto.get("domain", "biology"),
+                "ai_subcategory": _auto.get("ai_subcategory", "")}
+    _auto2 = _rule_classify(hit.get("title") or "")
+    if _auto2.get("domain") == "ai" and not _is_ai_tags(tags):
+        tags = {**tags, "domain": "ai", "ai_subcategory": _auto2.get("ai_subcategory", "general")}
+    is_ai = _is_ai_tags(tags)
+    if is_ai:
+        base = (
+            "你是 AI / 科研智能体文献提炼专家。从论文中提取可复核的方法、benchmark、结果和局限，"
+            "输出 JSON 对象（不要其他文字）：\n" + _AI_SCHEMA_HINT + "\n" + _AI_RULES + "\n"
+            f"文献标题: {hit.get('title')} | 期刊: {hit.get('journal')} | DOI: {hit.get('doi')}\n"
+            f"预分类: {json.dumps(tags, ensure_ascii=False)}\n"
+        )
+    else:
+        base = (
+            "你是生信文献证据提炼专家。从文献中提取**可复核的原子生物学结论**（给 AI 分析系统检索使用），"
+            "输出 JSON 对象（不要其他文字）：\n"
+            + _KNOWLEDGE_SCHEMA_HINT + "\n" + _EVIDENCE_RULES + "\n"
+            "补充：基因名/参数值/阈值/版本号必须原文原样；参数要带 tool 和 context；"
+            "方法类内容只放 bioinfo，不做 L0–L3 分级。\n"
+            f"文献标题: {hit.get('title')} | 期刊: {hit.get('journal')} | DOI: {hit.get('doi')}\n"
+            f"预分类: {json.dumps(tags, ensure_ascii=False)}\n"
+        )
     knowledge = {}
     bullets = {}
     try:
-        if len(md_text) <= 18000:
+        _single_limit = 60000 if is_ai else 18000
+        if len(md_text) <= _single_limit:
             txt = _llm_content(
                 base + "输出 JSON 对象（不要其他文字）。以下为文献 Markdown（# 为标题）:\n" + md_text,
-                "lit_knowledge", temperature=0.3, max_tokens=6000,
+                "lit_knowledge", temperature=0.3, max_tokens=16000 if is_ai else 8000,
                 retry_prefix="【重要：不要输出任何思考过程，立即输出最终 JSON 对象，第一个字符必须是 { 】\n",
                 no_think=True)
             knowledge = _parse_json_object(txt)
         else:
             _cb("extract", 0, 1, f"长文献分块提取: {len(_split_md_sections(md_text))} 节")
-            chunks = _chunk_sections(_split_md_sections(md_text))
+            chunks = _chunk_sections(_split_md_sections(md_text), max_chars=7000)
             bullets = {"biology": [], "bioinfo": []}
 
             def _know_prompt(_i, chunk):
-                return ("你是文献知识提炼助手。对下面的文献片段，按给出的 schema 提炼**结构化知识**，"
+                if is_ai:
+                    return ("你是 AI 文献证据提炼助手。对下面的文献片段，按 schema 提炼 AI 方法/"
+                            "benchmark/结果/局限，输出 JSON 对象（不要其他文字）：\n"
+                            + _AI_SCHEMA_HINT + "\n" + _AI_RULES + "\n"
+                            "（该片段没涉及的字段给空数组/空串）\n" + chunk)
+                return ("你是文献证据提炼助手。对下面的文献片段，按给出的 schema 提炼**原子结论**，"
                         "输出 JSON 对象（不要其他文字）：\n" + _KNOWLEDGE_SCHEMA_HINT + "\n"
-                        "（该片段没涉及的字段给空数组/空串）\n"
-                        "证据链：conclusions 每条必须带 evidence_level（L0 无来源/L1 有来源未验证/"
-                        "L2 原文有湿实验验证/L3 临床级验证）+ validation（验证方式与图号，写实判定，"
-                        "找不到验证描述只能给 L0/L1）。\n" + chunk)
+                        + _EVIDENCE_RULES + "\n"
+                        "（该片段没涉及的字段给空数组/空串）\n" + chunk)
 
             # max_tokens 4000 → 10000：实测 24 块里 20 块把 4000 额度全用在 reasoning 上、
             # content 为空 → 每块都白跑一遍再重试。给足额度后一次成型（推理+JSON 都装得下）。
             _parts = _llm_chunks_parallel(
                 chunks, _know_prompt, "lit_know_chunk", progress_cb=_cb, phase="extract",
-                max_tokens=10000, retry_prefix="【不要思考，立即输出 JSON 对象，第一个字符必须是 { 】\n")
+                max_tokens=12000, retry_prefix="【不要思考，立即输出 JSON 对象，第一个字符必须是 { 】\n")
             for part in _parts:
                 for sec in ("biology", "bioinfo"):
                     bullets[sec].append(part.get(sec) or {})
@@ -2324,10 +2686,10 @@ def extract_paper_knowledge(file_or_title: str, progress_cb=None, force: bool = 
             # 小/中篇走 LLM 合并（去重 + 冲突消解）；超长直接走下面的确定性聚合（内容一条不丢）。
             if len(merged) <= 14000:
                 txt = _llm_content(
-                    base + "以下是从全文各节提取出的知识碎片（按 biology/bioinfo 聚合，数组可能有重复/冲突），"
+                    base + "以下是从全文各节提取出的结论碎片（biology.conclusions 可能有重复/冲突），"
                     "请合并去重后输出最终的完整 JSON 对象（不要其他文字）"
-                    "（结论合并时保留 evidence_level/validation/locator 字段；同一结论有多个级别时取较低的级别，"
-                    "validation 合并写出全部验证依据）:\n" + merged,
+                    "（同一结论合并时保留 source.quote/locator、assay、experimental_object、cohort、"
+                    "background、validation、evidence_type；多个级别取较低级别，validation 合并全部依据）:\n" + merged,
                     "lit_knowledge_merge", temperature=0.3, max_tokens=12000,
                     retry_prefix="【不要思考，立即输出最终 JSON 对象，第一个字符必须是 { 】\n",
                     no_think=True)
@@ -2354,11 +2716,43 @@ def extract_paper_knowledge(file_or_title: str, progress_cb=None, force: bool = 
                     elif isinstance(v2, str) and v2 and not agg.get(k2):
                         agg[k2] = v2
             knowledge[sec] = agg
-    # 证据链归一化（kb-evidence-v1）：结论升级为带级别对象 + 写实校验（虚高降级）
-    knowledge = _normalize_knowledge_evidence(knowledge)
+    # AI 论文：首轮常只给 problem/method；缺 benchmark/claims 时做一次聚焦补提取。
+    if is_ai:
+        _ai0 = knowledge.get("ai") or {}
+        if not _ai0.get("benchmarks") or not _ai0.get("claims"):
+            try:
+                _focus = _llm_content(
+                    "只提取这篇 AI 论文的 architecture、contributions、benchmarks、results、"
+                    "limitations、claims，输出 JSON 对象（不要其他文字）：\n"
+                    + _AI_SCHEMA_HINT + "\n" + _AI_RULES + "\n"
+                    "重点：benchmark 的 name/task/metric/result/baseline 必须原文原样；"
+                    "claims 必须有 source.quote/locator。\n"
+                    "文献 Markdown:\n" + md_text[:50000],
+                    "lit_ai_focus", temperature=0.2, max_tokens=14000,
+                    retry_prefix="【不要思考，立即输出 JSON 对象，第一个字符必须是 { 】\n",
+                    no_think=True)
+                _extra = _parse_json_object(_focus)
+                if _extra.get("ai"):
+                    knowledge["ai"] = _merge_ai(_ai0, _extra["ai"])
+            except Exception as e:
+                logger.warning(f"lit_ai_focus failed: {e}")
+
+    # 证据链归一化（kb-evidence-v3）：来源可核实性 + claim-specific 校验 + 原文 quote 回查 + 防虚高降级
+    # DOI 联网核实默认关闭（避免离线/CI 抖动）；批量入库时设 MEMOMICS_DOI_VERIFY=1 打开。
+    _doi_ok = None
+    if os.environ.get("MEMOMICS_DOI_VERIFY", "0").strip().lower() in ("1", "true", "on", "yes"):
+        try:
+            from memomics.bio_tools.source_verifier import resolve_doi
+            _doi_ok = resolve_doi(hit.get("doi") or "", hit.get("title") or "")
+        except Exception:
+            _doi_ok = None
+    knowledge = _normalize_knowledge_evidence(knowledge, source_text=md_text,
+                                              expected_doi=hit.get("doi") or "",
+                                              doi_resolved=_doi_ok)
+    knowledge["bioinfo"] = _compact_bioinfo(knowledge.get("bioinfo") or {})
     bio = knowledge.get("biology") or {}
     bi = knowledge.get("bioinfo") or {}
-    if not any(bio.values()) and not any(bi.values()):
+    if not any(bio.values()) and not any(bi.values()) and not knowledge.get("ai"):
         return json.dumps({"ok": False,
                            "error": f"未能提取出知识（{hit.get('file')}：LLM 未输出有效 JSON，"
                                     "已自动重试；可稍后再试）"},
@@ -2371,7 +2765,9 @@ def extract_paper_knowledge(file_or_title: str, progress_cb=None, force: bool = 
                  f"DOI {hit.get('doi') or '—'} · 提取于 {now}")
     os.makedirs(_knowledge_dir(), exist_ok=True)
     with open(os.path.join(_knowledge_dir(), f"{stem}.md"), "w", encoding="utf-8") as f:
-        f.write(_knowledge_to_markdown(knowledge, hit.get("title") or hit.get("file"), meta_line))
+        f.write(_ai_to_markdown(knowledge.get("ai") or {}, hit.get("title") or hit.get("file"), meta_line)
+                if is_ai else
+                _knowledge_to_markdown(knowledge, hit.get("title") or hit.get("file"), meta_line))
     evidence = f"DOI {hit.get('doi')} | {hit.get('title')} | {hit.get('path')}"
     written, rejected = _write_knowledge_entries(hit, knowledge, tags, evidence)
     try:
@@ -2379,21 +2775,36 @@ def extract_paper_knowledge(file_or_title: str, progress_cb=None, force: bool = 
         _idx = _load_index(_idx_file)
         for _e in _idx:
             if _e.get("file") == hit.get("file"):
+                _e["tags"] = tags
                 _e["knowledge"] = knowledge
-                _e["knowledge_done"] = True
                 _e["knowledge_extracted_at"] = now
                 if written:
+                    _e["knowledge_done"] = True
                     _e["kb_done"] = True
                     _e["kb_written_count"] = len(written)
+                else:
+                    # 全部拒绝/0 条写入不能标成功，否则下次会被幂等跳过、永远补不回来。
+                    _e["knowledge_done"] = False
+                    _e["knowledge_rejected_count"] = len(rejected)
         _save_index(_idx_file, _idx)
     except Exception as e:
         logger.warning(f"knowledge mark failed: {e}")
-    _cb("done", 1, 1, f"知识提取完成: 写入 {len(written)} 条")
+    _claims_written = sum(1 for c in ((knowledge.get("biology") or {}).get("conclusions") or [])
+                          if isinstance(c, dict) and c.get("kb_eligible") is True)
+    _claims_written += len((knowledge.get("ai") or {}).get("claims") or [])
+    _cb("done", 1, 1, f"知识提取完成: {len(written)} 个条目 / {_claims_written} 条 claim")
+    _note_ok = ("AI/科研智能体论文 → ai_agent/<子类>（问题/方法/benchmark/结果/局限 + claims）；"
+                "不套用生物 L0-L3。" if is_ai else
+                "生物学结论 → 01_生物学知识（kb-evidence-v2，claim 级 quote/定位/上下文/L0-L3）；"
+                "生信知识(测序/流程/包/参数) → 03_测序方法；质控 → 02_质控参数。带 DOI 溯源。")
+    _note_fail = ("未写入任何知识库条目（可能全部被 quote/上下文/L2-L3 门禁拒绝）；"
+                  "knowledge_done 保持 false，可修正后重试。")
     return json.dumps({
-        "ok": True, "paper": hit.get("title"), "file": hit.get("file"), "doi": hit.get("doi"),
+        "ok": bool(written), "paper": hit.get("title"), "file": hit.get("file"), "doi": hit.get("doi"),
         "knowledge": knowledge, "written": written, "rejected": rejected,
+        "claims_written": _claims_written,
         "knowledge_file": f"memomics_home/papers/knowledge/{stem}.md",
-        "note": "生物学知识(结论/marker/类器官/化学) → 01_生物学知识；生信知识(测序/流程/包/参数) → 03_测序方法；质控 → 02_质控参数。带 DOI 溯源。"},
+        "note": _note_ok if written else _note_fail},
         ensure_ascii=False, indent=2)
 
 
@@ -2442,7 +2853,7 @@ def extract_all_knowledge(progress_cb=None) -> str:
         "ok": ok_n > 0, "total": len(lib), "pending": n, "succeeded": ok_n,
         "written_total": sum(r["written"] for r in results),
         "results": results,
-        "note": "结构化知识(生物学+生信)已写入 papers/knowledge/ 与 knowledge_base 五级目录，带 DOI 溯源。"},
+        "note": "仅统计真正写入的条目；被 quote/上下文/L2-L3 门禁拒绝的文章保持 knowledge_done=false，可修正后重试。"},
         ensure_ascii=False, indent=2)
 
 

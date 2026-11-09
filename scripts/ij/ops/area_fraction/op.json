@@ -1,0 +1,74 @@
+{
+  "id": "area_fraction",
+  "version": "1.0.2",
+  "name": "阳性面积占比",
+  "summary": "阈值分割后算「阳性像素 / 视野像素」，输出单行 CSV + 掩膜图。适用于胶原（Sirius red / PSR）、纤维化、DAB 阳性面积、荧光阳性区域占比。比例无量纲，µm² 换算在工具侧完成。",
+  "status": "ready",
+  "requires": [],
+  "template": "macro.ijm.tmpl",
+  "outputs": [
+    "area_fraction.csv",
+    "mask.png"
+  ],
+  "params": {
+    "px_um": {
+      "type": "number",
+      "default": 0,
+      "desc": "物理像素尺寸（µm/px），用于报告 µm² 面积；0 = 只给比例与像素数"
+    },
+    "channel": {
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 4,
+      "desc": "RGB/多通道取第几通道（如 Sirius red 取绿色=2）"
+    },
+    "threshold": {
+      "type": "string",
+      "default": "Otsu",
+      "enum": [
+        "Otsu",
+        "Triangle",
+        "Yen",
+        "Li",
+        "Mean",
+        "Default",
+        "Huang",
+        "Intermodes",
+        "IsoData",
+        "MaxEntropy",
+        "MinError",
+        "Minimum",
+        "Moments",
+        "Percentile",
+        "RenyiEntropy",
+        "Shanbhag"
+      ],
+      "desc": "自动阈值方法"
+    },
+    "smooth": {
+      "type": "number",
+      "default": 0,
+      "desc": "高斯模糊 sigma（像素）：先降噪再阈值，噪声大的 12/16-bit 图给 1.5–3"
+    },
+    "invert": {
+      "type": "bool",
+      "default": false,
+      "desc": "阳性区域偏暗时置 true"
+    },
+    "project": {
+      "type": "bool",
+      "default": true,
+      "desc": "Z 堆栈先最大强度投影"
+    }
+  },
+  "accept": {
+    "min_objects": 0,
+    "max_objects": 100000,
+    "area_fraction": [
+      0.0001,
+      0.999
+    ],
+    "unit": "ratio"
+  }
+}

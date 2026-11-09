@@ -25,3 +25,24 @@
 
 完整案例（含 `skill_evolution` 必须传 `skill_name`、回读核验假阴性、read-before-write 门禁）→
 `platform-execution-pitfalls/references/post-delivery-verification-discipline.md`
+
+## 加分场景：路线被用户中途否决后，task_plan 必须显式收口（2026-11-03 实测）
+
+**现象**：跑到一半用户否决这条路线（原话"还不如我之前的 v2 版本稳妥，你觉得怎么处理？"），
+产物作废、作业停掉，但 `task_plan.md` 里 Phase 仍 `**Status:** in_progress`、
+Verification Checklist 还挂着 `- [ ]` → 完成契约永远不满足 → 唤醒一轮轮空转。
+
+**做法（一次写完，别分轮补）**：
+
+1. 先处置现场：`ps -ef | grep <作业标记> | grep -v grep | wc -l` = 0，再删作废产物
+   （删除走 `platform-execution-pitfalls/references/destructive-cleanup-with-audit-script.md`）
+2. 顶部 `## Goal` 追加**最终结论**（谁裁决的、为什么退回、哪一版是有效结果），
+   原目标保留但标"原目标"
+3. 作废 Phase 的 `**Status:**` 改 `cancelled`，未完成项把 `- [ ]` 改成 `- [-]`（或纯文本）
+   —— 契约**只认 `- [ ]`**，`- [-]` 不算未勾选
+4. **新增一个「清理与定稿」Phase 标 `complete`**，把删除、三源核实、保留证据链写进去，
+   让主线以"已完成"收尾而不是以"取消"收尾（用户看面板时才知道活干完了）
+5. `Decisions Made` 补一行：为什么退回旧版本（日后被追问时的自证）
+
+**判据**：唤醒一次只读 → `task_plan` 无 `- [ ]` + 各 Phase 全 `complete`/`cancelled`
+→ 终态，按上文"引用上轮在案数字、不重跑核验"处理。

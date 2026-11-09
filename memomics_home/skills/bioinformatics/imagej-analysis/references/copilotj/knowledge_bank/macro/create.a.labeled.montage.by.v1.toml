@@ -1,0 +1,23 @@
+type = "macro"
+signature = "create.a.labeled.montage.by.v1"
+name = "Create A Labeled Montage By"
+topic = ["stacking","montage"]
+
+description = """Create a labeled montage by stacking specific saved outputs, labeling slices, and generating a 2x4 grid."""
+
+
+[content]
+plugin_name = "Images to Stack; Make Montage..."
+
+plugin_description = """Images to Stack converts all currently open images into a single stack; Make Montage renders a grid from a stack with optional labels."""
+
+correct_syntax = """run("Images to Stack", "name=ProcessStack title"); run("Make Montage...", "columns=4 rows=2 scale=1 label use slice");"""
+
+tips = [
+  """Close all unrelated open images before calling Images to Stack to prevent unintended slices.""",
+  """Label slices using an array sized to the actual stack length; guard against out-of-bounds.""",
+  """Verify all target files exist and open them in a controlled order before stacking.""",
+]
+
+site = "https://imagej.nih.gov/ij/docs/menus/image.html#stack"
+

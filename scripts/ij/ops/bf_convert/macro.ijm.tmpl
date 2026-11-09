@@ -1,0 +1,28 @@
+// ===== MemOmics op:bf_convert v1.0.0 =====
+// 厂商格式 → TIFF（Bio-Formats）。渲染生成，勿手改。
+__PARAMS__
+
+JOB = "__JOB__";
+OUT = "__OUT__";
+IN  = "__IN__";
+T = OUT + "trace.txt";
+File.append("01_start", T);
+
+// Bio-Formats 导入：view=Hyperstack 才能按 C/Z/T 取通道；stack_order=XYCZT 与 OME 一致
+run("Bio-Formats Importer", "open=" + IN + " autoscale color_mode=Default view=Hyperstack stack_order=XYCZT windowless=true");
+getDimensions(w, h, c, z, t);
+File.append("02_dims w=" + w + " h=" + h + " c=" + c + " z=" + z + " t=" + t, T);
+
+// CHANNEL=0 表示保留全部通道；否则只留第 CHANNEL 个（1 起）
+if (CHANNEL > 0 && c > 1) {
+  if (CHANNEL > c) CHANNEL = c;
+  run("Make Substack...", "channels=" + CHANNEL + "-" + CHANNEL + " slices=1-" + z + " frames=1-" + t);
+  getDimensions(w, h, c, z, t);
+  File.append("03_substack c=" + c + " z=" + z + " t=" + t + " slices=" + nSlices, T);
+}
+
+saveAs("Tiff", OUT + "converted.tif");
+File.append("04_saved", T);
+
+File.saveString("{\"n_objects\":0,\"width\":" + w + ",\"height\":" + h + ",\"unit\":\"px\",\"channels\":" + c + ",\"slices\":" + z + ",\"frames\":" + t + "}", OUT + "DONE.json");
+File.append("05_done", T);

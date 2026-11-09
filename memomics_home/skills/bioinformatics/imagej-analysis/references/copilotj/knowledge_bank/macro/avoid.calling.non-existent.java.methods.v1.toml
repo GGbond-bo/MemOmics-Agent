@@ -1,0 +1,23 @@
+type = "macro"
+signature = "avoid.calling.non-existent.java.methods.v1"
+name = "Avoid Calling Non Existent Java Methods"
+topic = ["macro_safety","error_handling"]
+
+description = """Avoid calling non-existent Java methods from ImageJ macro language for error redirection."""
+
+
+[content]
+plugin_name = "Macro Language (avoid call to ij.IJ.redirectErrorMessages)"
+
+plugin_description = """The ImageJ macro language supports run, set*, and basic control flow. Direct Java method calls via call() require valid hooks; ij.IJ.redirectErrorMessages with a boolean parameter is not available."""
+
+correct_syntax = """Do not use: call("ij.IJ.redirectErrorMessages", true);"""
+
+tips = [
+  """Remove unsupported call() invocations that target non-existent Java methods.""",
+  """Rely on the Log window and try/catch-like control via conditional checks (e.g., nImages) instead.""",
+  """Keep each macro step minimal (≤3 ops) to isolate failures and identify offending lines quickly.""",
+]
+
+site = "https://imagej.net/scripting/macro"
+

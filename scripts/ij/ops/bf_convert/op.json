@@ -1,0 +1,37 @@
+{
+  "id": "bf_convert",
+  "version": "1.0.1",
+  "name": "厂商格式转 TIFF（Bio-Formats）",
+  "summary": "用 Bio-Formats 命令行（ImageConverter）把 .czi/.lif/.nd2/.vsi 等厂商格式转成 TIFF，完全不走 ImageJ/显示，批处理更稳。px_um 自动从文件 OME 元数据读取。",
+  "status": "ready",
+  "requires": [
+    "bioformats"
+  ],
+  "template": "macro.ijm.tmpl",
+  "outputs": [
+    "converted.tif"
+  ],
+  "params": {
+    "channel": {
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 8,
+      "desc": "取第几个通道（1 起）；0 = 保留全部通道"
+    },
+    "px_um": {
+      "type": "number",
+      "default": 0,
+      "desc": "留空/0 = 自动从文件 OME 元数据读取（读不到才需要手填）"
+    }
+  },
+  "accept": {
+    "min_objects": 0,
+    "max_objects": 0,
+    "unit": "convert"
+  },
+  "mode": "cli",
+  "cli": {
+    "main": "loci.formats.tools.ImageConverter"
+  }
+}

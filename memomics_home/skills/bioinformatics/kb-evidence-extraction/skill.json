@@ -1,10 +1,10 @@
 {
  "id": "kb-evidence-extraction",
- "name": "知识库证据链提炼 Skill（L0-L3 可信度分级）",
+ "name": "知识库证据链提炼 Skill（kb-evidence-v2 claim 级）",
  "category": "Literature",
  "language": "Python",
- "description": "把文献库文献提炼成带证据链的知识库条目：生物学结论按 L0-L3 可信度分级（L0 无来源/L1 有来源未验证/L2 实验验证/L3 临床级），每条带验证方式与原文位置；测序方法/实验方法/参数类不做分级、只需标注文章来源。触发场景：提炼文献进知识库、补充知识库、构建证据链、评估知识可信度。",
- "starting_prompt": "使用 知识库证据链提炼 Skill（L0-L3 可信度分级） 进行分析",
+ "description": "把文献提炼成可复核的 claim 级知识库条目（kb-evidence-v2）：生物论文每条原子结论带 L0-L3、quote、图号、技术、物种/组织、对象、队列、背景和 claim-specific validation，并提取 marker、湿实验条件/试剂、类器官/3D 培养；AI/科研智能体论文独立走 ai_agent/<frameworks|benchmarks|evaluation|agent_design|systems|applications>，提取问题/方法/架构/benchmark/结果/局限。触发：交互框或文献库提炼进知识库、补充知识库、评估可信度、分析/辩论前查参数与结论。",
+ "starting_prompt": "使用 知识库证据链提炼 Skill（kb-evidence-v2，claim/marker/湿实验/类器官） 进行分析",
  "source_dir": "skills/bioinformatics/kb-evidence-extraction",
  "memomics_module": "",
  "chains_from": [
@@ -17,7 +17,9 @@
   "evidence-chain",
   "kb",
   "extraction",
-  "L0-L3"
+  "L0-L3",
+  "kb-evidence-v2",
+  "claim-level"
  ],
  "aliases": [
   "证据链提炼",
@@ -35,5 +37,5 @@
   "evidence chain",
   "补充知识库"
  ],
- "when_to_use": "把文献库文献提炼成带证据链的知识库条目。触发场景：'把这篇/这些文献提炼进知识库'、'提取知识/参数进知识库'、'构建/补充知识库（带证据链）'、'这条结论可信度几级'。"
+ "when_to_use": "把文献/交互框内容提炼成 claim 级知识库条目（kb-evidence-v2）：生物论文提取 L0-L3 结论、quote、物种/组织、marker、湿实验、类器官；AI/科研智能体论文提取问题/方法/架构/benchmark/结果/局限并分类到 ai_agent 子类。触发：'把这篇/这些文献提炼进知识库'、'提取知识/参数进知识库'、'构建/补充知识库（带证据链）'、'这条结论可信度几级'、分析/辩论前查 KB。"
 }

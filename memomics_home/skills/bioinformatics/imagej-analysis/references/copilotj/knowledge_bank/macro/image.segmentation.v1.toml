@@ -1,0 +1,27 @@
+type = "macro"
+signature = "image.segmentation.v1"
+name = "Image Segmentation"
+topic = [
+  "Image Segmentation",
+  "Binary Image",
+  "Thresholding",
+]
+
+description = """Converts an image to a binary mask based on the current threshold settings."""
+
+
+[content]
+plugin_name = "Convert to Mask"
+
+plugin_description = """Creates a binary image (mask) from the current image based on its threshold. Pixels within the threshold are set to 255 (white) and those outside are set to 0 (black)."""
+
+correct_syntax = """run("Convert to Mask");"""
+
+tips = [
+  """The command may modify the active image in-place instead of creating a new window named 'Mask of...'. To avoid errors, do not try to select a new window by name; the active window is now the mask.""",
+  """To create a new mask window while preserving the original, use `run("Duplicate...", "title=mask_image");` before converting.""",
+  """Ensure a threshold has been set (e.g., using `setAutoThreshold("Default dark");`) before running this command.""",
+]
+
+site = "https://imagej.nih.gov/ij/docs/menus/process.html#options"
+

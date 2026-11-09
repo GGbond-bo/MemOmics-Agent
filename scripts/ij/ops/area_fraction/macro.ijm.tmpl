@@ -1,0 +1,63 @@
+// ===== MemOmics op:area_fraction v1.0.1 =====
+// 阳性面积占比。渲染生成，勿手改。比例本身无量纲，面积换算在 MemOmics 侧。
+__PARAMS__
+
+JOB = "__JOB__";
+OUT = "__OUT__";
+IN  = "__IN__";
+T = OUT + "trace.txt";
+File.append("01_start", T);
+
+open(IN);
+File.append("02_open " + getTitle(), T);
+
+if (nSlices > 1 && PROJECT_MAX) run("Z Project...", "projection=[Max Intensity]");
+
+if (bitDepth() == 24) {
+  base = getTitle();
+  run("Split Channels");
+  n = nImages;
+  target = n - 3 + CHANNEL;
+  if (target < 1) target = 1;
+  if (target > n) target = n;
+  selectImage(target);
+  rename("CH_PICK");
+  for (i = nImages; i >= 1; i--) {
+    selectImage(i);
+    if (getTitle() != "CH_PICK") close();
+  }
+  selectWindow("CH_PICK");
+}
+
+// 标定基准：量一块 100×100 像素的 ROI，得到「IJ 单位/像素」（s=1 表示本来就是像素域）
+RWW = getWidth(); if (RWW > 100) RWW = 100;
+RHH = getHeight(); if (RHH > 100) RHH = 100;
+makeRectangle(0, 0, RWW, RHH);
+getStatistics(ra, rmean, rmin, rmax);
+IJ_SCALE = sqrt(ra / (RWW * RHH));
+run("Select None");
+
+run("Duplicate...", "title=work");
+if (SMOOTH > 0) run("Gaussian Blur...", "sigma=" + SMOOTH);
+if (INVERT) setAutoThreshold(THRESH + " light");
+else setAutoThreshold(THRESH + " dark");
+run("Convert to Mask");
+File.append("03_mask", T);
+
+w = getWidth();
+h = getHeight();
+getHistogram(vals, cnts, 256);
+File.append("04_hist255=" + cnts[255], T);
+pos = cnts[255];
+tot = w * h;
+frac = pos / tot;
+
+s = "metric,value" + "\n";
+s = s + "positive_px," + pos + "\n";
+s = s + "total_px," + tot + "\n";
+s = s + "area_fraction," + frac + "\n";
+File.saveString(s, OUT + "area_fraction.csv");
+saveAs("PNG", OUT + "mask.png");
+
+File.append("07_end", T);
+File.saveString("{\"n_objects\":0,\"width\":" + w + ",\"height\":" + h + ",\"unit\":\"px\",\"area_fraction\":" + frac + ",\"ij_scale\":" + IJ_SCALE + "}", OUT + "DONE.json");

@@ -157,6 +157,7 @@ When you need annotate celltype scRNA analysis
 | human | hippocampus | aging | 2026-08-27 | extract_8classes_genes.py | - | - |  |
 | - | - | - | 2026-08-27 | annotate_human_30clusters.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-09-24 | annotate_mf2000_dotplot.R | - | - |  |
+| human | skeletal muscle | aging | 2026-11-02 | - | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

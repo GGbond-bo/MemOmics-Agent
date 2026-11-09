@@ -1,0 +1,44 @@
+type = "macro"
+signature = "opencomet.v1"
+name = "OpenComet DNA Damage Assay"
+topic = [
+  "DNA damage detection",
+  "comet analysis",
+  "OpenComet",
+  "biological analysis",
+]
+tags = ["OpenComet", "DNA damage", "comet", "biological analysis"]
+
+description = """
+OpenComet plugin macro usage guide for detecting and analyzing comet-like structures, commonly used in DNA damage assays\
+"""
+
+data_type = "macro"
+
+[content]
+plugin_name = "OpenComet"
+description = """
+OpenComet is a plugin for ImageJ/Fiji that detects and analyzes comet-like structures in images, commonly used in DNA damage assays.
+"""
+
+correct_syntax = 'run("OpenComet ");'
+
+tips = [
+  """
+1. Guide users to check the installation of the plugin and ensure it is properly configured. Jar link: https://cometbio.org/versions/v1.3.1/OpenComet_jar_v1.3.1.zip
+  """,
+  """
+2. OpenComet dialog can be accessed via command: run("OpenComet "); and you cannot pass other parameters in the macro.
+  """,
+  """
+3. In the OpenComet dialog, users can select the input image, and output options, you should guide users to select the correct input image and output options. 
+For example, users should click button "Browse" to select the input image file and set the output folder where the results will be saved. And click "Run" to run the analysis.
+  """,
+  """
+4. You should know the output, as it will generate a csv file with the results, and you can analyze it. You don't need to open the tif overlay image as the plugin already open.
+you open the csv file in Excel or other software to analyze the results.
+  """,
+]
+
+site = "https://cometbio.org/versions/v1.3.1/OpenComet_jar_v1.3.1.zip"
+

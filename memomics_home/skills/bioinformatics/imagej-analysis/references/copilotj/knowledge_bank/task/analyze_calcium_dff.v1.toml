@@ -1,0 +1,705 @@
+type = "task"
+signature = "analyze_calcium_dff.v1"
+name = "analyze_calcium_dff"
+topic = [
+  "calcium imaging",
+  "ΔF/F analysis",
+]
+tags = ["analyze_calcium_dff"]
+
+description = """Quantifies the mean fluorescence signal per frame from a calcium imaging stack, exports the time-series as a CSV, and performs ΔF/F analysis for specified stimulus onset times using customizable baseline and response windows, outputting event-wise ΔF/F summaries and visualizations."""
+
+question = """I have two-photon calcium imaging data from the visual cortex: data_05.tif (already opened).
+Each dataset contains 930 frames acquired at 3 Hz. Ultrasound stimulation (0.5 s) was applied
+at frames: 91, 182, 273, 363, 453, 545, 635, 726, and 816."""
+
+summary = """**Summary of ImageJ Task: Mean Calcium Signal Extraction and ΔF/F Analysis**
+
+---
+
+### 1. Task Overview
+
+The primary goal of this task was to extract the mean calcium fluorescence signal from each frame of a large calcium imaging time series, export this time trace for quantitative analysis, and then compute ΔF/F changes in response to defined ultrasound stimulation times. The process included exporting a summary table and generating plots for both the signal trace and ΔF/F across stimulus events.
+
+---
+
+### 2. Key Actions Taken
+
+- **Initial Assessment with imagejPerception**  
+  The agent first analyzed the open image stack using `imagejPerception`, confirming that the active image (`30hz-ave6-fr600isfobegin-1500sifoend_00001_copy_motion_corrected.tif`) is a 16-bit, single-channel, 3000-frame calcium imaging time series suitable for mean signal computation.
+
+- **Workflow Confirmation with User**  
+  The proposed plan—mean extraction, export, ΔF/F analysis at user-defined onset times, and result plotting—was detailed and confirmed by the user before proceeding.
+
+- **Mean Signal Extraction via ImageJ Macro**  
+  A new stack was duplicated to protect original data. For each frame in the duplicated stack, the mean fluorescence intensity was computed across the image area and saved to a CSV file (`30hz-ave6-fr600isfobegin-1500sifoend-10hz.csv`).
+
+- **ΔF/F Analysis Delegated to Python Agent**  
+  The CSV containing the mean trace was analyzed by the Python Agent. Using the ultrasound stimulation onsets [120, 240, 360] seconds (with baseline [-10, -2]s, response [0, 10]s windows), the agent calculated dff_mean and dff_peak values for each stimulation and generated all required output tables and figures.
+
+---
+
+### 3. Critical Results
+
+- **Mean Calcium Signal CSV**:  
+  `D:/vscode_project/ChatImageJ/temp/30hz-ave6-fr600isfobegin-1500sifoend-10hz.csv`  
+  (Contains frame-by-frame mean signal).
+
+- **ΔF/F Summary Table:**  
+  `D:/vscode_project/ChatImageJ/temp/30hz-ave6-fr600isfobegin-1500sifoend-10hz_dff_summary.csv`  
+  (Tabulates dff_mean and dff_peak for each stimulation).
+
+- **Plots Generated:**  
+  - Mean calcium signal trace plot:  
+    `.../30hz-ave6-fr600isfobegin-1500sifoend-10hz_mean_calcium_trace.png`
+  - ΔF/F bar plot:  
+    `.../30hz-ave6-fr600isfobegin-1500sifoend-10hz_dff_barplot.png`
+
+---
+
+### 4. Error Handling
+
+- **Delegation Argument Formatting**:  
+  There was a miscommunication in the argument format used to delegate the ΔF/F analysis to the Python Agent, resulting in validation and attribute errors. This was resolved by reformatting the task as a clear instruction string (rather than as a dictionary), after which it executed successfully.
+
+- **No Data Loss or Step Reversals**:  
+  The duplication of the stack ensured data integrity throughout the process, and all outputs were saved under new informative filenames.
+
+---
+
+### 5. Current State
+
+- **All planned computations and exports are complete**:  
+  Mean calcium signal extraction, ΔF/F computation per stipulated windows and events, and all required results export and visualization have been accomplished.  
+- **No outstanding errors or incomplete steps**:  
+  The workflow was completed as designed, and all critical outputs were confirmed as saved in the target directory.
+
+---
+
+### 6. Technical Details
+
+- **Input Image**:  
+  - File: `30hz-ave6-fr600isfobegin-1500sifoend_00001_copy_motion_corrected.tif`
+  - Dimensions: 512 x 512 pixels × 3000 frames; 16-bit, 1 channel
+
+- **Mean Signal Extraction**:  
+  - Each frame’s mean calculated
+  - Exported to:  
+    `D:/vscode_project/ChatImageJ/temp/30hz-ave6-fr600isfobegin-1500sifoend-10hz.csv`
+
+- **ΔF/F Analysis Parameters**:  
+  - Onset times (seconds): `[120, 240, 360]`
+  - Baseline window (relative to onset): `[-10, -2] s`
+  - Response window: `[0, 10] s`
+  - Calculated metrics: `dff_mean`, `dff_peak`
+
+- **Outputs & File Paths**:  
+  - ΔF/F summary:  
+    `.../30hz-ave6-fr600isfobegin-1500sifoend-10hz_dff_summary.csv`
+  - Signal trace plot:  
+    `.../30hz-ave6-fr600isfobegin-1500sifoend-10hz_mean_calcium_trace.png`
+  - Bar plot:  
+    `.../30hz-ave6-fr600isfobegin-1500sifoend-10hz_dff_barplot.png`
+
+---
+
+**In summary:**  
+The process efficiently quantified and summarized calcium activity dynamics from time-series data, with robust error handling and all expected results exported for further analysis and publication."""
+
+[[steps]]
+id = 1
+  [steps.action]
+  name = "run_macro"
+  script = """selectWindow("30hz-ave6-fr600isfobegin-1500sifoend_00001_copy_motion_corrected.tif");
+run("Duplicate...", "title=CalciumStackCopy duplicate");
+selectWindow("CalciumStackCopy");
+run("Clear Results");
+for (i = 1; i <= nSlices; i++) {
+ setSlice(i);
+ getStatistics(area, mean);
+ setResult("Frame", i-1, i);
+ setResult("MeanIntensity", i-1, mean);
+}
+saveAs("Results", "D:/vscode_project/ChatImageJ/temp/30hz-ave6-fr600isfobegin-1500sifoend-10hz.csv");"""
+
+[[steps]]
+id = 2
+  [steps.action]
+  name = "delegate_task"
+  agent = "Python Agent"
+  task = "Read the CSV file 'D:/vscode_project/ChatImageJ/temp/30hz-ave6-fr600isfobegin-1500sifoend-10hz.csv' containing mean calcium signal per frame. For each stimulus onset at 120, 240, and 360 seconds, calculate ΔF/F using a baseline window of [-10, -2] seconds and a response window of [0, 10] seconds (relative to each onset). For each onset, output dff_mean (mean ΔF/F in response window) and dff_peak (max ΔF/F in response window) to a table (CSV or XLS). Also, generate and save both the mean signal time trace plot and a ΔF/F bar plot to 'D:/vscode_project/ChatImageJ/temp/'. Save all outputs using informative filenames reflecting the input file and calculation type. Report the final file paths for all output."
+
+
+data_type = "16-bit, single-channel, 512x512x3000 frame grayscale calcium imaging time-series stack (motion corrected, bright cellular structures, likely representing whole-field mean fluorescence, suitable for automated stack-wise quantification)."
+[requirements]
+bit_depth = [8, 16]
+min_size = [128, 128]
+channels = "single-channel grayscale only"
+
+[defaults]
+baseline_window_seconds = "[-10, -2]"
+response_window_seconds = "[0, 10]"
+stimulation_onsets_seconds = "[120, 240, 360]"
+
+tips = [
+  """ Code example:
+#!/usr/bin/env python3
+
+import os, json, argparse, math
+from typing import Tuple, Optional, List, Dict
+
+import numpy as np
+import pandas as pd
+import tifffile
+import matplotlib
+matplotlib.use("Agg")          # headless
+import matplotlib.pyplot as plt
+
+from scipy.ndimage import uniform_filter1d, binary_dilation
+from scipy.ndimage import fourier_shift
+from scipy.stats import linregress, zscore
+from tqdm import tqdm
+
+# --- Optional readers (for FS inference) ---
+try:
+    from scanimage_tiff_reader import ScanImageTiffReader
+    HAVE_SI = True
+except Exception:
+    HAVE_SI = False
+
+# --- Suite2p registration (preferred for MC) ---
+try:
+    from suite2p.registration import register as s2p_register
+    HAVE_S2P_REG = True
+except Exception:
+    HAVE_S2P_REG = False
+
+# --- Suite2p segmentation (run_s2p) ---
+try:
+    from suite2p import run_s2p, default_ops
+    HAVE_RUN_S2P = True
+except Exception:
+    HAVE_RUN_S2P = False
+    print("Warning: Suite2p segmentation not available, will use simple segmentation fallback")
+
+# --- skimage fallback for rigid MC ---
+try:
+    from skimage.registration import phase_cross_correlation
+    HAVE_SKIMAGE = True
+except Exception:
+    HAVE_SKIMAGE = False
+
+
+# -------------------------------------------------
+# 1) Parameters (edit as needed)
+# -------------------------------------------------
+FILES        = ["<用户目录>/OneDrive/chatImageJ/hjr/fus2/data_05.tif"]
+
+# If None, we try to infer from metadata; else use this value.
+FS: Optional[float] = 3.0      # Hz or None
+
+# Stim frames (0-based). If you prefer seconds, set STIM_SECONDS and leave STIM_FRAMES=None.
+STIM_FRAMES  = np.array([91,182,273,363,453,545,635,726,816]) - 1
+STIM_SECONDS: Optional[np.ndarray] = None  # e.g., np.array([30.3, 60.6, ...], dtype=float)
+
+PRE_SEC      = 5
+POST_SEC     = 25
+BASELINE_SEC = 5
+
+# Neuropil subtraction weight
+BG_WEIGHT    = 0.7
+
+# Optional smoothing (seconds) applied to raw F/Fneu before ΔF/F (0 or None disables)
+SMOOTH_SEC   = 0.0
+
+# Save motion-corrected TIFF next to source
+SAVE_MC_TIFF = True
+
+# Output root folder
+OUT_ROOT = "outputs"   # per-file subfolders will be created
+
+
+# -------------------------------------------------
+# 2) Utilities
+# -------------------------------------------------
+def ensure_dir(p: str) -> None:
+    os.makedirs(p, exist_ok=True)
+
+def save_tif(path: str, stack: np.ndarray) -> None:
+    tifffile.imwrite(path, stack.astype(np.float32, copy=False))
+
+def _move_axis_to_TYX(arr: np.ndarray) -> np.ndarray:
+    # ScanImage reader is quite reliable
+    if HAVE_SI:
+        try:
+            with ScanImageTiffReader(tif_path) as r:
+                md = r.metadata()
+                # Common ScanImage key
+                for key in ["scanimage.SI.hRoiManager.scanVolumeRate",
+                            "frameRate", "scanimage.SI.hRoiManager.lineScanTime"]:
+                    if key in md:
+                        try:
+                            val = float(md[key])
+                            # lineScanTime is seconds per line; skip that
+                            if "lineScanTime" in key:
+                                continue
+                            if val > 0:
+                                return val
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+    # Fallback: look for generic frame rate tag in tifffile
+    try:
+        with tifffile.TiffFile(tif_path) as tf:
+            # Some systems store frame interval in ImageDescription
+            desc = tf.pages[0].tags.get("ImageDescription")
+            if desc:
+                s = str(desc.value)
+                for k in ["frameRate=", "framerate=", "FrameRate=", "frame_rate="]:
+                    if k in s:
+                        i = s.index(k) + len(k)
+                        j = i
+                        while j < len(s) and (s[j].isdigit() or s[j] in "."):
+                            j += 1
+                        val = float(s[i:j])
+                        if val > 0:
+                            return val
+    except Exception:
+        pass
+    return None
+
+def seconds_to_frames(s: float, fs: float) -> int:
+    return int(round(s * fs))
+
+def bounded_slice(a: int, b: int, nT: int) -> slice:
+    a = max(0, min(nT, a))
+    b = max(0, min(nT, b))
+    if b <= a:
+        b = min(nT, a + 1)
+    return slice(a, b)
+
+def mc_suite2p(movie_TYX: np.ndarray, maxregshift: float = 0.1) -> np.ndarray:
+    if not HAVE_SKIMAGE:
+        raise RuntimeError("skimage not available for fallback registration.")
+    nT, h, w = movie_TYX.shape
+    n0 = min(n_template, nT)
+    template = np.median(movie_TYX[:n0], axis=0).astype(np.float32)
+    reg = np.empty_like(movie_TYX, dtype=np.float32)
+    for i in tqdm(range(nT), desc="skimage MC", leave=False):
+        shift, _, _ = phase_cross_correlation(template, movie_TYX[i], upsample_factor=upsample)
+        reg[i] = np.fft.ifftn(fourier_shift(np.fft.fftn(movie_TYX[i]), shift)).real.astype(np.float32)
+    return reg
+
+def suite2p_segment(input_tif: str, fs: float, out_dir: str) -> Dict[str, np.ndarray]:
+    if not HAVE_RUN_S2P:
+        print("Suite2p segmentation not available, using simple segmentation fallback")
+        return simple_segment_fallback(input_tif, fs, out_dir)
+    
+    ensure_dir(out_dir)
+
+    # Suite2p expects data_path (folder) or files. We provide files=[input_tif].
+    ops = default_ops()
+    ops.update({
+        "fs": fs,
+        "nchannels": 1,
+        "functional_chan": 1,
+        "align_by_chan": 1,
+        "nonrigid": False,
+        "save_path0": out_dir,   # output root
+        "delete_bin": True,
+        "batch_size": 2000,
+        "max_overlap": 0.2,
+        "sparse_mode": 1,
+    })
+    run_s2p(ops=ops, files=[input_tif])
+
+    # Find the latest ops.npy within out_dir tree
+    ops_path, stat_path, F_path, Fneu_path = None, None, None, None
+    for root, _, files in os.walk(out_dir):
+        if "ops.npy" in files and "stat.npy" in files and "F.npy" in files and "Fneu.npy" in files:
+            ops_path  = os.path.join(root, "ops.npy")
+            stat_path = os.path.join(root, "stat.npy")
+            F_path    = os.path.join(root, "F.npy")
+            Fneu_path = os.path.join(root, "Fneu.npy")
+    if not all([ops_path, stat_path, F_path, Fneu_path]):
+        raise RuntimeError("Could not locate Suite2p outputs (ops/stat/F/Fneu).")
+
+    ops  = np.load(ops_path, allow_pickle=True).item()
+    stat = np.load(stat_path, allow_pickle=True)
+    F    = np.load(F_path)
+    Fneu = np.load(Fneu_path)
+    return {"ops": ops, "stat": stat, "F": F, "Fneu": Fneu}
+
+
+def simple_segment_fallback(input_tif: str, fs: float, out_dir: str) -> Dict[str, np.ndarray]:
+    # Load the motion-corrected data
+    with tifffile.TiffFile(input_tif) as tf:
+        movie = tf.asarray()
+    
+    if movie.ndim != 3:
+        raise ValueError(f"Expected 3D movie, got shape {movie.shape}")
+    
+    T, H, W = movie.shape
+    print(f"Simple segmentation on {T} frames, {H}x{W} pixels")
+    
+    # Create a simple grid-based segmentation
+    cell_size = 20  # pixels
+    n_cells_y = H // cell_size
+    n_cells_x = W // cell_size
+    
+    # Extract signals from grid regions
+    F_list = []
+    Fneu_list = []
+    stat_list = []
+    
+    cell_id = 0
+    for i in range(n_cells_y):
+        for j in range(n_cells_x):
+            y_start = i * cell_size
+            y_end = min((i + 1) * cell_size, H)
+            x_start = j * cell_size
+            x_end = min((j + 1) * cell_size, W)
+            
+            # Extract region
+            region = movie[:, y_start:y_end, x_start:x_end]
+            
+            # Mean signal in region (soma)
+            F_signal = region.mean(axis=(1, 2))
+            
+            # Neuropil signal (surrounding region, simplified)
+            neuropil_y_start = max(0, y_start - 5)
+            neuropil_y_end = min(H, y_end + 5)
+            neuropil_x_start = max(0, x_start - 5)
+            neuropil_x_end = min(W, x_end + 5)
+            
+            neuropil_region = movie[:, neuropil_y_start:neuropil_y_end, neuropil_x_start:neuropil_x_end]
+            Fneu_signal = neuropil_region.mean(axis=(1, 2))
+            
+            # Only keep regions with reasonable activity
+            if F_signal.std() > F_signal.mean() * 0.05:  # Simple activity threshold
+                F_list.append(F_signal)
+                Fneu_list.append(Fneu_signal)
+                
+                # Create stat entry
+                ypix = np.arange(y_start, y_end)
+                xpix = np.arange(x_start, x_end)
+                ypix_full, xpix_full = np.meshgrid(ypix, xpix, indexing='ij')
+                
+                stat_entry = {
+                    'ypix': ypix_full.flatten(),
+                    'xpix': xpix_full.flatten(),
+                    'med': [y_start + (y_end - y_start) // 2, x_start + (x_end - x_start) // 2],
+                    'npix': len(ypix_full.flatten())
+                }
+                stat_list.append(stat_entry)
+                cell_id += 1
+    
+    if not F_list:
+        raise RuntimeError("No active regions found in simple segmentation")
+    
+    F = np.array(F_list)  # (n_cells, T)
+    Fneu = np.array(Fneu_list)  # (n_cells, T)
+    
+    # Create mock ops
+    ops = {
+        "Ly": H,
+        "Lx": W,
+        "fs": fs,
+        "nframes": T
+    }
+    
+    print(f"Simple segmentation found {len(F_list)} active regions")
+    
+    return {"ops": ops, "stat": stat_list, "F": F, "Fneu": Fneu}
+
+
+# -------------------------------------------------
+# 3) Core per-file routine
+# -------------------------------------------------
+def process_file(tif_path: str, fs_param: Optional[float]) -> pd.DataFrame:
+    fname = os.path.basename(tif_path)
+    base  = os.path.splitext(fname)[0]
+    out_dir = os.path.join(OUT_ROOT, base)
+    ensure_dir(out_dir)
+
+    print(f"\n=== Processing {fname} ===")
+
+    # 3a. Load & axis normalize
+    with tifffile.TiffFile(tif_path) as tf:
+        arr = tf.asarray()
+    movie = _move_axis_to_TYX(arr)  # (T,Y,X), float32
+    nT, H, W = movie.shape
+    print(f"Loaded {fname}: T={nT}, H={H}, W={W}, dtype={movie.dtype}")
+
+    # 3b. Frame rate
+    fs = fs_param if (fs_param and fs_param > 0) else infer_fs_from_meta(tif_path)
+    if not fs or fs <= 0:
+        raise ValueError("Frame rate FS is missing or invalid; set FS in script or embed in metadata.")
+    print(f"Using frame rate: {fs:.3f} Hz")
+
+    # 3c. Stim frames
+    if STIM_FRAMES is not None:
+        stim_frames = np.asarray(STIM_FRAMES, dtype=int)
+    elif STIM_SECONDS is not None:
+        stim_frames = np.asarray([seconds_to_frames(s, fs) for s in STIM_SECONDS], dtype=int)
+    else:
+        raise ValueError("Provide STIM_FRAMES or STIM_SECONDS.")
+
+    # 3d. Motion correction
+    print("[1/4] Motion correction …")
+    try:
+        if HAVE_S2P_REG:
+            reg = mc_suite2p(movie, maxregshift=0.1)
+            print("Suite2p registration complete.")
+        elif HAVE_SKIMAGE:
+            print("Suite2p not available; using skimage fallback.")
+            reg = mc_skimage(movie)
+        else:
+            raise RuntimeError("No motion-correction backend available (need suite2p or skimage).")
+    except Exception as e:
+        print(f"Motion correction failed: {e}")
+        raise
+
+    mc_tif = os.path.join(out_dir, f"{base}_mc.tif")
+    if SAVE_MC_TIFF:
+        save_tif(mc_tif, reg)
+        print(f"Saved motion-corrected TIFF: {mc_tif}")
+    else:
+        # still write a small pointer thumbnail for provenance if desired; skipped here
+        mc_tif = os.path.join(out_dir, f"{base}_mc_virtual.tif")
+        save_tif(mc_tif, reg[:1])  # tiny file to please Suite2p path usage; will replace with in-memory
+        # Note: run_s2p requires an on-disk path; we saved a trivial page above but will point to the real stack via the same path,
+        # so keep SAVE_MC_TIFF=True in practice to avoid confusion.
+
+    # 3e. Suite2p segmentation (on the MC tiff)
+    print("[2/4] ROI segmentation (Suite2p) …")
+    s2p_out_dir = os.path.join(out_dir, "suite2p")
+    ensure_dir(s2p_out_dir)
+    # Ensure the mc_tif actually contains the registered stack
+    if SAVE_MC_TIFF is False:
+        save_tif(mc_tif, reg)  # write full stack if we hadn't
+
+    s2p = suite2p_segment(mc_tif, fs, s2p_out_dir)
+    ops, stat, F, Fneu = s2p["ops"], s2p["stat"], s2p["F"], s2p["Fneu"]
+    # F, Fneu: shape (n_neurons, T)
+    if F.shape != Fneu.shape:
+        raise RuntimeError(f"F/Fneu shape mismatch: {F.shape} vs {Fneu.shape}")
+    n_neurons, T2 = F.shape
+    if T2 != reg.shape[0]:
+        print(f"Warning: Suite2p T={T2} differs from MC T={reg.shape[0]} (crop/trim may have occurred). Using Suite2p T.")
+    print(f"Detected {n_neurons} ROIs.")
+
+    # 3f. Neuropil subtraction
+    Fcorr = (F - BG_WEIGHT * Fneu).astype(np.float32, copy=False)
+
+    # Optional smoothing on raw fluorescence before ΔF/F
+    if SMOOTH_SEC and SMOOTH_SEC > 0:
+        k = max(1, int(round(SMOOTH_SEC * fs)))
+        if k > 1:
+            Fcorr = uniform_filter1d(Fcorr, size=k, axis=1, mode="nearest")
+
+    # 3g. Save ROI masks & centroids
+    masks = np.zeros((n_neurons, ops["Ly"], ops["Lx"]), dtype=np.uint8)
+    centroids = []
+    for i, s in enumerate(stat):
+        ypix = s.get("ypix", None)
+        xpix = s.get("xpix", None)
+        med  = s.get("med", None)
+        if ypix is None or xpix is None:
+            continue
+        masks[i, ypix, xpix] = 255
+        if med is not None and len(med) >= 2:
+            centroids.append((i + 1, int(med[1]), int(med[0])))
+        else:
+            # fallback centroid via mean of pixels
+            cy = int(np.mean(ypix))
+            cx = int(np.mean(xpix))
+            centroids.append((i + 1, cx, cy))
+    roi_mask_path = os.path.join(out_dir, f"{base}_roi_masks.tif")
+    save_tif(roi_mask_path, masks)
+    pd.DataFrame(centroids, columns=["neuron_id", "x", "y"]).to_csv(
+        os.path.join(out_dir, f"{base}_centroids.csv"), index=False
+    )
+
+    # -------------------------------------------------
+    # 4) ΔF/F, z-score, classification
+    # -------------------------------------------------
+    print("[3/4] ΔF/F, z-score, classification …")
+    T = Fcorr.shape[1]
+    pre_f  = seconds_to_frames(PRE_SEC, fs)
+    post_f = seconds_to_frames(POST_SEC, fs)
+    base_f = seconds_to_frames(BASELINE_SEC, fs)
+    win_len = pre_f + post_f
+
+    # Build bounded windows per stim
+    stim_windows: List[Tuple[slice, slice, slice]] = []
+    for s in stim_frames:
+        # center index s is the first frame of the stim window (time 0)
+        a = s - pre_f
+        b = s + post_f
+        full_sl = bounded_slice(a, b, T)
+        # baseline window immediately before stim: [s-pre_f - base_f, s-pre_f)
+        bl_a = s - pre_f - base_f
+        bl_b = s - pre_f
+        bl_sl = bounded_slice(bl_a, bl_b, T)
+        stim_windows.append((full_sl, bl_sl, slice(None)))  # third slice reserved
+
+    # ΔF/F cube: (neurons, n_stims, win_len) with NaN for out-of-bounds
+    dff = np.full((n_neurons, len(stim_frames), win_len), np.nan, dtype=np.float32)
+
+    for k, (full_sl, bl_sl, _) in enumerate(stim_windows):
+        seg_len = full_sl.stop - full_sl.start
+        if seg_len <= 0 or (bl_sl.stop - bl_sl.start) <= 0:
+            continue
+        F0 = Fcorr[:, bl_sl].mean(axis=1, keepdims=True)  # (neurons, 1)
+        seg = Fcorr[:, full_sl]                           # (neurons, seg_len)
+        seg_dff = (seg - F0) / np.maximum(F0, 1e-8)
+        # place into centered region of pre/post window if seg_len < win_len
+        start = (win_len - seg_len) // 2
+        dff[:, k, start:start+seg_len] = seg_dff.astype(np.float32, copy=False)
+
+    # z-score across neurons (per timepoint within each stim)
+    df_z = zscore(dff, axis=0, nan_policy="omit")
+
+    # Preliminary labels
+    labels = np.zeros_like(dff, dtype=np.int8)
+    labels[np.where(df_z >= 2)]  = 1
+    labels[np.where(df_z <= -2)] = -1
+
+    # Activation heuristic in early response window (first 3 seconds post)
+    early_win = slice(pre_f, min(pre_f + seconds_to_frames(3, fs), win_len))
+    activated = np.zeros((n_neurons, len(stim_frames)), dtype=bool)
+    for k in range(len(stim_frames)):
+        seg_z   = df_z[:, k, early_win]
+        seg_dff = dff[:, k, early_win]
+        ok = np.any(seg_z >= 2, axis=1) & (np.nanmax(seg_dff, axis=1) > 2.0)
+        activated[:, k] = ok
+
+    # Subtype classification by pre-stim slope (last 2 seconds before stim)
+    pre2 = slice(max(0, pre_f - seconds_to_frames(2, fs)), pre_f)
+    preex, postex = [], []
+    xpre = np.arange(pre2.stop - pre2.start, dtype=float)
+    for n in range(n_neurons):
+        ypre = dff[n, :, pre2].mean(axis=0)  # average across stims for stability
+        if np.isnan(ypre).any() or len(xpre) < 2:
+            slope = 0.0
+        else:
+            slope = linregress(xpre, ypre[:len(xpre)]).slope
+        if activated[n].any():
+            (preex if slope > 0.2 else postex).append(n + 1)
+
+    postex_idx = np.array(postex, dtype=int) - 1
+    success = activated[postex_idx].mean(axis=1) if postex_idx.size else np.array([], dtype=float)
+
+    # -------------------------------------------------
+    # 5) Save arrays, tables, plots
+    # -------------------------------------------------
+    print("[4/4] Saving results …")
+    # Arrays
+    np.savez_compressed(
+        os.path.join(out_dir, f"{base}_full_results.npz"),
+        dff=dff, df_z=df_z, labels=labels, activated=activated,
+        preex=np.array(preex, dtype=int),
+        postex=np.array(postex, dtype=int),
+        success_rate=success,
+        stim_frames=stim_frames,
+        fs=np.array([fs], dtype=float)
+    )
+
+    # Peri-stim table (long format) for quick inspection
+    rows = []
+    for n in range(n_neurons):
+        for k, s in enumerate(stim_frames):
+            seg = dff[n, k]
+            rows.append({
+                "file": fname,
+                "neuron_id": n + 1,
+                "stim_index": k,
+                "stim_frame": int(s),
+                "dff_mean_0_3s": float(np.nanmean(seg[early_win])),
+                "dff_peak_0_3s": float(np.nanmax(seg[early_win])),
+                "activated": bool(activated[n, k]),
+            })
+    peri_df = pd.DataFrame(rows)
+    peri_df.to_csv(os.path.join(out_dir, f"{base}_peri_stim_summary.csv"), index=False)
+
+    # High-level summary (per file)
+    summary = pd.DataFrame([{
+        "file": fname,
+        "total_neurons": int(n_neurons),
+        "activated_any": int(activated.any(axis=1).sum()),
+        "preex": int(len(preex)),
+        "postex": int(len(postex)),
+        "postex_success_mean": float(np.nanmean(success)) if success.size else np.nan
+    }])
+    summary.to_csv(os.path.join(out_dir, f"{base}_summary.csv"), index=False)
+
+    # Figures
+    # 1) Mean fluorescence across neurons (from Suite2p-corrected Fcorr)
+    t = np.arange(T, dtype=float) / fs
+    mean_Fcorr = np.nanmean(Fcorr, axis=0)
+    fig1 = plt.figure(figsize=(10, 4))
+    ax1 = fig1.gca()
+    ax1.plot(t, mean_Fcorr, lw=0.9)
+    for s in stim_frames:
+        ax1.axvline(s / fs, ls="--", lw=1)
+    ax1.set_xlabel("Time (s)")
+    ax1.set_ylabel("Mean Fcorr (a.u.)")
+    ax1.set_title(f"{base}: Mean neuropil-corrected fluorescence")
+    fig1.tight_layout()
+    fig1.savefig(os.path.join(out_dir, f"{base}_mean_Fcorr.png"), dpi=150)
+    plt.close(fig1)
+
+    # 2) Bar summary: per-stim activation counts
+    act_counts = activated.sum(axis=0)
+    fig2 = plt.figure(figsize=(8, 4))
+    ax2 = fig2.gca()
+    ax2.bar(np.arange(len(stim_frames)), act_counts)
+    ax2.set_xlabel("Stim index")
+    ax2.set_ylabel("# Activated neurons")
+    ax2.set_title(f"{base}: Activation per stimulus")
+    fig2.tight_layout()
+    fig2.savefig(os.path.join(out_dir, f"{base}_activation_bars.png"), dpi=150)
+    plt.close(fig2)
+
+    print(f"Done. Outputs in: {out_dir}")
+    return summary
+
+
+# -------------------------------------------------
+# 6) Main
+# -------------------------------------------------
+def main():
+    parser = argparse.ArgumentParser(description="Two-photon calcium imaging pipeline (robust).")
+    parser.add_argument("--files", nargs="*", default=FILES, help="List of TIFF files to process")
+    parser.add_argument("--fs", type=float, default=(FS if FS else 0.0),
+                        help="Frame rate (Hz). If 0, attempt to infer from metadata.")
+    args = parser.parse_args()
+
+    ensure_dir(OUT_ROOT)
+
+    all_summaries = []
+    for f in args.files:
+        if not os.path.exists(f):
+            print(f"File not found: {f}")
+            continue
+        fs_arg = args.fs if args.fs > 0 else None
+        summ = process_file(f, fs_arg)
+        all_summaries.append(summ)
+
+    if all_summaries:
+        pd.concat(all_summaries, ignore_index=True).to_csv(
+            os.path.join(OUT_ROOT, "summary_all_files.csv"), index=False
+        )
+        print(f"\nGlobal summary saved to {os.path.join(OUT_ROOT, 'summary_all_files.csv')}")
+    else:
+        print("No files processed.")
+
+
+if __name__ == "__main__":
+    main()
+
+""",
+]
+

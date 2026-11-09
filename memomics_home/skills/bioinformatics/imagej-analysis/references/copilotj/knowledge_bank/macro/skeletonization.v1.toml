@@ -1,0 +1,27 @@
+type = "macro"
+signature = "skeletonization.v1"
+name = "Skeletonization"
+topic = [
+  "skeletonization",
+  "morphology",
+  "3d analysis",
+]
+
+description = """Creates a one-pixel-wide skeleton of a 3D binary object, which is a prerequisite for the Analyze Skeleton plugin."""
+
+
+[content]
+plugin_name = "Skeletonize (2D/3D)"
+
+plugin_description = """This plugin thins binary objects in a 2D or 3D image to a single-pixel-wide skeleton. It is essential for topological and morphological analysis of structures like neurons or vessels."""
+
+correct_syntax = """run("Skeletonize (2D/3D)");"""
+
+tips = [
+  """Error prevention tip based on dialog issues: This command is computationally intensive on large 3D stacks and is highly prone to timeout errors in automated environments. If a timeout occurs, do not retry with the same macro.""",
+  """Parameter configuration guidance: The plugin itself has no parameters in the macro call, but it operates on the active binary image. Ensure the input image is properly thresholded and cleaned of noise, as stray pixels can create unwanted skeletal branches.""",
+  """Common usage pitfalls to avoid: Avoid running this command in the same macro call as other long-running processes (like 'Analyze Skeleton'). The most robust solution for timeouts is to save the binary image and perform skeletonization using an external Python script with `skimage.morphology.skeletonize_3d`.""",
+]
+
+site = "https://imagej.net/plugins/skeletonize3d"
+

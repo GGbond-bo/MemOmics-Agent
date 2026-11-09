@@ -1,0 +1,47 @@
+type = "macro"
+signature = "coloc-2.v1"
+name = "Coloc 2 Colocalization Analysis"
+topic = [
+  "colocalization analysis",
+  "dual channel analysis",
+  "fluorescence microscopy",
+  "image analysis",
+]
+tags = ["Coloc 2", "colocalization", "fluorescence", "dual channel analysis"]
+
+description = "Coloc 2 colocalization analysis plugin macro usage guide"
+
+data_type = "macro"
+
+[content]
+plugin_name = "Coloc 2"
+description = "Colocalization analysis plugin. Use 'channel1' and 'channel2' parameters."
+
+correct_syntax = """
+run("Coloc 2", "channel_1=cropped_01_POS076_D.tif channel_2=CropGreen.tif roi_or_mask=<None> \
+threshold_regression=Costes show_save_pdf_dialog li_histogram_channel_1 li_histogram_channel_2 \
+li_icq spearman's_rank_correlation manders'_correlation kendall's_tau_rank_correlation \
+2d_intensity_histogram costes'_significance_test psf=3 costes_randomisations=10");
+"""
+
+tips = [
+  "1. Adjust costes_randomisations for significance testing (default is 10).",
+  "2. Ensure images are pre-processed (e.g., background subtraction) before coloc analysis.",
+  "3. You need a 2-color channel image. If more than 2 channels, split them first (Image → Color → Split Channels).",
+  "4. Z stacks work fine, but time series will fail. Split time series into numbered images first.",
+  "5. For ROI analysis, you have 2 options:",
+  "   - Select ROI with ImageJ selection tools (applies to all slices in z-stack)",
+  "   - Use a binary mask image with same x,y,z dimensions (white=255 for analysis, black=0 to ignore)",
+  "6. In GUI, select your 2 images in the first 2 dropdown lists as channel 1 and channel 2.",
+  "7. Third dropdown: select ROI/mask image (must have same xyz dimensions as the other 2 images).",
+  "8. Results appear in ImageJ Log window as comma-separated values for export.",
+  "9. Set PSF size (in pixels) - determines size of image chunks for randomization.",
+  "10. Choose Costes iterations (minimum 10, better 100+ for statistical significance).",
+  "11. Results GUI shows tables and images (Li plots, scatterplots, 2D histograms with regression).",
+  "12. Scatterplot uses fire color LUT; log checkbox toggles log scaling display.",
+  "13. Save results as standardized PDF format for consistent comparison.",
+  "14. This tool may take a while to run, so you need to remind users to be patient.",
+]
+
+site = "https://imagej.net/plugins/coloc-2"
+

@@ -250,6 +250,22 @@ Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正
 | human | skeletal_muscle | aging | 2026-10-23 | inspect_merged_xlsx.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-10-23 | inspect_merged_od_xlsx.py | - | - |  |
 | human | skeletal_muscle | aging | 2026-10-23 | recon2_columns_OD.py | - | - |  |
+| human | skeletal_muscle | aging+exercise+diabetes | 2026-11-02 | immune_RUV_MAST_v5.R | - | - |  |
+| human | skeletal_muscle | aging+exercise+diabetes | 2026-11-03 | immune_RUV_MAST_v5.R | - | - |  |
+| human | skeletal_muscle | aging+exercise+diabetes | 2026-11-03 | immune_RUV_MAST_v5.R | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-11-03 | immune_RUV_MAST_v7.R | - | - |  |
+| human | skeletal_muscle | exercise+aging | 2026-11-03 | immune_RUV_MAST_v7.R | - | - |  |
+| human | skeletal_muscle | aging+exercise | 2026-11-03 | - | - | - |  |
+| - | - | aging+exercise | 2026-11-03 | - | - | - |  |
+| - | - | aging+exercise | 2026-11-03 | - | - | - |  |
+| - | - | aging+exercise | 2026-11-03 | - | - | - |  |
+| - | - | aging+exercise | 2026-11-03 | - | - | - |  |
+| - | - | aging+exercise | 2026-11-03 | - | - | - |  |
+| - | - | aging+exercise | 2026-11-03 | - | - | - |  |
+| - | - | aging+exercise | 2026-11-03 | - | - | - |  |
+| - | - | aging+exercise | 2026-11-03 | - | - | - |  |
+| - | - | aging+exercise | 2026-11-03 | - | - | - |  |
+| - | - | aging+exercise | 2026-11-03 | - | - | - |  |
 ## 🚨 Critical Pitfalls
 
 ### P1: Pseudobulk per subcluster×condition breaks DESeq2
@@ -279,6 +295,8 @@ Pseudobulk DESeq2+Wilcoxon+MAST多方法, 含多重检验校正
 
 | Error | Cause | Solution |
 |-------|-------|----------|
+| 4 个分片作业启动后 99 字节即退，各日志仅 `line 9: : command not fou | 把环境根目录写成了 user（自己的家目录）而非 zhangxiao6（实 | 集群环境根是 /cluster/share/zhangxiao6/software/minicon |
+| remote_cluster run 执行 `qstat -f` 在 SGE 集群上挂死，300s  | qstat -f 输出量巨大且部分队列状态查询会阻塞，导致 ssh 会话 std | 不要用 qstat -f（全量队列详情在 SGE 上会阻塞 ssh stdout）；改用直接 sub |
 | error in evaluating the argument 'X' in selecting  | split() 的分组变量为 NULL —— 想当然假设 meta 里有 ind | 示例数据.rds 的 meta.data 不含 individual 列（只有  |
 | variables in design formula cannot contain NA: typ | pseudobulk 聚合列名（colnames(pb)）与 sub$sampl | 待修:pseudobulk meta$type 由 sub$type[match(colnames( |
 | unused argument (compression = "none") — ggsave 在  | ggsave 的 compression 参数按设备分发，png 设备不接受该参 | 拆开三次 ggsave 调用：png/pdf 不传 compression，tiff 传 compr |

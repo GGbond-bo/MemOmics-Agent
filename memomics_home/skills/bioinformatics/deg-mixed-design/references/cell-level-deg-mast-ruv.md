@@ -71,6 +71,7 @@ Zhang X et al., *Multimodal brain cell atlas across the adult macaque lifespan*,
 | 5 | **D 组件 NA** | glmer 在二值响应遇完全分离（某基因在某组近全 0）→ SE 为 NA | **非 bug**，剔除+留痕，别静默输出 NA 列 |
 | 6 | **`zlm` 随机效应语法** | — | `method` 支持 `"glm"`/`"glmer"`/`"bayesglm"`（官方 `zlm.Rd` 原文确认） |
 | 7 | **`RUVr` 位置参数** | 误判用户代码写错 | 官方签名 `RUVr(x, cIdx, k, residuals, center, round, ...)` —— `RUVr(counts, rownames(counts), k=n, res1)` **正确**（cIdx=全基因是 vignette 惯例） |
+| 8 | **`cpm()` 被 `SingleCellExperiment` 的 S4 泛型抢走** | `library(MAST)` 后裸写 `cpm(d_e)` → `unable to find an inherited method for function 'cpm' for signature 'object = "DGEList"'`，脚本在 RUV 段 `Execution halted`（前面日志全正常，看着像数据问题） | `edgeR::cpm(d_e)`（只改这一处）。探针 `find("cpm")` → 同时列出 `package:SingleCellExperiment` 与 `package:edgeR`，前者优先即会崩。**载入 MAST/SCE/scater 后凡 edgeR 函数一律写全名**；实测只有 `cpm` 被抢，`DGEList`/`calcNormFactors`/`glmFit`/`estimateGLM*Disp` 干净。⛔ 不要据此改 `edgeR` 版本或判"数据坏了" |
 
 实测性能（24 供体 / 3000 基因 / Pure Type IIA）：glmer+(1|individual) **0.13 s/基因 → 约 6.6 min**；RE 与无 RE 的 coef 相关 **0.964**。
 

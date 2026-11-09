@@ -3588,6 +3588,33 @@ class SessionDB:
 
         return f"{base} #{max_num + 1}"
 
+    def _nearest_chain_title(self, start_id: str) -> Optional[str]:
+        """从 start_id 沿 parent_session_id 向上找第一个非空标题（压缩链标题继承）。
+
+        背景（2026-10-27 用户反馈）：压缩续写创建的子会话 title 为 NULL，而
+        list_sessions_rich 默认把根会话投影到最新 continuation 并用 tip 的字段覆盖，
+        于是用户手动改过的名字被空标题顶掉、列表退回"首条消息"——表现为改名后
+        过一段时间自己变回去。这里沿链取最近的非空标题作为兜底。
+        """
+        cur = start_id
+        for _ in range(64):  # 压缩链不会这么深；防御性上限
+            if not cur:
+                return None
+            try:
+                with self._lock:
+                    row = self._conn.execute(
+                        "SELECT title, parent_session_id FROM sessions WHERE id = ?", (cur,)
+                    ).fetchone()
+            except Exception:
+                return None
+            if not row:
+                return None
+            title = (row["title"] or "").strip() if row["title"] is not None else ""
+            if title:
+                return row["title"]
+            cur = row["parent_session_id"]
+        return None
+
     def get_compression_tip(self, session_id: str) -> Optional[str]:
         """Walk the compression-continuation chain forward and return the tip.
 
@@ -3985,6 +4012,16 @@ class SessionDB:
                 ):
                     if key in tip_row:
                         merged[key] = tip_row[key]
+                # 2026-10-27：压缩续写子会话的 title/preview 通常为空，直接覆盖会把
+                # 用户在根会话上手改的名字顶掉（改名"过一阵自己变回去"的真凶）。
+                # 空标题 → 沿链继承最近的非空标题；空 preview → 继承根的 preview。
+                if not (merged.get("title") or "").strip():
+                    inherited = self._nearest_chain_title(tip_id) or s.get("title")
+                    if inherited:
+                        merged["title"] = inherited
+                        merged["_title_inherited"] = True
+                if not (merged.get("preview") or "").strip():
+                    merged["preview"] = s.get("preview") or ""
                 merged["_lineage_root_id"] = s["id"]
                 projected.append(merged)
             sessions = projected

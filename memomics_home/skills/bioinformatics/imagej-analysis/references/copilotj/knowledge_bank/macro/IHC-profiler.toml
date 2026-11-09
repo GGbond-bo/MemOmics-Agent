@@ -1,0 +1,44 @@
+type = "macro"
+signature = "ihc.dab.profiler.v1"
+name = "IHC Profiler"
+topic = [
+  "Immunohistochemistry",
+  "DAB Quantification",
+  "Color Deconvolution",
+  "Histopathology Analysis",
+]
+
+description = """Performs semi-quantitative analysis of DAB-stained immunohistochemistry images.
+The macro deconvolutes the H–DAB color space, calculates the distribution of brown stain intensity,
+and classifies pixels into four categories: High Positive, Positive, Low Positive, and Negative."""
+
+[content]
+plugin_name = "IHC Profiler"
+
+plugin_description = """Analyzes DAB-stained histological images by computing the pixel-intensity histogram of
+the DAB (C2) channel from Colour Deconvolution. It estimates the proportion of pixels
+in four intensity ranges corresponding to High Positive, Positive, Low Positive, and Negative staining,
+and reports a weighted IHC score."""
+
+correct_syntax = """run("IHC Profiler", "mode=[Cytoplasmic Stained Image] vectors=[H DAB]");"""
+
+tips = [
+"""Use on RGB IHC brightfield images stained with hematoxylin and DAB (H-DAB).""",
+"""The plugin automatically performs Colour Deconvolution and plots a histogram of the DAB channel.""",
+"""The final report shows the percentage of each staining category and the weighted score (0-4).""",
+"""Results are displayed in the **Log window**, you can select log window and save it if you need to analysis.""",
+]
+
+site = "https://imagej.nih.gov/ij/plugins/ihc-profiler.html"
+
+examples = [
+  """Analyze a DAB-stained slide:
+  run("IHC Profiler", "mode=[Cytoplasmic Stained Image] vectors=[H DAB]");""",
+
+  """Typical output (shown in the Log window):
+  High Positive: 14.82 %
+  Positive: 26.31 %
+  Low Positive: 38.64 %
+  Negative: 20.23 %
+  The score is Positive.""",
+]

@@ -1,0 +1,43 @@
+type = "macro"
+signature = "colour-deconvolution.v1"
+name = "Colour Deconvolution"
+topic = [
+  "color deconvolution",
+  "histological images",
+  "stain separation",
+  "pathology",
+]
+tags = ["color deconvolution", "staining", "histology", "pathology analysis"]
+
+description = "Colour Deconvolution plugin macro usage guide for separating different stains in histological images"
+
+data_type = "macro"
+
+[content]
+plugin_name = "Colour Deconvolution2"
+
+correct_syntax = """
+run("Colour Deconvolution2", "vectors=H&E output=8bit_Transmittance simulated cross hide");
+"""
+
+tips = [
+  """
+1) Pick the right stain set:
+  - Use vectors that match your stain (e.g., [H&E], [H DAB], [H FastRed]).
+  """,
+  """
+2) Understand the outputs:
+  - output=8bit_Transmittance gives three 8-bit grayscale images (Stain1, Stain2, Residual).
+  - "simulated" adds a preview of the reconstructed RGB; "cross" overlays a crosshair; "hide" suppresses dialogs for batch use.
+  """,
+  """
+3) Preprocess before deconvolution (optional but helpful):
+  - Subtract Background (rolling ball 50-200 px) to correct illumination.
+  - Light Gaussian blur (σ≈1-2) to reduce noise if staining is grainy.
+  """,
+  """
+4) 
+some times User only have Colour Deconvolution or Colour Deconvolution2 installed, so you can try both macros to see which one is available.
+  """,
+]
+

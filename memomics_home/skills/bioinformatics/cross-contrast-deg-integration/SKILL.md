@@ -12,10 +12,13 @@ description: >-
   「某基因家族在各比较组出现在多少个亚群」「出现频率 N 次」「亚群共享的 XX 基因」
   「统计一下 HSP/DNAJ/某家族开头的基因」「这个家族在五个比较组分别有多少」「按家族出频次表」
   「看看这表里有什么」「给我展示这个数据有什么信息」「这个表格里有什么信息」「陌生 DEG 工作簿」
-  「结构侦察」「先把表看清」。
+  「结构侦察」「先把表看清」
+  「整理成一个表」「五个 sheet」「按比较组重排」「Aging/Diabetes/Ex_Young/Ex_Old_Ctrl/EX_Old_DM」
+  「每个 sheet 有对应的比较组所有亚群」「DEG 结果整理成表」「两批结果各出一份表」「打包成 Excel」。
 when_to_use: >-
   [cross-contrast-deg-integration] 已有多套 DEG 结果表，要算交集/逆转/共享响应或设计其下游路线时；
-  或**刚拿到一张陌生的已算好 DEG 工作簿**、要先讲清"里面有什么"（只读侦察，见第零节）
+  或**刚拿到一张陌生的已算好 DEG 工作簿**、要先讲清"里面有什么"（只读侦察，见第零节）；
+  或**要把多套 DEG csv 按生物学比较组重排成 5-sheet 交付 Excel**（打包+质量审计，见第九节）
 version: 1.0.0
 author: MemOmics
 license: MIT
@@ -279,6 +282,116 @@ E[|A ∩ B|] = |A| × |B| / N        N = 实际检测到的基因数（不是全
 
 ---
 
+## 九、按「生物学比较组」重排成多 sheet 交付表（打包，不是交集分析）
+
+用户说「**整理成一个表，Aging、Diabetes、Ex_Young、Ex_Old_Ctrl、EX_Old_DM 五个 sheet，
+每个 sheet 有对应的比较组所有亚群的 DEG 信息，Immune 和 MuSC 都要这么做**」时用本节。
+这是**已算好结果的重新分箱 + 交付**，不重算 DEG、不算交集，但口径错一处整张表就废。
+
+### 9.1 五个 sheet 名 = 用户定义的字符串常量，映射必须先问
+
+映射（用户 2026-11-02 拍板「映射 A」，**禁止自造组名或调换顺序**）：
+
+| Sheet | 比较组 |
+|---|---|
+| `Aging` | `Y_Pre_vs_O_Pre` |
+| `Diabetes` | `O_Pre_vs_OD_Pre` |
+| `Ex_Young` | `Y_Pre_vs_Y_Post` |
+| `Ex_Old_Ctrl` | `O_Pre_vs_O_Post` |
+| `EX_Old_DM` | `OD_Pre_vs_OD_Post` |
+
+⚠️ `Aging` 与 `Diabetes` 最容易对调（都是「跨条件、非配对」），**动手前必须单独确认这两行**。
+交付前与用户原话逐字比对 sheet 名（`Ex_Old_Ctrl` 的下划线、`EX_Old_DM` 的全大写都要一模一样）。
+
+### 9.2 🔴 跨队列 schema 按**列名**对齐，禁止按位置
+
+同一项目里不同批次常跑的是**不同版本脚本**，列数与列序都会漂：
+
+| 队列 | 来源脚本 | 列数 | 差异 |
+|---|---|---|---|
+| MuSC | v1 | 16 | 无 `n_samples`；`component` 在 `coef_D` **之后** |
+| Immune | v2 | 17 | 有 `n_samples`；`component` 在 `fdr` **之后** |
+
+按位置 `df[cols]` 硬切 → 两队列的 `component` / `coef_D` 整块错位且**不报错**。
+正确做法：以列名建统一 schema，缺列补 `pd.NA`，多列打 warn：
+
+```python
+COLS = ["gene","coef","se","z","p","fdr","component","coef_D","p_D","fdr_D",
+        "celltype","comparison","direction","method","nRUV_used","n_cells","n_samples"]
+for c in [c for c in COLS if c not in df.columns]:
+    df[c] = pd.NA                      # 缺列填 NA，不要删列
+missing = ",".join(...)                # 记进 input_manifest，交付时说明
+```
+
+- **缺失列不是数据丢失**，是版本差异 —— 必须在交付说明里写清（「MuSC 的 `n_samples` 全空，
+  因为那批是 v1 脚本跑的」），否则用户以为你漏了。
+- 数值列一律 `pd.to_numeric(errors="coerce")` 再排序，防混入字符串让 `sort_values` 静默异常。
+
+### 9.3 空 sheet 必须建出来
+
+某队列可能压根没跑出某个比较组的 csv（本次 MuSC 只 4 个亚群 / 15 个 csv）。
+**仍然写出 5 个 sheet**（空的写表头即可）——否则下游 `pd.read_excel(sheet_name="Diabetes")`
+直接 `KeyError`，而用户看到的是「明明说了五个 sheet 怎么只有三个」。
+
+### 9.4 未勾选的口径：默认「全部基因 + 长表」并当场声明
+
+用户常常只拍板映射、不勾另外两项。此时按可追溯性默认：
+
+| 口径 | 默认 | 理由 |
+|---|---|---|
+| 内容 | **全部基因**（不过滤 FDR/\|coef\|） | 筛掉就做不了 GSEA/阈值敏感性；用户可在 Excel 里按 `fdr` 列自己筛 |
+| 结构 | **长表**（每行 = 基因 × 亚群） | 宽表跨亚群列数不齐、无法筛选排序 |
+| 排序 | `celltype` 升序 → `p` 升序 | 每亚群最显著的基因浮到顶部 |
+
+交付时**逐条声明这三个口径**（用户没勾 ≠ 你没问过，说明白即可）。
+
+### 9.5 🔴 交付前必做：逐「亚群 × 比较组」显著率审计（本次救命的一步）
+
+打包本身不带任何质量保证 —— **假象在拼表后依然原样存在，而拼表会让它更隐蔽**
+（混在几十万行里，用户看不出某一行来自一个 88% 显著的坏表）。所以出表后**必须**按
+`celltype × sheet` 拆开算 `FDR<0.05 占比`，并把 `>20%` 的标出来：
+
+```python
+g = d.groupby("celltype")
+rate = (sub["fdr"] < 0.05).mean()          # 每个 亚群×比较组 一个数
+up_down = ((sig & sub.coef > 0).sum(), (sig & sub.coef < 0).sum())
+```
+
+**判据（三条同时成立 = 技术性假象，该表不可用于生物学结论）**：
+
+1. **显著率 > 20%**（单细胞里 0.2–5% 才是常态）；
+2. **极性近单向**（up/down 比 > 10:1，如 4,972 up / 92 down）；
+3. 三者叠加：**跨组比较 + 无随机效应（`bayesglm`）+ `k_actual` 顶到上限**。
+
+本次实测（同一批数据、同一脚本）：
+
+| 队列 | Sheet | 显著率中位 | 判定 |
+|---|---|---:|---|
+| Immune | Ex_Young / EX_Old_DM / Ex_Old_Ctrl / Diabetes | 0.19–0.48% | ✅ 可用 |
+| Immune | Aging | 1.92% | 🟡 整体可用，但 `LYVE1+ Mac` 单亚群 82.7% 需剔除 |
+| **MuSC** | Ex_Young / EX_Old_DM | 3.60% / 1.59% | ✅ 可用 |
+| **MuSC** | **Aging / Diabetes / Ex_Old_Ctrl** | **71.5% / 67.3% / 69.7%** | 🔴 **整表不可用** |
+
+**汇报纪律**：先给「哪几个 sheet 能用」的结论，**再**给行数表。
+⛔ 不要只交「两份 xlsx、多少行」就完事 —— 那等于把假象打包成成品递给用户。
+⛔ 但也不要因为个别亚群异常就把整个全家桶判废（Immune Aging 是 1.92% 中位，只有 1 个亚群坏）。
+
+### 9.6 配套产物（缺一个都算半成品）
+
+| 产物 | 作用 |
+|---|---|
+| `<队列>_DEG_by_comparison.xlsx` | 主交付，5 sheet |
+| `DEG_5sheet_summary.csv` | 每 sheet 行数/亚群数/显著数 up/down |
+| `DEG_by_celltype_significance_rate.csv` | **70 个 亚群×比较组 的显著率**，审计底稿 |
+| `input_manifest_<队列>.csv` | 每个 sheet 由哪些 csv 拼成（含缺列记录），可追溯 |
+| `deg_5sheet_quality.png/pdf` | 显著率热图，>20% 画黑框 —— 一眼看出哪块红 |
+| `scripts/build_5sheet_deg_xlsx.py` | 生成脚本，可重跑 |
+
+> 完整脚本骨架、xlsx 结构断言（sheet 名/顺序/17 列/sheet 内亚群数）、
+> 本次 10 个异常组合全表、以及热图配方 → `references/deg-five-sheet-packaging.md`
+
+---
+
 ## 判据表模板（直接照用）
 
 | 用户问题 | 基因集运算 | 主判据 | 必须附带 |
@@ -346,6 +459,9 @@ E[|A ∩ B|] = |A| × |B| / N        N = 实际检测到的基因数（不是全
   THRESHOLD（阈值是否不设防）/ OVERLAP（obs vs E / OR / Jaccard）三张表 + VERDICT
 - `references/shared-term-pseudo-correlation.md` —— **共享条件项的代数伪相关**（Aging/Ex_Old 共享 O_Pre：
   实测 785 vs 期望 630）+ 结论降调表（辩论裁决 modify）+ hurdle 组件列（C/D）口径陷阱
+- `references/deg-five-sheet-packaging.md` —— **按生物学比较组重排成 5-sheet 交付表**（第九节配套）：
+  五组映射常量、跨队列 v1/v2 schema 按名对齐、空 sheet 兜底、xlsx 结构断言、
+  **70 个 亚群×比较组显著率审计**（本次 10 个 >20% 组合全表 + 各 sheet 中位数）、质量热图配方
 - `references/merged-deg-workbook-recon.md` —— **陌生 DEG 工作簿结构侦察**（第零节配套）：7 步清单、
   三个算术陷阱实测数字、C/D 符号一致率口径陷阱、本例读数、对话内报告骨架
 - `scripts/merged_deg_workbook_recon.py` —— **陌生 DEG 工作簿探针**：结构/规模/显著性/CvsD 一致率/

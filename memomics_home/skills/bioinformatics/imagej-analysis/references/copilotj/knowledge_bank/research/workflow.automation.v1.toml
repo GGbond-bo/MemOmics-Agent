@@ -1,0 +1,110 @@
+type = "research"
+signature = "workflow.automation.v1"
+name = "Workflow Automation"
+topic = [
+  "workflow automation",
+  "ΔF/F best practices",
+]
+
+description = """This dialog demonstrates a robust, reproducible workflow for whole-field ΔF/F analysis of calcium imaging stacks using ImageJ and external Python scripting. Exporting the mean signal per frame as a CSV ensures compatibility and traceability. Direct delegation of ΔF/F calculations to Python avoids ImageJ scripting complexity, provided the task is articulated as a single clear text string. Parameterization of baseline and response windows, and explicit onset lists, streamlines batch processing of stimulation responses. Attention to export filenames, directory structure, and the reproducibility of plots (time trace and bar plots) is critical for reproducible scientific reporting."""
+
+summary = """**Summary of ImageJ Task: Mean Calcium Signal Extraction and ΔF/F Analysis**
+
+---
+
+### 1. Task Overview
+
+The primary goal of this task was to extract the mean calcium fluorescence signal from each frame of a large calcium imaging time series, export this time trace for quantitative analysis, and then compute ΔF/F changes in response to defined ultrasound stimulation times. The process included exporting a summary table and generating plots for both the signal trace and ΔF/F across stimulus events.
+
+---
+
+### 2. Key Actions Taken
+
+- **Initial Assessment with imagejPerception**  
+  The agent first analyzed the open image stack using `imagejPerception`, confirming that the active image (`30hz-ave6-fr600isfobegin-1500sifoend_00001_copy_motion_corrected.tif`) is a 16-bit, single-channel, 3000-frame calcium imaging time series suitable for mean signal computation.
+
+- **Workflow Confirmation with User**  
+  The proposed plan—mean extraction, export, ΔF/F analysis at user-defined onset times, and result plotting—was detailed and confirmed by the user before proceeding.
+
+- **Mean Signal Extraction via ImageJ Macro**  
+  A new stack was duplicated to protect original data. For each frame in the duplicated stack, the mean fluorescence intensity was computed across the image area and saved to a CSV file (`30hz-ave6-fr600isfobegin-1500sifoend-10hz.csv`).
+
+- **ΔF/F Analysis Delegated to Python Agent**  
+  The CSV containing the mean trace was analyzed by the Python Agent. Using the ultrasound stimulation onsets [120, 240, 360] seconds (with baseline [-10, -2]s, response [0, 10]s windows), the agent calculated dff_mean and dff_peak values for each stimulation and generated all required output tables and figures.
+
+---
+
+### 3. Critical Results
+
+- **Mean Calcium Signal CSV**:  
+  `D:/vscode_project/ChatImageJ/temp/30hz-ave6-fr600isfobegin-1500sifoend-10hz.csv`  
+  (Contains frame-by-frame mean signal).
+
+- **ΔF/F Summary Table:**  
+  `D:/vscode_project/ChatImageJ/temp/30hz-ave6-fr600isfobegin-1500sifoend-10hz_dff_summary.csv`  
+  (Tabulates dff_mean and dff_peak for each stimulation).
+
+- **Plots Generated:**  
+  - Mean calcium signal trace plot:  
+    `.../30hz-ave6-fr600isfobegin-1500sifoend-10hz_mean_calcium_trace.png`
+  - ΔF/F bar plot:  
+    `.../30hz-ave6-fr600isfobegin-1500sifoend-10hz_dff_barplot.png`
+
+---
+
+### 4. Error Handling
+
+- **Delegation Argument Formatting**:  
+  There was a miscommunication in the argument format used to delegate the ΔF/F analysis to the Python Agent, resulting in validation and attribute errors. This was resolved by reformatting the task as a clear instruction string (rather than as a dictionary), after which it executed successfully.
+
+- **No Data Loss or Step Reversals**:  
+  The duplication of the stack ensured data integrity throughout the process, and all outputs were saved under new informative filenames.
+
+---
+
+### 5. Current State
+
+- **All planned computations and exports are complete**:  
+  Mean calcium signal extraction, ΔF/F computation per stipulated windows and events, and all required results export and visualization have been accomplished.  
+- **No outstanding errors or incomplete steps**:  
+  The workflow was completed as designed, and all critical outputs were confirmed as saved in the target directory.
+
+---
+
+### 6. Technical Details
+
+- **Input Image**:  
+  - File: `30hz-ave6-fr600isfobegin-1500sifoend_00001_copy_motion_corrected.tif`
+  - Dimensions: 512 x 512 pixels × 3000 frames; 16-bit, 1 channel
+
+- **Mean Signal Extraction**:  
+  - Each frame’s mean calculated
+  - Exported to:  
+    `D:/vscode_project/ChatImageJ/temp/30hz-ave6-fr600isfobegin-1500sifoend-10hz.csv`
+
+- **ΔF/F Analysis Parameters**:  
+  - Onset times (seconds): `[120, 240, 360]`
+  - Baseline window (relative to onset): `[-10, -2] s`
+  - Response window: `[0, 10] s`
+  - Calculated metrics: `dff_mean`, `dff_peak`
+
+- **Outputs & File Paths**:  
+  - ΔF/F summary:  
+    `.../30hz-ave6-fr600isfobegin-1500sifoend-10hz_dff_summary.csv`
+  - Signal trace plot:  
+    `.../30hz-ave6-fr600isfobegin-1500sifoend-10hz_mean_calcium_trace.png`
+  - Bar plot:  
+    `.../30hz-ave6-fr600isfobegin-1500sifoend-10hz_dff_barplot.png`
+
+---
+
+**In summary:**  
+The process efficiently quantified and summarized calcium activity dynamics from time-series data, with robust error handling and all expected results exported for further analysis and publication."""
+
+
+content = """This dialog demonstrates a robust, reproducible workflow for whole-field ΔF/F analysis of calcium imaging stacks using ImageJ and external Python scripting. Exporting the mean signal per frame as a CSV ensures compatibility and traceability. Direct delegation of ΔF/F calculations to Python avoids ImageJ scripting complexity, provided the task is articulated as a single clear text string. Parameterization of baseline and response windows, and explicit onset lists, streamlines batch processing of stimulation responses. Attention to export filenames, directory structure, and the reproducibility of plots (time trace and bar plots) is critical for reproducible scientific reporting."""
+
+highlights = ["Task delegation to Python for ΔF/F analysis requires a single string input to avoid agent invocation errors.","Ensuring image format (bit depth, channel, size) suitability prior to batch analysis saves troubleshooting time.","Exporting intermediate CSVs for analysis interleaves well with downstream tools; separation of responsibility streamlines debugging."]
+
+references = ["https://imagej.net/plugins","https://en.wikipedia.org/wiki/Delta_F_over_F","https://github.com/NeuroInfoCal/CalciumImagingAnalysis"]
+

@@ -223,6 +223,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 | "结构化展示" / "可视化呈现" / "UI组件" / "要点卡片" / "dsh-ui" / "genui" / "交互面板" | `skill_view("genui")` ← 回答正文输出 ```dsh-ui 围栏，webui 自动渲染成卡片/表格/图表/流程（2026-08-22 集成） |
 | "Illustrator" / "操控AI" / "操作AI" / "AI里" / "AI文件" / "AI脚本" / "AI画板" / "画板" / "ExtendScript" / "JSX脚本" | `skill_view("adobe-illustrator")` ← AI 操控手册（21 命令 + 画→导出→**看图**→调整闭环 + 面板导入配方 + 版本沉淀；2026-10-04 建，2026-10-05 全量回归 36/36） |
 | "云平台" / "DCS" / "DCS云" / "GenPilot" / "华大云" / "云上跑" / "在云上跑分析" / "投递任务" / "云容器" / "上传到云" / "云上数据" | `skill_view("dcs-cloud")` ← 云平台操作手册 + **开工前确认协议**（先 `dcs_cloud(action="context")` 拿候选 → `ask_user(kind="intent")` 问清 项目/数据/参数/输出/费用 → 用户勾选后才动手；MemOmics 只是中介，干活的是云平台；对齐铁律 27/28/35。2026-10-07 建） |
+| "ImageJ" / "Fiji" / "Bio-Formats" / "肌纤维横截面" / "肌纤维 CSA" / "MinFeret" / "细胞核计数" / "颗粒计数" / "胶原面积" / "阳性面积占比" / "CZI" / "LIF" / "ND2" / "显微图像定量" | `skill_view("imagej-analysis")` ← 本机/集群 ImageJ 定量（路径与上传配置 → `probe` → `ops` → 单图 `run` 验收 → `batch` → `summarize`；本机图选集群时自动 SFTP，无需用户先传集群；2026-11-09 建） |
 
 **🔴 genui 自觉判断（2026-08-22，RED 必触发 · 不等触发词）**：结构化表达优于纯文本时**主动**输出 ```dsh-ui fence，不需要用户开口——判断标准：这段内容换成组件会不会更好扫、更好懂、更好操作？会 → 就用。命中"内容类型 → 组件"映射（见下方使用引导）即输出；纯问答/一句话能说清才不用。这与 `cns-visualization` 出图无关（那是科学图，这是回答内的信息组件）。
 
@@ -562,7 +563,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
   ⑤ 用户也可以在 WebUI「🖧 远端集群」控制台里自己用 `locate · 路径判定` 模式查同一个问题（输出里会带 `范围：local-only` / `local+cluster`），或用「🖥 节点体检」看各节点的连通性和负载。
   ⑥ **Windows ↔ Linux 的两套体系**（本机 Windows、集群 Linux）：集群上**不需要装 MemOmics**，`remote_cluster` 只用到 ssh + shell；反过来本地也不是"在集群上装了个 Windows 版"。要送上去算的东西一律走 `push`（`push` 会自动把 CRLF 换行转成 LF——**这一点很关键**，Windows 写的 `.sh/.py/.R` 直接传上去 Linux 会报 `bash\r: command not found`／python 语法错；本机原文件不会被改动，要保留 CRLF 就传 `crlf="keep"`，同时 `.sh/.py` 会自动加可执行位），算完的产物走 `pull` 回到本机 `results/{session_dir}/`。另外 Linux 是**区分大小写**的：`A.tsv` 和 `a.tsv` 是两个文件，路径别凭记忆写，用 `locate` 查或 `run` 里 `ls` 看一眼。
 4. **分步执行**：写一步跑一步，不要一次性写完所有代码
-5. **门控辩论（先文献后 KB）**：分析级结论按三级门控触发辩论——`debate_gate` 判定 L1（轻量）/L2（完整 8 角色）；**高影响（入库/报告/结论产物）强制 L2 不可降级**；失败重试≥2、rail_review(post) 未通过、候选参数≥2 → 升级 L2；statistical 级默认 L1；chat/lightweight 级不辩。同一 topic 只辩一次（debated_topics 去重），单会话超 budget（默认3）后非强制降 L1。辩论前必须先 `search_papers()` 获取带 PMID/DOI 真实文献。KB 预查询内容（自动注入）作为 `knowledge_base_info` 传入提供生物学背景，但辩论引用**只能来自 search_papers**，KB 线索不可直接作为引用来源。裁决自动回流 `record_verdict`（skill.json debate_verdicts）。v2 证据契约：每个论点必须带 PMID/DOI/数据锚点，无证据标 [仅是推理]；裁判按 rubrics（证据质量/效应量/混杂/先验文献/可重复性）出分并列出 missing；超预算按调用次数计，judge_count>1 多裁判投票。详见 skill `debate-core`。
+5. **门控辩论（先文献后 KB）**：分析级结论按三级门控触发辩论——`debate_gate` 判定 L1（轻量）/L2（完整 8 角色）；**高影响（入库/报告/结论产物）强制 L2 不可降级**；失败重试≥2、rail_review(post) 未通过、候选参数≥2 → 升级 L2；statistical 级默认 L1；chat/lightweight 级不辩。同一 topic 只辩一次（debated_topics 去重），单会话超 budget（默认3）后非强制降 L1。辩论前必须先 `search_papers()` 获取带 PMID/DOI 真实文献。KB 预查询内容（自动注入）作为 `knowledge_base_info` 传入；**有 PMID/DOI/原文位置/数据锚点的 KB 条目可直接进入统一证据表**，无来源或 verification=missing 的只能作为线索，不得当已验证证据。统一证据账 `evidence_ledger`：hypotheses / evidence_items（domain、claim、supports、against、source、verification、limitations）/ missing_evidence；assessment 只能引用 evidence_id，没有可引用证据时输出 unresolved（暂不判断），禁止把“未找到”写成反证。裁决自动回流 `record_verdict`（skill.json debate_verdicts）。v2 证据契约：每个论点必须带 PMID/DOI/数据锚点，无证据标 missing；裁判按 rubrics（证据质量/效应量/混杂/先验文献/可重复性）出分并列出 missing；超预算按调用次数计，judge_count>1 多裁判投票。详见 skill `debate-core`。
    **分情况（2026-09-22 起系统强制，不要为辩论而辩论）**：只读操作/事实查询/线性命令执行（ls、cat、echo…）/本会话已辩过的同一议题/活选项<2 → **L0 直接跳过辩论**，系统会打印"执行前不辩论：<原因>"；脚本设计（首次且含可争议参数）→ L1；结论合成有 ≥2 个活选项或存在不确定性 → L2，没分歧 → L1。高影响/失败重试≥2/rail_review(post) 未通过 → **L2 强制不降级**（这些硬信号优先于跳过规则）。判断"值不值得辩"的准绳：**辩完必须能改变下一步动作**。
    **裁决必须能落地（P2）**：裁判输出必须带 `decision` / `next_actions[{action,owner,why,expected,cost,blocks}]` / `fallback{path,confidence,risk,label}` / `reopen_condition` / `missing`——**禁止"证据不足，先补数据再下结论"这种没有下一步的结论**。owner=ai 的 next_actions 会被系统自动写成会话待办；带 `blocks` 的行动未完成时，高影响工具（入库/报告/产物）会被硬拦（解除：完成该待办 / 重跑 debate_analysis / 标记 cancelled）。
 6. **技能复用**：有 user_scripts → 辩论 + rail_review(pre) → 跑后审查 → record_run
@@ -896,7 +897,7 @@ terminal 完成 → _pending_record = True
 ## 参考
 
 > 📋 **SOUL-detail.md**：场景触发表、19领域一览、分析流程、长任务追踪规则 12-21、task_plan.md 模板、心跳/error_scanner 部署、后台进程模式决策树、HTML 报告规则、目录策略
-> 📚 **SKILLS_INDEX.md**：459 个生信技能索引（由系统按意图动态注入）
+> 📚 **SKILLS_INDEX.md**：460 个生信技能索引（由系统按意图动态注入）
 > 🔧 **environment.json**：`<安装目录>/environment.json` 全局环境文件
 
 | "代谢组学" / "metabolomics" / "LC-MS" / "GC-MS" / "峰表" / "peak table" / "差异代谢物" / "代谢通路富集" / "代谢组" / "lc-ms" / "gc-ms" / "火山图" / "热图" / "volcano" / "heatmap" / "代谢物差异" | `skill_view("metabolomics-full-pipeline")` |

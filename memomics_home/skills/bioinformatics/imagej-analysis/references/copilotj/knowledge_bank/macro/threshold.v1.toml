@@ -1,0 +1,30 @@
+type = "macro"
+signature = "threshold.v1"
+name = "Threshold Binary Segmentation"
+topic = ["threshold segmentation", "binarization", "image segmentation"]
+tags = ["Threshold", "thresholding", "binarization", "segmentation"]
+
+description = "Macro usage guide for ImageJ thresholding to create binary masks. Supports multiple algorithms (Otsu, Li, Triangle, IsoData, etc.)."
+
+data_type = "macro"
+
+[content]
+plugin_name = "Threshold"
+description = "Thresholding plugin for binary segmentation. Use 'method=' parameter to control the algorithm."
+
+correct_syntax = 'run("Thresholding", "method=Otsu");'
+
+tips = [
+  "Always specify the method explicitly (e.g., Otsu, Li, Triangle, IsoData). Avoid leaving it to the default.",
+  "Otsu is robust for images with clear foreground vs. background separation (e.g., nuclei, glomeruli).",
+  "Triangle or Li often work better for uneven illumination or low-contrast biological tissues.",
+  "Avoid 'Default dark' for tissue sections — it tends to select the entire organ as a single object.",
+  "After thresholding, always inspect the mask visually. If everything turns black/white, switch to another method.",
+  "Use Analyze Particles with a size filter to exclude very large structures (whole kidney) or very small noise.",
+  "Combine thresholding with preprocessing steps such as Gaussian Blur (to reduce noise) and Enhance Contrast.",
+  "If segmentation fails, try adaptive thresholding plugins (e.g., Auto Local Threshold) instead of global methods.",
+  "For 3D stacks, apply thresholding slice-by-slice, then merge results for consistent counting.",
+  "When reporting counts (e.g., glomeruli), always include size/circularity filters to avoid false positives."
+]
+
+site = "https://imagej.net/plugins/thresholding"

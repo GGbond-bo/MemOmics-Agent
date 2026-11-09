@@ -1,0 +1,26 @@
+type = "macro"
+signature = "clij2.v1"
+name = "CLIJ2 GPU-Accelerated Image Processing"
+topic = [
+  "GPU acceleration",
+  "image processing",
+  "CLIJ2",
+  "high performance computing",
+]
+tags = ["CLIJ2", "GPU", "image processing", "accelerated computing"]
+
+description = "CLIJ2 GPU-accelerated image processing plugin macro usage guide"
+
+data_type = "macro"
+
+[content]
+plugin_name = "CLIJ2"
+description = "GPU-accelerated image processing. Initialize GPU first."
+
+correct_syntax = "Ext.CLIJ2_pushCurrentImage(input); Ext.CLIJ2_operation(input, output);"
+
+tips = [
+  "Must initialize CLIJ2 first. Use Ext.CLIJ2_ prefix for all operations. Push/pull images to/from GPU.",
+]
+
+site = "https://imagej.net/plugins/clij"

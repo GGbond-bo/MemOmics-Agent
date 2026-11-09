@@ -46,6 +46,12 @@ import httpx
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+from memomics.bio_tools.debate_evidence import (
+    attach_evidence_ledger,
+    build_evidence_ledger,
+    evidence_ledger_prompt,
+)
+
 logger = logging.getLogger(__name__)
 
 # === 会话级隔离（ContextVar，替代 threading.local） ===
@@ -221,7 +227,11 @@ _DEBATE_BUDGET_DEFAULT = float(os.environ.get("MEMOMICS_DEBATE_BUDGET", "900") o
 # 单次调用约 25-40s，整场 200-300s。最初定 180s 会把裁判掐死（judge_error → 引擎兜底，
 # 等于白跑一场）。现定 360s：够跑完整场并留余量，又远小于 L2 的 900s。
 _L1_BUDGET_DEFAULT = float(os.environ.get("MEMOMICS_DEBATE_L1_BUDGET", "360") or 360)
-_HTTP_TIMEOUT_DEFAULT = float(os.environ.get("MEMOMICS_DEBATE_HTTP_TIMEOUT", "60") or 60)
+# 单次 HTTP 上限（2026-11-02 真数据实测修正）：默认 60s 对**推理型模型**太短 ——
+# dcs-cloud/deepseek-v4-pro 用真实角色 prompt（≈2.8k 字符）单席位稳定 130~140s，
+# 60s（或服务器里的 90s）会让 7 席全部 ReadTimeout → 整场 error、证据表为空。
+# 现在默认 150s（仍可用 env 覆盖；慢模型建议 200~240s，注意整场还有 _DEBATE_BUDGET_DEFAULT 900s 兜底）。
+_HTTP_TIMEOUT_DEFAULT = float(os.environ.get("MEMOMICS_DEBATE_HTTP_TIMEOUT", "150") or 150)
 _DEADLINES: dict = {}
 _DEADLINE_BUDGETS: dict = {}
 _DEADLINE_LOCK = threading.Lock()
@@ -719,81 +729,103 @@ JUDGE_PROMPT = """你是生信分析多角色辩论的**裁判编辑**。7位专
 # ==================== v2 证据审查器提示词（2026-08-27） ====================
 
 _EVIDENCE_CONTRACT = """## 证据契约 v3 · 证据链（必须遵守）
-0. **这场辩论的唯一目标是“找证据链”，不是说服对方、也不是比谁语气强**。每个 claim 都要给出
+0. **这场辩论的唯一目标是“找证据链”，不是说服对方、也不是比谁语气强**。每条 evidence_item 都要给出
    「结论 → 证据节点 → 反证/失效条件 → 缺什么」这条链；只写一句断言不算论据。
-1. 每个证据节点必须挂锚点 + 级别：
-   - 知识库已验知识：L0 无来源 / L1 有来源未验证 / L2 湿实验验证 / L3 临床级（对齐 kb-evidence-v1）；
-   - 文献：P（有 PMID/DOI、可查） / 实验记录 C / 纯推理 I；
-   - 数据：写具体数值与出处（文件 / 字段 / 行号），例：[数据: DEG 表 n=1246, FDR<0.05]。
-2. **三条证据线各自表态**（不属于本场的写“本场不适用”，属于本场的必须给针对性判断，不许空着）：
-   - 知识库线：既有已验知识支不支持这个结论？（给条目 + 级别）
-   - 统计线：统计方法与过程有没有问题（设计 / 模型假设 / 多重检验 / 样本量 / 混杂 / 效应量 / 模型诊断）
-   - 生信线：步骤与方法有没有错误（上游 QC / 比对与定量 / 注释与参考版本 / 工具与参数 / 可复现性）
-3. 无直接证据的推理必须标注 [仅是推理]（I 级），且不得作为论点计分。
-4. 你的专业领域内若存在失败条件/已知反例，必须写入 self_audit_failures（这是链条的“反证”一环）。
-5. 若证据不足，明确写“本领域证据不足，不可下结论”，并列出 needed_evidence（缺什么 + 怎么补 +
-   补到什么程度算够）。**宁可不结论，也不要给一条挂不上锚点的链。**"""
+1. 每个 evidence_item 必须挂可核查的来源与定位：
+   - 文献/知识库：PMID/DOI/KB 条目 + 原文位置（图/表/句）；引用 KB 结论时附 kb-evidence-v2 的
+     L0 有出处但无直接支持 / L1 有来源未验证 / L2 claim-specific 湿实验 / L3 临床级；
+     KB claim 必须同时写清 experimental_object、cohort、background；不同文章结论冲突时并列，
+     不得合并成单一结论，也不得隐去队列/对象差异；
+   - 数据：具体数值 + 文件/字段/行号；
+   - 工具：工具名/版本/参数 + 实际输出；
+   - 纯推理只能标 `source.type=reasoning`、`verification=unverified|missing`，不得计为已验证证据。
+   - `verification=verified` 只表示该来源在本轮输入中可直接核对，不代表引擎已独立复核其真实性。
+2. **按领域分别收集证据，不在角色内部写三条线的长篇陈述**：
+   - 生物学（biology）：marker 特异性/共表达、已知细胞类型、负 marker、替代解释；
+   - 统计（statistics）：设计、独立性/伪重复、效应量与 CI、多重检验、功效、混杂；
+   - 生信（bioinformatics）：上游 QC、比对与定量、注释与参考版本、双包/环境 RNA、聚类稳定性、参数敏感性、可复现性；
+   - 历史（history）：同类失败、已知坑位、上次修复是否适用于本场。
+   本角色只负责自己的领域，其他领域由对应角色补；不得用“本场不适用”代替实际检索或计算。
+3. 无直接证据的推理必须写进 `missing_evidence` 或标 `verification=missing`，且不得作为裁决依据。
+4. 你的专业领域内若存在失败条件/已知反例，必须写入 limitations（这是链条的“反证”一环）。
+5. 若证据不足，明确写“本领域证据不足，不可下结论”，并列出 missing_evidence（缺什么 + 怎么补 +
+   能区分哪个假设）。**宁可不结论，也不要给一条挂不上锚点的链。**
+6. **没有文献/没有 marker/没有检索命中 ≠ 反证**。只能标 verification=missing 或 unverified；
+   不得把“未找到”写成“污染”“不存在”或“没有生物学意义”。
+7. 槽位名里的 pro/con 只是兼容标签，**不是预设立场**。你的任务是分领域核查证据，
+   对每个候选假设写清 supports / against；无法区分就保持 unresolved，不要为了辩论硬选一边。"""
 
 _V2_OUTPUT_SPEC = """## 输出格式（严格 JSON，不要输出任何其他文字）
-{{"claims": [{{"claim": "…", "evidence": "[PMID:…] / [KB源:… L2] / [数据:…]", "level": "L0|L1|L2|L3 / P|C|I", "confidence": "high|medium|low", "risk_boundary": "失效条件…",
-   "evidence_chain": [{{"step": "这一步在推什么", "anchor": "[PMID:…] / [KB源:… L2] / [数据:…]", "level": "L0|L1|L2|L3 / P|C|I", "counter": "这一步的反证或它不成立的条件"}}]}}],
- "lineage_audit": {{"kb": "知识库线：既有已验知识支持/不支持/无相关条目（给条目+级别）|本场不适用",
-                    "statistics": "统计线：统计方法与过程有无问题（具体到环节）|本场不适用",
-                    "bioinformatics": "生信线：步骤与方法有无错误（具体到步骤）|本场不适用"}},
- "self_audit_failures": ["…"], "alternative_hypothesis": "若…则结论可能为…（可检验）", "needed_evidence": ["…"]}}"""
+{{
+ "hypotheses": [{{"statement": "候选假设1"}}, {{"statement": "候选假设2（含技术假象/替代解释）"}}],
+ "evidence_items": [{{
+   "domain": "biology|statistics|bioinformatics|history|design|reproducibility|general",
+   "claim": "一条原子证据/观察，不写长篇论证",
+   "supports": ["这条证据支持哪个假设"],
+   "against": ["这条证据反对哪个假设；不区分就留空"],
+   "source": {{"type": "paper|kb|data|tool|reasoning", "id": "PMID/DOI/KB条目/文件/运行ID",
+               "locator": "图表/原文句/字段/行号", "quote_or_value": "原文句或实际数值"}},
+   "verification": "verified|unverified|missing",
+   "limitations": "适用范围、反证、失效条件"
+ }}],
+ "missing_evidence": [{{"what": "缺什么决定性证据", "how_to_obtain": "用哪个工具/数据怎么补",
+                         "distinguishes": ["补完后能区分哪些假设"]}}]
+}}
+要求：只输出证据和证据缺口，不写角色发言稿；每条 evidence_items 必须能由上面的输入直接核查，
+不得临时发明文献、数值或实验结果。"""
 
 _V2_ROLE_QUESTIONS = {
     "pro_biology": {
-        "title": "生物学专业编辑（正方）",
-        "task": "从生物学角度支持以下决策/结论",
-        "questions": """1. Marker gene 验证：相关标记基因的表达模式是否支持？
+        "title": "生物学证据审查",
+        "task": "从生物学角度核查以下决策/结论的证据，不预设立场",
+        "questions": """1. Marker gene 验证：相关标记基因的表达模式是否支持？是否有负 marker？
 2. 已知生物学知识：与文献中已知的细胞类型/组织特征是否一致？
 3. 生物学预期：结果是否符合该物种/组织/方向的生物学预期？
-4. 证据等级标注：marker 特异性需给出双细胞类型对比数据或 PMID/DOI；无则 [I]。""",
+4. 证据等级标注：marker 特异性需给出双细胞类型对比数据或 PMID/DOI；无则标 missing。""",
     },
     "pro_statistics": {
-        "title": "统计学专业编辑（正方）",
-        "task": "从统计学角度支持以下决策/结论",
+        "title": "统计学证据审查",
+        "task": "从统计学角度核查以下决策/结论的证据，不预设立场",
         "questions": """1. 显著性：p 值/FDR 是否达到阈值？效应量是否足够大？
-2. 样本量：细胞数/样本数是否足够支持这个结论？（必须报告是否做过功效分析，没有则写在 self_audit_failures）
+2. 样本量：细胞数/样本数是否足够支持这个结论？是否跨供体重复？（必须报告是否做过功效分析，没有则写入 missing_evidence）
 3. 分布特征：数据分布是否符合方法假设（附模型诊断证据）。
 4. 多重比较校正方法明确说明。""",
     },
     "pro_bioinformatics": {
-        "title": "生信专业编辑（正方）",
-        "task": "从生信分析质量角度支持以下决策/结论",
+        "title": "生信方法证据审查",
+        "task": "从生信分析质量角度核查以下决策/结论的证据，不预设立场",
         "questions": """1. QC 指标：nFeature/nCount/percent.mt 分布（给分位数，不只是均值）。
 2. 聚类质量：轮廓系数、聚类稳定性、双胞率是否达标。
 3. 分析流程：参数选择是否符合最佳实践？是否遗漏步骤？
 4. 参数敏感性：说明结果对参数的变化区间（敏感/不敏感）。""",
     },
     "con_biology": {
-        "title": "生物学专业编辑（反方）",
-        "task": "从生物学角度质疑以下决策/结论",
+        "title": "生物学反证与替代解释审查",
+        "task": "核查生物学反证、替代解释与证据边界，不预设反对立场",
         "questions": """1. 异质性：是否存在亚群被合并？是否有过度聚类？
 2. 批次效应：生物学差异与技术差异是否混淆？
 3. Marker 重叠：标记基因是否在多种细胞类型中表达？特异性是否足够？
 4. 替代解释：必须给出【可检验的替代假设】（如“可能同源亚群，用 X 标记可区分”）。""",
     },
     "con_statistics": {
-        "title": "统计学专业编辑（反方）",
-        "task": "从统计学角度质疑以下决策/结论",
+        "title": "统计学反证审查",
+        "task": "核查统计反证、假设违背与证据边界，不预设反对立场",
         "questions": """1. 多重比较：是否校正？假阳性率是否可控？
-2. 统计功效：样本量是否足够？按当前样本量该效应量的功效是多少？（无法估计则写 self_audit_failures）
+2. 统计功效：样本量是否足够？按当前样本量该效应量的功效是多少？（无法估计则写 missing_evidence）
 3. 模型假设：是否满足？是否有更合适方法？
 4. 效应量：显著是否达到有生物学意义的大小？""",
     },
     "con_bioinformatics": {
-        "title": "生信专业编辑（反方）",
-        "task": "从生信分析质量角度质疑以下决策/结论",
+        "title": "生信方法反证审查",
+        "task": "核查生信方法反证、技术假象与证据边界，不预设反对立场",
         "questions": """1. 降维质量：PCA/UMAP 解释方差是否足够？是否过度降维？
 2. 聚类稳定性：不同分辨率下是否稳定？bootstrap 稳定性如何？
 3. 注释置信度：自动注释置信度得分？是否有手动验证？
-4. 参数敏感性：换一组参数结果会变吗（给出敏感性陈述与证据或 [I]）。""",
+4. 参数敏感性：换一组参数结果会变吗（给出敏感性陈述与证据或 missing）。""",
     },
     "con_history": {
-        "title": "历史经验编辑（反方）",
-        "task": "从历史报错与经验记录角度质疑，并做证据匹配",
+        "title": "历史证据与失败记录审查",
+        "task": "从历史报错与经验记录角度核查，并做证据匹配",
         "questions": """1. 检索相似历史报错（error_memory/errors.jsonl），给出〔相似度/适用性/置信度〕。
 2. 已知陷阱：该参数/方法是否有已知的坑？
 3. 环境限制：当前硬件/环境能否跑通？
@@ -833,15 +865,14 @@ _V2_ROLE_TEMPLATE = """你是**{title}**。你的任务是从你的专业视角{
 {questions}
 
 ## 要求
-- 严格按“输出格式”输出 JSON；每个 claim 必须带证据锚点与级别，并给出 evidence_chain
-  （结论 → 证据节点 → 反证/失效条件 → 缺什么），链条断在哪一步就写进 needed_evidence。
-- lineage_audit 里三条证据线（知识库 / 统计 / 生信）逐条表态；属于本场的线必须给针对性判断，不许空着。
-- 不编造证据；无证据写 [仅是推理]（I）并计入 needed_evidence。
-- 控制在 500 字以内（结构化字段总长度）。
-- 你不知道其他编辑的观点，请独立思考。
+- 严格按“输出格式”输出 JSON；只填你能核查的 evidence_items 与 missing_evidence，不写角色发言稿。
+- 每条证据必须带来源与定位；支持/反对的是**候选假设**，不是支持/反对某个角色。
+- 不编造证据；无证据写 verification=missing 并进入 missing_evidence；未检索到不等于反证。
+- 控制在 1600 字以内（结构化字段总长度）。
+- 你不知道其他编辑的观点，请独立核查；即使槽位名含正方/反方，也不要预设立场。
 {output_spec}"""
 
-_V2_JUDGE_PROMPT = """你是{persona}。{n_pro}位专业编辑（{roles}）进行了辩论，请按 rubrics 综合裁决。
+_V2_JUDGE_PROMPT = """你是{persona}。{n_pro}位专业审查者（{roles}）已按领域核查证据，请依据**统一证据表**裁决，而不是比较谁更会辩论。
 
 ## 辩论主题
 {topic}
@@ -856,14 +887,19 @@ _V2_JUDGE_PROMPT = """你是{persona}。{n_pro}位专业编辑（{roles}）进�
 {con_arguments}
 
 {digest_section}{neutral_args}{evidence_section}{contract}
-
-{focus_section}## 评分 rubrics（替代主观“说服力”）
+{ledger_section}
+{focus_section}## 评分 rubrics（只用于评价证据，不用于评价说服力）
 {rubrics_hint}
 
 ## 裁决决策树（必须遵守）
 0. 你的职责**不是判断"证据够不够"，而是决定"下一步怎么走"**。任何裁决都必须给出
    decision（现在就做的那件事）+ next_actions（至少 1 条 ai 现在就能执行的动作）+ fallback。
    只写"证据不足、建议补数据"而不给方案 = 没有完成裁决。
+0.1 **只能引用统一证据表里的 evidence_id**。不得临时新增 PMID/DOI、数字、实验结果或角色没有提供的事实。
+   assessment.because 必须列出真正决定裁决的 ID；没有可引用证据时 assessment.label=unresolved，
+   preferred_hypothesis 写“暂不判断”，不得硬选一边。**没有文献/没有 marker ≠ 反证**。
+0.2 结论只保留三部分：统一证据表（输入已给）、assessment（当前裁决）、next_actions（下一步验证）。
+   不要复述各角色发言，不要写多方辩论过程。
 1. 若正反双方证据均不足（大量 [I]/[仅是推理]）→ verdict=need_more_info, confidence=low, 必须列 missing；
    **同时必须给出**：① decision：现有证据下能确定到哪一步（可执行的边界，例："按证据更强的 X 先做，
    结论标注低置信"）；② next_actions：补证据的具体动作（查哪个库/跑哪个对照/要用户给什么），带 expected；
@@ -882,6 +918,8 @@ _V2_JUDGE_PROMPT = """你是{persona}。{n_pro}位专业编辑（{roles}）进�
 
 ## 输出格式（严格 JSON）
 {{"rubrics": {{{rubric_keys}}}, "verdict": "support|modify|need_more_info", "confidence": "high|medium|low",
+ "assessment": {{"label": "supported|contradicted|unresolved", "preferred_hypothesis": "最符合证据的假设；无法区分则暂不判断",
+                "confidence": "high|medium|low", "because": ["BIO-01", "STAT-01"], "summary": "≤200字，只总结证据如何导向裁决"}},
  "decision": "一句话：现在就该做的那件事（可执行，禁止写'需要更多证据'）",
  "next_actions": [{{"action": "具体动作", "owner": "ai|user", "why": "为什么做", "expected": "做完能得到什么",
                    "cost": "low|medium|high", "blocks": ["不做则必须停的动作"]}}],
@@ -933,8 +971,9 @@ _SCENARIO_PROMPT = """你在为一场多角色辩论做**赛前场景预判**。
 ## 判断要求
 1. 先看主题真正在争论什么：是**生物学/实验结论**、**统计与实验设计**、**图表版式与视觉呈现**、
    **代码与工程实现**、**文档写作**，还是**运维环境/资源**问题。可以复合，但必须给出一个主场景。
-2. 角色槽位固定：正方 3 席、反方 4 席（反方第 4 席专门负责「历史经验/踩过的坑」）。
-   你要为每个槽位起一个**符合本场景**的专业身份，并写出该身份必须追问的问题清单。
+2. 角色槽位固定：pro 标签 3 席、con 标签 4 席（仅为兼容旧归档；**不是预设立场**）。
+   反方第 4 席专门负责「历史经验/踩过的坑」。你要为每个槽位起一个**符合本场景**的证据审查身份，
+   并写出该身份必须追问的问题清单。每个角色都可以同时提出支持与反对某假设的证据，禁止强迫其只站一边。
    生物学辩题就用生物学/统计/生信身份；版式辩题应该是信息设计/期刊规范/可读性与色觉可达性
    这类身份；代码辩题应该是软件工程/性能/测试与可维护性这类身份。**不许所有场景都套生物学**。
 3. 裁判 rubric：给出 5-7 个**本场景真正该看**的评分维度（英文 key + 中文名 + 打分说明）。
@@ -1021,6 +1060,9 @@ _JUDGE_DIGEST_REPAIR_PROMPT = """你上一步已经把辩论整理分析做完�
 ## 你上一步的输出（可能被截断）
 {prev}
 
+## 各角色原始发言（修复时必须逐席核对，丢失的内容从这里恢复，不得只依赖上一步摘要）
+{raw}
+
 ## 输出要求（第一个字符必须是 {{ ，最后一个字符必须是 }} ）
 1. 只允许使用原始发言里出现过的内容与锚点；没有证据的陈述 evidence 写 "[找不到论据]"，evidence_status 写 "无外部证据"。
 2. 结构必须是这个 JSON：
@@ -1096,10 +1138,11 @@ def _judge_digest(topic: str, context: str, role_blocks, evidence_cards: str = "
         if not blocks:
             out["skipped"] = "no_arguments"
             return out
+        raw_blocks = "\n\n".join(blocks)
         prompt = _JUDGE_DIGEST_PROMPT.format(
             topic=topic, context=context,
             evidence_section=_evidence_block(evidence_cards),
-            raw="\n\n".join(blocks), note=extra_note or "")
+            raw=raw_blocks, note=extra_note or "")
         r = _call_llm_role_resilient("judge", prompt, cfg or {}, temperature=0.2)
         _want = _role_model_id("judge", cfg or {})
         # 2026-09-18: 主路由失败时如实记录「真正产出整理稿的路由」，否则归档会把回退模型的
@@ -1126,7 +1169,7 @@ def _judge_digest(topic: str, context: str, role_blocks, evidence_cards: str = "
             # 修复轮（2026-09-18 实跑教训）：很多推理模型在整理步骤里也把内容全塞进 reasoning，
             # content 只剩草稿 → 再叫它一次，只把上一步的分析格式化成 JSON（成本 1 次调用，
             # 有 _JUDGE_ROUTE_BAD 备忘，不会对着已挂的主路由重复付超时）。
-            _fix = _JUDGE_DIGEST_REPAIR_PROMPT.format(prev=txt[:7000])
+            _fix = _JUDGE_DIGEST_REPAIR_PROMPT.format(prev=txt[:7000], raw=raw_blocks)
             r2 = _call_llm_role_resilient("judge", _fix, cfg or {}, temperature=0.1)
             out["attempts"] = 2
             txt2 = str(r2.get("content") or "")
@@ -1332,7 +1375,7 @@ def _scenario_line(scenario) -> str:
     if scenario.get("why"):
         _t += f"（判定依据：{scenario['why']}）"
     _t += ("\n你的身份与提问清单已按该场景设定；某条问题在本场景确实不适用时可以跳过，"
-           "但要在 self_audit_failures 里写明原因。")
+           "但要在 missing_evidence 或 limitations 里写明原因。")
     if scenario.get("evidence_types"):
         _t += "\n本场景的证据标准：" + "；".join(scenario["evidence_types"][:4]) + "。"
     return _t + "\n"
@@ -1379,9 +1422,11 @@ def _v2_role_prompt(label: str, topic: str, context: str, kb_info: str,
 
 def _v2_judge_prompt(topic: str, context: str, pro_arguments: str, con_arguments: str,
                      evidence_cards: str = "", neutral_args: str = "",
-                     roles: str = "3 正方 + 4 反方", digest: str = "", scenario=None) -> str:
+                     roles: str = "3 正方 + 4 反方", digest: str = "", scenario=None,
+                     evidence_ledger=None) -> str:
     """裁判 prompt。scenario=赛前场景预判结果时，裁判身份/检查要点/评分维度全部按本场场景走
-    （排版题就不再拿生信的 effect_size/confounding 去打分）。"""
+    （排版题就不再拿生信的 effect_size/confounding 去打分）。
+    evidence_ledger 是统一证据账；裁判只能用其中的 evidence_id 作为裁决依据。"""
     _sc = scenario if isinstance(scenario, dict) else None
     persona = "生信分析多角色辩论的**裁判编辑**（v2）"
     focus_section = ""
@@ -1416,6 +1461,8 @@ def _v2_judge_prompt(topic: str, context: str, pro_arguments: str, con_arguments
         neutral_args=neutral_args or "",
         evidence_section=_evidence_block(evidence_cards),
         contract=_EVIDENCE_CONTRACT + "\n\n",
+        ledger_section=("## 统一证据表（裁决只能引用这里的 evidence_id）\n"
+                        + evidence_ledger_prompt(evidence_ledger or {}) + "\n\n"),
         focus_section=focus_section,
         rubrics_hint=rubrics_hint,
         rubric_keys=rubric_keys)
@@ -2018,7 +2065,7 @@ def _debate_fingerprint(mode: str, rounds: int, role_model_map: dict, cfg: dict 
     C3(2026-08-11): 增加 level 参数（默认 L2 = 现状指纹，向后兼容）——
     L1 轻量采样与 L2 完整辩论的结果必须隔离，否则脚本阶段的 L1 结果污染结论阶段的 L2。
     """
-    parts = [f"mode={mode}", f"rounds={rounds}"]
+    parts = [f"mode={mode}", f"rounds={rounds}", "result_schema=ledger_v1"]
     if level and level != "L2":
         parts.append(f"level={level}")
     # 2026-09-13: 默认路由改为「当前使用模型的提供商」后，同一 topic 在不同模型下
@@ -2567,7 +2614,7 @@ def _parse_judge_json(text: str) -> dict:
         if isinstance(_ro, str) and _ro.strip():
             _out["reopen_condition"] = _ro.strip()[:300]
         for _k, _t in (("missing", list), ("next_actions", list), ("fallback", dict),
-                       ("chain_verdicts", dict)):
+                       ("chain_verdicts", dict), ("assessment", dict), ("evidence_ledger", dict)):
             _v = _extract_json_value(text, _k)
             if isinstance(_v, _t):
                 _out[_k] = _v
@@ -2591,7 +2638,7 @@ def _copy_decision_fields(dst: dict, obj: dict) -> None:
     judge 真的给了 decision/next_actions 时，顺带清掉上一轮回填留下的标记
     （decision_source / 回填告警），避免把 judge 的产出误标成"引擎回填"。
     """
-    for k in _DECISION_FIELDS + _CHAIN_FIELDS:
+    for k in _DECISION_FIELDS + _CHAIN_FIELDS + ("assessment",):
         v = obj.get(k)
         if v:
             dst[k] = v
@@ -2896,17 +2943,19 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
         _l1_judge_max = int(_mt.get("l1_judge") or 8192)
     except Exception:
         _l1_judge_max = 8192
-    # v2 结构化论据较长，记录保留 800 字（legacy 500 字）
-    _keep = 800 if use_v2 else 500
+    # 证据账需要保留完整结构化条目；不再把角色 JSON 截成 800 字。
+    _keep = 6000 if use_v2 else 800
     _hb = _ProgressHeartbeat(f"L1 采样（{n_samples} 组 × 2 次调用）").start()
     # 2026-10-13：给裁判留窗口 —— 采样阶段最多吃掉「总预算 - 裁判预留」，
     # 采样结束后把没花完的还回去（否则裁判整理/裁判会被掐死 → judge_error → 引擎兜底）。
     _l1_phase = _role_phase_begin()
+    _domain_cycle = ("biology", "statistics", "bioinformatics")
     for i in range(n_samples):
         temp = _TEMP_POOL[i % len(_TEMP_POOL)]
+        _domain = _domain_cycle[i % len(_domain_cycle)]
         if use_v2:
-            pro_prompt = _v2_role_prompt("pro_biology", topic, context, kb or "无", "", ev, scenario=scenario)
-            con_prompt = _v2_role_prompt("con_biology", topic, context, kb or "无", "", ev, scenario=scenario)
+            pro_prompt = _v2_role_prompt(f"pro_{_domain}", topic, context, kb or "无", "", ev, scenario=scenario)
+            con_prompt = _v2_role_prompt(f"con_{_domain}", topic, context, kb or "无", "", ev, scenario=scenario)
         else:
             pro_prompt = _L1_PRO_PROMPT.format(topic=topic, context=context, kb_info=kb or "无")
             con_prompt = _L1_CON_PROMPT.format(topic=topic, context=context, kb_info=kb or "无")
@@ -2916,9 +2965,10 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
                              rc["model"], temperature=temp + 0.1, max_tokens=_l1_role_max)
         if pro.get("error") or con.get("error"):
             continue
-        debates_text.append(f"### 第{i+1}组（采样温度 {temp:.1f}）\n"
+        debates_text.append(f"### 第{i+1}组（{_domain}，采样温度 {temp:.1f}）\n"
                             f"正方：{pro['content'][:_keep]}\n反方：{con['content'][:_keep]}")
-        sample_records.append({"pro": pro["content"][:800], "con": con["content"][:800],
+        sample_records.append({"pro": pro["content"][:_keep], "con": con["content"][:_keep],
+                               "domain": _domain,
                                "pro_call_id": pro["call_id"], "con_call_id": con["call_id"],
                                "pro_draft_only": str(pro["content"]).startswith("[reasoning草稿"),
                                "con_draft_only": str(con["content"]).startswith("[reasoning草稿")})
@@ -2946,11 +2996,17 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
                                            "不要把它们当成不同模型的观点。\n\n"))
     _dg_section = _digest_section_text(digest_res)
 
+    _role_payloads = {}
+    for _i, _s in enumerate(sample_records):
+        _role_payloads[f"l1_pro_{_i}"] = {"content": _s["pro"], "domain": _s.get("domain", "general")}
+        _role_payloads[f"l1_con_{_i}"] = {"content": _s["con"], "domain": _s.get("domain", "general")}
+    _provisional_ledger = build_evidence_ledger(_role_payloads)
+
     if use_v2:
         pro_args = "\n\n".join(s["pro"] for s in sample_records)
         con_args = "\n\n".join(s["con"] for s in sample_records)
         judge_prompt = _v2_judge_prompt(topic, context, pro_args, con_args, ev, digest=_dg_section,
-                                        scenario=scenario)
+                                        scenario=scenario, evidence_ledger=_provisional_ledger)
     else:
         _l1_persona = ("生信分析评审的**裁判**" if not isinstance(scenario, dict)
                        or not scenario.get("judge_persona")
@@ -2968,7 +3024,9 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
         "level": "L1",
         "model": f"{rc['provider']}/{rc['model']}",
         "samples": sample_records,
-        "judge_verdict": judge.get("content", "")[:3000],
+        # 2026-11-02：采样组数不足也照常出裁决，但要打降级标记（不进缓存、置信度封顶 medium）
+        "degraded": len(sample_records) < n_samples,
+        "judge_verdict": judge.get("content", "")[:8000],
         "verdict": "need_more_info", "confidence": "low",
         "recommended_params": {},
         "isolation_verification": {
@@ -2987,24 +3045,45 @@ def _debate_l1_lightweight(topic: str, context: str, kb: str, cfg: dict, fingerp
             _copy_decision_fields(result, obj)   # v3: L1 也要给"下一步"
         except Exception as e:
             result["verdict_parse_error"] = str(e)[:100]
+            result["judge_error"] = True
+            result["judge_error_detail"] = "L1 judge output could not be parsed"
     else:
         # v2(2026-08-27): L1 裁判失败不再静默 — 下游可区分“信息不足”和“裁判故障”
         result["judge_error"] = True
         result["judge_error_detail"] = "L1 judge LLM call failed (retry exhausted)"
 
-    # v3(2026-09-22): 无论 judge 给没给行动方案，裁决里必须有 decision/next_actions/fallback
-    _ensure_decision_block(result)
+    # 裁判失败不能伪装成“本场得出了通用下一步”。保留证据账，明确暂不作实质裁决。
+    if not result.get("judge_error"):
+        _ensure_decision_block(result)
+    else:
+        result["decision"] = "本场裁判调用或解析失败，暂不作实质裁决；请先查看已保留的证据表"
+        result["next_actions"] = []
+        result["decision_source"] = "judge_error"
     # B2 一致性门禁（与 L2 同规则）
     issues = _check_consistency(result)
     if issues:
         result["confidence"] = "low"
         result["consistency_issues"] = issues
 
+    try:
+        _ledger_judge = _parse_judge_json(judge.get("content", "")) if not judge.get("error") else {}
+    except Exception:
+        _ledger_judge = {}
+    attach_evidence_ledger(result, _role_payloads, _ledger_judge)
+    if result.get("judge_error"):
+        result["assessment"].update({
+            "label": "unresolved", "preferred_hypothesis": "暂不判断",
+            "confidence": "low", "basis_status": "judge_error",
+            "summary": result.get("judge_error_detail", "裁判失败"),
+        })
+        result["evidence_ledger"]["assessment"] = result["assessment"]
+
     _persist_decision_channel(result)   # 2026-10-14：参数决策 → claims/params.json（后续分析要用）
     result_json = json.dumps(result, ensure_ascii=False, indent=2)
     # 2026-08-14 修复：矛盾裁决（consistency_issues 非空）不入全局缓存，
     # 否则下次同 topic+context 命中会直接返回 low 结果，污染 72h 复用。
-    if not result.get("consistency_issues"):
+    # 2026-11-02：采样组数不足的降级裁决同样不入缓存。
+    if not result.get("consistency_issues") and not result.get("degraded"):
         _save_debate(topic, context, result_json, fingerprint=fingerprint)
     _archive_debate_to_results(topic, context, result_json)
     _reflow_verdict(result)
@@ -3026,24 +3105,52 @@ def _auto_kb_injection(topic: str, context: str = "", species: str = "",
     """
     out = {"biology_kb": "", "bioinfo_kb": "", "statistics_kb": "", "sources": []}
     try:
-        from memomics.bio_tools.kb_search import _search_kb
+        from memomics.bio_tools.kb_search import _search_kb, format_claims_for_prompt
     except Exception:
         try:
-            from kb_search import _search_kb
+            from kb_search import _search_kb, format_claims_for_prompt
         except Exception:
             return out
 
     def _fmt(items, tag):
         parts, srcs = [], []
         for it in items:
-            parts.append(f"[{tag}·{it.get('file', '')}]\n{it.get('snippet', '')[:max_chars]}")
+            block = ""
+            claims = it.get("claims") or []
+            params = it.get("parameters") or []
+            if claims:
+                block += format_claims_for_prompt(claims, max_claims=2)
+            if params:
+                plines = []
+                for p in params[:4]:
+                    plines.append(f"- {p.get('tool') or p.get('param')} {p.get('param') or ''} = "
+                                  f"{p.get('value') or ''}（{p.get('context') or p.get('section') or ''}）")
+                block += "\n【KB 参数】\n" + "\n".join(plines)
+            markers = it.get("markers") or []
+            if markers:
+                block += "\n【KB 注释 Marker】\n" + "\n".join(
+                    f"- {m.get('gene')} → {m.get('cell_type') or '—'}" for m in markers[:6])
+            wet = it.get("wet_lab") or []
+            if wet:
+                block += "\n【KB 湿实验】\n" + "\n".join(
+                    f"- {w.get('experiment')} ｜ {w.get('conditions') or ''} ｜ "
+                    f"{len(w.get('reagents') or [])} reagents" for w in wet[:3])
+            organoids = it.get("organoids") or []
+            if organoids:
+                block += "\n【KB 类器官】\n" + "\n".join(
+                    f"- {o.get('name')} ｜ {', '.join(o.get('species') or [])} ｜ {o.get('tissue') or ''}"
+                    for o in organoids[:3])
+            if not block:
+                block = str(it.get("snippet", ""))[:max_chars]
+            parts.append(f"[{tag}·{it.get('file', '')}]\n{block}")
             srcs.append(it.get("file", ""))
         return "\n\n".join(parts), srcs
 
     # ① biology：同物种/组织/方向优先（物种按目录名精确匹配，不受
     # tissue/direction 的 path_boost 干扰）
     try:
-        r = _search_kb(topic, species=species, tissue=tissue, direction=direction)
+        r = _search_kb(topic, species=species, tissue=tissue, direction=direction,
+                       include_details=True, max_claims_per_hit=2, max_params_per_hit=3)
         results = r.get("results", [])
         if species:
             try:
@@ -3058,7 +3165,8 @@ def _auto_kb_injection(topic: str, context: str = "", species: str = "",
         others = []
         if len(same) < 2:
             try:
-                r2 = _search_kb(topic, species="", tissue=tissue, direction=direction)
+                r2 = _search_kb(topic, species="", tissue=tissue, direction=direction,
+                                include_details=True, max_claims_per_hit=2, max_params_per_hit=3)
                 seen = {s["file"] for s in same}
                 others = [x for x in r2.get("results", []) if x["file"] not in seen][:max_per_kb - len(same)]
             except Exception:
@@ -3072,11 +3180,13 @@ def _auto_kb_injection(topic: str, context: str = "", species: str = "",
 
     # ② bioinfo：话题匹配为主（方法类跨物种可参考）
     try:
-        r = _search_kb(topic, species=species, tissue=tissue, direction=direction)
+        r = _search_kb(topic, species=species, tissue=tissue, direction=direction,
+                       include_details=True, max_claims_per_hit=2, max_params_per_hit=3)
         top = r.get("results", [])[:max_per_kb]
         if len(top) < 2:
             try:
-                r2 = _search_kb(topic, species="", tissue="", direction="")
+                r2 = _search_kb(topic, species="", tissue="", direction="",
+                                include_details=True, max_claims_per_hit=2, max_params_per_hit=3)
                 seen = {t["file"] for t in top}
                 top += [x for x in r2.get("results", []) if x["file"] not in seen][:max_per_kb - len(top)]
             except Exception:
@@ -3089,6 +3199,23 @@ def _auto_kb_injection(topic: str, context: str = "", species: str = "",
 
     # ③ statistics：不注入（LLM 自行判断统计）
     return out
+
+
+def _l1_kb_bundle(general_kb: str, biology_kb: str, statistics_kb: str, bioinfo_kb: str) -> str:
+    """Combine every available KB lane for L1 without dropping one when another is present."""
+    parts, seen = [], set()
+    for title, value in (
+        ("通用知识库", general_kb),
+        ("生物学知识库", biology_kb),
+        ("统计学知识库", statistics_kb),
+        ("生信方法知识库", bioinfo_kb),
+    ):
+        text = str(value or "").strip()
+        if not text or text == "无知识库参考" or text in seen:
+            continue
+        seen.add(text)
+        parts.append(f"## {title}\n{text}")
+    return "\n\n".join(parts) if parts else "无知识库参考"
 
 
 def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
@@ -3227,7 +3354,8 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
 
     if level == "L1":
         _emit_progress("进入 L1 轻量采样辩论", "pending")
-        return _debate_l1_lightweight(topic, context, kb, cfg, fingerprint, evidence_cards,
+        _l1_kb = _l1_kb_bundle(kb, biology_kb, statistics_kb, bioinfo_kb_val)
+        return _debate_l1_lightweight(topic, context, _l1_kb, cfg, fingerprint, evidence_cards,
                                       scenario=scenario, scenario_res=scenario_res)
 
     try:
@@ -3330,6 +3458,20 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             ]
             for _nl, _nr in (neutral_results or {}).items():
                 _l2_blocks.append(_digest_block("中立 · " + _role_title(_nl, scenario), (_nr or {}).get("content", "")))
+
+            _role_payloads = {
+                "pro_biology": pro_bio.get("content", ""),
+                "pro_statistics": pro_stat.get("content", ""),
+                "pro_bioinformatics": pro_bioinfo.get("content", ""),
+                "con_biology": con_bio.get("content", ""),
+                "con_statistics": con_stat.get("content", ""),
+                "con_bioinformatics": con_bioinfo.get("content", ""),
+                "con_history": con_history.get("content", ""),
+            }
+            for _nl, _nr in (neutral_results or {}).items():
+                _role_payloads[_nl] = (_nr or {}).get("content", "")
+            _provisional_ledger = build_evidence_ledger(_role_payloads)
+
             _dg_note = ("## 说明\n本场是多角色对抗（v3）：每个角色是独立 LLM 调用、上下文切断，"
                         "正方看不到反方。请按角色整理上述发言。\n\n"
                         + (_scenario_line(scenario) if scenario else ""))
@@ -3338,6 +3480,35 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                              "「该角色本次没有输出」，不要替它们编造观点：" + "、".join(_failed_early) + "\n\n")
             digest_res = _judge_digest(topic, context, _l2_blocks, ev, cfg, extra_note=_dg_note)
             _dg_section = _digest_section_text(digest_res)
+
+            # ===== 2026-11-02 降级裁决：席位失败时不再整场报 error =====
+            # 真数据实测：慢推理模型单席位 ~135s，7 席很容易挂掉一两席；旧实现"任一席位失败
+            # 就整场 error"，模型拿到的是空证据表，只能重跑或放弃。现在：只要活下来的席位
+            # 够多（默认 ≥3 席、且正反两侧各至少 1 席、裁判本身没失败），就继续让裁判在
+            # **现有证据**上出裁决，并打 degraded 标记；同时在归档/证据账里写明缺了谁。
+            _seat_specs = [
+                ("pro_biology", pro_bio), ("pro_statistics", pro_stat), ("pro_bioinformatics", pro_bioinfo),
+                ("con_biology", con_bio), ("con_statistics", con_stat),
+                ("con_bioinformatics", con_bioinfo), ("con_history", con_history),
+            ] + [(lbl, r) for lbl, r in (neutral_results or {}).items()]
+            _seat_failed = [(lbl, _role_title(lbl, scenario)) for lbl, _r in _seat_specs
+                            if (_r or {}).get("error") or "辩论生成失败" in str((_r or {}).get("content", ""))]
+            _seat_ok_count = len(_seat_specs) - len(_seat_failed)
+            _pro_ok = sum(1 for lbl, _r in _seat_specs[:3]
+                          if not ((_r or {}).get("error") or "辩论生成失败" in str((_r or {}).get("content", ""))))
+            _con_ok = sum(1 for lbl, _r in _seat_specs[3:7]
+                          if not ((_r or {}).get("error") or "辩论生成失败" in str((_r or {}).get("content", ""))))
+            _degraded = bool(_seat_failed)
+            try:
+                _min_seats = int(cfg.get("degraded_min_seats", 3) or 3)
+            except Exception:
+                _min_seats = 3
+            _require_con = str(cfg.get("degraded_require_con", True)).lower() not in ("0", "false", "no")
+            _degrade_enabled = str(cfg.get("degraded_verdict", True)).lower() not in ("0", "false", "no")
+            _can_degrade = bool(
+                _degrade_enabled and _degraded and _seat_ok_count >= _min_seats
+                and _pro_ok >= 1 and (_con_ok >= 1 or not _require_con)
+            )
 
             # ========== 裁判（唯一看到所有角色论点的，单/多裁判采样） ==========
             if use_v2:
@@ -3354,7 +3525,7 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                 ])
                 judge_prompt = _v2_judge_prompt(topic, context, pro_args_v2, con_args_v2, ev,
                                                 neutral_args=neutral_args_v2, digest=_dg_section,
-                                                scenario=scenario)
+                                                scenario=scenario, evidence_ledger=_provisional_ledger)
             else:
                 judge_prompt = JUDGE_PROMPT.format(
                     topic=topic, context=context,
@@ -3365,6 +3536,17 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                     con_stat=con_stat["content"],
                     con_bioinfo=con_bioinfo["content"],
                     con_history=con_history["content"],
+                )
+            if _degraded and _can_degrade:
+                judge_prompt = judge_prompt + (
+                    "\n\n## 本场为**降级裁决**（有席位没有输出）\n"
+                    f"成功席位 {_seat_ok_count}/{len(_seat_specs)}；以下席位本次调用失败、没有任何输出："
+                    + "、".join(t for _, t in _seat_failed) + "。\n"
+                    "规则：\n"
+                    "1) 只能依据现有席位的证据裁决，**不得替缺失席位编造观点或论据**；\n"
+                    "2) 因缺证据而下不了的结论，必须写进 missing / missing_evidence，并在 reasoning 里点名；\n"
+                    "3) 置信度最高只能给 medium（不得 high）；\n"
+                    "4) decision/next_actions 仍要给出——缺证据就写清「补什么证据、由谁补」。\n"
                 )
             primary_judge, consensus = _collect_judge_consensus(judge_prompt, cfg)
             # 2026-09-13 修复：原写法 `primary_judge or _call_llm_role(...)` 里，失败裁判结果是
@@ -3384,21 +3566,26 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
 
             # 🔧 P0-1 修复(2026-08-01): 失败检测 — 8个角色任一失败则不缓存不归档
             # 之前: 401/超时失败占位符仍被 _save_debate 缓存72h → 相同topic+context再命中返回占位符
+            # 2026-11-02：席位失败但够多（且裁判没失败）→ 走降级裁决，不再整场 error。
             _all_roles = [pro_bio, pro_stat, pro_bioinfo, con_bio, con_stat, con_bioinfo, con_history, judge] + list(neutral_results.values())
             _failed_roles = [r.get("call_id", "?") for r in _all_roles if r.get("error") or "辩论生成失败" in str(r.get("content", ""))]
-            if _failed_roles:
+            _judge_failed = bool((judge or {}).get("error")
+                                 or "辩论生成失败" in str((judge or {}).get("content", "")))
+            _fail_details = {}
+            for _r in _all_roles:
+                if not isinstance(_r, dict):
+                    continue
+                if _r.get("error") or "辩论生成失败" in str(_r.get("content", "")):
+                    _fail_details[_r.get("call_id", "?")] = {
+                        "model": str(_r.get("error_model", "")),
+                        "detail": str(_r.get("error_detail", "placeholder content"))[:300],
+                    }
+            if _failed_roles and _can_degrade and not _judge_failed:
+                logger.warning(
+                    "debate DEGRADED %d/%d seats failed (%s) → 继续由裁判在现存证据上裁决",
+                    len(_seat_failed), len(_seat_specs), [lbl for lbl, _ in _seat_failed][:3])
+            elif _failed_roles:
                 logger.warning(f"debate FAILED {len(_failed_roles)}/{len(_all_roles)} roles: {_failed_roles[:3]}... 不缓存不归档")
-                # 2026-09-13: 失败原因随结果回传（provider/模型 + HTTP 正文）。
-                # 之前只有一句「有角色返回占位符」，judge 连续 4 次 L2 失败都要翻日志才能定位。
-                _fail_details = {}
-                for _r in _all_roles:
-                    if not isinstance(_r, dict):
-                        continue
-                    if _r.get("error") or "辩论生成失败" in str(_r.get("content", "")):
-                        _fail_details[_r.get("call_id", "?")] = {
-                            "model": str(_r.get("error_model", "")),
-                            "detail": str(_r.get("error_detail", "placeholder content"))[:300],
-                        }
                 # 2026-09-26：失败也别把已经跑完的席位全丢了。把成功席位的论点一并回传，
                 # 上层还能接着用；预算耗尽时明确标注，便于区分「配置错」和「超时放弃」。
                 _ok_roles = {}
@@ -3585,7 +3772,7 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
                     result["scores"] = _obj2.get("scores", {}) or {}
                     _copy_decision_fields(result, _obj2)   # v3: 重裁也可能带来新的行动方案
                     result["judge_rejudged"] = True
-                    result["judge_verdict"] = _judge2["content"][:3000]
+                    result["judge_verdict"] = _judge2["content"][:8000]
                     judge = _judge2
             except Exception as _re:
                 logger.warning(f"judge re-judge failed: {_re}")
@@ -3595,11 +3782,36 @@ def debate_analysis(topic: str, context: str, knowledge_base_info: str = "",
             result["consistency_issues"] = _issues
             logger.warning(f"debate verdict still inconsistent after re-judge: {_issues} → confidence=low, 禁止回流")
 
+        try:
+            _ledger_judge = _parse_judge_json(judge.get("content", ""))
+        except Exception:
+            _ledger_judge = {}
+        attach_evidence_ledger(result, _role_payloads, _ledger_judge)
+        result["assessment"]["confidence"] = result.get("confidence", "low")
+        result["evidence_ledger"]["assessment"] = result["assessment"]
+
+        # ===== 2026-11-02 降级标记 =====
+        # degraded=True 的裁决可以用（有 verdict / decision / 证据账），但必须让下游知道
+        # "有席位没说话"：不进 72h 缓存、置信度不高于 medium、证据缺口写进 note。
+        result["degraded"] = bool(_degraded)
+        if _degraded:
+            result["degraded_seats"] = [t for _, t in _seat_failed]
+            result["seat_success"] = "%d/%d" % (_seat_ok_count, len(_seat_specs))
+            result["failed_role_details"] = _fail_details
+            result["degraded_note"] = (
+                "本场有 %d 个席位没有输出（%s），裁决只基于其余 %d 个席位；"
+                "缺证据已写入 evidence_ledger.missing_evidence，confidence 不高于 medium。"
+                % (len(_seat_failed), "、".join(t for _, t in _seat_failed), _seat_ok_count))
+            if str(result.get("confidence", "")).lower() == "high":
+                result["confidence"] = "medium"
+                result["degraded_confidence_capped"] = True
+
         _persist_decision_channel(result)   # 重裁后也刷新参数通道（以最新裁决为准）
         result_json = json.dumps(result, ensure_ascii=False, indent=2)
         # 持久化辩论结果（优化2：全局缓存用于去重；P0：指纹隔离）
         # 2026-08-14 修复：矛盾裁决不入缓存，否则下次命中直接返回 low 结果。
-        if not result.get("consistency_issues"):
+        # 2026-11-02：降级裁决同样不入缓存 —— 少席位的结论不该被 72h 复用。
+        if not result.get("consistency_issues") and not result.get("degraded"):
             _save_debate(topic, context, result_json, fingerprint=fingerprint)
         # 归档到结果目录（需求1b：强制保留到 results/.../log/）
         _archive_debate_to_results(topic, context, result_json)
@@ -3765,6 +3977,222 @@ def _fallback_debate(topic: str, context: str, kb_info: str, history_errors: str
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
+# ==================== 单遍证据账（A2，2026-11-03）====================
+# A/B 实测（3 真实问题 × 3 臂）：7 席 L2 相对「单遍+账本契约」只多拿 1/15 条检查项，
+# 却贵 7.7 倍；而「单遍+账本契约」用 1/8 时间拿到 93%。所以把 A2 做成一等公民：
+# 产出前先跑一次账本（1~2 分钟），由**账本状态**决定要不要升级到对抗辩论，
+# 而不是按题型分类硬判。
+
+_LEDGER_PROMPT = (
+    "你是资深生信分析师。请基于给定事实回答下面的问题，**必须按证据账格式输出一个 JSON**：\n"
+    "{\n"
+    '  "evidence_items": [{"claim": "...", "source": {"type": "data|kb|paper|tool|reasoning", '
+    '"id": "...", "locator": "...", "quote_or_value": "..."}, '
+    '"supports": ["假设A"], "against": [], "verification": "verified|unverified|missing", '
+    '"limitations": "..."}],\n'
+    '  "hypotheses": [{"statement": "..."}],\n'
+    '  "missing_evidence": [{"what": "缺什么", "how_to_obtain": "怎么补", "distinguishes": "补完能区分哪个假设"}],\n'
+    '  "verdict": "support|modify|reject|need_more_info",\n'
+    '  "confidence": "high|medium|low",\n'
+    '  "assessment": {"label": "supported|contradicted|unresolved", '
+    '"preferred_hypothesis": "...", "because": ["E1", "E2"], "summary": "..."},\n'
+    '  "decision": "现在就做的那一件事",\n'
+    '  "next_actions": [{"action": "可执行动作", "owner": "ai|user", "why": "...", "expected": "..."}],\n'
+    '  "missing": ["缺的关键证据"]\n'
+    "}\n"
+    "规则：\n"
+    "1) 每条 evidence 必须带 source 与 locator，引不到就标 verification=missing；\n"
+    "2) **不得给出没有锚点的结论**；证据不足就写 verdict=need_more_info + assessment.label=unresolved；\n"
+    "3) missing_evidence 要写清「缺什么 / 怎么补 / 补完能区分哪个假设」；\n"
+    "4) assessment.because 用 E1/E2… 指 evidence_items 的第几条（引擎会自动映射成证据 ID）；\n"
+    "5) 只输出 JSON，不要额外解释。\n\n"
+    "## 问题\n__TOPIC__\n\n## 已知事实（已核实）\n__CONTEXT__\n"
+    "__KB__\n__CARDS__\n"
+)
+
+_IRREVERSIBLE_RE = re.compile(
+    r"删除|删掉|剔除|丢弃|移出|重归类|重新归类|重命名|改注释|更改注释|定稿|写入最终|"
+    r"\bdrop\b|\bdelete\b|\bdiscard\b|relabel|rename", re.I)
+
+
+def ledger_escalation_reasons(result: dict) -> list:
+    """账本状态 → 是否需要升级对抗辩论。返回理由列表（空 = 账本足够，不必辩）。
+
+    这是 A/B 结论的落地：辩论不再按题型触发，而由**证据状态**触发。
+    """
+    reasons = []
+    r = result or {}
+    led = r.get("evidence_ledger") or {}
+    counts = led.get("counts") or {}
+    assess = led.get("assessment") or {}
+    verdict = str(r.get("verdict") or "").strip().lower()
+    label = str(assess.get("label") or "").strip().lower()
+    ev = int(counts.get("evidence") or 0)
+    verified = int(counts.get("verified") or 0)
+    missing = int(counts.get("missing") or 0)
+
+    if not verdict or verdict in ("need_more_info", "unresolved") or label in ("unresolved",):
+        reasons.append("账本结论未定（verdict=%s / label=%s）"
+                       % (verdict or "空", label or "空"))
+    if ev == 0:
+        reasons.append("账本没有任何证据条目")
+    elif verified * 2 < ev:
+        reasons.append("可核对证据不足（verified %d/%d）" % (verified, ev))
+    if any((it.get("supports") and it.get("against")) for it in (led.get("evidence_items") or [])):
+        reasons.append("存在同一条证据既支持又反对的锚点冲突")
+    _basis = str(assess.get("basis_status") or "").strip()
+    if _basis in ("invalid_evidence_ids", "missing_evidence_ids", "no_evidence"):
+        reasons.append("账本引用不到锚点（basis_status=%s）" % _basis)
+    if ev and missing > ev:
+        reasons.append("缺失证据多于已有证据（missing %d > evidence %d）" % (missing, ev))
+    action_text = " ".join([
+        str(r.get("decision") or ""),
+        json.dumps(r.get("next_actions") or [], ensure_ascii=False),
+        str(r.get("topic") or ""),
+    ])
+    if _IRREVERSIBLE_RE.search(action_text):
+        reasons.append("结论涉及不可逆动作（删除/重归类/定稿）")
+    return reasons
+
+
+def ledger_pass(topic: str, context: str = "", *, species: str = "", tissue: str = "",
+                direction: str = "", knowledge_base_info: str = "", evidence_cards: str = "",
+                auto_kb: bool = False) -> str:
+    """A2：单遍证据账（1 次 LLM 调用，约 1~2 分钟）。
+
+    输出与 debate_analysis 同构（verdict/decision/next_actions/evidence_ledger），
+    额外带 escalate{needed,reasons,recommended_level}——上层据此决定是否升级辩论。
+    """
+    _t0 = time.time()
+    cfg = _load_debate_config() or {}
+    route = _resolve_role_llm("judge", cfg) or {}
+    if not route.get("api_key"):
+        route = _default_role_llm(os.environ.get("DEEPSEEK_API_KEY", ""),
+                                  os.environ.get("DEEPSEEK_BASE_URL", ""),
+                                  os.environ.get("DEEPSEEK_MODEL", ""),
+                                  _load_provider_keys())
+    if not route.get("api_key"):
+        return json.dumps({
+            "topic": topic, "level": "LEDGER", "debate_format": "单遍证据账（A2）",
+            "error": True, "note": "没有可用的模型路由（judge / 当前模型 / provider_keys 都拿不到 key）",
+        }, ensure_ascii=False, indent=2)
+
+    _kb, _cards = "", ""
+    kb_text = str(knowledge_base_info or "").strip()
+    if not kb_text and auto_kb:
+        try:
+            _inj = _auto_kb_injection(topic, context, species=species, tissue=tissue,
+                                      direction=direction)
+            kb_text = "\n".join(str(_inj.get(k) or "") for k in
+                                ("biology_kb", "bioinfo_kb", "statistics_kb")).strip()
+        except Exception:
+            kb_text = ""
+    if kb_text:
+        _kb = "\n## 知识库参考（可引用，需标 source.type=kb + id）\n" + kb_text[:4000]
+    if str(evidence_cards or "").strip():
+        _cards = "\n## 已有证据卡\n" + str(evidence_cards)[:3000]
+
+    prompt = (_LEDGER_PROMPT
+              .replace("__TOPIC__", topic or "(未给出)")
+              .replace("__CONTEXT__", context or "(无)")
+              .replace("__KB__", _kb)
+              .replace("__CARDS__", _cards))
+    _emit_progress("单遍证据账：调用模型整理证据（约 1~2 分钟）", "pending")
+    try:
+        res = _call_llm_role_resilient("judge", prompt, cfg)
+    except Exception as e:  # noqa: BLE001
+        res = {"error": True, "error_detail": "%s: %s" % (type(e).__name__, str(e)[:200])}
+
+    content = str((res or {}).get("content") or "")
+    obj = None
+    if content and not (res or {}).get("error"):
+        try:
+            obj = _parse_judge_json(content)
+        except Exception:
+            obj = None
+        if obj is None:
+            try:
+                obj = json.loads(content.replace("```json", "").replace("```", "").strip())
+            except Exception:
+                obj = None
+
+    if not isinstance(obj, dict):
+        return json.dumps({
+            "topic": topic, "level": "LEDGER", "debate_format": "单遍证据账（A2）",
+            "error": True,
+            "model": "%s/%s" % (route.get("provider", ""), route.get("model", "")),
+            "error_detail": str((res or {}).get("error_detail") or "模型输出不是合法 JSON")[:300],
+            "raw_output": content[:3000],
+            "note": "账本解析失败可作为「证据不足」处理：直接升级辩论或重试一次。",
+        }, ensure_ascii=False, indent=2)
+
+    result = {
+        "topic": topic,
+        "level": "LEDGER",
+        "debate_format": "单遍证据账（A2）",
+        "model": "%s/%s" % (route.get("provider", ""), route.get("model", "")),
+        "verdict": obj.get("verdict") or "need_more_info",
+        "confidence": obj.get("confidence") or "low",
+        "decision": obj.get("decision") or "",
+        "next_actions": obj.get("next_actions") or [],
+        "missing": obj.get("missing") or [
+            (m.get("what") if isinstance(m, dict) else str(m))
+            for m in (obj.get("missing_evidence") or [])
+        ],
+        "judge_verdict": content[:8000],
+        "elapsed_s": round(time.time() - _t0, 1),
+        "usage": (res or {}).get("usage") or {},
+    }
+    _copy_decision_fields(result, obj)
+    # 单遍账本里模型看不到引擎分配的 evidence_id（BIO-01/STAT-01…），它会给 "E1"/"证据2"。
+    # 这里先建一次账本拿 id 顺序，把 E<n> 映射成真 id，再正式 attach —— 否则 basis_status
+    # 会一直是 invalid_evidence_ids，把一场本来干净的账本误判成"要升级辩论"。
+    try:
+        _pre = build_evidence_ledger({"ledger": json.dumps(obj, ensure_ascii=False)}, obj)
+        _ids = [str(x.get("evidence_id") or "") for x in (_pre.get("evidence_items") or [])]
+        _assess = obj.get("assessment") if isinstance(obj.get("assessment"), dict) else {}
+        _bec = _assess.get("because") if isinstance(_assess.get("because"), list) else []
+        _mapped = []
+        for _tok in _bec:
+            _m = re.match(r"^(?:e|证据|evidence[_\s-]?)\s*(\d+)$", str(_tok).strip(), re.I)
+            if _m:
+                _i = int(_m.group(1)) - 1
+                if 0 <= _i < len(_ids) and _ids[_i]:
+                    _mapped.append(_ids[_i])
+                    continue
+            _mapped.append(_tok)
+        if _mapped and isinstance(obj.get("assessment"), dict):
+            obj["assessment"]["because"] = _mapped
+    except Exception:
+        pass
+    try:
+        attach_evidence_ledger(result, {"ledger": json.dumps(obj, ensure_ascii=False)}, obj)
+    except Exception as e:  # noqa: BLE001
+        result["ledger_error"] = "%s: %s" % (type(e).__name__, str(e)[:200])
+    try:
+        _ensure_decision_block(result)
+    except Exception:
+        pass
+
+    reasons = ledger_escalation_reasons(result)
+    result["escalate"] = {
+        "needed": bool(reasons),
+        "reasons": reasons,
+        "recommended_level": ("L2" if any("不可逆" in x for x in reasons) else "L1"),
+    }
+    try:
+        _persist_decision_channel(result)
+    except Exception:
+        pass
+    try:
+        _archive_debate_to_results(topic, context, json.dumps(result, ensure_ascii=False))
+    except Exception:
+        pass
+    _emit_progress("单遍证据账完成（%s）" % ("需升级辩论" if reasons else "账本足够"),
+                   "done" if not reasons else "pending")
+    return json.dumps(result, ensure_ascii=False, indent=2)
+
+
 def _register():
     try:
         from tools.registry import registry
@@ -3794,6 +4222,48 @@ def _register():
             ),
             emoji="🎭",
             max_result_size_chars=40_000,
+        )
+
+        # 2026-11-03（A/B 结论落地）：单遍证据账 = 产出前的第一道关（1 次调用，约 1~2 分钟）。
+        # 账本足够就不辩；账本 unresolved / 锚点冲突 / 涉及不可逆动作才升级 L1/L2。
+        LEDGER_SCHEMA = {
+            "name": "evidence_ledger",
+            "description": (
+                "单遍证据账（A2）：一次调用把「结论 + 证据 + 缺失证据 + 下一步」整理成账本，"
+                "约 1~2 分钟。产出结论前先跑它；返回里的 escalate.needed=true 时再调 "
+                "debate_analysis（L1/L2）做对抗裁决。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string", "description": "要裁决的问题（一句话）"},
+                    "context": {"type": "string", "description": "已核实的数据/方法/结果摘要"},
+                    "species": {"type": "string", "description": "物种（可选）"},
+                    "tissue": {"type": "string", "description": "组织（可选）"},
+                    "direction": {"type": "string", "description": "方向/主题（可选）"},
+                    "knowledge_base_info": {"type": "string", "description": "知识库参考（可选）"},
+                    "evidence_cards": {"type": "string", "description": "已有证据卡（可选）"},
+                    "auto_kb": {"type": "boolean", "description": "是否自动检索知识库（默认 false）"},
+                },
+                "required": ["topic"],
+            },
+        }
+        registry.register(
+            name="evidence_ledger",
+            toolset="memomics",
+            schema=LEDGER_SCHEMA,
+            handler=lambda args, **kw: ledger_pass(
+                args.get("topic", ""),
+                args.get("context", ""),
+                species=args.get("species", ""),
+                tissue=args.get("tissue", ""),
+                direction=args.get("direction", ""),
+                knowledge_base_info=args.get("knowledge_base_info", ""),
+                evidence_cards=args.get("evidence_cards", ""),
+                auto_kb=bool(args.get("auto_kb", False)),
+            ),
+            emoji="📒",
+            max_result_size_chars=60_000,
         )
 
         # 问题8: 新增图片结论 vs 模块结论一致性辩论模板

@@ -37,6 +37,9 @@ from . import vision_tool
 from . import reference_library
 from . import literature_library
 from . import remote_cluster
+# 2026-11-09：集群 ImageJ 定量（imagej 工具）。依赖 remote_cluster 的 SSH 连接池，
+# 必须排在它之后导入，避免循环导入时拿到半初始化的模块。
+from . import imagej_analysis
 from . import env_inventory
 from . import cloud_connector
 # 2026-09-24 修复：这三个模块会自注册工具，但一直没被导入 → 模型工具列表里没有它们。

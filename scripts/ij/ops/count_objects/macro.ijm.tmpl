@@ -1,0 +1,69 @@
+// ===== MemOmics op:count_objects v1.0.1 =====
+// 颗粒/核计数。渲染生成，勿手改。测量一律像素域，µm 换算在 MemOmics 侧。
+__PARAMS__
+
+JOB = "__JOB__";
+OUT = "__OUT__";
+IN  = "__IN__";
+T = OUT + "trace.txt";
+File.append("01_start", T);
+
+open(IN);
+File.append("02_open " + getTitle(), T);
+
+if (nSlices > 1 && PROJECT_MAX) run("Z Project...", "projection=[Max Intensity]");
+
+if (bitDepth() == 24) {
+  base = getTitle();
+  run("Split Channels");
+  n = nImages;
+  target = n - 3 + CHANNEL;
+  if (target < 1) target = 1;
+  if (target > n) target = n;
+  selectImage(target);
+  rename("CH_PICK");
+  for (i = nImages; i >= 1; i--) {
+    selectImage(i);
+    if (getTitle() != "CH_PICK") close();
+  }
+  selectWindow("CH_PICK");
+}
+
+// 标定基准：量一块 100×100 像素的 ROI，得到「IJ 单位/像素」（s=1 表示本来就是像素域）
+RWW = getWidth(); if (RWW > 100) RWW = 100;
+RHH = getHeight(); if (RHH > 100) RHH = 100;
+makeRectangle(0, 0, RWW, RHH);
+getStatistics(ra, rmean, rmin, rmax);
+IJ_SCALE = sqrt(ra / (RWW * RHH));
+run("Select None");
+
+run("Duplicate...", "title=work");
+if (SMOOTH > 0) run("Gaussian Blur...", "sigma=" + SMOOTH);
+if (INVERT) setAutoThreshold(THRESH + " light");
+else setAutoThreshold(THRESH + " dark");
+run("Convert to Mask");
+File.append("03_mask", T);
+if (WATERSHED) run("Watershed");
+saveAs("PNG", OUT + "mask.png");
+
+w = getWidth();
+h = getHeight();
+getHistogram(vals, cnts, 256);
+File.append("04_hist255=" + cnts[255], T);
+pos = cnts[255];
+frac = pos / (w * h);
+
+run("Set Measurements...", "area perimeter shape feret's decimal=3");
+File.append("05_ap size=" + SZ + " circ=" + CIRC, T);
+run("Analyze Particles...", "size=" + SZ + " circularity=" + CIRC + " show=Outlines display clear");
+
+File.append("06_after_ap nResults=" + nResults, T);
+n = nResults;
+if (n > 0) saveAs("Results", OUT + "objects.csv");
+if (n == 0) File.saveString("Label,Area,Perim.,Circ.,Feret,MinFeret,AR,Round,Solidity\n", OUT + "objects.csv");
+run("Select None");
+run("Flatten");
+saveAs("PNG", OUT + "outlines.png");
+
+File.append("07_end", T);
+File.saveString("{\"n_objects\":" + n + ",\"width\":" + w + ",\"height\":" + h + ",\"unit\":\"px\",\"area_fraction\":" + frac + ",\"ij_scale\":" + IJ_SCALE + "}", OUT + "DONE.json");

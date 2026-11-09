@@ -1,0 +1,27 @@
+type = "macro"
+signature = "calcium.imaging.v1"
+name = "Calcium Imaging"
+topic = [
+  "calcium imaging",
+  "roi detection",
+  "neuroscience",
+]
+
+description = """Using the Suite2p library via a Python script to perform automated ROI detection and segmentation on calcium imaging data."""
+
+
+[content]
+plugin_name = "Suite2p (via Python)"
+
+plugin_description = """Suite2p is a popular Python package for processing two-photon calcium imaging data, specializing in ROI detection, signal extraction, and quality control. It is typically run from a script rather than as a direct ImageJ plugin."""
+
+correct_syntax = """ops = suite2p.run_s2p(ops={}, db=db) # Python syntax"""
+
+tips = [
+  """The dialog showed a 'ValueError: mutable default' error during import. This often indicates an incompatibility between library versions (e.g., suite2p, numpy, numba). Ensure your Python environment is correctly configured with compatible package versions as specified in the library's documentation.""",
+  """Before running a complex external library, create a dedicated virtual environment to manage dependencies and avoid conflicts.""",
+  """As a fallback, if libraries like Suite2p fail, a robust alternative is to use fundamental image processing steps: mean projection, thresholding (e.g., Otsu's method), and connected component analysis, as demonstrated in the successful recovery step of the dialog.""",
+]
+
+site = "https://suite2p.readthedocs.io/en/latest/"
+

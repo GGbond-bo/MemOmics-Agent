@@ -1,0 +1,27 @@
+type = "macro"
+signature = "video.export.v1"
+name = "Video Export"
+topic = [
+  "Video Export",
+  "ImageJ Automation",
+  "Error Handling",
+]
+
+description = """Saves the current image stack as an AVI video file."""
+
+
+[content]
+plugin_name = "AVI..."
+
+plugin_description = """Saves an image stack as a video in AVI format. This command often opens a dialog box for setting compression options."""
+
+correct_syntax = """saveAs("AVI... ", "path=[filepath] compression=[JPEG/None] frame=[fps]");"""
+
+tips = [
+  """This command frequently causes timeouts in automated environments because it can open an interactive dialog for compression settings, which halts script execution. It is not recommended for full automation.""",
+  """For reliable automation, first save the stack as a multi-page TIFF using `saveAs("Tiff", "path");`, then use a Python script with a library like `imageio` to convert the TIFF file into a video.""",
+  """If multiple automation attempts fail and the application becomes unresponsive, the most reliable solution is to ask the user to save the file manually via the 'File > Save As > AVI...' menu.""",
+]
+
+site = "https://imagej.nih.gov/ij/developer/macro/functions.html#saveAs"
+

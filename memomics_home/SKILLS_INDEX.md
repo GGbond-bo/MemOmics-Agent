@@ -292,7 +292,7 @@
 | 90 | windows-bioinformatics-batch-processing | 在Windows上启动长时间运行的生信批量任务（10+样本，每样本>5分钟）时加载，确保进程不因会话中断而死亡，LLM主动监控进度。系统唤醒(#N)主线进度检查也适用 — 协议见 references/agent-side-wakeup-check.md | windows, batch, processing | YEL 讨论触发 |
 | 91 | windows-com-app-automation | 用 Windows COM + 脚本引擎确定性地驱动桌面应用（Illustrator/Photoshop/InDesign/Word/Excel）:cscript→VBScript→CreateObject→DoJavaScriptFile/DoScript 桥，ExtendScript ES3 手拼 JSON、隔离文档写操作的安全模式、可复制的 doctor/探测脚手架。 | Illustrator自动化, 操控Illustrator, 批量改Illustrator, Illustrator脚本, ExtendScript, JSX脚本, COM自动化, Photoshop自动化, InDesign自动化, 脚本控制软件, 软件没有CLI, 桌面软件自动化, 图内文字批量改, cscript, DoJavaScriptFile, 画板操作 | RED 必触发 |
 
-## 09_内置 - MemOmics系统 (22 skills)
+## 09_内置 - MemOmics系统 (23 skills)
 
 | # | Skill | 使用场景 | 触发词 | Trigger |
 |---|---|---|---|---|
@@ -314,10 +314,11 @@
 | 16 | file-convert | 当你需要 格式转换 时触发 —— 数据格式转换:CSV/Excel/TSV/H5AD/MTX等常见格式互转 | file-convert, file convert, file, convert | GRN 按需触发 |
 | 17 | find-skill | 智能搜索可用技能:当用户需要某个分析功能但不确定有没有现成技能时，自动搜索239个内置技能+外部蓝图，找到最匹配的并推荐安装。也支持用户说'有没有XXX的技能'时触发。 | find-skill, find skill, find | GRN 按需触发 |
 | 18 | heart-conference-monitor | 心脏会议监控:追踪心脏病学会议→提取关键发现→监控研究趋势→生成报告 | heart-conference-monitor, heart conference monitor, heart, conference, monitor | GRN 按需触发 |
-| 19 | ml-classification | 适用于: disease, 有标签数据, 分类/预测 —— LASSO+RandomForest+SVM+SHAP解释, 支持bulk和scRNA | ml-classification, ml classification, classification | GRN 按需触发 |
-| 20 | phylo-create-skill | Create, test, package, and present reusable skills for Phylo's Biomni platform and bioinformatics workflows. | phylo-create-skill, phylo create skill, phylo | GRN 按需触发 |
-| 21 | remote-cluster-execution | 远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收；含常驻 R 会话（kernel 式持久化，大 rds 读一次一直用:session_start/exec/save/restore/status/stop）。触发:集群/node1/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub/常驻会话/读一次一直用/不要每次重新读取。 | 集群, 远端集群, 集群环境, 集群有哪些环境, 帮我看看集群, node1, 用集群跑, 在集群上跑, 投递任务, qsub, slurm, sge, 常驻会话, 读一次一直用, 不要重复读取 rds, kernel 式持久化 | RED 必触发 |
-| 22 | self-improving-agent | 自进化能力:分析成功后自动沉淀经验为新技能；分析失败后自动学习错误模式避免重复犯错；根据使用频率自动优化参数。包括技能沉淀、错误学习、参数进化三大子系统。 | self-improving-agent, self improving agent, self, improving, agent | GRN 按需触发 |
+| 19 | imagej-analysis | 用户要用 ImageJ/Fiji 做显微图像定量、肌纤维横截面测量、核/颗粒计数、阳性面积占比，或要把 CZI/LIF/ND2/VSI 转成 TIFF 时加载。 | ImageJ, Fiji, Bio-Formats, 肌纤维横截面, 肌纤维 CSA, MinFeret, 细胞核计数, 颗粒计数, 胶原面积, 阳性面积占比, CZI, LIF, ND2, 显微图像定量 | RED 必触发 |
+| 20 | ml-classification | 适用于: disease, 有标签数据, 分类/预测 —— LASSO+RandomForest+SVM+SHAP解释, 支持bulk和scRNA | ml-classification, ml classification, classification | GRN 按需触发 |
+| 21 | phylo-create-skill | Create, test, package, and present reusable skills for Phylo's Biomni platform and bioinformatics workflows. | phylo-create-skill, phylo create skill, phylo | GRN 按需触发 |
+| 22 | remote-cluster-execution | 远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收；含常驻 R 会话（kernel 式持久化，大 rds 读一次一直用:session_start/exec/save/restore/status/stop）。触发:集群/node1/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub/常驻会话/读一次一直用/不要每次重新读取。 | 集群, 远端集群, 集群环境, 集群有哪些环境, 帮我看看集群, node1, 用集群跑, 在集群上跑, 投递任务, qsub, slurm, sge, 常驻会话, 读一次一直用, 不要重复读取 rds, kernel 式持久化 | RED 必触发 |
+| 23 | self-improving-agent | 自进化能力:分析成功后自动沉淀经验为新技能；分析失败后自动学习错误模式避免重复犯错；根据使用频率自动优化参数。包括技能沉淀、错误学习、参数进化三大子系统。 | self-improving-agent, self improving agent, self, improving, agent | GRN 按需触发 |
 
 ## 10_多组学整合 - 多组学整合 (11 skills)
 
@@ -346,7 +347,7 @@
 | 5 | extract_pdf_content | When you need extract pdf content analysis | extract_pdf_content, extract pdf content, extract, pdf, content | YEL 讨论触发 |
 | 6 | extract_url_content | When you need extract url content analysis | extract_url_content, extract url content, extract, url, content | YEL 讨论触发 |
 | 7 | fetch_supplementary_info_from_doi | When you need fetch supplementary info from doi analysis | supplementary, info, doi | YEL 讨论触发 |
-| 8 | kb-evidence-extraction | 把文献库文献提炼成带证据链的知识库条目。触发场景:'把这篇/这些文献提炼进知识库'、'提取知识/参数进知识库'、'构建/补充知识库（带证据链）'、'这条结论可信度几级'。 | kb-evidence-extraction, 证据链, 提炼进知识库, 提炼知识, 知识提取, 证据分级, evidence chain, 补充知识库 | YEL 讨论触发 |
+| 8 | kb-evidence-extraction | 把文献/交互框内容提炼成 claim 级知识库条目（kb-evidence-v2）:生物论文提取 L0-L3 结论、quote、物种/组织、marker、湿实验、类器官；AI/科研智能体论文提取问题/方法/架构/benchmark/结果/局限并分类到 ai_agent 子类… | kb-evidence-extraction, 证据链, 提炼进知识库, 提炼知识, 知识提取, 证据分级, evidence chain, 补充知识库 | YEL 讨论触发 |
 | 9 | knowledge-base-curation | Auto-generated for knowledge-base-curation | knowledge-base-curation, knowledge base curation, knowledge, base, curation | YEL 讨论触发 |
 | 10 | large-file-transfer-troubleshooting | 大文件传输（上传/下载）失败的排查与修复，云平台（DCS Cloud / GenPilot）与远端集群通用。覆盖「提交即失败 / 0 B / 用时 1s」类症状的阶段判定、通道与体积上限、浏览器端流式写入残件（.crswap）、目标端残留导致平台条目预校验拒绝，以及免 shell 三源取证。 | 下载失败, 上传失败, 传输失败, 批次下载, 提交批次下载任务失败, crswap, 卡在0%, 大文件下载, 云平台下载, 下载任务报错, oss 通道, raysync, 目标盘空间不足, 传输中断 | RED 必触发 |
 | 11 | literature-param-extraction | 拿到真实数据要分析但知识库无参数时；search_knowledge 返回 0 条或 confidence=low 时；用户要求从文献提取参数时 | 提取参数, 文献参数, parameter extraction, 实验参数, 参数提取 | RED 必触发 |

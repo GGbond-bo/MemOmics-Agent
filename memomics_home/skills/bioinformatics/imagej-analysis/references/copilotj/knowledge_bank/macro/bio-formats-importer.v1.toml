@@ -1,0 +1,21 @@
+type = "macro"
+signature = "bio-formats-importer.v1"
+name = "Bio-Formats Importer"
+topic = ["file import", "microscopy files", "Bio-Formats"]
+tags = ["Bio-Formats", "file import", "microscopy", "image import"]
+
+description = "Bio-Formats Importer plugin macro usage guide for importing microscopy files"
+
+data_type = "macro"
+
+[content]
+plugin_name = "Bio-Formats Importer"
+description = "Import microscopy files. Use 'open=' parameter for file path."
+
+correct_syntax = """
+run("Bio-Formats Importer", "open=path/to/file.lsm autoscale color_mode=Default view=Hyperstack");
+"""
+
+tips = ["Use 'open=' not 'path=' or 'file='. Put full file path after open=."]
+
+site = "https://imagej.net/formats/bio-formats"

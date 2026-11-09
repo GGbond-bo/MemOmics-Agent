@@ -1,0 +1,27 @@
+type = "macro"
+signature = "imagej.macro.v1"
+name = "Imagej Macro"
+topic = [
+  "ImageJ Macro",
+  "Window Management",
+  "Error Handling",
+]
+
+description = """A macro command to select a specific image window by its title, making it the active window for subsequent actions."""
+
+
+[content]
+plugin_name = "selectWindow"
+
+plugin_description = """Activates an image window by its title. It is a built-in macro function in ImageJ."""
+
+correct_syntax = """selectWindow("window_title_with_extension");"""
+
+tips = [
+  """To prevent the 'No window with the title... found' error, always verify the exact titles of all open windows before attempting to select one. Window titles can change after save operations (e.g., from 'image' to 'image.png').""",
+  """Be cautious when using generic commands like `run("Close");` or `run("Close All");` in the middle of a script, as they can unexpectedly close windows needed for subsequent steps.""",
+  """The window title must be an exact string match. If a save operation adds a file extension to the window title, your `selectWindow` call must include it.""",
+]
+
+site = "https://imagej.nih.gov/ij/developer/macro/functions.html#selectWindow"
+

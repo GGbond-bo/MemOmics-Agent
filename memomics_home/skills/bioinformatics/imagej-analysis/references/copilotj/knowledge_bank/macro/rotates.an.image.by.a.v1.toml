@@ -1,0 +1,26 @@
+type = "macro"
+signature = "rotates.an.image.by.a.v1"
+name = "Rotates An Image By A"
+topic = ["image transformation","rotation","error handling"]
+
+description = """Rotates an image by a specified angle using bilinear interpolation, creating a new image. This macro encountered an error in the original workflow due to the image not being active."""
+
+
+[content]
+plugin_name = "Rotate..."
+
+plugin_description = """Performs image rotation. It's crucial to ensure the source image window is active or explicitly opened before calling this command, especially after saving an intermediate result that might implicitly close the window or deactivate it, leading to a 'No window found' error."""
+
+correct_syntax = """open("/path/to/image.tif");
+run("Rotate...", "angle=<angle> grid=1 interpolation=Bilinear create");
+selectWindow("image_title-rotated");
+saveAs("Tiff", "/path/to/rotated_image.tif");"""
+
+tips = [
+  """Always explicitly `open()` an image by its full path if there's any doubt it might have been closed or if its window is not reliably active after a previous operation (e.g., `saveAs`).""",
+  """ImageJ's `saveAs()` can sometimes implicitly close or deactivate the current window. Account for this by re-opening or carefully re-selecting the window for subsequent operations.""",
+  """Use `selectWindow()` only when certain the window is already open and its exact title is known. For robust chained operations, `open()` is generally safer than relying solely on `selectWindow()`.""",
+]
+
+site = "https://imagej.net/docs/menus/transform.html#rotate"
+

@@ -1,0 +1,23 @@
+type = "macro"
+signature = "executes.the.deconvolutionlab2.plugin.headlessly.v1"
+name = "Executes The Deconvolutionlab2 Plugin Headlessly"
+topic = ["deconvolution","DeconvolutionLab2","ImageJ macro","image restoration"]
+
+description = """Executes the DeconvolutionLab2 plugin headlessly to perform deconvolution with a specified image, PSF, algorithm, and output file path."""
+
+
+[content]
+plugin_name = "DeconvolutionLab2 Run"
+
+plugin_description = """A plugin for performing deconvolution on microscopy images using various algorithms. It can be run from a macro with file paths as arguments for headless processing."""
+
+correct_syntax = """run("DeconvolutionLab2 Run", "-image file C:/path/to/image.tif -psf file C:/path/to/psf.tif -algorithm RL 15 -out file D:/path/to/output.tif");"""
+
+tips = [
+  """The '-out file' argument may not reliably save the output, especially if the process is interrupted or encounters a non-fatal error. The plugin might generate an in-memory window (e.g., 'Final Display of RL') instead. Always verify the output file's existence.""",
+  """If the output file is not created, check for new, unnamed image windows in ImageJ. The result is likely there and needs to be saved manually.""",
+  """This is a long-running process. After execution, provide a significant timeout and inform the user that ImageJ may be unresponsive.""",
+]
+
+site = "https://bigwww.epfl.ch/deconvolution/deconvolutionlab2/"
+

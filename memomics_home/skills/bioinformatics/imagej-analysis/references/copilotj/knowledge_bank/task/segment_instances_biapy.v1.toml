@@ -1,0 +1,154 @@
+type = "task"
+signature = "segment_instances_biapy.v1"
+name = "segment_instances_biapy"
+question = """My dataset at D:\\vscode_project\\ChatImageJ\\temp\\CartoCell_data. The images are **3D .tif stacks**.
+
+**Training (instance segmentation, 3D):**
+
+- Train for **3 epochs** using BiaPy’s **instance segmentation (inst3d)** workflow.
+- Training data:
+    - `DATA.TRAIN.PATH = /temp/CartoCell_data/train_M1/x` (raw)
+    - `DATA.TRAIN.GT_PATH = /temp/CartoCell_data/train_M1/y` (instance masks)
+- Test data (for prediction/qualitative check):
+    - `DATA.TEST.PATH = /temp/CartoCell_data/test/x` (raw)
+    - `DATA.TEST.GT_PATH = /temp/CartoCell_data/test/y` (ground truth)
+
+**Evaluation:**
+
+- Evaluate on the **validation** split:
+    - `DATA.VAL.PATH = /temp/CartoCell_data/validation/x`
+
+**Hyperparameters:**
+
+- `EPOCHS = 3`
+- `OPTIMIZER = ADAMW`, `LR = 1e-4`
+
+**Deliverables:**
+
+1. Train and save the best checkpoint.
+2. Run prediction on `validation/x` and save predicted **instance label stacks**.
+3. In **ImageJ**, open a predicted stack and show a **3D Projection** (Max Intensity) of:
+    - the original stack, and
+    - the predicted instance stack with a colored LUT (e.g., Glasbey) / boundary overlay."""
+topic = ["instance_segmentation","3d","deep_learning","workflow"]
+tags = ["segment_instances_biapy"]
+
+description = """A deep learning workflow to train a 3D instance segmentation model using BiaPy, predict on new data, and visualize the results (original vs. predicted instance mask) as 3D projections in ImageJ."""
+
+summary = """Summary of ImageJ Task
+1.  **Task Overview**: The main objective was to execute a complete 3D instance segmentation workflow. This involved training a deep learning model using the BiaPy tool, using the trained model to predict instance masks on a validation dataset, and finally, visualizing a comparison between an original image stack and its corresponding predicted segmentation in ImageJ.
+
+2.  **Key Actions Taken**:
+    *   **Delegated ML Task**: The complex model training and prediction steps were delegated to the `Tool Agent`, which used the `biapy_tool`. The agent was instructed to first run a training job for 3 epochs and then use the resulting checkpoint to perform predictions.
+    *   **Verified Outputs**: After the `Tool Agent` completed its task, the `folder_summary` tool was used to inspect the output directory and confirm the successful creation of the predicted image files.
+    *   **Visualized in ImageJ**: The `run_macro` command was executed to open an original 3D stack and its corresponding predicted instance stack. The macro applied a colored lookup table ("Glasbey on Dark") to the prediction and generated "Max Intensity" 3D projections for both stacks, enabling a clear visual comparison.
+
+3.  **Critical Results**:
+    *   A 3D instance segmentation model was successfully trained on the provided `train_M1` dataset.
+    *   Instance label stacks were successfully predicted for all images in the `validation/x` folder.
+    *   The final deliverable was a visual comparison in ImageJ, showing two 3D projection images: the original validation image and its AI-generated instance segmentation map, clearly delineating different objects with unique colors.
+
+4.  **Error Handling**: The `Tool Agent` successfully managed and resolved several errors during its execution. Notably, it encountered a "File Not Found" error when trying to locate the model checkpoint for prediction. It resolved this by programmatically listing the contents of the checkpoint directory to identify the exact and correct `.pth` checkpoint filename, allowing the prediction phase to proceed.
+
+5.  **Current State**: The task is fully complete. The model has been trained, predictions have been generated, and the results have been visualized as requested by the user.
+
+6.  **Technical Details**:
+    *   **BiaPy Workflow**: `inst3d` (3D Instance Segmentation)
+    *   **Training Data**:
+        *   Raw: `D:/vscode_project/ChatImageJ/temp/CartoCell_data/train_M1/x`
+        *   Ground Truth: `D:/vscode_project/ChatImageJ/temp/CartoCell_data/train_M1/y`
+    *   **Prediction Data**:
+        *   Input: `D:/vscode_project/ChatImageJ/temp/CartoCell_data/validation/x`
+        *   Output: `D:/vscode_project/ChatImageJ/temp/biapy_runs/biapy_run/results/biapy_run_1/per_image_instances/`
+    *   **Hyperparameters**:
+        *   `EPOCHS`: 3
+        *   `OPTIMIZER`: `ADAMW`
+        *   `LR`: `1e-4`
+    *   **Visualization**: A "Max Intensity" 3D projection was used with a "Glasbey on Dark" LUT applied to the predicted mask."""
+
+[[steps]]
+id = 1
+  [steps.action]
+  name = "delegate_task"
+  agent = "Tool Agent"
+  task = """Please perform 3D instance segmentation using the `biapy_tool`. 
+
+**Phase 1: Training**
+- **Tool**: `biapy_tool`
+- **Mode**: `train`
+- **Configuration Parameters**:
+  - `PROBLEM.TYPE = INSTANCE_SEG`
+  - `PROBLEM.NDIM = 3D`
+  - `DATA.TRAIN.PATH = D:/vscode_project/ChatImageJ/temp/CartoCell_data/train_M1/x`
+  - `DATA.TRAIN.GT_PATH = D:/vscode_project/ChatImageJ/temp/CartoCell_data/train_M1/y`
+  - `DATA.TEST.PATH = D:/vscode_project/ChatImageJ/temp/CartoCell_data/test/x`
+  - `DATA.TEST.GT_PATH = D:/vscode_project/ChatImageJ/temp/CartoCell_data/test/y`
+  - `TRAIN.EPOCHS = 3`
+  - `TRAIN.OPTIMIZER = ADAMW`
+  - `TRAIN.LR = 1e-4`
+
+**Phase 2: Prediction**
+- **Tool**: `biapy_tool`
+- **Mode**: `predict`
+- **Configuration Parameters**:
+  - `DATA.TEST.PATH = D:/vscode_project/ChatImageJ/temp/CartoCell_data/validation/x`
+  - `CHECKPOINT_PATH`: Use the checkpoint from the training phase (BiaPy should handle this automatically by pointing to the experiment output directory).
+
+Please save the prediction results in the default BiaPy output directory."""
+
+[[steps]]
+id = 2
+  [steps.action]
+  name = "run_macro"
+  script = """original_path = "D:/vscode_project/ChatImageJ/temp/CartoCell_data/validation/x/cyst 4d fil 3well Pha,bcat,dapi 02.08.19 40x Z5 12a.tif";
+
+predicted_path = "D:/vscode_project/ChatImageJ/temp/biapy_runs/biapy_run/results/biapy_run_1/per_image_instances/cyst 4d fil 3well Pha,bcat,dapi 02.08.19 40x Z5 12a.tif";
+
+
+// Open original and predicted stacks
+open(original_path);
+
+original_title = getTitle();
+
+open(predicted_path);
+
+predicted_title = getTitle();
+
+
+// Apply LUT to the predicted stack
+selectWindow(predicted_title);
+
+run("Glasbey on Dark");
+
+
+// Create 3D Projection for the original stack
+selectWindow(original_title);
+
+run("3D Project...", "projection=[Max Intensity]");
+
+
+// Create 3D Projection for the predicted stack
+selectWindow(predicted_title);
+
+run("3D Project...", "projection=[Max Intensity]");
+
+"""
+
+
+data_type = """3D .tif stacks"""
+[requirements]
+bit_depth = [8, 16]
+min_size = [128, 128]
+channels = "Grayscale or multi-channel, depending on model configuration."
+
+[defaults]
+epochs = "3"
+optimizer = "ADAMW"
+learning_rate = "1e-4"
+
+tips = [
+  """Ensure your data is organized into separate folders for training, validation, and testing, each with 'x' (raw images) and 'y' (ground truth masks) subdirectories as expected by BiaPy.""",
+  """Model training is computationally expensive and time-consuming. Start with a small number of epochs to verify the setup before running a full training session.""",
+  """The 'Glasbey on Dark' LUT is effective for visualizing instance segmentation results as it assigns a unique color to each labeled object.""",
+]
+

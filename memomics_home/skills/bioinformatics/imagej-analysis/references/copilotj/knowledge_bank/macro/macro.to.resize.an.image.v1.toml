@@ -1,0 +1,28 @@
+type = "macro"
+signature = "macro.to.resize.an.image.v1"
+name = "Macro To Resize An Image"
+topic = ["image resizing","macro debugging","image manipulation"]
+
+description = """Macro to resize an image to specified dimensions. This macro initially failed due to incorrect image selection after a previous `saveAs` operation closed the target window. The corrected approach involves duplicating the original image for each operation."""
+
+
+[content]
+plugin_name = "Size..."
+
+plugin_description = """Changes the width and height of an image using a specified interpolation method. It's found under Image > Scale...."""
+
+correct_syntax = """selectWindow("Cell_Colony.jpg");
+run("Duplicate...", "title=temp_resize.tif");
+selectWindow("temp_resize.tif");
+run("Size...", "width=200 height=200 interpolation=Bilinear");
+saveAs("Tiff", "/Users/jacklu/vscode_project/ChatImageJ/temp/02_resize.tif");
+close("temp_resize.tif");"""
+
+tips = [
+  """Always verify the existence and active status of an image window using `selectWindow("Image Title")` before attempting operations on it.""",
+  """If multiple operations need to be performed starting from an original image, duplicate the original image for each operation (e.g., `run("Duplicate...", "title=temp_image.tif");`) to avoid modifying the original and to ensure the target image is consistently available.""",
+  """Close temporary images created during sequential processing to maintain a clean ImageJ workspace (e.g., `close("temp_image.tif");`).""",
+]
+
+site = "https://imagej.net/docs/menus/image.html#scale"
+

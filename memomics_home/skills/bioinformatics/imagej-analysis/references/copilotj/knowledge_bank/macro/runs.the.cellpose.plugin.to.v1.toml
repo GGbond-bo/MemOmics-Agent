@@ -1,0 +1,25 @@
+type = "macro"
+signature = "runs.the.cellpose.plugin.to.v1"
+name = "Runs The Cellpose Plugin To"
+
+description = "Runs the Cellpose plugin to perform deep-learning-based nuclei segmentation on the active image."
+
+
+[content]
+plugin_name = "Cellpose"
+
+plugin_description = """
+A deep-learning based segmentation plugin for cells and nuclei. Its execution via macro can be sensitive to the environment setup.\
+"""""
+
+correct_syntax = """
+run("Cellpose", "pretrained_model=nuclei diameter=0.0 cellprob_threshold=0.0 flow_threshold=0.4");\
+"""
+
+tips = [
+  """If you encounter an "Unrecognized command: 'Cellpose'" error, verify that the Cellpose plugin is correctly installed and that the ImageJ/Fiji environment is properly configured to locate its commands.""",
+  """For nuclei segmentation, use the parameter `pretrained_model=nuclei`. Set `diameter=0.0` to allow Cellpose to automatically estimate the object size.""",
+  """Automated Cellpose execution can fail due to issues with its underlying Python environment. If macro and script-based methods fail, be prepared to run it manually via the GUI or use an alternative algorithm.""",
+]
+
+site = "https://cellpose.readthedocs.io/en/latest/"

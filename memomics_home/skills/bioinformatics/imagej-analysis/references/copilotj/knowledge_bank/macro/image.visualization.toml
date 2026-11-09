@@ -1,0 +1,28 @@
+type = "macro"
+signature = "image.visualization"
+name = "Image Visualization"
+topic = [
+  "Image Visualization",
+  "Montage",
+  "Layout",
+]
+
+description = """Creates a single image grid (montage) from a stack of images."""
+
+
+[content]
+plugin_name = "Make Montage..."
+
+plugin_description = """Arranges the slices of a stack into a grid within a new image. Source images must first be combined into a stack, typically using the 'Images to Stack' command."""
+
+correct_syntax = """run("Images to Stack", "images=[image1.tif, image2.tif] name=Stack");
+run("Make Montage...", "columns=2 rows=1 scale=1.0 border=2");"""
+
+tips = [
+  """The most common failure is a dimension mismatch. Ensure all images intended for the montage are successfully created and have identical dimensions before running `Images to Stack`.""",
+  """Run montage creation as the final step in a separate macro call after all individual images (like overlays) have been generated. This isolates potential errors and prevents timeouts.""",
+  """When using `Images to Stack`, explicitly list the window names in the `images=[]` array to ensure the correct images are included in the correct order, which is more robust than relying on the currently open images.""",
+]
+
+site = "https://imagej.net/plugins/make-montage"
+

@@ -1,0 +1,54 @@
+type = "macro"
+signature = "3d-project.v1"
+name = "3D Project Volume Rendering"
+topic = [
+  "3D projection",
+  "volume rendering",
+  "three dimensional visualization",
+  "image projection",
+]
+tags = [
+  "3D projection",
+  "volume rendering",
+  "visualization",
+  "three dimensional",
+]
+
+description = "3D Project plugin macro usage guide for volume rendering and projection of 3D image data"
+
+data_type = "macro"
+
+[content]
+plugin_name = "3D Project"
+
+correct_syntax = 'run("3D Project...", "projection=[Brightest Point] axis=Y-Axis slice=1 initial=0 total=360 rotation=10 lower=1 upper=255 opacity=0 surface=100 interior=50");'
+
+tips = [
+  """
+"3D Project" is a feature of the Fiji 3D Viewer plugin used to perform volume rendering or projection on 3D image data.
+
+The "Brightest Point" projection takes the brightest voxel along the specified axis for each pixel column and maps its intensity to a 2D image, which is suitable for a quick view of the intensity distribution of 3D structures.
+
+--- Parameter Details ---
+• projection=[Brightest Point]: Sets the projection mode to "Brightest Point". Other options include "Average Intensity" and "Maximum Intensity".
+• axis=Y-Axis: Specifies the projection axis as the Y axis. To project along the X axis, use "axis=X-Axis".
+• slice=1: Indicates to start from the first slice, usually set to 1.
+• initial=0 total=360 rotation=10: Defines the rotation angle range and step size for 3D rotational projection, meaning from 0° to 360° with a step of 10°.
+• lower=1 upper=255: Sets the intensity mapping range, mapping pixel values to the range [1, 255].
+• opacity=0: Sets rendering opacity to 0 (fully transparent, used for projection to avoid occlusion).
+• surface=100 interior=50: Sets thresholds for surface and interior voxels during rendering, usually left at default values.
+
+--- Macro Example ---
+run("3D Project...", "projection=[Brightest Point] axis=Y-Axis slice=1 initial=0 total=360 rotation=10 lower=1 upper=255 opacity=0 surface=100 interior=50");
+
+--- Related Commands ---
+• doCommand("Start Animation [\\]"): Starts the 3D rotational animation using the current projection settings.
+• doCommand("Stop Animation"): Stops any ongoing 3D animation.
+
+--- Example Scenarios ---
+1. A researcher has a 3D fluorescent image stack and wants to view the intensity distribution along the Y axis. After importing the image into Fiji, running the above macro generates a 2D projection image, facilitating subsequent quantitative or visual analysis.
+2. When processing multiple 3D datasets, this command can be placed in a macro loop to apply the "Brightest Point" projection to every stack in a folder.
+3. After generating the projection, use `doCommand("Start Animation [\\]")` to animate the projection rotation for presentation or inspection, then `doCommand("Stop Animation")` to halt the animation when needed.
+""",
+]
+

@@ -1,0 +1,202 @@
+type = "task"
+signature = "process_image_pipeline.v1"
+name = "process_image_pipeline"
+question = """Process the open image in ImageJ step-by-step (duplicate, resize, grayscale, rotate, auto contrast, blur, Otsu threshold), saving each result with the given sequential filename, then assemble all outputs into a labeled grid figure."""
+topic = ["Image Processing","Workflow Automation","Image Montage"]
+tags = ["process_image_pipeline"]
+
+description = """Performs a sequential image processing pipeline including duplicating, resizing, converting to grayscale, rotating, auto-contrasting, blurring, and Otsu thresholding. Each intermediate step is saved, and all results are compiled into a final labeled montage."""
+
+summary = """Here is a detailed summary of the ImageJ task execution:
+
+### Summary of ImageJ Task
+
+**1. Task Overview**
+The primary objective was to process a microscopy image (`human_motis.png`) through a sequential, seven-step image processing pipeline. Each step's output was to be saved as a separate file. Finally, the original image and all seven processed results were to be compiled into a single, labeled 4x2 montage for visual comparison.
+
+**2. Key Actions Taken**
+*   **Initial Analysis**: The process started with `imagej_perception` to analyze the active image, identifying it as a microscopy image of human cell nuclei.
+*   **Planning and Approval**: A detailed, 8-step execution plan was formulated and presented to the user for approval via `user_manipulate`, ensuring the proposed workflow met the requirements before execution.
+*   **Sequential Image Processing**: A series of `run_macro` commands were executed to perform the image processing pipeline:
+    1.  **Duplicate**: The original image was duplicated.
+    2.  **Resize**: The image was resized to 50% of its original dimensions.
+    3.  **Grayscale**: The image was converted to 8-bit grayscale.
+    4.  **Rotate**: The image was rotated by 45 degrees.
+    5.  **Auto Contrast**: Contrast was enhanced using the "Enhance Contrast" function.
+    6.  **Blur**: A Gaussian blur (sigma=2) was applied.
+    7.  **Threshold**: An Otsu auto threshold was applied to create a binary mask.
+*   **Montage Assembly**: A final `run_macro` command was used to close all open windows, reopen all the saved intermediate files along with the original, rename them for clarity, combine them into a stack, and generate the final labeled montage.
+
+**3. Critical Results**
+*   **Intermediate Files**: Seven intermediate TIF images were successfully generated and saved to the specified directory, documenting each stage of the process:
+    *   `01_duplicate.tif`
+    *   `02_resized.tif`
+    *   `03_grayscale.tif`
+    *   `04_rotated.tif`
+    *   `05_autocontrast.tif`
+    *   `06_blurred.tif`
+    *   `07_thresholded.tif`
+*   **Final Figure**: A composite image, `processing_montage.tif`, was successfully created and saved. This figure provides a comprehensive visual summary of the entire workflow, displaying the original image and the seven processed versions in a labeled grid.
+
+**4. Error Handling**
+No errors were encountered during the execution of this task. All macro commands ran successfully, and all expected output files were generated without issue.
+
+**5. Current State**
+The task is **fully complete**. All requested image processing steps have been executed, all intermediate and final files have been successfully saved, and the final montage has been created and stored as requested.
+
+**6. Technical Details**
+*   **Input Image Path**: `/Users/jacklu/Library/CloudStorage/OneDrive-Personal/chatImageJ/pics/human_motis.png`
+*   **Output Directory**: `/Users/jacklu/vscode_project/ChatImageJ/temp/`
+*   **Processing Parameters**:
+    *   Resize: 50% of original size (520x499 pixels), Bilinear interpolation.
+    *   Rotate: 45 degrees, Bilinear interpolation.
+    *   Enhance Contrast: `saturated=0.1`.
+    *   Gaussian Blur: `sigma=2`.
+    *   Threshold Method: Otsu.
+*   **Montage Parameters**: 4 columns, 2 rows, 0.5x scale, font size 24, with labels and a border.
+*   **Final Output File**: `/Users/jacklu/vscode_project/ChatImageJ/temp/processing_montage.tif`"""
+
+[[steps]]
+id = 1
+  [steps.action]
+  name = "run_macro"
+  script = """selectWindow("human_motis.png");
+
+run("Duplicate...", "title=01_duplicate.tif");
+
+saveAs("Tiff", "/Users/jacklu/vscode_project/ChatImageJ/temp/01_duplicate.tif");
+"""
+
+[[steps]]
+id = 2
+  [steps.action]
+  name = "run_macro"
+  script = """selectWindow("01_duplicate.tif");
+
+run("Size...", "width=520 height=499 interpolation=Bilinear");
+
+saveAs("Tiff", "/Users/jacklu/vscode_project/ChatImageJ/temp/02_resized.tif");
+"""
+
+[[steps]]
+id = 3
+  [steps.action]
+  name = "run_macro"
+  script = """selectWindow("02_resized.tif");
+
+run("8-bit");
+
+saveAs("Tiff", "/Users/jacklu/vscode_project/ChatImageJ/temp/03_grayscale.tif");
+"""
+
+[[steps]]
+id = 4
+  [steps.action]
+  name = "run_macro"
+  script = """selectWindow("03_grayscale.tif");
+
+run("Rotate...", "angle=45 grid=1 interpolation=Bilinear");
+
+saveAs("Tiff", "/Users/jacklu/vscode_project/ChatImageJ/temp/04_rotated.tif");
+"""
+
+[[steps]]
+id = 5
+  [steps.action]
+  name = "run_macro"
+  script = """selectWindow("04_rotated.tif");
+
+run("Enhance Contrast", "saturated=0.1");
+
+saveAs("Tiff", "/Users/jacklu/vscode_project/ChatImageJ/temp/05_autocontrast.tif");
+"""
+
+[[steps]]
+id = 6
+  [steps.action]
+  name = "run_macro"
+  script = """selectWindow("05_autocontrast.tif");
+
+run("Gaussian Blur...", "sigma=2");
+
+saveAs("Tiff", "/Users/jacklu/vscode_project/ChatImageJ/temp/06_blurred.tif");
+"""
+
+[[steps]]
+id = 7
+  [steps.action]
+  name = "run_macro"
+  script = """selectWindow("06_blurred.tif");
+
+setAutoThreshold("Otsu");
+
+run("Convert to Mask");
+
+saveAs("Tiff", "/Users/jacklu/vscode_project/ChatImageJ/temp/07_thresholded.tif");
+"""
+
+[[steps]]
+id = 8
+  [steps.action]
+  name = "run_macro"
+  script = """close("*");
+
+open("/Users/jacklu/Library/CloudStorage/OneDrive-Personal/chatImageJ/pics/human_motis.png");
+
+rename("Original");
+
+open("/Users/jacklu/vscode_project/ChatImageJ/temp/01_duplicate.tif");
+
+rename("Duplicate");
+
+open("/Users/jacklu/vscode_project/ChatImageJ/temp/02_resized.tif");
+
+rename("Resized");
+
+open("/Users/jacklu/vscode_project/ChatImageJ/temp/03_grayscale.tif");
+
+rename("Grayscale");
+
+open("/Users/jacklu/vscode_project/ChatImageJ/temp/04_rotated.tif");
+
+rename("Rotated");
+
+open("/Users/jacklu/vscode_project/ChatImageJ/temp/05_autocontrast.tif");
+
+rename("AutoContrast");
+
+open("/Users/jacklu/vscode_project/ChatImageJ/temp/06_blurred.tif");
+
+rename("Blurred");
+
+open("/Users/jacklu/vscode_project/ChatImageJ/temp/07_thresholded.tif");
+
+rename("Thresholded");
+
+run("Images to Stack", "use");
+
+run("Make Montage...", "columns=4 rows=2 scale=0.5 font=24 label border=2");
+
+saveAs("Tiff", "/Users/jacklu/vscode_project/ChatImageJ/temp/processing_montage.tif");
+"""
+
+
+data_type = """The data is a single-channel, 24/32-bit color image (1041x998 pixels) from fluorescence microscopy, named `human_motis.png`. It displays numerous bright, circular to oval-shaped cell nuclei on a dark, uniform background."""
+[requirements]
+bit_depth = [8, 24, 32]
+min_size = [128, 128]
+channels = "single-channel"
+
+[defaults]
+resize_factor = "0.5"
+rotation_angle = "45"
+gaussian_sigma = "2"
+montage_columns = "4"
+montage_rows = "2"
+
+tips = [
+  """When creating a montage from multiple files, rename each image window after opening it to ensure the labels in the final figure are clear and descriptive.""",
+  """Use `close("*");` at the beginning of the final assembly macro to ensure a clean slate and prevent unintended images from being included in the stack/montage.""",
+  """Saving intermediate steps to a dedicated temporary directory helps keep the main project folder organized.""",
+]
+

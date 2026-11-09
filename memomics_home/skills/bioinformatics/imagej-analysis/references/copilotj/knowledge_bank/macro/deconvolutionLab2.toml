@@ -1,0 +1,36 @@
+type = "macro"
+signature = "deconvolutionLab2.v1"
+name = "DeconvolutionLab2 Richardson-Lucy Deconvolution"
+topic = [
+    "deconvolution",
+    "Richardson-Lucy",
+    "ImageJ macro",
+    "DeconvolutionLab2",
+    "image restoration"
+]
+tags = ["DeconvolutionLab2", "deconvolution", "Richardson-Lucy", "ImageJ", "macro"]
+
+description = "DeconvolutionLab2 plugin macro usage guide for Richardson-Lucy deconvolution."
+
+data_type = "macro"
+
+[content]
+plugin_name = "DeconvolutionLab2"
+description = "Richardson-Lucy deconvolution using DeconvolutionLab2. Specify input image, PSF, algorithm, iterations, and output path."
+
+correct_syntax = "run(\"DeconvolutionLab2 Run\", \"-image file D:\\Google_Downloads\\SIM.tif -psf synthetic Gaussian 2.0 2.0 1.0 -algorithm RL 15 -out file D:\\Google_Downloads\\deconv_SIM.tif\");"
+
+example = "run(\"DeconvolutionLab2 Run\", \"-image file D:\\Google_Downloads\\SIM.tif -psf synthetic Gaussian 2.0 2.0 1.0 -algorithm RL 15 -out file D:\\Google_Downloads\\deconv_SIM.tif\");"
+
+tips = [
+    """
+
+// 1. Define file paths for the input image and the PSF 
+// 2. Paths should all be absolute paths
+// 3. This will take a long time to run, it returns success message only mean it runs but does not indicate completion, so after you run this plugin, you must invoke user_manipulate immediately and guide the user.
+
+"""
+]
+
+site = """https://bigwww.epfl.ch/deconvolution/deconvolutionlab2/
+    -   [DeconvolutionLab2 PDF Documentation](https://bigwww.epfl.ch/deconvolution/deconvolutionlab2/sage1701p.pdf)"""

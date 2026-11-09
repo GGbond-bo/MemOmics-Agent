@@ -26,9 +26,10 @@ _establish_connection / _detect_remote_home / _run_bash / execute / cleanup
   2. _before_execute() 置空 —— 父类每次执行前都会触发一次文件同步，
      集群场景不需要。
 
-除这两点外，SSH 命令构造（ControlMaster/ControlPersist/BatchMode/
-StrictHostKeyChecking=accept-new/ConnectTimeout/-p/-i）与执行语义和 memomics
-完全一致，因此行为可预期、出问题可按 memomics 文档排查。
+旧版手工连接的 SSH 命令构造（ControlMaster/ControlPersist/BatchMode/
+StrictHostKeyChecking=accept-new/ConnectTimeout/-p/-i）与 memomics 保持一致。
+目录管理的 V5 密码连接则使用固定 System32 OpenSSH、受控 ``-F`` 路由和 ASKPASS，
+不使用 ``-i``、ssh-agent 或 ControlMaster，因此可按其独立的密码连接提示排查。
 
 配置（memomics_home/config.yaml）
 -------------------------------
@@ -53,17 +54,19 @@ StrictHostKeyChecking=accept-new/ConnectTimeout/-p/-i）与执行语义和 memom
     MEMOMICS_REMOTE_ENABLED / _HOST / _USER / _PORT / _KEY / _WORKDIR /
     _SCHEDULER / _LOCAL_ROOT / _REMOTE_ROOT
 
-网关限制：ssh 使用 BatchMode=yes，**只支持密钥登录**，不支持密码交互。
+认证方式：目录管理的连接使用本机加密保存的账号密码和受控 ASKPASS；旧版手工配置仍可使用
+BatchMode 密钥登录。浏览器不会显示或接收 SSH 密码交互。
 本机没有 ssh/scp 时工具自检报错并说明装法。
 
-平台差异：memomics 的 SSH 后端默认用 ControlMaster 复用连接，但 Windows 自带的
-Win32-OpenSSH 没有 mux 支持（报 "getsockname failed: Not a socket"）。本工具会自动
-探测并降级为"每次新建连接"（Linux/macOS 上仍走 ControlMaster），不需要手工配置。
+平台差异：旧版手工连接默认用 ControlMaster 复用连接，但 Windows 自带的
+Win32-OpenSSH 没有 mux 支持（报 "getsockname failed: Not a socket"），会自动
+降级为"每次新建连接"。目录管理的 V5 密码连接始终每次新建连接，不需要手工配置。
 """
 
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import logging
 import os
@@ -71,12 +74,18 @@ import posixpath
 import re
 import shlex
 import shutil
+import socket
+import stat
 import subprocess
 import tempfile
 import threading
 import time
 from datetime import datetime
 from pathlib import Path
+
+from memomics.bio_tools import ssh_policy as _ssh_policy
+from memomics.bio_tools import password_ssh as _password_ssh
+from memomics.bio_tools import askpass_security as _askpass_security
 
 logger = logging.getLogger(__name__)
 
@@ -127,11 +136,69 @@ _DEFAULT_CFG = {
     "auto_record_env": True,     # check 成功后把节点环境自动沉淀到 🧩 环境管理（environment.json）
     "persist_gate": True,        # 铁规 10 硬闸：run/submit 要读 ≥100MB 未标记大输入 → 拒绝执行
     "persist_min_mb": 100,       # 硬闸阈值（MB）
+    # --- 多集群（2026-11-04）---
+    "name": "",                  # 当前生效的集群名（_load_remote_config 回填）
+    "label": "",                 # 集群的人读标记（中文名写这里，集群名只允许 ASCII）
+    "cluster": "",               # 同上（handler/台账用这个名字分家）
+    "clusters": {},              # {集群名: {enabled/host/user/nodes/...}}
+    "default_cluster": "",       # 默认集群名（留空 = 第一个）
+    "cluster_names": [],         # 全部集群名（有序）
+    "multi_cluster": False,      # 是否处于多集群模式（配了 remote.clusters）
     # --- 常驻 R 会话（kernel 式持久化，2026-10-09）---
     # remote.session: {env, rscript, roots, dir, load_timeout, wait, save_wait, max_sessions}
     # 节点级可覆盖：remote.nodes.<名字>.session: {...}（比如某台机器上 R 在别的路径）
     "session": {},
 }
+
+# ---------------------------------------------------------------------------
+# 多集群（2026-11-04，用户要求）
+#
+# 一个 remote: 段里可以登记多个集群，每个集群 = 一套连接信息 + 若干命名节点。
+# 要求：**集群之间不能串**（节点名只在本集群内解析；本地台账按集群分目录；
+# 会话记录带集群标记），并且能设默认集群。
+#
+#     remote:
+#       user: zhang                    # 共享身份默认值（集群里没写的才继承）
+#       key: ~/.ssh/id_ed25519
+#       default_cluster: bgi           # 默认集群
+#       clusters:
+#         bgi:                         # 集群名（独立命名，进台账目录名）
+#           label: 华大 BGI 集群        # 人读标记（中文写这里）
+#           enabled: true
+#           host: login.bgi.example
+#           workdir: /work/zhang
+#           scheduler: pbs
+#           nodes:
+#             login1: {}
+#             gpu1: {host: 10.0.0.5, note: A100}
+#           default_node: login1
+#         lab2:                        # 另一台机器 / 另一个账号
+#           label: 实验室二号机
+#           enabled: true
+#           host: 10.20.30.40
+#           user: lisi
+#           workdir: /home/lisi/proj
+#           nodes:
+#             login1: {}
+#
+# 没有 clusters 段时行为完全不变（集群名 = default，台账仍在 <home>/remote）。
+# ---------------------------------------------------------------------------
+_CLUSTER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$")
+_LEGACY_CLUSTER = "default"      # 老配置（没有 clusters 段）的集群名
+
+# 集群里「不写就继承 remote: 顶层」的字段。**host / workdir / job_dir 刻意不在其中**：
+# 继承别人的 host 会连错机器、继承 workdir 会把 B 的作业写进 A 目录 —— 这正是不许串的底线。
+_CLUSTER_INHERIT_KEYS = (
+    "user", "port", "key", "scheduler", "partition", "queue", "timeout",
+    "max_output_chars", "extra_ssh_options", "local_root", "remote_root",
+    "node_policy", "allow_unlisted_nodes", "auto_record_env",
+    "persist_gate", "persist_min_mb", "ge_pe", "ge_mem_res", "ge_gpu_res",
+    "session",
+)
+# 每个集群必须自己声明（不继承）的字段
+_CLUSTER_OWN_KEYS = ("enabled", "host", "workdir", "job_dir", "nodes",
+                     "default_node", "label", "note", "name")
+
 
 _CFG_CACHE = {"mtime": None, "cfg": None}
 
@@ -241,21 +308,45 @@ def _load_remote_config(force: bool = False) -> dict:
     cfg["node_policy"] = str(cfg.get("node_policy") or "ask").strip().lower() or "ask"
     cfg["allow_unlisted_nodes"] = _truthy(cfg.get("allow_unlisted_nodes", True))
 
+    # --- 多集群（2026-11-04）---
+    # 有 remote.clusters 时：本函数返回「默认集群」的合并配置，同时带上 clusters /
+    # default_cluster / cluster_names，调用方据此列集群、切集群；老配置（无 clusters）
+    # 走下面的 else 分支，一个字段都不变。
+    _clusters = _normalize_clusters(raw.get("clusters"))
+    _default_name = _cluster_default_name(_clusters, raw.get("default_cluster") or "")
+    if _clusters:
+        _base = dict(cfg)
+        cfg = _merge_cluster(_base, _clusters[_default_name], _default_name)
+        cfg["clusters"] = _clusters
+        cfg["cluster_names"] = list(_clusters)
+        cfg["default_cluster"] = _default_name
+        cfg["multi_cluster"] = True
+    else:
+        cfg["clusters"] = {}
+        cfg["cluster_names"] = [_LEGACY_CLUSTER]
+        cfg["default_cluster"] = _LEGACY_CLUSTER
+        cfg["cluster"] = _LEGACY_CLUSTER
+        cfg["name"] = _LEGACY_CLUSTER
+        cfg["multi_cluster"] = False
+        cfg["label"] = str(cfg.get("label") or "").strip()
+
     _CFG_CACHE["mtime"] = mtime
     _CFG_CACHE["cfg"] = cfg
     return cfg
 
 
-def remote_cluster_enabled() -> bool:
-    """check_fn：没配置 remote: 段（或 nodes 段）时工具对模型不可见。"""
-    cfg = _load_remote_config()
-    if not cfg["enabled"]:
+def _cluster_usable(cfg: dict) -> bool:
+    """这个集群配全了没有（启用 + 有节点 + 有 user）。"""
+    if not cfg.get("enabled"):
         return False
     table = _node_table(cfg)
     if not table:
         return False
-    # user 可以是全局共享，也可以在某个节点上单独给
-    return bool(cfg["user"]) or any(str(t.get("user") or "").strip() for t in table.values())
+    # Both host and user may be per-profile.  A managed account profile with a
+    # missing host is intentionally incomplete rather than an implicit alias
+    # for its random stable id.
+    return any(str(t.get("host") or "").strip() and str(t.get("user") or "").strip()
+               for t in table.values())
 
 
 # ---------------------------------------------------------------------------
@@ -267,8 +358,37 @@ _NODE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,47}$")
 # 节点条目里允许覆盖的字段；其余一律跟共享配置走（同一个集群路径一样，没必要重复配）
 _NODE_OVERRIDE_KEYS = (
     "host", "user", "port", "key", "workdir", "job_dir", "scheduler",
-    "partition", "queue", "timeout", "proxy_jump", "extra_ssh_options",
-    "note", "role",
+    "partition", "queue", "local_root", "remote_root", "timeout", "proxy_jump", "extra_ssh_options",
+    "note", "role", "display_name", "connection_profile", "catalog_v4_ssh_route",
+    # V5 password profiles have no key material.  These are opaque
+    # non-secret provenance fields used to obtain the account password from
+    # Windows Credential Manager at execution time.
+    "auth_mode", "catalog_account_id", "gateway_account_id", "catalog_v5_ssh_route",
+    "catalog_v5_target_alias", "catalog_v5_gateway_alias", "catalog_v5_gateway_host",
+    "catalog_v5_gateway_user", "catalog_v5_gateway_port",
+)
+
+# Legacy hand-written nodes historically treat an omitted/empty field as an
+# inherited top-level value.  Account-only catalog PATCHes can instead make a
+# deliberate clear authoritative for just the edited profile.  The marker is
+# internal YAML metadata, never an API response field or SSH argument.
+_EXPLICIT_EMPTY_OVERRIDE_MARKER = "_memomics_explicit_empty_overrides"
+_EXPLICIT_EMPTY_OVERRIDE_FIELDS = frozenset({
+    "key", "workdir", "job_dir", "local_root", "remote_root", "proxy_jump", "extra_ssh_options",
+})
+
+# Durable remote resources must not be retargeted when an operator later edits
+# or removes their named profile.  Keep this deliberately to connection and
+# scheduler fields: it contains only a private-key *path*, never credential
+# material.  New job/session records write every field (including empty
+# values), so re-entry can distinguish an intentionally empty override from an
+# older record that simply predates a field.
+_CONNECTION_SNAPSHOT_FIELDS = (
+    "host", "user", "port", "key", "workdir", "job_dir", "scheduler",
+    "partition", "queue", "local_root", "remote_root", "timeout", "extra_ssh_options", "proxy_jump", "session",
+    "catalog_v4_ssh_route", "auth_mode", "catalog_account_id", "gateway_account_id",
+    "catalog_v5_ssh_route", "catalog_v5_target_alias", "catalog_v5_gateway_alias",
+    "catalog_v5_gateway_host", "catalog_v5_gateway_user", "catalog_v5_gateway_port",
 )
 
 _LITERAL_HOST_RE = re.compile(r"^(?:([^@\s]+)@)?([A-Za-z0-9._-]+)(?::(\d+))?$")
@@ -316,17 +436,214 @@ def _normalize_nodes(raw) -> dict:
         elif isinstance(spec, str):
             entry = {"host": spec.strip() or key}
         elif isinstance(spec, dict):
+            raw_empty_overrides = spec.get(_EXPLICIT_EMPTY_OVERRIDE_MARKER) or []
+            explicit_empty = {
+                str(field) for field in raw_empty_overrides
+                if str(field) in _EXPLICIT_EMPTY_OVERRIDE_FIELDS
+            } if isinstance(raw_empty_overrides, (list, tuple, set)) else set()
             for k in _NODE_OVERRIDE_KEYS:
                 val = spec.get(k)
-                if val is None or (isinstance(val, str) and not val.strip()):
+                if val is None:
+                    continue
+                # 2026-11-08 合并修：catalog 管理的账号 profile（connection_profile）
+                # 里显式写出的空值就是权威值（key:'' 表示这个账号不用私钥），
+                # 不能当"没填"丢掉，否则每次保存都会退回共享配置。
+                _is_profile = bool(spec.get("connection_profile"))
+                if (isinstance(val, str) and not val.strip()
+                        and k not in explicit_empty and not _is_profile):
                     continue
                 entry[k] = _as_list(val) if k == "extra_ssh_options" else val
         else:
             logger.warning("remote.nodes.%s 的值类型不支持（%s），按空配置处理",
                            key, type(spec).__name__)
-        entry.setdefault("host", key)   # 名字默认就当主机名/ssh 别名用
+        # Hand-written legacy nodes may use their mapping key as an SSH alias.
+        # API-managed connection profiles are different: an omitted host must
+        # remain incomplete rather than turning a generated stable id into a
+        # remote hostname (and accidentally using a wrong account).
+        if not entry.get("connection_profile"):
+            entry.setdefault("host", key)
         out[key] = entry
     return out
+
+
+# ---------------------------------------------------------------------------
+# 多集群：解析 / 合并 / 列举
+# ---------------------------------------------------------------------------
+
+
+def _normalize_clusters(raw) -> dict:
+    """把 remote.clusters 规范成 {集群名: spec}（名字非法/重复直接丢弃并告警）。"""
+    if raw is None:
+        return {}
+    if isinstance(raw, (list, tuple)):
+        raw = {str(x).strip(): {} for x in raw if str(x).strip()}
+    if not isinstance(raw, dict):
+        logger.warning("remote.clusters 必须是字典（当前类型 %s），已忽略", type(raw).__name__)
+        return {}
+    out: dict = {}
+    seen = set()
+    for name, spec in raw.items():
+        key = str(name).strip()
+        if not key:
+            continue
+        if not _CLUSTER_NAME_RE.match(key):
+            logger.warning("remote.clusters 忽略非法集群名 %r（只允许字母数字和 . _ -，"
+                           "不超过 32 字符；中文请写进 label）", key)
+            continue
+        low = key.lower()
+        if low in seen:
+            logger.warning("remote.clusters 忽略重名集群 %r（集群名用来分台账，不能重名）", key)
+            continue
+        seen.add(low)
+        out[key] = dict(spec) if isinstance(spec, dict) else {}
+    return out
+
+
+def _cluster_default_name(clusters: dict, wanted: str = "") -> str:
+    """默认集群：显式指定 > 第一个。指定的名字不存在时退到第一个（并告警）。"""
+    if not clusters:
+        return _LEGACY_CLUSTER
+    wanted = str(wanted or "").strip()
+    if wanted:
+        for name in clusters:
+            if name.lower() == wanted.lower():
+                return name
+        logger.warning("remote.default_cluster=%r 不在 clusters 里，已退到第一个集群 %r",
+                       wanted, next(iter(clusters)))
+    return next(iter(clusters))
+
+
+def _merge_cluster(base: dict, spec: dict, name: str) -> dict:
+    """把一个集群条目合并成完整配置（身份字段继承 remote: 顶层，主机/目录必须自己给）。"""
+    cfg = dict(_DEFAULT_CFG)
+    for k in _CLUSTER_INHERIT_KEYS:
+        val = base.get(k)
+        if val not in (None, "", [], {}):
+            cfg[k] = val
+    spec = spec if isinstance(spec, dict) else {}
+    for k, val in spec.items():
+        if k == "name":
+            continue
+        if k not in _CLUSTER_INHERIT_KEYS and k not in _CLUSTER_OWN_KEYS and k != "note":
+            continue
+        if val is None:
+            continue
+        if isinstance(val, str) and not val.strip() and k not in ("workdir", "host"):
+            continue
+        cfg[k] = val
+    # enabled 没写就跟随顶层总开关（新增集群不用再勾一次）
+    cfg["enabled"] = _truthy(spec.get("enabled")) if "enabled" in spec else _truthy(base.get("enabled"))
+    cfg["name"] = name
+    cfg["cluster"] = name
+    cfg["label"] = str(spec.get("label") or cfg.get("label") or "").strip()
+    cfg["note"] = str(spec.get("note") or "").strip()
+    cfg["host"] = str(cfg.get("host") or "").strip()
+    cfg["user"] = str(cfg.get("user") or "").strip()
+    cfg["key"] = str(cfg.get("key") or "").strip()
+    if not cfg["key"]:
+        try:
+            _det = detect_private_keys()
+            if _det:
+                cfg["key"] = _det[0]
+        except Exception:
+            pass
+    try:
+        cfg["port"] = int(str(cfg.get("port") or 22).strip() or 22)
+    except Exception:
+        cfg["port"] = 22
+    for _k, _d in (("timeout", 300), ("max_output_chars", 20000)):
+        try:
+            cfg[_k] = int(str(cfg.get(_k) or _d).strip() or _d)
+        except Exception:
+            cfg[_k] = _d
+    cfg["workdir"] = str(cfg.get("workdir") or "").strip() or "~"
+    cfg["scheduler"] = str(cfg.get("scheduler") or "auto").strip().lower()
+    cfg["job_dir"] = str(cfg.get("job_dir") or "").strip() or posixpath.join(cfg["workdir"], "memomics_jobs")
+    cfg["extra_ssh_options"] = _as_list(cfg.get("extra_ssh_options"))
+    cfg["local_root"] = str(cfg.get("local_root") or "").strip()
+    cfg["remote_root"] = str(cfg.get("remote_root") or "").strip()
+    cfg["nodes"] = _normalize_nodes(spec.get("nodes"))
+    cfg["default_node"] = str(spec.get("default_node") or "").strip()
+    dn = cfg["default_node"]
+    if dn:
+        hit = next((n for n in cfg["nodes"] if n.lower() == dn.lower()), "")
+        if hit:
+            cfg["default_node"] = hit
+        elif len(cfg["nodes"]) == 1:
+            cfg["default_node"] = next(iter(cfg["nodes"]))
+        else:
+            logger.warning("集群 %s 的 default_node=%r 不在本集群 nodes 里，已清空", name, dn)
+            cfg["default_node"] = ""
+    cfg["node_policy"] = str(cfg.get("node_policy") or "ask").strip().lower() or "ask"
+    cfg["allow_unlisted_nodes"] = _truthy(cfg.get("allow_unlisted_nodes", True))
+    cfg["cluster"] = name
+    return cfg
+
+
+def _clusters_of(cfg: dict) -> dict:
+    return cfg.get("clusters") if isinstance(cfg.get("clusters"), dict) else {}
+
+
+def cluster_list(cfg: dict | None = None) -> list:
+    """全部集群的摘要（给前端下拉 / 状态条用），默认集群排第一。"""
+    cfg = cfg if isinstance(cfg, dict) else _load_remote_config()
+    clusters = _clusters_of(cfg)
+    default_name = cfg.get("default_cluster") or _LEGACY_CLUSTER
+    names = list(cfg.get("cluster_names") or [])
+    if not names:
+        names = [_LEGACY_CLUSTER]
+    out = []
+    for name in names:
+        merged = _merge_cluster(cfg, clusters.get(name) or {}, name) if clusters else cfg
+        nodes = list((merged.get("nodes") or {}).keys())
+        out.append({
+            "name": name,
+            "label": str(merged.get("label") or ""),
+            "enabled": bool(merged.get("enabled")),
+            "is_default": name == default_name,
+            "host": str(merged.get("host") or ""),
+            "user": str(merged.get("user") or ""),
+            "workdir": str(merged.get("workdir") or ""),
+            "scheduler": str(merged.get("scheduler") or ""),
+            "nodes": nodes,
+            "nodes_count": len(nodes),
+            "ready": bool(merged.get("enabled")) and bool(merged.get("nodes") or merged.get("host")),
+        })
+    out.sort(key=lambda x: (not x["is_default"], x["name"].lower()))
+    return out
+
+
+def resolve_cluster(cfg: dict, requested: str = ""):
+    """按名字取某个集群的完整配置 → (name, cfg, 错误JSON)。
+
+    多集群模式下**必须**先确定集群：没指定就用默认集群（并在返回里写清用了哪个），
+    指定了但不存在则硬拦并列候选 —— 绝不猜（猜错就是把 A 的作业投到 B 上）。
+    """
+    clusters = _clusters_of(cfg)
+    want = str(requested or "").strip()
+    if not clusters:                     # 老配置 / 只有一个集群：行为完全不变
+        name = cfg.get("cluster") or _LEGACY_CLUSTER
+        # 但**显式点名**一个不存在的集群时要报错，不能静默落到唯一的集群上（那也是「串」）
+        if want and want.lower() not in (name.lower(), _LEGACY_CLUSTER):
+            return "", {}, _err(
+                "没有这个集群：%r。当前只有一个（老配置）集群：%s" % (want, name),
+                clusters=cluster_list(cfg),
+                hint="要接多个集群请在「🖧 远端集群 → ⚙️ 配置」里点「＋ 集群」；"
+                     "集群名写错了就改 cluster 参数。",
+            )
+        return name, cfg, None
+    if want:
+        for name in clusters:
+            if name.lower() == want.lower():
+                return name, _merge_cluster(cfg, clusters[name], name), None
+        return "", {}, _err(
+            "没有这个集群：%r。已配置的集群：%s"
+            % (want, "、".join(clusters)),
+            clusters=cluster_list(cfg),
+            hint="集群名写错了就改 cluster 参数；要去别的集群请先问用户，不要自己换。",
+        )
+    name = _cluster_default_name(clusters, cfg.get("default_cluster") or "")
+    return name, _merge_cluster(cfg, clusters[name], name), None
 
 
 def _node_table(cfg: dict) -> dict:
@@ -349,12 +666,32 @@ def _node_table(cfg: dict) -> dict:
 
     for name, entry in nodes.items():
         node = dict(cfg)
+        if entry.get("connection_profile") is True:
+            # API-created profiles represent a concrete server/account pair.
+            # Do not let an omitted account field borrow credentials or a
+            # path mapping / working directory from an old top-level
+            # single-server setup.
+            # Legacy hand-written nodes without this marker keep their shared
+            # inheritance behaviour for backwards compatibility.
+            node.update({
+                "host": "", "user": "", "port": 22, "key": "",
+                "workdir": "~", "job_dir": "", "extra_ssh_options": [],
+                "local_root": "", "remote_root": "", "proxy_jump": "",
+                "scheduler": "auto", "partition": "", "queue": "", "timeout": 300,
+            })
         node.update({k: v for k, v in entry.items() if k not in ("note", "role")})
         node["_name"] = name
+        # The mapping key is the stable server id.  A friendly display name is
+        # intentionally separate so renaming it never breaks a chat session
+        # that is bound to this server.
+        node["_display_name"] = str(entry.get("display_name") or name)
         node["_note"] = str(entry.get("note") or "")
         node["_role"] = str(entry.get("role") or "")
         node["_shared"] = False
-        node["host"] = str(node.get("host") or name).strip()
+        if entry.get("connection_profile") is True:
+            node["host"] = str(node.get("host") or "").strip()
+        else:
+            node["host"] = str(node.get("host") or name).strip()
         # 节点覆盖了 workdir 但没覆盖 job_dir 时，作业目录要跟着走
         if "workdir" in entry and "job_dir" not in entry:
             node["job_dir"] = posixpath.join(str(node.get("workdir") or "~").rstrip("/"),
@@ -376,10 +713,136 @@ def _node_table(cfg: dict) -> dict:
     return table
 
 
+def _connection_snapshot(cfg: dict) -> dict:
+    """Return a detached, complete connection snapshot for a durable resource.
+
+    Do not filter false-y values here.  ``key=''`` and
+    ``extra_ssh_options=[]`` are meaningful: falling back to a subsequently
+    edited server profile could send a historical job through the wrong key or
+    bastion.  Older records omit fields entirely and are handled compatibly by
+    the replay code below.
+    """
+    snapshot = {}
+    for field in _CONNECTION_SNAPSHOT_FIELDS:
+        # Do not add an empty new-only field to historical V1 snapshots.  Its
+        # presence is itself a version signal during replay, and a stale/unknown
+        # non-empty value must never be silently reclassified as legacy.
+        if field == "catalog_v4_ssh_route":
+            if catalog_v4_ssh_route_required(cfg.get(field)):
+                snapshot[field] = CATALOG_V4_SSH_ROUTE_MARKER
+            continue
+        if field == "catalog_v5_ssh_route":
+            if catalog_v5_ssh_route_required(cfg.get(field)):
+                snapshot[field] = CATALOG_V5_SSH_ROUTE_MARKER
+            continue
+        value = cfg.get(field)
+        if isinstance(value, dict):
+            value = dict(value)
+        elif isinstance(value, (list, tuple)):
+            value = list(value)
+        snapshot[field] = value
+    return snapshot
+
+
+def _apply_connection_snapshot(base: dict, record: dict) -> dict:
+    """Overlay a persisted connection snapshot without losing deliberate empties.
+
+    A field's *presence* is the version boundary: new records include all
+    snapshot fields, whereas old records fall back to the current profile only
+    for fields they never stored.
+    """
+    node = dict(base or {})
+    record = record if isinstance(record, dict) else {}
+    for field in _CONNECTION_SNAPSHOT_FIELDS:
+        if field not in record:
+            continue
+        if field == "catalog_v4_ssh_route":
+            # Interim builds wrote ``null`` for legacy records.  Treat that as
+            # absent so it cannot erase a current V4 profile marker; exact V4
+            # provenance survives durable R-session/job re-entry, while any
+            # other non-empty marker is an integrity failure.
+            if catalog_v4_ssh_route_required(record.get(field)):
+                node[field] = CATALOG_V4_SSH_ROUTE_MARKER
+            continue
+        if field == "catalog_v5_ssh_route":
+            if catalog_v5_ssh_route_required(record.get(field)):
+                node[field] = CATALOG_V5_SSH_ROUTE_MARKER
+            continue
+        value = record.get(field)
+        if isinstance(value, dict):
+            value = dict(value)
+        elif isinstance(value, (list, tuple)):
+            value = list(value)
+        node[field] = value
+    # ``cluster_kernel``/node_state records historically use ``extra_opts``.
+    # Accept it only when the canonical field is absent, preserving an explicit
+    # empty ``extra_ssh_options`` in a new remote-cluster record.
+    if "extra_ssh_options" not in record and "extra_opts" in record:
+        node["extra_ssh_options"] = list(record.get("extra_opts") or [])
+    try:
+        node["port"] = int(node.get("port") or 22)
+    except Exception:
+        node["port"] = 22
+    return node
+
+
 def _nodes_brief(table: dict) -> list:
-    return [{"name": n, "host": t.get("host"), "user": t.get("user"),
+    return [{"name": n, "display_name": t.get("_display_name") or n,
+             "host": t.get("host"), "user": t.get("user"),
              "note": t.get("_note") or "", "role": t.get("_role") or ""}
             for n, t in table.items()]
+
+
+def bound_server_for_session(session_id: str = "") -> str:
+    """Compatibility shim for retired chat-to-profile target bindings.
+
+    Older callers (including the kernel helper) still import this function.
+    Session metadata is deliberately not read: ``chat_session_id`` now records
+    ownership only, so a stale binding or a metadata outage cannot choose or
+    block a remote target.  Kept as a stable no-op until old clients stop
+    calling the legacy binding endpoints.
+    """
+    _ = session_id
+    return ""
+
+
+def select_node_for_session(cfg: dict, requested: str = "", session_id: str = "",
+                            recorded_target: bool = False):
+    """Resolve a current node without using deprecated chat/profile bindings.
+
+    ``chat_session_id`` remains valuable for user-message and durable job
+    attribution, but it is not a target-selection authority.  New work may
+    explicitly select any configured profile from any chat; without an
+    explicit node the long-standing single-node/default/``needs_node`` policy
+    applies.  Historical job and R-session re-entry remains the sole special
+    case: it must reconnect to its recorded target (or reject a missing target
+    rather than treating the retired profile id as a host name).
+    """
+    requested = str(requested or "").strip()
+    # A persisted job/daemon owns a historical connection snapshot.  Do not
+    # read current session metadata for that re-entry path.  It may still rely
+    # on a current named profile when an older record predates full snapshots;
+    # in that case never let the convenience literal-host fallback turn a
+    # deleted stable id into an SSH destination.
+    if recorded_target:
+        table = _node_table(cfg)
+        if requested.lower() == "legacy-default" and len(table) == 1 and not (cfg.get("nodes") or {}):
+            name = next(iter(table))
+            return table[name], name, None
+        for name, node in table.items():
+            if name.lower() == requested.lower():
+                return node, name, None
+        return None, "", _err(
+            "历史资源登记的服务器 %r 已不存在，且记录没有可用的连接快照；已拒绝把它当作裸主机连接。"
+            % requested,
+            status="historical_target_missing", recorded_server_id=requested,
+            nodes=_nodes_brief(table),
+        )
+    # ``session_id`` deliberately has no selection effect.  Keep it in the
+    # signature for tool/API compatibility and for callers that use it only as
+    # durable resource attribution.
+    _ = session_id
+    return _select_node(cfg, requested)
 
 
 def _select_node(cfg: dict, requested: str = ""):
@@ -552,26 +1015,68 @@ def _make_conn_class():
         """
 
         def __init__(self, host: str, user: str, cwd: str = "~", timeout: int = 60,
-                     port: int = 22, key_path: str = "", extra_options=None):
+                     port: int = 22, key_path: str = "", extra_options=None,
+                     catalog_v4_ssh_route: str = "", catalog_v5_ssh_route: str = "",
+                     auth_mode: str = "", catalog_account_id: str = "", gateway_account_id: str = "",
+                     catalog_v5_target_alias: str = "", catalog_v5_gateway_alias: str = "",
+                     catalog_v5_gateway_host: str = "", catalog_v5_gateway_user: str = "",
+                     catalog_v5_gateway_port: int | str = ""):
             global _MUX_KNOWN_UNSUPPORTED
             BaseEnvironment.__init__(self, cwd=cwd, timeout=timeout)
             self.host = host
             self.user = user
             self.port = int(port or 22)
             self.key_path = key_path or ""
-            self.extra_options = [str(o) for o in (extra_options or [])]
+            self.catalog_v4_ssh_route = catalog_v4_ssh_route_required(catalog_v4_ssh_route)
+            self.catalog_v5_ssh_route = catalog_v5_ssh_route_required(catalog_v5_ssh_route)
+            if self.catalog_v4_ssh_route and self.catalog_v5_ssh_route:
+                raise RuntimeError("a catalog profile cannot use both V4 and V5 authentication")
+            self._v5_profile = {
+                "host": self.host, "user": self.user, "port": self.port,
+                "workdir": cwd or "~", "timeout": int(timeout or 60),
+                "auth_mode": auth_mode, "catalog_account_id": catalog_account_id,
+                "gateway_account_id": gateway_account_id,
+                "catalog_v5_ssh_route": catalog_v5_ssh_route,
+                "catalog_v5_target_alias": catalog_v5_target_alias,
+                "catalog_v5_gateway_alias": catalog_v5_gateway_alias,
+                "catalog_v5_gateway_host": catalog_v5_gateway_host,
+                "catalog_v5_gateway_user": catalog_v5_gateway_user,
+                "catalog_v5_gateway_port": catalog_v5_gateway_port,
+                "extra_ssh_options": list(extra_options or []),
+            }
+            if self.catalog_v5_ssh_route:
+                # A V5 profile must never carry an identity-file fallback.
+                if self.key_path:
+                    raise RuntimeError("catalog V5 password profile cannot carry a key path")
+                _candidate, self.catalog_ssh_config_args, _runtime = catalog_v5_process_runtime(self._v5_profile)
+                self.extra_options = []
+                self.catalog_strict_host_keys = True
+            else:
+                self.catalog_ssh_config_args, self.extra_options = _split_catalog_ssh_options(
+                    extra_options, host=self.host, user=self.user, port=self.port, key=self.key_path,
+                    require_managed=self.catalog_v4_ssh_route,
+                )
+                self.catalog_strict_host_keys = bool(self.catalog_ssh_config_args)
 
             # Windows 没有 unix socket / Win32-OpenSSH 无 mux：默认关掉连接复用
-            self.use_mux = (not _MUX_KNOWN_UNSUPPORTED) and os.name != "nt"
+            self.use_mux = (not self.catalog_v5_ssh_route) and (not _MUX_KNOWN_UNSUPPORTED) and os.name != "nt"
             self.control_dir = Path(tempfile.gettempdir()) / "memomics-ssh"
             self.control_dir.mkdir(parents=True, exist_ok=True)
-            _socket_id = hashlib.sha256(
-                ("%s@%s:%s" % (user, host, self.port)).encode()
-            ).hexdigest()[:16]
+            _socket_id = hashlib.sha256(json.dumps({
+                "host": host, "user": user, "port": self.port,
+                "key": self.key_path, "extra_options": self.extra_options,
+                "catalog_ssh_config": self.catalog_ssh_config_args,
+            }, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:16]
             self.control_socket = self.control_dir / ("%s.sock" % _socket_id)
 
             self._sync_manager = None
-            _ensure_ssh_available()
+            if self.catalog_v5_ssh_route:
+                # V5 never trusts PATH: the runtime later launches only the
+                # OS-owned System32 OpenSSH binaries.
+                _password_ssh.system_openssh_executable("ssh.exe")
+                _password_ssh.system_openssh_executable("scp.exe")
+            else:
+                _ensure_ssh_available()
             try:
                 self._establish_connection()
             except RuntimeError as exc:
@@ -585,14 +1090,74 @@ def _make_conn_class():
             self._remote_home = self._detect_remote_home()
             self.init_session()
 
+        def _v5_command(self, extra_args=None):
+            """Return one non-multiplexed OpenSSH argv/env pair for V5."""
+            _candidate, config_args, runtime = catalog_v5_process_runtime(self._v5_profile)
+            cmd = [str(_password_ssh.system_openssh_executable("ssh.exe"))] + list(config_args) + [
+                "-o", "BatchMode=no", "-o", "ConnectTimeout=10",
+            ]
+            if extra_args:
+                cmd.extend(extra_args)
+            cmd.append("%s@%s" % (self.user, runtime.target_alias))
+            return cmd, runtime
+
+        def _v5_scp_base(self):
+            """Return one V5 SCP argv prefix/env/alias with no key fallback."""
+            _candidate, config_args, runtime = catalog_v5_process_runtime(self._v5_profile)
+            cmd = [str(_password_ssh.system_openssh_executable("scp.exe")), "-r", "-q"] + list(config_args) + [
+                "-o", "BatchMode=no", "-o", "ConnectTimeout=10",
+            ]
+            return cmd, runtime
+
+        def _establish_connection(self):
+            if not self.catalog_v5_ssh_route:
+                return super()._establish_connection()
+            cmd, runtime = self._v5_command()
+            cmd.append("echo 'SSH connection established'")
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=15,
+                                        stdin=subprocess.DEVNULL, env=runtime.env)
+                if result.returncode != 0:
+                    raise RuntimeError("SSH connection failed: %s" % (result.stderr.strip() or result.stdout.strip()))
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError("SSH connection to %s@%s timed out" % (self.user, self.host)) from exc
+
+        def _detect_remote_home(self):
+            if not self.catalog_v5_ssh_route:
+                return super()._detect_remote_home()
+            try:
+                cmd, runtime = self._v5_command()
+                cmd.append("echo $HOME")
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=10,
+                                        stdin=subprocess.DEVNULL, env=runtime.env)
+                if result.returncode == 0 and result.stdout.strip():
+                    return result.stdout.strip()
+            except Exception:
+                pass
+            return "/root" if self.user == "root" else "/home/%s" % self.user
+
         def _build_ssh_command(self, extra_args=None):
+            if self.catalog_v5_ssh_route:
+                cmd, _runtime = self._v5_command(extra_args)
+                return cmd
+            # A long-lived connection may execute after an external file
+            # change.  Revalidate the immutable -F proof on every command,
+            # not merely when this ClusterSSH object was constructed.
+            self.catalog_ssh_config_args, self.extra_options = _split_catalog_ssh_options(
+                list(self.catalog_ssh_config_args) + list(self.extra_options),
+                host=self.host, user=self.user, port=self.port, key=self.key_path,
+                require_managed=self.catalog_v4_ssh_route,
+            )
+            self.catalog_strict_host_keys = bool(self.catalog_ssh_config_args)
             if self.use_mux:
                 cmd = super()._build_ssh_command(extra_args)
             else:
-                # 复刻父类命令构造，只是不带 ControlMaster/ControlPath
-                cmd = ["ssh",
+                # 复刻父类命令构造，只是不带 ControlMaster/ControlPath。
+                # V4 puts its verified -F first because ProxyJump children
+                # inherit -F but not arbitrary outer -o options.
+                cmd = ["ssh"] + list(self.catalog_ssh_config_args) + [
                        "-o", "BatchMode=yes",
-                       "-o", "StrictHostKeyChecking=accept-new",
+                       "-o", "StrictHostKeyChecking=%s" % ("yes" if self.catalog_strict_host_keys else "accept-new"),
                        "-o", "ConnectTimeout=10"]
                 if self.port != 22:
                     cmd.extend(["-p", str(self.port)])
@@ -601,10 +1166,46 @@ def _make_conn_class():
                 if extra_args:
                     cmd.extend(extra_args)
                 cmd.append("%s@%s" % (self.user, self.host))
+            if self.catalog_strict_host_keys and self.use_mux:
+                # The inherited builder has a legacy accept-new flag.  Remove
+                # it rather than relying on later config precedence, then put
+                # the content-addressed -F at argv start with an explicit yes.
+                filtered = [cmd[0]]
+                index = 1
+                while index < len(cmd):
+                    if (cmd[index] == "-o" and index + 1 < len(cmd)
+                            and str(cmd[index + 1]).lower().startswith("stricthostkeychecking=")):
+                        index += 2
+                        continue
+                    filtered.append(cmd[index])
+                    index += 1
+                cmd = [filtered[0]] + list(self.catalog_ssh_config_args) + [
+                    "-o", "StrictHostKeyChecking=yes",
+                ] + filtered[1:]
             if self.extra_options and cmd:
                 # ssh 选项必须排在 host 之前
                 cmd[-1:] = list(self.extra_options) + [cmd[-1]]
             return cmd
+
+        def _run_bash(self, cmd_string: str, *, login: bool = False, timeout: int = 120,
+                      stdin_data: str | None = None):
+            if not self.catalog_v5_ssh_route:
+                return super()._run_bash(cmd_string, login=login, timeout=timeout, stdin_data=stdin_data)
+            from tools.environments.base import _popen_bash
+            cmd, runtime = self._v5_command()
+            if login:
+                cmd.extend(["bash", "-l", "-c", shlex.quote(cmd_string)])
+            else:
+                cmd.extend(["bash", "-c", shlex.quote(cmd_string)])
+            return _popen_bash(cmd, stdin_data, env=runtime.env)
+
+        def cleanup(self):
+            # V5 deliberately disables ControlMaster: every native process
+            # receives a fresh bounded ASKPASS environment and cannot reuse a
+            # key-authenticated master connection from a historical profile.
+            if self.catalog_v5_ssh_route:
+                return None
+            return super().cleanup()
 
         def _before_execute(self) -> None:
             # 集群场景不做本地→远端文件同步（父类默认行为）
@@ -615,11 +1216,46 @@ def _make_conn_class():
 
 
 def _conn_key(cfg: dict) -> str:
-    # 键里带上密钥路径：同一个 host 用不同密钥/不同用户时不能复用同一条连接
-    return "%s@%s:%s|%s" % (cfg["user"], cfg["host"], cfg["port"], cfg.get("key") or "")
+    # A profile is a complete connection identity.  Same-host accounts can
+    # differ by user, identity path, jump route or working directory; reusing
+    # the first ClusterSSH object would retain its cwd/SSH options.
+    v4_route = catalog_v4_ssh_route_required(cfg.get("catalog_v4_ssh_route"))
+    v5_route = catalog_v5_password_profile(cfg)
+    identity = {
+        "host": str(cfg.get("host") or ""),
+        "user": str(cfg.get("user") or ""),
+        "port": int(cfg.get("port") or 22),
+        "key": str(cfg.get("key") or ""),
+        "workdir": str(cfg.get("workdir") or "~"),
+        "timeout": int(cfg.get("timeout") or 300),
+        "extra_ssh_options": list(cfg.get("extra_ssh_options") or []),
+    }
+    if v4_route:
+        # Preserve V1's historical cache identity byte-for-byte.  V4-only
+        # provenance and the content-addressed route digest participate only
+        # for profiles that actually carry the exact persistent marker.
+        identity["catalog_v4_ssh_route"] = CATALOG_V4_SSH_ROUTE_MARKER
+        identity["catalog_ssh_config"] = _catalog_ssh_config_fingerprint(
+            cfg.get("extra_ssh_options") or [], cfg,
+        )
+    if v5_route:
+        identity.update({
+            "catalog_v5_ssh_route": CATALOG_V5_SSH_ROUTE_MARKER,
+            "auth_mode": CATALOG_V5_PASSWORD_AUTH_MODE,
+            "catalog_account_id": str(cfg.get("catalog_account_id") or ""),
+            "gateway_account_id": str(cfg.get("gateway_account_id") or ""),
+            "catalog_v5_target_alias": str(cfg.get("catalog_v5_target_alias") or ""),
+            "catalog_v5_gateway_alias": str(cfg.get("catalog_v5_gateway_alias") or ""),
+            "catalog_ssh_config": _catalog_ssh_config_fingerprint(
+                cfg.get("extra_ssh_options") or [], cfg,
+            ),
+        })
+    return hashlib.sha256(json.dumps(identity, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
 
 
 def _get_conn(cfg: dict, force_reconnect: bool = False):
+    # Fail closed before returning an existing cached client too.
+    _catalog_ssh_config_fingerprint(cfg.get("extra_ssh_options") or [], cfg)
     key = _conn_key(cfg)
     with _CONN_LOCK:
         if force_reconnect:
@@ -632,15 +1268,30 @@ def _get_conn(cfg: dict, force_reconnect: bool = False):
         conn = _CONNS.get(key)
         if conn is None:
             ClusterSSH = _make_conn_class()
-            conn = ClusterSSH(
-                host=cfg["host"],
-                user=cfg["user"],
-                cwd=cfg["workdir"] or "~",
-                timeout=cfg["timeout"],
-                port=cfg["port"],
-                key_path=cfg["key"],
-                extra_options=cfg["extra_ssh_options"],
-            )
+            kwargs = {
+                "host": cfg["host"],
+                "user": cfg["user"],
+                "cwd": cfg["workdir"] or "~",
+                "timeout": cfg["timeout"],
+                "port": cfg["port"],
+                "key_path": cfg["key"],
+                "extra_options": cfg["extra_ssh_options"],
+            }
+            if catalog_v4_ssh_route_required(cfg.get("catalog_v4_ssh_route")):
+                kwargs["catalog_v4_ssh_route"] = CATALOG_V4_SSH_ROUTE_MARKER
+            if catalog_v5_password_profile(cfg):
+                kwargs.update({
+                    "catalog_v5_ssh_route": CATALOG_V5_SSH_ROUTE_MARKER,
+                    "auth_mode": CATALOG_V5_PASSWORD_AUTH_MODE,
+                    "catalog_account_id": cfg.get("catalog_account_id") or "",
+                    "gateway_account_id": cfg.get("gateway_account_id") or "",
+                    "catalog_v5_target_alias": cfg.get("catalog_v5_target_alias") or "",
+                    "catalog_v5_gateway_alias": cfg.get("catalog_v5_gateway_alias") or "",
+                    "catalog_v5_gateway_host": cfg.get("catalog_v5_gateway_host") or "",
+                    "catalog_v5_gateway_user": cfg.get("catalog_v5_gateway_user") or "",
+                    "catalog_v5_gateway_port": cfg.get("catalog_v5_gateway_port") or "",
+                })
+            conn = ClusterSSH(**kwargs)
             _CONNS[key] = conn
         # job_dir 开头的 ~ 展开成远端家目录：scp 的目标路径不经 shell 解释，
         # 字面 '~/...' 会被当成相对路径直接打不开（2026-10-08 dry_run 实踩）
@@ -679,11 +1330,19 @@ def _truncate(text: str, limit: int) -> str:
 
 def _ok(payload: dict) -> str:
     payload.setdefault("status", "ok")
+    # 2026-11-05：结果统一带集群名（多集群下会话/作业/输出都要能看出来在哪个集群；
+    # 老配置没有集群概念 → 不写这个字段，保持原样）
+    _cl = active_cluster()
+    if _cl:
+        payload.setdefault("cluster", _cl)
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
 def _err(message: str, **extra) -> str:
     payload = {"status": "error", "error": message}
+    _cl = active_cluster()
+    if _cl:
+        payload["cluster"] = _cl
     payload.update(extra)
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
@@ -716,7 +1375,7 @@ def _record_job(record: dict) -> None:
         logger.warning("记录远端作业失败: %s", exc)
 
 
-def _iter_jobs(limit: int = 200) -> list:
+def _iter_jobs(limit: int | None = 200) -> list:
     path = _records_path()
     if not path.exists():
         return []
@@ -735,22 +1394,101 @@ def _iter_jobs(limit: int = 200) -> list:
                     out.append(rec)
     except OSError as exc:
         logger.warning("读取远端作业记录失败: %s", exc)
-    return out[-limit:]
+    return out if limit is None else out[-limit:]
 
 
 def _find_job(cfg: dict, job_id: str):
-    for rec in reversed(_iter_jobs()):
+    # An explicit job id is an identity lookup, not a "recent jobs" view.
+    # Keep scanning the append-only local ledger so an old record can retain
+    # its scheduler/log/pid metadata after later submissions.
+    for rec in reversed(_iter_jobs(limit=None)):
         if str(rec.get("job_id")) == str(job_id) and _rec_matches_node(rec, cfg):
             return rec
     return None
 
 
+_INTERNAL_SELECTED_JOB_RECORD = "_memomics_selected_job_record"
+
+
+def _selected_job_record(args: dict, cfg: dict, job_id: str):
+    """Return the handler-selected historical record when it matches this call.
+
+    The public handler strips this private key from inbound args before making
+    its own full-ledger selection.  Actions therefore use it only as an
+    internal hand-off, never as a REST/model supplied target override.
+    """
+    record = args.get(_INTERNAL_SELECTED_JOB_RECORD)
+    if not isinstance(record, dict) or not job_id:
+        return None
+    if str(record.get("job_id") or "") != str(job_id):
+        return None
+    if not _rec_matches_node(record, cfg):
+        return None
+    return dict(record)
+
+
 def _job_owner_node(job_id: str) -> str:
     """这个 job_id 在记录里属于哪个节点（没有记录返回空串）。"""
-    for rec in reversed(_iter_jobs()):
+    for rec in reversed(_iter_jobs(limit=None)):
         if str(rec.get("job_id")) == str(job_id):
             return str(rec.get("node") or "")
     return ""
+
+
+def _recorded_job_summary(record: dict) -> dict:
+    """Return a non-secret diagnostic summary for an ambiguous job id."""
+    return {
+        "server_id": str(record.get("server_id") or ""),
+        "node": str(record.get("node") or ""),
+        "host": str(record.get("host") or ""),
+        "session_id": str(record.get("session_id") or ""),
+        "ts": str(record.get("ts") or record.get("created") or ""),
+        "name": str(record.get("name") or ""),
+    }
+
+
+def _select_recorded_job_snapshot(job_id: str, *, requested: str = "", chat_session_id: str = ""):
+    """Resolve one historical job without guessing across colliding scheduler IDs.
+
+    Schedulers commonly issue the same numeric id on separate servers.  A
+    status/log/cancel request must therefore use an explicit target first,
+    then its owning chat, and only finally a globally unique record.  Returning
+    an error rather than the most recent JSONL entry keeps cancel/log actions
+    from being sent to another cluster.
+    """
+    wanted = str(job_id or "").strip()
+    if not wanted:
+        return None, None
+    candidates = [dict(item) for item in _iter_jobs(limit=None)
+                  if str(item.get("job_id") or "") == wanted]
+    if not candidates:
+        return None, None
+    target = str(requested or "").strip().lower()
+    if target:
+        matches = [item for item in candidates if target in {
+            str(item.get("server_id") or "").strip().lower(),
+            str(item.get("node") or "").strip().lower(),
+            str(item.get("host") or "").strip().lower(),
+        }]
+        if not matches:
+            return None, _err(
+                "job_id %s 的登记目标与请求的 node/host %r 不匹配，已拒绝操作。" % (wanted, requested),
+                status="job_target_mismatch", job_id=wanted,
+                candidates=[_recorded_job_summary(item) for item in candidates[:12]],
+            )
+        candidates = matches
+    if chat_session_id:
+        owned = [item for item in candidates
+                 if str(item.get("session_id") or "") == str(chat_session_id)]
+        if owned:
+            candidates = owned
+    if len(candidates) == 1:
+        return candidates[0], None
+    return None, _err(
+        "job_id %s 在多个服务器或聊天会话中出现，无法安全判断目标；请指定 node/host 或从所属聊天操作。" % wanted,
+        status="ambiguous_job", job_id=wanted,
+        candidates=[_recorded_job_summary(item) for item in candidates[:12]],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -781,13 +1519,60 @@ _POLL_MAX_NODES = 8
 _MAX_TOUCHES = 50
 
 
-def _supervision_dir() -> Path:
-    base = _get_config_path().parent / "remote"
+_ACTIVE = threading.local()
+
+
+def set_active_cluster(name: str) -> None:
+    """handler 入口登记本轮用的集群：本地台账（作业状态/常驻会话/触点）据此分家。"""
+    try:
+        _ACTIVE.cluster = str(name or "").strip()
+    except Exception:
+        pass
+
+
+def active_cluster() -> str:
+    return str(getattr(_ACTIVE, "cluster", "") or "")
+
+
+def _supervision_dir(cluster: str | None = None) -> Path:
+    """集群本地台账目录。
+
+    - 老配置 / 未指定集群 → `<home>/remote`（历史台账原地可读，行为不变）
+    - 多集群 → `<home>/remote/clusters/<集群名>`：每个集群一套 job_states / sessions /
+      touches，**互不相通**（这正是「集群不能串」的落地点）
+    默认集群第一次使用时把老台账**复制**一份过去（原文件保留、不搬迁，失败静默）。
+    """
+    name = active_cluster() if cluster is None else str(cluster or "").strip()
+    root = _get_config_path().parent / "remote"
+    if not name:
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+        return root
+    base = root / "clusters" / _cluster_dir_name(name)
     try:
         base.mkdir(parents=True, exist_ok=True)
     except OSError:
         pass
+    try:
+        cfg = _load_remote_config()
+        if cfg.get("multi_cluster") and name == str(cfg.get("default_cluster") or ""):
+            for fname in (_JOB_STATES_FILE, "sessions.json", _TOUCHES_FILE):
+                src, dst = root / fname, base / fname
+                if src.exists() and not dst.exists():
+                    shutil.copy2(src, dst)
+    except Exception:
+        pass
     return base
+
+
+def _cluster_dir_name(name: str) -> str:
+    """集群名 → 目录名（安全字符直接用；其余带短哈希兜底，保证两个名字不会撞）。"""
+    raw = str(name or "").strip()
+    if raw and re.match(r"^[A-Za-z0-9._-]{1,64}$", raw) and raw not in (".", ".."):
+        return raw
+    return "_c_" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
 def _read_json_file(path: Path, default):
@@ -1142,28 +1927,53 @@ def _map_remote_to_local(cfg: dict, remote_path: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _scp_base(conn) -> list:
-    cmd = ["scp", "-r", "-q"]
+    config_args = list(getattr(conn, "catalog_ssh_config_args", []) or [])
+    extra_options = list(getattr(conn, "extra_options", []) or [])
+    config_args, extra_options = _split_catalog_ssh_options(
+        config_args + extra_options, host=getattr(conn, "host", ""), user=getattr(conn, "user", ""),
+        port=getattr(conn, "port", 22), key=getattr(conn, "key_path", ""),
+        require_managed=bool(getattr(conn, "catalog_v4_ssh_route", False)),
+    )
+    strict_host_keys = bool(config_args)
+    cmd = ["scp", "-r", "-q"] + config_args
     if getattr(conn, "use_mux", False):
         cmd.extend(["-o", "ControlPath=%s" % conn.control_socket])
     cmd.extend([
            "-o", "BatchMode=yes",
-           "-o", "StrictHostKeyChecking=accept-new",
+           "-o", "StrictHostKeyChecking=%s" % ("yes" if strict_host_keys else "accept-new"),
            "-o", "ConnectTimeout=10"])
     if conn.port and conn.port != 22:
         cmd.extend(["-P", str(conn.port)])
     if conn.key_path:
         cmd.extend(["-i", conn.key_path])
-    if conn.extra_options:
-        cmd.extend(conn.extra_options)
+    if extra_options:
+        cmd.extend(extra_options)
     return cmd
 
 
 def _scp_transfer(conn, local_path: str, remote_path: str, upload: bool) -> dict:
     """scp 传输；新版 scp 走 SFTP，若对端禁用 sftp-server 则退回传统 scp（-O）。"""
-    target = "%s@%s:%s" % (conn.user, conn.host, shlex.quote(remote_path))
+    v5 = bool(getattr(conn, "catalog_v5_ssh_route", False))
+    if not v5:
+        base = _scp_base(conn)
+        scp_host = str(conn.host or "")
     last_err = ""
     for extra in ([], ["-O"]):
-        cmd = _scp_base(conn) + extra
+        # Each V5 native process must receive a fresh bounded-lifetime
+        # ASKPASS mapping.  In particular, an SFTP fallback cannot reuse the
+        # password map (or its credential revision) created for the failed
+        # SFTP process.
+        runtime = None
+        if v5:
+            base, runtime = conn._v5_scp_base()
+            scp_host = str(runtime.target_alias)
+        # scp remote-spec syntax uses ':' as the host/path separator, so a V4
+        # literal IPv6 endpoint must be bracketed even though ssh itself
+        # accepts the unbracketed HostName from our generated -F config.
+        if ":" in scp_host and not (scp_host.startswith("[") and scp_host.endswith("]")):
+            scp_host = "[%s]" % scp_host
+        target = "%s@%s:%s" % (conn.user, scp_host, shlex.quote(remote_path))
+        cmd = list(base) + extra
         if upload:
             cmd.extend([local_path, target])
         else:
@@ -1171,7 +1981,8 @@ def _scp_transfer(conn, local_path: str, remote_path: str, upload: bool) -> dict
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True,
                                   timeout=max(conn.timeout, 120),
-                                  stdin=subprocess.DEVNULL)
+                                  stdin=subprocess.DEVNULL,
+                                  env=runtime.env if runtime is not None else None)
         except subprocess.TimeoutExpired:
             last_err = "scp 超时（%ss）" % max(conn.timeout, 120)
             continue
@@ -1413,17 +2224,18 @@ def _action_check(cfg: dict, args: dict) -> str:
     if cfg.get("auto_record_env", True):
         try:
             from memomics.bio_tools import env_inventory as _ei
-            rec = _ei.record_cluster_node(cfg.get("_name") or cfg["host"], {
+            _node_nm = cfg.get("_name") or cfg["host"]
+            rec = _ei.record_cluster_node(_node_nm, {
                 "status": "ok", "host": cfg["host"], "user": cfg["user"],
                 "scheduler": scheduler, "workdir": workdir,
                 "workdir_missing": ("WORKDIR_MISSING" in output),
                 "remote_home": remote_home,
                 "bins": {k: v for k, v in sched_bins.items() if v and not str(k).endswith("_ver")},
                 "output": output,
-            })
+            }, cluster_name=active_cluster())
             if rec.get("ok"):
                 env_sync = ("已同步到 🧩 环境管理（environment.json → cluster.nodes.%s.probed）"
-                            % (cfg.get("_name") or cfg["host"]))
+                            % (rec.get("node") or _node_nm))
                 output += "\n== env_sync ==\n" + env_sync
         except Exception as exc:  # noqa: BLE001
             logger.warning("节点环境同步失败（不影响自检）: %s", exc)
@@ -1880,11 +2692,19 @@ def _action_submit(cfg: dict, args: dict) -> str:
         if pid_match:
             job_id = pid_match.group(1)
     record = {
-        "ts": _now(), "node": cfg.get("_name") or "", "host": cfg["host"], "user": cfg["user"],
+        "ts": _now(), "node": cfg.get("_name") or "", "server_id": cfg.get("_name") or "",
+        # Write a complete target snapshot.  Later server edits/removal must
+        # not change where status/logs/cancel reconnect, including the port,
+        # identity path and ProxyJump options.
+        **_connection_snapshot(cfg),
+        "connection_snapshot_version": 1,
         "scheduler": sched, "job_id": job_id, "name": name,
         "script": script_remote, "stdout": out_log, "stderr": err_log,
         "workdir": workdir, "command": command[:4000], "pid_file": pid_file,
-        "session_id": _current_agent_session(),   # 监督归属：哪个会话提交的
+        # WebUI console requests carry the durable chat id explicitly; agent
+        # calls use the propagated ContextVar.  Preserve either so later
+        # same-scheduler-id lookups can disambiguate by owning chat.
+        "session_id": str(args.get("chat_session_id") or _current_agent_session() or ""),
     }
     _record_job(record)
     # 立刻落一条 submitted 到监督账本：即使本机还没轮询过，证据也能精确归属到会话
@@ -2043,7 +2863,7 @@ def _status_probe(conn, cfg: dict, rec, job_id: str, want_log_tail: bool = True)
 
 def _action_status(cfg: dict, args: dict) -> str:
     job_id = str(args.get("job_id") or "").strip()
-    rec = _find_job(cfg, job_id) if job_id else None
+    rec = _selected_job_record(args, cfg, job_id) or (_find_job(cfg, job_id) if job_id else None)
     cross_note = ""
     if job_id and rec is None:
         owner = _job_owner_node(job_id)
@@ -2088,7 +2908,7 @@ def _action_logs(cfg: dict, args: dict) -> str:
     lines = int(args.get("lines") or 100)
     job_id = str(args.get("job_id") or "").strip()
     path = (args.get("path") or "").strip()
-    rec = _find_job(cfg, job_id) if job_id else None
+    rec = _selected_job_record(args, cfg, job_id) or (_find_job(cfg, job_id) if job_id else None)
     if not path:
         if rec is None:
             recent = [r for r in _iter_jobs(20) if _rec_matches_node(r, cfg)]
@@ -2132,7 +2952,7 @@ def _action_cancel(cfg: dict, args: dict) -> str:
     job_id = str(args.get("job_id") or "").strip()
     if not job_id:
         return _err("cancel 需要 job_id")
-    rec = _find_job(cfg, job_id)
+    rec = _selected_job_record(args, cfg, job_id) or _find_job(cfg, job_id)
     conn = _get_conn(cfg)
     sched = (rec or {}).get("scheduler") or cfg["scheduler"]
     if sched == "auto":
@@ -2536,7 +3356,7 @@ def _locate_remote(node_cfg: dict, raw: str, flavor: str = "bare") -> dict:
     if _has_glob(unix):
         out["checked"] = [c for c in cands if c]
         return _locate_remote_glob(conn, out["checked"], out)
-    seen = set()
+    seen = []
     for cand in cands:
         if not cand or cand in seen:
             continue
@@ -2678,7 +3498,554 @@ def _paramiko():
         return None
 
 
-def _p_connect(paramiko, host, port, user, password, key_path, sock_factory=None):
+_CATALOG_KNOWN_HOSTS_LOCK = threading.RLock()
+_CATALOG_APPLICATION_KEY_LOCK = threading.RLock()
+_CATALOG_SSH_CONFIG_LOCK = threading.RLock()
+_CATALOG_MANAGED_STORE_LOCK = threading.RLock()
+
+# Persisted with V4 catalog profiles and every durable connection snapshot.
+# It is intentionally distinct from ``connection_profile``: older API-managed
+# profiles can still carry user-owned legacy ``-F`` options, whereas this
+# exact value means their route must prove the app-owned V4 policy at every
+# SSH argv boundary.
+CATALOG_V4_SSH_ROUTE_MARKER = "v4-managed-route-1"
+CATALOG_V5_SSH_ROUTE_MARKER = _password_ssh.PASSWORD_ROUTE_MARKER
+CATALOG_V5_PASSWORD_AUTH_MODE = _password_ssh.PASSWORD_AUTH_MODE
+
+
+def catalog_v4_ssh_route_required(value) -> bool:
+    """Return whether a profile/snapshot must carry a verified V4 ``-F``.
+
+    An omitted marker is the sole legacy compatibility case.  A non-empty
+    value that is not the exact marker is persistent provenance corruption,
+    not a reason to weaken the route to a user-owned legacy ``-F`` config.
+    """
+    if value is None or value == "":
+        return False
+    if value == CATALOG_V4_SSH_ROUTE_MARKER:
+        return True
+    raise RuntimeError("catalog V4 SSH route provenance is invalid")
+
+
+def catalog_v4_route_required(value) -> bool:
+    """Validate the normalized boolean marker stored by local job ledgers.
+
+    ``catalog_v4_route`` is internal data written as a real boolean after the
+    public ``catalog_v4_ssh_route`` marker has been checked.  Accept only that
+    exact shape so a tampered string cannot be coerced through ``bool(value)``
+    into an unrelated execution policy.
+    """
+    if value is True:
+        return True
+    if value is False or value is None or value == "":
+        return False
+    raise RuntimeError("catalog V4 SSH route provenance is invalid")
+
+
+def catalog_v5_ssh_route_required(value) -> bool:
+    """Return whether a profile must use the V5 Credential-Manager route."""
+    if value is None or value == "":
+        return False
+    if value == CATALOG_V5_SSH_ROUTE_MARKER:
+        return True
+    raise RuntimeError("catalog V5 SSH route provenance is invalid")
+
+
+def catalog_v5_route_required(value) -> bool:
+    """Validate the normalized V5 boolean used by durable job snapshots."""
+    if value is True:
+        return True
+    if value is False or value is None or value == "":
+        return False
+    raise RuntimeError("catalog V5 SSH route provenance is invalid")
+
+
+def catalog_v5_password_profile(cfg: dict) -> bool:
+    """Recognize only a complete, explicitly marked V5 password profile.
+
+    A partial/new-looking record is corruption, never a reason to fall back
+    to an old ``key`` field.  Profiles without the V5 marker remain historical
+    key-route compatibility records until they are deliberately rematched.
+    """
+    if not isinstance(cfg, dict):
+        return False
+    marked = catalog_v5_ssh_route_required(cfg.get("catalog_v5_ssh_route"))
+    mode = cfg.get("auth_mode")
+    if not marked and mode in (None, "", "legacy_key"):
+        return False
+    if not marked or mode != CATALOG_V5_PASSWORD_AUTH_MODE:
+        raise RuntimeError("catalog V5 password profile provenance is invalid")
+    # Validate the opaque identifiers now; runtime mapping is allowed only
+    # after this exact profile shape is proved.
+    if not _password_ssh.is_password_profile(cfg):
+        raise RuntimeError("catalog V5 password profile provenance is invalid")
+    if not str(cfg.get("catalog_account_id") or ""):
+        raise RuntimeError("catalog V5 password account is unavailable")
+    return True
+
+
+class _CatalogHostKeyChangedError(RuntimeError):
+    """A catalog TOFU entry exists but disagrees with a newly observed key."""
+
+
+class _CatalogHostKeyStoreError(RuntimeError):
+    """The app-owned catalog host-key store cannot be used safely."""
+
+
+class _CatalogManagedStorePermissionError(RuntimeError):
+    """The V4-managed SSH artifact store cannot be permission-hardened."""
+
+
+def _catalog_known_hosts_path() -> Path:
+    """Dedicated TOFU store for V4 catalog matching (never a credential)."""
+    # Keep this a flat, app-owned file beside config.yaml.  It must outlive an
+    # individual profile: historical job/R snapshots may still need its
+    # verified host identity after that profile is deleted.
+    return _catalog_managed_store_dir() / "known_hosts"
+
+
+def _catalog_application_key_path() -> Path:
+    """Return the one V4-managed identity path without consulting user ~/.ssh.
+
+    This is deliberately a flat file in the existing application home.  The
+    catalog must never scan or silently adopt arbitrary operator identities:
+    an explicit key path remains supported, while password bootstrap may
+    create this single app-owned ed25519 identity.
+    """
+    return _catalog_managed_store_dir() / "id_ed25519"
+
+
+def _catalog_route_config_dir() -> Path:
+    """App-owned, durable flat home for content-addressed V4 OpenSSH configs."""
+    return _catalog_managed_store_dir()
+
+
+def _catalog_managed_store_dir() -> Path:
+    """Return the one V4-controlled directory beneath the existing app home."""
+    return _get_config_path().parent / ".memomics-catalog-v4"
+
+
+def _catalog_is_reparse_or_symlink(path: Path) -> bool:
+    try:
+        if path.is_symlink():
+            return True
+        attributes = getattr(path.stat(), "st_file_attributes", 0)
+        return bool(attributes & 0x0400)  # FILE_ATTRIBUTE_REPARSE_POINT
+    except OSError:
+        return True
+
+
+def _catalog_windows_current_sid() -> str:
+    """Look up the current Windows SID using argv-only system tooling."""
+    try:
+        proc = subprocess.run(
+            ["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True,
+            text=True, timeout=10, stdin=subprocess.DEVNULL,
+        )
+    except Exception as exc:
+        raise _CatalogManagedStorePermissionError("catalog security identity unavailable") from exc
+    match = re.search(r"S-\d+(?:-\d+)+", (proc.stdout or "")) if proc.returncode == 0 else None
+    if not match:
+        raise _CatalogManagedStorePermissionError("catalog security identity unavailable")
+    return match.group(0)
+
+
+def _catalog_set_windows_dacl(path: Path, sddl: str) -> None:
+    """Set an exact protected DACL through Win32, without a shell command."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW.argtypes = [
+            wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(wintypes.DWORD),
+        ]
+        advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW.restype = wintypes.BOOL
+        advapi32.SetFileSecurityW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, ctypes.c_void_p]
+        advapi32.SetFileSecurityW.restype = wintypes.BOOL
+        kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+        kernel32.LocalFree.restype = ctypes.c_void_p
+        descriptor = ctypes.c_void_p()
+        if not advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                str(sddl), 1, ctypes.byref(descriptor), None):
+            raise OSError(ctypes.get_last_error(), "ConvertStringSecurityDescriptorToSecurityDescriptorW")
+        try:
+            # DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION.
+            # Ownership is deliberately left untouched; the current user only
+            # needs an exact non-inherited ACL on this app-owned object.
+            if not advapi32.SetFileSecurityW(str(path), wintypes.DWORD(0x80000004), descriptor):
+                raise OSError(ctypes.get_last_error(), "SetFileSecurityW")
+        finally:
+            kernel32.LocalFree(descriptor)
+    except _CatalogManagedStorePermissionError:
+        raise
+    except Exception as exc:
+        raise _CatalogManagedStorePermissionError("catalog security permissions unavailable") from exc
+
+
+def _catalog_windows_sddl(path: Path) -> str:
+    """Read the DACL SDDL for exact post-write verification."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        advapi32.GetNamedSecurityInfoW.argtypes = [
+            wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+            ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(ctypes.c_void_p),
+            ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(ctypes.c_void_p),
+        ]
+        advapi32.GetNamedSecurityInfoW.restype = wintypes.DWORD
+        advapi32.ConvertSecurityDescriptorToStringSecurityDescriptorW.argtypes = [
+            ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD,
+            ctypes.POINTER(ctypes.c_wchar_p), ctypes.POINTER(wintypes.DWORD),
+        ]
+        advapi32.ConvertSecurityDescriptorToStringSecurityDescriptorW.restype = wintypes.BOOL
+        kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+        kernel32.LocalFree.restype = ctypes.c_void_p
+        descriptor = ctypes.c_void_p()
+        # GetNamedSecurityInfoW returns Win32 ERROR_* instead of BOOL.
+        status = advapi32.GetNamedSecurityInfoW(
+            str(path), wintypes.DWORD(1), wintypes.DWORD(0x00000004),
+            None, None, None, None, ctypes.byref(descriptor),
+        )
+        if status != 0:
+            raise OSError(int(status), "GetNamedSecurityInfoW")
+        try:
+            rendered = ctypes.c_wchar_p()
+            size = wintypes.DWORD()
+            if not advapi32.ConvertSecurityDescriptorToStringSecurityDescriptorW(
+                    descriptor, 1, wintypes.DWORD(0x00000004), ctypes.byref(rendered), ctypes.byref(size)):
+                raise OSError(ctypes.get_last_error(), "ConvertSecurityDescriptorToStringSecurityDescriptorW")
+            try:
+                return str(rendered.value or "")
+            finally:
+                kernel32.LocalFree(ctypes.cast(rendered, ctypes.c_void_p))
+        finally:
+            kernel32.LocalFree(descriptor)
+    except _CatalogManagedStorePermissionError:
+        raise
+    except Exception as exc:
+        raise _CatalogManagedStorePermissionError("catalog security permissions unavailable") from exc
+
+
+def _catalog_windows_canonical_sid(value: str) -> str:
+    """Resolve an SDDL trustee token to its concrete numeric Windows SID.
+
+    ``GetNamedSecurityInfoW`` may render the current local Administrator as
+    ``LA`` rather than the numeric SID returned by ``whoami /user``.  Compare
+    resolved SIDs, not textual aliases: accepting ``LA`` by name would grant a
+    different local Administrator account access when its SID is not the
+    current process identity.
+    """
+    token = str(value or "").strip()
+    if not token:
+        raise _CatalogManagedStorePermissionError("catalog security permissions unavailable")
+    try:
+        import ctypes
+        from ctypes import wintypes
+        advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        advapi32.ConvertStringSidToSidW.argtypes = [
+            wintypes.LPCWSTR, ctypes.POINTER(ctypes.c_void_p),
+        ]
+        advapi32.ConvertStringSidToSidW.restype = wintypes.BOOL
+        advapi32.ConvertSidToStringSidW.argtypes = [
+            ctypes.c_void_p, ctypes.POINTER(ctypes.c_wchar_p),
+        ]
+        advapi32.ConvertSidToStringSidW.restype = wintypes.BOOL
+        kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+        kernel32.LocalFree.restype = ctypes.c_void_p
+        binary_sid = ctypes.c_void_p()
+        if not advapi32.ConvertStringSidToSidW(token, ctypes.byref(binary_sid)):
+            raise OSError(ctypes.get_last_error(), "ConvertStringSidToSidW")
+        try:
+            rendered = ctypes.c_wchar_p()
+            if not advapi32.ConvertSidToStringSidW(binary_sid, ctypes.byref(rendered)):
+                raise OSError(ctypes.get_last_error(), "ConvertSidToStringSidW")
+            try:
+                canonical = str(rendered.value or "").strip()
+            finally:
+                kernel32.LocalFree(ctypes.cast(rendered, ctypes.c_void_p))
+        finally:
+            kernel32.LocalFree(binary_sid)
+        if not re.fullmatch(r"S-\d+(?:-\d+)+", canonical, flags=re.IGNORECASE):
+            raise _CatalogManagedStorePermissionError("catalog security permissions unavailable")
+        return canonical.upper()
+    except _CatalogManagedStorePermissionError:
+        raise
+    except Exception as exc:
+        raise _CatalogManagedStorePermissionError("catalog security permissions unavailable") from exc
+
+
+def _catalog_assert_windows_acl(actual: str, sid: str, *, directory: bool) -> None:
+    """Reject any DACL that differs from the protected managed-file whitelist."""
+    # SDDL may omit owner/group when we requested only DACL, so avoid relying
+    # on their presentation.  Everything after D: is the requested DACL.
+    dacl = actual.split("D:", 1)[1] if "D:" in actual else ""
+    if not dacl.startswith("P"):
+        raise _CatalogManagedStorePermissionError("catalog security permissions unavailable")
+    aces = re.findall(r"\(([^()]*)\)", dacl)
+    expected_trustees = [
+        _catalog_windows_canonical_sid(sid),
+        _catalog_windows_canonical_sid("SY"),
+        _catalog_windows_canonical_sid("BA"),
+    ]
+    if len(aces) != 3:
+        raise _CatalogManagedStorePermissionError("catalog security permissions unavailable")
+    seen = []
+    for ace in aces:
+        fields = ace.split(";")
+        if len(fields) != 6 or fields[0] != "A" or fields[2] != "FA":
+            raise _CatalogManagedStorePermissionError("catalog security permissions unavailable")
+        if directory:
+            if fields[1] != "OICI":
+                raise _CatalogManagedStorePermissionError("catalog security permissions unavailable")
+        elif fields[1] != "":
+            raise _CatalogManagedStorePermissionError("catalog security permissions unavailable")
+        trustee = _catalog_windows_canonical_sid(fields[5])
+        if trustee not in expected_trustees:
+            raise _CatalogManagedStorePermissionError("catalog security permissions unavailable")
+        seen.append(trustee)
+    if sorted(seen) != sorted(expected_trustees):
+        raise _CatalogManagedStorePermissionError("catalog security permissions unavailable")
+
+
+def _catalog_verify_windows_acl(path: Path, *, directory: bool) -> None:
+    """Read and verify, but never repair, a managed object's DACL."""
+    sid = _catalog_windows_current_sid()
+    _catalog_assert_windows_acl(_catalog_windows_sddl(path), sid, directory=directory)
+
+
+def _catalog_harden_windows_acl(path: Path, *, directory: bool) -> None:
+    """Replace—not merge—the managed object's DACL, then verify its whitelist."""
+    sid = _catalog_windows_current_sid()
+    inherit = "OICI" if directory else ""
+    sddl = "D:P(A;%s;FA;;;%s)(A;%s;FA;;;SY)(A;%s;FA;;;BA)" % (
+        inherit, sid, inherit, inherit,
+    )
+    _catalog_set_windows_dacl(path, sddl)
+    _catalog_verify_windows_acl(path, directory=directory)
+
+
+def _catalog_harden_managed_path(path: Path, *, directory: bool) -> None:
+    """Harden only the V4-owned store and its artifacts, never user key files."""
+    if _catalog_is_reparse_or_symlink(path):
+        raise _CatalogManagedStorePermissionError("catalog security path is invalid")
+    try:
+        if os.name == "nt":
+            _catalog_harden_windows_acl(path, directory=directory)
+        else:
+            os.chmod(path, 0o700 if directory else 0o600)
+    except _CatalogManagedStorePermissionError:
+        raise
+    except OSError as exc:
+        raise _CatalogManagedStorePermissionError("catalog security permissions unavailable") from exc
+
+
+def _catalog_verify_managed_path(path: Path, *, directory: bool) -> None:
+    """Fail closed when an existing managed artifact's current ACL/mode drifts.
+
+    This is deliberately verification-only.  Re-applying a safe DACL at an
+    execution boundary would make a previously replaceable known-host pin or
+    app-owned key appear trustworthy after the fact.  Creation and atomic
+    replacement use ``_catalog_harden_managed_path`` instead.
+    """
+    if _catalog_is_reparse_or_symlink(path):
+        raise _CatalogManagedStorePermissionError("catalog security path is invalid")
+    try:
+        if directory:
+            if not path.is_dir():
+                raise _CatalogManagedStorePermissionError("catalog security path is invalid")
+        elif not path.is_file():
+            raise _CatalogManagedStorePermissionError("catalog security path is invalid")
+        if os.name == "nt":
+            _catalog_verify_windows_acl(path, directory=directory)
+        else:
+            expected_mode = 0o700 if directory else 0o600
+            if stat.S_IMODE(path.stat().st_mode) != expected_mode:
+                raise _CatalogManagedStorePermissionError("catalog security permissions unavailable")
+    except _CatalogManagedStorePermissionError:
+        raise
+    except OSError as exc:
+        raise _CatalogManagedStorePermissionError("catalog security permissions unavailable") from exc
+
+
+def _catalog_ensure_managed_store() -> Path:
+    """Create a new managed store or strictly verify an existing one.
+
+    Repairing an existing root at this point would erase evidence that another
+    identity could have replaced a child pin/key before normal execution.
+    """
+    root = _catalog_managed_store_dir()
+    home = root.parent
+    with _CATALOG_MANAGED_STORE_LOCK:
+        if not home.is_dir() or _catalog_is_reparse_or_symlink(home):
+            raise _CatalogManagedStorePermissionError("catalog security home is unavailable")
+        if root.exists() and not root.is_dir():
+            raise _CatalogManagedStorePermissionError("catalog security store is invalid")
+        created = not root.exists()
+        try:
+            if created:
+                root.mkdir(mode=0o700, parents=False, exist_ok=False)
+        except OSError as exc:
+            raise _CatalogManagedStorePermissionError("catalog security store is unavailable") from exc
+        if created:
+            _catalog_harden_managed_path(root, directory=True)
+        else:
+            _catalog_verify_managed_path(root, directory=True)
+    return root
+
+
+def _catalog_v5_staged_askpass_helper() -> Path:
+    """Return the only helper a V5 password route may execute.
+
+    The release-tree helper is merely an immutable byte source.  At the
+    execution boundary, stage its reviewed bytes into the already protected
+    catalog store and verify the staged file's exact DACL and hash before
+    returning it for ``SSH_ASKPASS``.  This deliberately happens only during
+    a V5 runtime request, never during code deployment or startup.
+    """
+    with _CATALOG_MANAGED_STORE_LOCK:
+        root = _catalog_ensure_managed_store()
+        return _askpass_security.stage_verified_askpass_helper(
+            root,
+            harden_managed_path=_catalog_harden_managed_path,
+            verify_managed_path=_catalog_verify_managed_path,
+            expected_sha256=_password_ssh.ASKPASS_HELPER_SHA256,
+        )
+
+
+def _known_host_lookup_names(host, port) -> list[str]:
+    host = str(host or "").strip()
+    if host.startswith("[") and host.endswith("]"):
+        host = host[1:-1]
+    try:
+        port = int(port or 22)
+    except Exception:
+        port = 22
+    # OpenSSH/Paramiko host-key stores scope non-default SSH ports as
+    # ``[host]:port``.  Falling back to a bare host here would make a pin for
+    # port 22 incorrectly block first-use bootstrap on (say) port 2222.
+    if port != 22:
+        return ["[%s]:%d" % (host, port)]
+    return [host]
+
+
+def _configure_catalog_host_key_policy(client, paramiko, host, port, known_hosts_path):
+    """Load an endpoint-scoped TOFU record before auth; save first sightings.
+
+    A known endpoint uses RejectPolicy, so a changed host key is rejected
+    before a password can be sent.  An unseen endpoint uses the normal TOFU
+    AutoAddPolicy and is persisted immediately, including an auth failure
+    after its SSH handshake, to prevent an identity swap between a key attempt
+    and the subsequent one-time password attempt.
+    """
+    if not known_hosts_path:
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        return None
+    path = Path(known_hosts_path)
+    # config.yaml's parent is the existing MemOmics home.  Do not create a
+    # user ~/.ssh directory or a new task/work folder as a side effect.
+    try:
+        managed_root = _catalog_managed_store_dir()
+        _catalog_verify_managed_path(managed_root, directory=True)
+        if path.parent.resolve() != managed_root.resolve():
+            raise _CatalogHostKeyStoreError("catalog host-key store is unavailable")
+        # Existing pins are trust material.  Verify their current exact ACL
+        # before loading; never repair an unexpected ACL and then trust bytes
+        # that could have been replaced while it was writable.
+        if path.exists() or path.is_symlink():
+            _catalog_verify_managed_path(path, directory=False)
+    except _CatalogManagedStorePermissionError:
+        raise
+    except _CatalogHostKeyStoreError:
+        raise
+    except Exception as exc:
+        raise _CatalogHostKeyStoreError("catalog host-key store is unavailable") from exc
+    try:
+        if path.exists() and path.stat().st_size:
+            client.load_host_keys(str(path))
+    except Exception as exc:
+        raise _CatalogHostKeyStoreError("catalog host-key store is unavailable") from exc
+    known = False
+    try:
+        keys = client.get_host_keys()
+        known = any(bool(keys.lookup(name)) for name in _known_host_lookup_names(host, port))
+    except Exception:
+        known = False
+    client.set_missing_host_key_policy(paramiko.RejectPolicy() if known else paramiko.AutoAddPolicy())
+    return path
+
+
+def _save_catalog_host_keys(client, paramiko, path) -> None:
+    if path is None:
+        return
+    try:
+        path = Path(path)
+        managed_root = _catalog_managed_store_dir()
+        _catalog_verify_managed_path(managed_root, directory=True)
+        if path.parent.resolve() != managed_root.resolve():
+            raise _CatalogHostKeyStoreError("catalog host-key store is unavailable")
+        if path.exists() or path.is_symlink():
+            _catalog_verify_managed_path(path, directory=False)
+        # Merge the just-observed key into the latest on-disk set while the
+        # global lock is held.  A direct ``save_host_keys`` would overwrite a
+        # concurrently learned different endpoint and could turn a same-host
+        # first-seen race into last-writer-wins trust.
+        HostKeys = getattr(paramiko, "HostKeys", None)
+        if HostKeys is None or not hasattr(client, "get_host_keys"):
+            # Falling back to ``save_host_keys`` is unsafe: it can overwrite a
+            # different endpoint learned by another request between load and
+            # save.  Real Paramiko exposes HostKeys; reject unsupported stubs
+            # rather than weakening the V4 trust guarantee.
+            raise _CatalogHostKeyStoreError("catalog host-key store is unavailable")
+        merged = HostKeys()
+        if path.exists() and path.stat().st_size:
+            merged.load(str(path))
+        observed = client.get_host_keys()
+        for hostname, key_types in observed.items():
+            existing = merged.lookup(hostname)
+            for key_type, key in key_types.items():
+                if existing and key_type in existing and existing[key_type] != key:
+                    raise _CatalogHostKeyChangedError("catalog host key changed")
+                merged.add(hostname, key_type, key)
+        fd, tmp_name = tempfile.mkstemp(prefix=".%s." % path.name, suffix=".tmp", dir=str(path.parent))
+        os.close(fd)
+        tmp = Path(tmp_name)
+        try:
+            merged.save(str(tmp))
+            # ``HostKeys.save`` owns its own file handle.  Re-open and sync
+            # its completed bytes before the atomic replacement so a sudden
+            # process/host failure cannot acknowledge a first-seen key that
+            # was only resident in the filesystem cache.  If the sync fails,
+            # keep the previous non-empty store intact and abort this
+            # connection attempt rather than allowing the password fallback
+            # to TOFU a second identity.
+            # Win32 FlushFileBuffers (used by ``os.fsync``) requires a handle
+            # opened with write access; ``rb`` works on POSIX but rejects the
+            # same temporary file on Windows.
+            with open(tmp, "r+b") as sync_fh:
+                os.fsync(sync_fh.fileno())
+            os.replace(tmp, path)
+            _catalog_harden_managed_path(path, directory=False)
+        finally:
+            try:
+                if tmp.exists():
+                    tmp.unlink()
+            except OSError:
+                pass
+    except _CatalogHostKeyChangedError:
+        raise
+    except _CatalogManagedStorePermissionError:
+        raise
+    except _CatalogHostKeyStoreError:
+        raise
+    except Exception as exc:
+        raise _CatalogHostKeyStoreError("catalog host-key store is unavailable") from exc
+
+
+def _p_connect(paramiko, host, port, user, password, key_path, sock_factory=None, *, known_hosts_path=None):
     """按顺序尝试 密钥→密码（哪个给了试哪个）；返回 (client, 认证方式)。全失败抛最后异常。
 
     sock_factory：走跳板时传一个"开新通道"的 callable —— 每次认证尝试都必须用
@@ -2692,26 +4059,62 @@ def _p_connect(paramiko, host, port, user, password, key_path, sock_factory=None
         attempts.append(("password", password))
     last_exc = None
     for mode, secret in attempts:
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        kwargs = {"hostname": host, "port": int(port or 22), "username": user,
-                  "look_for_keys": False, "allow_agent": False,
-                  "timeout": 15, "banner_timeout": 30, "auth_timeout": 20}
-        if sock_factory is not None:
-            kwargs["sock"] = sock_factory()
-        if mode == "key":
-            kwargs["key_filename"] = secret
-        else:
-            kwargs["password"] = secret
+        # The trust decision, SSH handshake, and first durable save must be a
+        # single critical section.  This intentionally serializes catalogue
+        # bootstrap attempts (not normal remote execution) so two requests
+        # cannot accept different first keys for one endpoint or lose a key
+        # for another endpoint during a read/modify/write save.
+        lock = _CATALOG_KNOWN_HOSTS_LOCK if known_hosts_path else None
+        if lock is not None:
+            lock.acquire()
         try:
-            client.connect(**kwargs)
-            return client, mode
-        except Exception as exc:  # noqa: BLE001 — 认证失败换下一方式；网络错误也只会让下一方式再撞一次
-            last_exc = exc
+            client = paramiko.SSHClient()
+            catalog_host_store = _configure_catalog_host_key_policy(
+                client, paramiko, host, port, known_hosts_path,
+            )
+            kwargs = {"hostname": host, "port": int(port or 22), "username": user,
+                      "look_for_keys": False, "allow_agent": False,
+                      "timeout": 15, "banner_timeout": 30, "auth_timeout": 20}
+            if sock_factory is not None:
+                kwargs["sock"] = sock_factory()
+            if mode == "key":
+                kwargs["key_filename"] = secret
+            else:
+                kwargs["password"] = secret
             try:
-                client.close()
+                client.connect(**kwargs)
+            except Exception as exc:  # noqa: BLE001 — 认证失败换下一方式; see caller's safe mapping
+                last_exc = exc
+                # For a first-seen V4 endpoint, AutoAddPolicy has already
+                # observed the SSH host key before authentication can fail.
+                # Persist it before considering a password retry.  A storage
+                # failure is terminal: otherwise a second attempt would be a
+                # fresh TOFU decision and could accept a different key.
+                try:
+                    _save_catalog_host_keys(client, paramiko, catalog_host_store)
+                except Exception as store_exc:
+                    try:
+                        client.close()
+                    except Exception:
+                        pass
+                    raise store_exc from exc
+                try:
+                    client.close()
+                except Exception:
+                    pass
+                continue
+            try:
+                _save_catalog_host_keys(client, paramiko, catalog_host_store)
             except Exception:
-                pass
+                try:
+                    client.close()
+                except Exception:
+                    pass
+                raise
+            return client, mode
+        finally:
+            if lock is not None:
+                lock.release()
     raise last_exc or RuntimeError("没有可用的认证方式（既没找到密钥文件也没给密码）")
 
 
@@ -2722,12 +4125,1309 @@ def _p_exec(client, cmd, timeout=30):
     return out, err_out
 
 
+# ---------------------------------------------------------------------------
+# V4 catalog matching probe
+# ---------------------------------------------------------------------------
+#
+# A catalog connection is deliberately tested before it is written into
+# ``remote.nodes``.  The catalog owns the server/node/account records; this
+# module receives only a fully composed, short-lived candidate configuration.
+# Do not make this a second SSH implementation: the last validation step below
+# calls the existing ``_action_nodes`` / ClusterSSH BatchMode engine that all
+# normal cluster work uses.
+
+_CATALOG_PROBE_NODE = "catalog-probe"
+_CATALOG_SAFE_HOST_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$")
+_CATALOG_SAFE_USER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+
+def _catalog_probe_result(ok: bool, stage: str, code: str, message: str, **extra) -> dict:
+    """Return the small, UI-safe V4 matching result shape.
+
+    In particular, this intentionally never carries an exception object, a
+    password, a private-key path, a public-key line, raw SSH output, or a
+    Paramiko/openssl diagnostic.  Those values can leak credentials or local
+    infrastructure details and are not useful instructions for the UI.
+    """
+    result = {"ok": bool(ok), "stage": str(stage), "code": str(code), "message": str(message)}
+    result.update({key: value for key, value in extra.items() if value is not None})
+    return result
+
+
+def _catalog_safe_text(value, field: str, *, required: bool = False, maximum: int = 1024) -> str:
+    text = "" if value is None else str(value).strip()
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in text):
+        raise ValueError("%s contains control characters" % field)
+    if required and not text:
+        raise ValueError("%s is required" % field)
+    if len(text) > maximum:
+        raise ValueError("%s is too long" % field)
+    return text
+
+
+def _catalog_network_host(value, field: str = "host") -> str:
+    """Validate catalog host syntax and return an unbracketed network host.
+
+    The V4 catalog accepts DNS names, IPv4, IPv6, and bracketed IPv6.  Socket
+    and Paramiko calls need the literal IPv6 address without brackets; the
+    ProxyJump/config serializers add brackets back only where SSH syntax needs
+    them.
+    """
+    host = _catalog_safe_text(value, field, required=True, maximum=253)
+    if any(ch.isspace() for ch in host) or any(ch in host for ch in "@/\\"):
+        raise ValueError("%s is invalid" % field)
+    if host.startswith("[") != host.endswith("]"):
+        raise ValueError("%s is invalid" % field)
+    literal = host[1:-1] if host.startswith("[") else host
+    try:
+        return str(ipaddress.ip_address(literal))
+    except ValueError:
+        if not _CATALOG_SAFE_HOST_RE.fullmatch(host) or ".." in host:
+            raise ValueError("%s is invalid" % field)
+        return host
+
+
+def _catalog_safe_port(value, field: str = "port") -> int:
+    try:
+        port = int(str(value).strip())
+    except Exception as exc:
+        raise ValueError("%s must be a number" % field) from exc
+    if not 1 <= port <= 65535:
+        raise ValueError("%s must be between 1 and 65535" % field)
+    return port
+
+
+def _catalog_safe_timeout(value) -> int:
+    try:
+        timeout = int(str(value if value is not None else 30).strip())
+    except Exception as exc:
+        raise ValueError("timeout must be a number") from exc
+    if not 1 <= timeout <= 7200:
+        raise ValueError("timeout must be between 1 and 7200")
+    return timeout
+
+
+def _catalog_key_path(value, *, required: bool = True) -> str:
+    """Validate a supplied V4 identity path without falling back to user SSH.
+
+    The catalog may use an explicit key, or its one app-owned key.  It never
+    scans ``~/.ssh`` or asks OpenSSH to pick an arbitrary user identity.
+    """
+    raw = _catalog_safe_text(value, "key_path", required=required, maximum=2048)
+    if not raw:
+        return ""
+    path = os.path.expanduser(raw)
+    if not os.path.isfile(path):
+        raise FileNotFoundError("application key file is unavailable")
+    try:
+        if os.path.getsize(path) <= 0:
+            raise OSError("empty key")
+    except OSError as exc:
+        raise FileNotFoundError("application key file is unavailable") from exc
+    return path
+
+
+def _catalog_existing_application_key() -> str:
+    """Return the trusted app-managed key when the complete pair exists."""
+    key_path = _catalog_application_key_path()
+    pub_path = Path(str(key_path) + ".pub")
+    managed_root = _catalog_managed_store_dir()
+    if not managed_root.exists():
+        return ""
+    _catalog_verify_managed_path(managed_root, directory=True)
+    if _catalog_is_reparse_or_symlink(key_path) or _catalog_is_reparse_or_symlink(pub_path):
+        # For a missing path the helper also returns true, so only treat it as
+        # suspicious when either artifact is actually present/reparse-like.
+        if key_path.exists() or pub_path.exists() or key_path.is_symlink() or pub_path.is_symlink():
+            raise FileNotFoundError("application key pair is invalid")
+    if not key_path.exists() and not pub_path.exists():
+        return ""
+    # A partial pair can be a previous interrupted generation.  Never replace
+    # it blindly: return an explicit safe validation failure to the caller.
+    if not key_path.is_file() or not pub_path.is_file():
+        raise FileNotFoundError("application key pair is incomplete")
+    _catalog_verify_managed_path(key_path, directory=False)
+    _catalog_verify_managed_path(pub_path, directory=False)
+    return _catalog_key_path(str(key_path))
+
+
+def _catalog_create_application_key() -> str:
+    """Create the one app-owned ed25519 pair after password bootstrap begins.
+
+    This intentionally never calls the legacy ``ensure_keypair`` helper: that
+    helper may inspect or create user ``~/.ssh`` material, which V4 must not
+    silently adopt.  The parent application home must already exist.
+    """
+    key_path = _catalog_application_key_path()
+    pub_path = Path(str(key_path) + ".pub")
+    with _CATALOG_APPLICATION_KEY_LOCK:
+        _catalog_ensure_managed_store()
+        existing = _catalog_existing_application_key()
+        if existing:
+            return existing
+        if key_path.exists() or pub_path.exists():
+            raise FileNotFoundError("application key pair is incomplete")
+        try:
+            from cryptography.hazmat.primitives import serialization as _serialization
+            from cryptography.hazmat.primitives.asymmetric import ed25519 as _ed25519
+            private_key = _ed25519.Ed25519PrivateKey.generate()
+            private_bytes = private_key.private_bytes(
+                _serialization.Encoding.PEM,
+                _serialization.PrivateFormat.OpenSSH,
+                _serialization.NoEncryption(),
+            )
+            public_bytes = private_key.public_key().public_bytes(
+                _serialization.Encoding.OpenSSH,
+                _serialization.PublicFormat.OpenSSH,
+            ) + b" memomics-catalog@local\n"
+        except Exception as exc:
+            raise RuntimeError("application key generation failed") from exc
+        tmp_key = None
+        tmp_pub = None
+        installed_key = False
+        installed_pub = False
+        try:
+            fd, tmp_name = tempfile.mkstemp(prefix=".%s." % key_path.name, suffix=".tmp", dir=str(key_path.parent))
+            tmp_key = Path(tmp_name)
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(private_bytes)
+                fh.flush()
+                os.fsync(fh.fileno())
+            fd, tmp_name = tempfile.mkstemp(prefix=".%s." % pub_path.name, suffix=".tmp", dir=str(pub_path.parent))
+            tmp_pub = Path(tmp_name)
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(public_bytes)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp_key, key_path)
+            tmp_key = None
+            installed_key = True
+            os.replace(tmp_pub, pub_path)
+            tmp_pub = None
+            installed_pub = True
+            _catalog_harden_managed_path(key_path, directory=False)
+            _catalog_harden_managed_path(pub_path, directory=False)
+        except _CatalogManagedStorePermissionError:
+            # We own these just-created paths and must not leave a private key
+            # behind with a broad inherited DACL after a failed hardening step.
+            for path, installed in ((key_path, installed_key), (pub_path, installed_pub)):
+                try:
+                    if installed and path.exists():
+                        path.unlink()
+                except OSError:
+                    pass
+            raise
+        except Exception as exc:
+            for path, installed in ((key_path, installed_key), (pub_path, installed_pub)):
+                try:
+                    if installed and path.exists():
+                        path.unlink()
+                except OSError:
+                    pass
+            raise RuntimeError("application key generation failed") from exc
+        finally:
+            for path in (tmp_key, tmp_pub):
+                try:
+                    if path is not None and path.exists():
+                        path.unlink()
+                except OSError:
+                    pass
+    return _catalog_key_path(str(key_path))
+
+
+def _catalog_public_key_line(key_path: str) -> str:
+    """Read only the paired public-key *line* required for installation.
+
+    The private-key body is never opened by this helper.  Requiring a paired
+    ``.pub`` file avoids invoking a shell helper which could otherwise expose
+    an untrusted path in diagnostics.
+    """
+    pub_path = key_path + ".pub"
+    try:
+        with open(pub_path, "r", encoding="utf-8") as fh:
+            line = fh.read().strip()
+    except Exception as exc:
+        raise FileNotFoundError("paired public key file is unavailable") from exc
+    if not line or "\n" in line or "\r" in line or "'" in line or len(line) > 16_384:
+        raise ValueError("paired public key file is invalid")
+    return line
+
+
+def _catalog_same_key_path(left: str, right: str) -> bool:
+    try:
+        return os.path.normcase(os.path.normpath(os.path.abspath(left))) == os.path.normcase(
+            os.path.normpath(os.path.abspath(right))
+        )
+    except Exception:
+        return str(left) == str(right)
+
+
+def _catalog_host_key_fingerprint(client):
+    """Opaque host-key identity used only to detect a mid-flow identity swap."""
+    try:
+        transport = client.get_transport()
+        key = transport.get_remote_server_key() if transport is not None else None
+        fingerprint = key.get_fingerprint() if key is not None else None
+        return bytes(fingerprint) if fingerprint else b""
+    except Exception:
+        return b""
+
+
+def _catalog_validate_candidate(config: dict, *, require_public_key: bool) -> tuple[dict | None, dict | None]:
+    """Normalize the private transient candidate and reject injection shapes."""
+    if not isinstance(config, dict):
+        return None, _catalog_probe_result(False, "validate", "invalid_connection", "连接配置格式无效。")
+    try:
+        # ``extra_ssh_options``/command/proxy command injection is never an
+        # input surface for V4.  ProxyJump is generated structurally below.
+        forbidden = {"command", "proxy_command", "extra_ssh_options", "password", "target_password", "gateway_password"}
+        if forbidden.intersection(config):
+            raise ValueError("unsupported connection field")
+        host = _catalog_network_host(config.get("host"), "host")
+        user = _catalog_safe_text(config.get("user"), "user", required=True, maximum=64)
+        if not _CATALOG_SAFE_USER_RE.fullmatch(user):
+            raise ValueError("user is invalid")
+        port = _catalog_safe_port(config.get("port", 22))
+        timeout = _catalog_safe_timeout(config.get("timeout", 30))
+        key_path = _catalog_key_path(config.get("key_path", config.get("key")), required=False)
+        normalized = {
+            "host": host,
+            "user": user,
+            "port": port,
+            "key": key_path,
+            "workdir": _catalog_safe_text(config.get("workdir") or "~", "workdir", maximum=1024) or "~",
+            "job_dir": _catalog_safe_text(config.get("job_dir") or "", "job_dir", maximum=1024),
+            "local_root": _catalog_safe_text(config.get("local_root") or "", "local_root", maximum=2048),
+            "remote_root": _catalog_safe_text(config.get("remote_root") or "", "remote_root", maximum=2048),
+            "timeout": timeout,
+            "scheduler": _catalog_safe_text(config.get("scheduler") or "auto", "scheduler", maximum=32).lower() or "auto",
+            "partition": _catalog_safe_text(config.get("partition") or "", "partition", maximum=128),
+            "queue": _catalog_safe_text(config.get("queue") or "", "queue", maximum=128),
+            "node_name": _CATALOG_PROBE_NODE,
+            # This path is produced locally, never accepted from the browser.
+            # It is also passed to the final OpenSSH nodes probe so Paramiko
+            # TOFU and the actual execution engine reject a changed host key
+            # consistently.
+            "known_hosts_path": str(_catalog_known_hosts_path()),
+        }
+        gateway = config.get("gateway")
+        if gateway is not None:
+            if not isinstance(gateway, dict):
+                raise ValueError("gateway is invalid")
+            g_forbidden = {"command", "proxy_command", "extra_ssh_options", "password"}
+            if g_forbidden.intersection(gateway):
+                raise ValueError("gateway contains unsupported fields")
+            g_host = _catalog_network_host(gateway.get("host"), "gateway host")
+            g_user = _catalog_safe_text(gateway.get("user"), "gateway user", required=True, maximum=64)
+            if not _CATALOG_SAFE_USER_RE.fullmatch(g_user):
+                raise ValueError("gateway endpoint is invalid")
+            g_port = _catalog_safe_port(gateway.get("port", 22), "gateway port")
+            requested_gateway_key = gateway.get("key_path", gateway.get("key")) or key_path
+            g_key = _catalog_key_path(requested_gateway_key, required=bool(requested_gateway_key))
+            if not g_key:
+                raise FileNotFoundError("gateway application key is unavailable")
+            normalized["gateway"] = {"host": g_host, "user": g_user, "port": g_port, "key": g_key}
+        return normalized, None
+    except _CatalogManagedStorePermissionError:
+        return None, _catalog_probe_result(
+            False, "validate", "key_permissions",
+            "应用管理的 SSH 安全文件权限检查失败；连接未保存。",
+        )
+    except FileNotFoundError:
+        return None, _catalog_probe_result(
+            False, "validate", "key_path_unavailable",
+            "指定的本地应用密钥或配套公钥文件不可用；请确认 key_path 和 .pub 文件。",
+        )
+    except Exception:
+        return None, _catalog_probe_result(
+            False, "validate", "invalid_connection",
+            "连接配置无效；请检查主机、端口、用户名和路径。",
+        )
+
+
+def prepare_catalog_connection(config: dict, *, target_password: str | None = None,
+                               require_public_key: bool = False) -> tuple[dict | None, dict | None]:
+    """Resolve the V4-managed identity for a trusted, transient candidate.
+
+    This is shared by the server adapter and the probe so a password-only
+    first setup cannot persist a different identity than the one it tested.
+    Omitted ``key_path`` never falls back to user SSH keys: we reuse only the
+    existing app-owned catalog key, reuse the saved gateway key for a via-login
+    route, or generate the app key *after* the caller supplied a target
+    password for one-time authorization.
+    """
+    candidate, failure = _catalog_validate_candidate(config, require_public_key=False)
+    if failure:
+        return None, failure
+    try:
+        # Setup is the only phase allowed to create/harden the application
+        # store.  Normal SSH/Paramiko re-entry uses verification-only helpers.
+        _catalog_ensure_managed_store()
+        key_path = str(candidate.get("key") or "")
+        gateway = candidate.get("gateway")
+        if not key_path and gateway:
+            key_path = str(gateway.get("key") or "")
+        if not key_path:
+            key_path = _catalog_existing_application_key()
+        if not key_path and str(target_password or ""):
+            key_path = _catalog_create_application_key()
+        if not key_path:
+            return None, _catalog_password_required("target")
+        candidate["key"] = _catalog_key_path(key_path)
+        if gateway:
+            gateway_key = _catalog_key_path(gateway.get("key"))
+            if not _catalog_same_key_path(candidate["key"], gateway_key):
+                return None, _catalog_probe_result(
+                    False, "validate", "gateway_key_mismatch",
+                    "跳板与目标必须使用同一把本地应用密钥；请为两端安装同一公钥后重试。",
+                )
+            gateway["key"] = gateway_key
+        if require_public_key:
+            candidate["public_key"] = _catalog_public_key_line(candidate["key"])
+        return candidate, None
+    except FileNotFoundError:
+        return None, _catalog_probe_result(
+            False, "validate", "key_path_unavailable",
+            "指定的本地应用密钥或配套公钥文件不可用；请确认 key_path 和 .pub 文件。",
+        )
+    except Exception:
+        return None, _catalog_probe_result(
+            False, "validate", "invalid_connection",
+            "连接配置无效；请检查主机、端口、用户名和路径。",
+        )
+
+
+def _catalog_tcp_handshake(host: str, port: int, timeout: int) -> None:
+    """Cheap preflight with no credential material and no SSH command string."""
+    sock = socket.create_connection((host, int(port)), timeout=min(max(int(timeout), 1), 15))
+    try:
+        return None
+    finally:
+        try:
+            sock.close()
+        except Exception:
+            pass
+
+
+def _catalog_proxy_jump(gateway: dict) -> str:
+    # Values have already passed strict literal validators; no shell fragment
+    # or user-provided ProxyCommand ever reaches OpenSSH.
+    host = str(gateway["host"])
+    if ":" in host:
+        host = "[%s]" % host
+    return "%s@%s:%d" % (gateway["user"], host, int(gateway["port"]))
+
+
+_CATALOG_ROUTE_CONFIG_RE = re.compile(r"^[0-9a-f]{64}\.conf$")
+
+
+def _catalog_ssh_config_value(value) -> str:
+    """Quote a generated OpenSSH config value without accepting fragments."""
+    text = str(value or "")
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in text) or "%" in text:
+        # OpenSSH expands tokens such as %h even inside quoted IdentityFile
+        # and UserKnownHostsFile values.  Reject rather than serializing a
+        # path different from the one V4 validated and pinned.
+        raise ValueError("unsafe SSH config value")
+    # Use slash paths on Windows so a backslash cannot accidentally become an
+    # OpenSSH escape.  Quotes are still escaped for the few legal POSIX paths
+    # containing a quote character.
+    text = text.replace("\\", "/").replace('"', '\\"')
+    return '"%s"' % text
+
+
+def _catalog_ssh_config_endpoint(host: str, user: str, port: int, key_path: str,
+                                 known_hosts_path: str, *, alias: str,
+                                 proxy_jump: str = "") -> list[str]:
+    """Render one fixed OpenSSH Host section from validated catalog fields."""
+    lines = [
+        "Host %s" % alias,
+        "    HostName %s" % _catalog_ssh_config_value(host),
+        "    User %s" % _catalog_ssh_config_value(user),
+        "    Port %d" % int(port),
+        "    BatchMode yes",
+        "    StrictHostKeyChecking yes",
+        "    UserKnownHostsFile %s" % _catalog_ssh_config_value(known_hosts_path),
+        "    IdentitiesOnly yes",
+        "    IdentityFile %s" % _catalog_ssh_config_value(key_path),
+    ]
+    if proxy_jump:
+        lines.append("    ProxyJump %s" % proxy_jump)
+    return lines
+
+
+def _catalog_ssh_route_config_bytes(candidate: dict) -> tuple[str, bytes]:
+    """Build a content-addressed config with no Include/ProxyCommand surface."""
+    key_path = os.path.abspath(str(candidate["key"]))
+    known_hosts_path = os.path.abspath(str(candidate["known_hosts_path"]))
+    gateway = candidate.get("gateway")
+    payload = {
+        "version": 1,
+        "target": {
+            "host": str(candidate["host"]), "user": str(candidate["user"]),
+            "port": int(candidate["port"]), "key": key_path,
+        },
+        "known_hosts": known_hosts_path,
+        "gateway": ({
+            "host": str(gateway["host"]), "user": str(gateway["user"]),
+            "port": int(gateway["port"]), "key": os.path.abspath(str(gateway["key"])),
+        } if gateway else None),
+    }
+    route_seed = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    gateway_alias = "memomics-v4-gateway-%s" % route_seed[:32]
+    lines = _catalog_ssh_config_endpoint(
+        payload["target"]["host"], payload["target"]["user"], payload["target"]["port"],
+        payload["target"]["key"], known_hosts_path, alias=payload["target"]["host"],
+        proxy_jump=gateway_alias if gateway else "",
+    )
+    if gateway:
+        lines.append("")
+        lines.extend(_catalog_ssh_config_endpoint(
+            payload["gateway"]["host"], payload["gateway"]["user"], payload["gateway"]["port"],
+            payload["gateway"]["key"], known_hosts_path, alias=gateway_alias,
+        ))
+    rendered = ("\n".join(lines) + "\n").encode("utf-8")
+    return hashlib.sha256(rendered).hexdigest(), rendered
+
+
+def _catalog_write_ssh_route_config(candidate: dict) -> Path:
+    """Atomically materialize an immutable, generated V4 route config.
+
+    The config is intentionally retained after profile deletion because job
+    and R-session snapshots reference the exact historical ``-F`` path.
+    """
+    try:
+        digest, rendered = _catalog_ssh_route_config_bytes(candidate)
+    except ValueError as exc:
+        raise RuntimeError("catalog SSH route config is invalid") from exc
+    root = _catalog_ensure_managed_store()
+    path = root / (digest + ".conf")
+    with _CATALOG_SSH_CONFIG_LOCK:
+        if path.exists() or path.is_symlink():
+            try:
+                _catalog_verify_managed_path(path, directory=False)
+                if path.read_bytes() != rendered:
+                    raise RuntimeError("catalog SSH route config digest conflict")
+            except OSError as exc:
+                raise RuntimeError("catalog SSH route config is unavailable") from exc
+            return path
+        try:
+            fd, tmp_name = tempfile.mkstemp(prefix=".%s." % path.name, suffix=".tmp", dir=str(root))
+            tmp = Path(tmp_name)
+            try:
+                with os.fdopen(fd, "wb") as fh:
+                    fh.write(rendered)
+                    fh.flush()
+                    os.fsync(fh.fileno())
+                os.replace(tmp, path)
+                _catalog_harden_managed_path(path, directory=False)
+            finally:
+                try:
+                    if tmp.exists():
+                        tmp.unlink()
+                except OSError:
+                    pass
+        except Exception as exc:
+            if isinstance(exc, RuntimeError):
+                raise
+            raise RuntimeError("catalog SSH route config is unavailable") from exc
+    return path
+
+
+def validate_catalog_ssh_policy(options, *, host: str, user: str, port: int,
+                                key: str, gateway=None,
+                                require_managed: bool = False) -> tuple[list[str], list[str], str]:
+    """Validate/pin a V4 route config for every SSH execution entry point.
+
+    ``require_managed`` is durable profile/job-snapshot provenance.  It is
+    deliberately independent of the mutable ``-F`` path so a V4 snapshot
+    cannot become a legacy option list when its route file is moved or renamed.
+    """
+    def _permission_checker(path, directory):
+        _catalog_verify_managed_path(Path(path), directory=bool(directory))
+
+    try:
+        return _ssh_policy.split_and_validate_managed_options(
+            options, managed_root=_catalog_route_config_dir(), expected_host=str(host),
+            expected_user=str(user), expected_port=int(port or 22), expected_key=str(key),
+            expected_gateway=gateway, permission_checker=_permission_checker,
+            require_managed=bool(require_managed),
+        )
+    except _CatalogManagedStorePermissionError:
+        raise
+    except _ssh_policy.ManagedSSHPolicyError as exc:
+        raise RuntimeError("catalog SSH route config failed integrity validation") from exc
+
+
+def _split_catalog_ssh_options(options, *, host: str, user: str, port: int,
+                               key: str, gateway=None,
+                               require_managed: bool = False) -> tuple[list[str], list[str]]:
+    prefix, remaining, _digest = validate_catalog_ssh_policy(
+        options, host=host, user=user, port=port, key=key, gateway=gateway,
+        require_managed=require_managed,
+    )
+    return prefix, remaining
+
+
+def _catalog_ssh_config_fingerprint(options, cfg: dict) -> str:
+    """Return a validated content digest for the SSH connection cache."""
+    if catalog_v5_password_profile(cfg):
+        candidate = catalog_v5_candidate_from_profile(cfg)
+        prefix, _target_alias, _gateway_alias = validate_catalog_v5_ssh_policy(options, candidate)
+        try:
+            return hashlib.sha256(Path(prefix[1]).read_bytes()).hexdigest()
+        except OSError as exc:
+            raise RuntimeError("catalog V5 SSH route proof is invalid") from exc
+    _prefix, _remaining, digest = validate_catalog_ssh_policy(
+        options, host=str(cfg.get("host") or ""), user=str(cfg.get("user") or ""),
+        port=int(cfg.get("port") or 22), key=str(cfg.get("key") or ""),
+        require_managed=catalog_v4_ssh_route_required(cfg.get("catalog_v4_ssh_route")),
+    )
+    return digest
+
+
+def catalog_ssh_policy_options(candidate: dict) -> list[str]:
+    """Return the sole server-owned V4 SSH option surface for a profile."""
+    path = _catalog_write_ssh_route_config(candidate)
+    options = ["-F", str(path).replace("\\", "/")]
+    validate_catalog_ssh_policy(
+        options, host=candidate["host"], user=candidate["user"], port=candidate["port"],
+        key=candidate["key"], gateway=candidate.get("gateway"), require_managed=True,
+    )
+    return options
+
+
+# ---------------------------------------------------------------------------
+# V5 password-only catalog route
+# ---------------------------------------------------------------------------
+#
+# New catalog profiles do not generate/install a public key.  Their route
+# config is still content-addressed and protected under the same app-owned
+# directory as V4 because strict host-key pins and immutable -F configs remain
+# necessary when the authentication factor is a locally stored password.
+
+_CATALOG_V5_ACCOUNT_RE = re.compile(r"^account-[0-9a-f]{12}$")
+_CATALOG_V5_ALIAS_RE = re.compile(r"^memomics-v5-(?:target|gateway)-[0-9a-f]{32}$")
+
+
+def _catalog_v5_account_id(value, field: str) -> str:
+    account_id = str(value or "")
+    if not _CATALOG_V5_ACCOUNT_RE.fullmatch(account_id):
+        raise ValueError("%s is invalid" % field)
+    return account_id
+
+
+def _catalog_v5_candidate(config: dict) -> dict:
+    """Normalize a trusted V5 candidate without accepting a key/command path."""
+    if not isinstance(config, dict):
+        raise ValueError("candidate is invalid")
+    forbidden = {
+        "key", "key_path", "password", "target_password", "gateway_password",
+        "extra_ssh_options", "command", "proxy_command", "proxy_jump",
+    }
+    if forbidden.intersection(config):
+        raise ValueError("candidate contains retired authentication fields")
+    host = _catalog_network_host(config.get("host"), "host")
+    user = _catalog_safe_text(config.get("user"), "user", required=True, maximum=64)
+    if not _CATALOG_SAFE_USER_RE.fullmatch(user):
+        raise ValueError("user is invalid")
+    candidate = {
+        "host": host,
+        "user": user,
+        "port": _catalog_safe_port(config.get("port", 22)),
+        "account_id": _catalog_v5_account_id(config.get("account_id"), "account id"),
+        "workdir": _catalog_safe_text(config.get("workdir") or "~", "workdir", maximum=1024) or "~",
+        "job_dir": _catalog_safe_text(config.get("job_dir") or "", "job_dir", maximum=1024),
+        "local_root": _catalog_safe_text(config.get("local_root") or "", "local_root", maximum=2048),
+        "remote_root": _catalog_safe_text(config.get("remote_root") or "", "remote_root", maximum=2048),
+        "timeout": _catalog_safe_timeout(config.get("timeout", 30)),
+        "scheduler": _catalog_safe_text(config.get("scheduler") or "auto", "scheduler", maximum=32).lower() or "auto",
+        "partition": _catalog_safe_text(config.get("partition") or "", "partition", maximum=128),
+        "queue": _catalog_safe_text(config.get("queue") or "", "queue", maximum=128),
+        "node_name": _CATALOG_PROBE_NODE,
+        "known_hosts_path": str(_catalog_known_hosts_path()),
+    }
+    gateway = config.get("gateway")
+    if gateway is None:
+        return candidate
+    if not isinstance(gateway, dict) or {"key", "key_path", "password", "command", "proxy_command"}.intersection(gateway):
+        raise ValueError("gateway is invalid")
+    g_host = _catalog_network_host(gateway.get("host"), "gateway host")
+    g_user = _catalog_safe_text(gateway.get("user"), "gateway user", required=True, maximum=64)
+    if not _CATALOG_SAFE_USER_RE.fullmatch(g_user):
+        raise ValueError("gateway user is invalid")
+    candidate["gateway"] = {
+        "host": g_host,
+        "user": g_user,
+        "port": _catalog_safe_port(gateway.get("port", 22), "gateway port"),
+        "account_id": _catalog_v5_account_id(gateway.get("account_id"), "gateway account id"),
+    }
+    return candidate
+
+
+def catalog_v5_candidate_from_profile(cfg: dict) -> dict:
+    """Rebuild the non-secret route snapshot stored in a durable profile."""
+    if not catalog_v5_password_profile(cfg):
+        raise RuntimeError("catalog V5 password profile provenance is invalid")
+    candidate = {
+        "host": cfg.get("host"), "user": cfg.get("user"), "port": cfg.get("port"),
+        "account_id": cfg.get("catalog_account_id"), "workdir": cfg.get("workdir"),
+        "job_dir": cfg.get("job_dir"), "local_root": cfg.get("local_root"),
+        "remote_root": cfg.get("remote_root"), "timeout": cfg.get("timeout"),
+        "scheduler": cfg.get("scheduler"), "partition": cfg.get("partition"), "queue": cfg.get("queue"),
+    }
+    gateway_account = str(cfg.get("gateway_account_id") or "")
+    if gateway_account:
+        candidate["gateway"] = {
+            "host": cfg.get("catalog_v5_gateway_host"),
+            "user": cfg.get("catalog_v5_gateway_user"),
+            "port": cfg.get("catalog_v5_gateway_port"),
+            "account_id": gateway_account,
+        }
+    return _catalog_v5_candidate(candidate)
+
+
+def _catalog_v5_route_seed(candidate: dict) -> tuple[str, dict]:
+    """Return a deterministic seed plus a serialization-safe endpoint view."""
+    known_hosts = os.path.abspath(str(candidate["known_hosts_path"]))
+    gateway = candidate.get("gateway")
+    payload = {
+        "version": 5,
+        "target": {
+            "host": str(candidate["host"]), "user": str(candidate["user"]),
+            "port": int(candidate["port"]), "account_id": str(candidate["account_id"]),
+        },
+        "known_hosts": known_hosts,
+        "gateway": ({
+            "host": str(gateway["host"]), "user": str(gateway["user"]),
+            "port": int(gateway["port"]), "account_id": str(gateway["account_id"]),
+        } if gateway else None),
+    }
+    seed = hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=True,
+                                    separators=(",", ":")).encode("utf-8")).hexdigest()
+    return seed, payload
+
+
+def _catalog_v5_aliases(candidate: dict) -> tuple[str, str]:
+    seed, payload = _catalog_v5_route_seed(candidate)
+    target = "memomics-v5-target-%s" % seed[:32]
+    gateway = "memomics-v5-gateway-%s" % seed[:32] if payload["gateway"] else ""
+    return target, gateway
+
+
+def _catalog_v5_ssh_config_endpoint(endpoint: dict, known_hosts_path: str, *, alias: str,
+                                    proxy_jump: str = "", trust_only: bool = False) -> list[str]:
+    """Render one fixed password-only section; no caller controls directives."""
+    if not _CATALOG_V5_ALIAS_RE.fullmatch(alias):
+        raise ValueError("route alias is invalid")
+    lines = [
+        "Host %s" % alias,
+        "    HostName %s" % _catalog_ssh_config_value(endpoint["host"]),
+        "    User %s" % _catalog_ssh_config_value(endpoint["user"]),
+        "    Port %d" % int(endpoint["port"]),
+        "    BatchMode %s" % ("yes" if trust_only else "no"),
+        "    PubkeyAuthentication no",
+        "    PasswordAuthentication no" if trust_only else "    PasswordAuthentication yes",
+        "    KbdInteractiveAuthentication no",
+        "    PreferredAuthentications %s" % ("none" if trust_only else "password"),
+        "    NumberOfPasswordPrompts %d" % (0 if trust_only else 1),
+        "    StrictHostKeyChecking %s" % ("accept-new" if trust_only else "yes"),
+        "    UserKnownHostsFile %s" % _catalog_ssh_config_value(known_hosts_path),
+        "    GlobalKnownHostsFile none",
+        "    HashKnownHosts no",
+        "    HostKeyAlias %s" % alias,
+        "    IdentityAgent none",
+        "    IdentitiesOnly yes",
+    ]
+    if proxy_jump:
+        if not _CATALOG_V5_ALIAS_RE.fullmatch(proxy_jump):
+            raise ValueError("gateway route alias is invalid")
+        lines.append("    ProxyJump %s" % proxy_jump)
+    return lines
+
+
+def _catalog_v5_ssh_route_config_bytes(candidate: dict, *, trust_endpoint: str = "") -> tuple[str, bytes]:
+    """Build a strict V5 route or its narrowly scoped unauthenticated TOFU probe."""
+    candidate = _catalog_v5_candidate(candidate)
+    if trust_endpoint not in {"", "target", "gateway"}:
+        raise ValueError("trust endpoint is invalid")
+    gateway = candidate.get("gateway")
+    if trust_endpoint == "gateway" and not gateway:
+        raise ValueError("gateway trust endpoint is unavailable")
+    target_alias, gateway_alias = _catalog_v5_aliases(candidate)
+    known_hosts = os.path.abspath(str(candidate["known_hosts_path"]))
+    lines = _catalog_v5_ssh_config_endpoint(
+        candidate, known_hosts, alias=target_alias,
+        proxy_jump=gateway_alias if gateway else "", trust_only=trust_endpoint == "target",
+    )
+    if gateway:
+        lines.append("")
+        lines.extend(_catalog_v5_ssh_config_endpoint(
+            gateway, known_hosts, alias=gateway_alias, trust_only=trust_endpoint == "gateway",
+        ))
+    rendered = ("\n".join(lines) + "\n").encode("utf-8")
+    return hashlib.sha256(rendered).hexdigest(), rendered
+
+
+def _catalog_v5_write_route_config(candidate: dict) -> tuple[Path, str, str]:
+    digest, rendered = _catalog_v5_ssh_route_config_bytes(candidate)
+    root = _catalog_ensure_managed_store()
+    path = root / (digest + ".conf")
+    with _CATALOG_SSH_CONFIG_LOCK:
+        if path.exists() or path.is_symlink():
+            _catalog_verify_managed_path(path, directory=False)
+            if path.read_bytes() != rendered:
+                raise RuntimeError("catalog password SSH route digest conflict")
+        else:
+            fd, tmp_name = tempfile.mkstemp(prefix=".%s." % path.name, suffix=".tmp", dir=str(root))
+            tmp = Path(tmp_name)
+            try:
+                with os.fdopen(fd, "wb") as handle:
+                    handle.write(rendered)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(tmp, path)
+                _catalog_harden_managed_path(path, directory=False)
+            finally:
+                try:
+                    if tmp.exists():
+                        tmp.unlink()
+                except OSError:
+                    pass
+    target_alias, gateway_alias = _catalog_v5_aliases(_catalog_v5_candidate(candidate))
+    return path, target_alias, gateway_alias
+
+
+def validate_catalog_v5_ssh_policy(options, candidate: dict) -> tuple[list[str], str, str]:
+    """Prove a stored V5 ``-F`` matches this exact account/endpoint route."""
+    values = [str(value) for value in (options or [])]
+    if len(values) != 2 or values[0] != "-F":
+        raise RuntimeError("catalog V5 SSH route proof is invalid")
+    normalized = _catalog_v5_candidate(candidate)
+    expected_digest, expected = _catalog_v5_ssh_route_config_bytes(normalized)
+    root = _catalog_ensure_managed_store()
+    raw = Path(values[1])
+    canonical = Path(os.path.abspath(str(raw)))
+    try:
+        if (not canonical.is_absolute() or canonical.parent.resolve() != root.resolve()
+                or _catalog_is_reparse_or_symlink(canonical) or canonical.resolve() != canonical
+                or canonical.name != expected_digest + ".conf"):
+            raise RuntimeError("catalog V5 SSH route proof is invalid")
+        _catalog_verify_managed_path(canonical, directory=False)
+        if canonical.read_bytes() != expected:
+            raise RuntimeError("catalog V5 SSH route proof is invalid")
+        known_hosts = _catalog_known_hosts_path()
+        if known_hosts.exists() or known_hosts.is_symlink():
+            _catalog_verify_managed_path(known_hosts, directory=False)
+    except _CatalogManagedStorePermissionError:
+        raise
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError("catalog V5 SSH route proof is invalid") from exc
+    target_alias, gateway_alias = _catalog_v5_aliases(normalized)
+    return ["-F", str(canonical).replace("\\", "/")], target_alias, gateway_alias
+
+
+def catalog_v5_ssh_policy_options(candidate: dict) -> list[str]:
+    path, _target_alias, _gateway_alias = _catalog_v5_write_route_config(candidate)
+    options, _target_alias, _gateway_alias = validate_catalog_v5_ssh_policy(["-F", str(path)], candidate)
+    return options
+
+
+def _catalog_v5_credential_store():
+    from memomics.cluster_credentials import CredentialManagerStore
+    return CredentialManagerStore(_get_config_path().parent)
+
+
+def catalog_v5_password_runtime(candidate: dict, *, credential_store=None,
+                                include_target: bool = True, include_gateway: bool = True):
+    """Return a fresh ASKPASS environment for one V5 native SSH process."""
+    normalized = _catalog_v5_candidate(candidate)
+    options = catalog_v5_ssh_policy_options(normalized)
+    _prefix, target_alias, gateway_alias = validate_catalog_v5_ssh_policy(options, normalized)
+    gateway = normalized.get("gateway") or {}
+    return _password_ssh.build_password_runtime(
+        credential_store or _catalog_v5_credential_store(),
+        target_account_id=normalized["account_id"], target_user=normalized["user"], target_alias=target_alias,
+        gateway_account_id=gateway.get("account_id", ""), gateway_user=gateway.get("user", ""),
+        gateway_alias=gateway_alias, include_target=include_target, include_gateway=include_gateway,
+        helper_path=_catalog_v5_staged_askpass_helper(),
+        helper_sha256=_password_ssh.ASKPASS_HELPER_SHA256,
+    )
+
+
+def catalog_v5_process_runtime(cfg: dict, *, credential_store=None):
+    """Verify one durable V5 profile and create its next process environment."""
+    candidate = catalog_v5_candidate_from_profile(cfg)
+    options, target_alias, gateway_alias = validate_catalog_v5_ssh_policy(
+        cfg.get("extra_ssh_options") or [], candidate,
+    )
+    # These copies are retained in the YAML/job snapshot for transparent
+    # diagnostics, but are not trusted on their own.  They must agree with
+    # the content-addressed policy generated from endpoint/account metadata.
+    if (str(cfg.get("catalog_v5_target_alias") or "") != target_alias
+            or str(cfg.get("catalog_v5_gateway_alias") or "") != gateway_alias):
+        raise RuntimeError("catalog V5 SSH alias provenance is invalid")
+    gateway = candidate.get("gateway") or {}
+    runtime = _password_ssh.build_password_runtime(
+        credential_store or _catalog_v5_credential_store(),
+        target_account_id=candidate["account_id"], target_user=candidate["user"], target_alias=target_alias,
+        gateway_account_id=gateway.get("account_id", ""), gateway_user=gateway.get("user", ""),
+        gateway_alias=gateway_alias,
+        helper_path=_catalog_v5_staged_askpass_helper(),
+        helper_sha256=_password_ssh.ASKPASS_HELPER_SHA256,
+    )
+    return candidate, options, runtime
+
+
+def _catalog_v5_known_alias_exists(alias: str) -> bool:
+    """Inspect only the controlled, unhashed V5 HostKeyAlias entries."""
+    if not _CATALOG_V5_ALIAS_RE.fullmatch(str(alias or "")):
+        return False
+    path = _catalog_known_hosts_path()
+    if not path.exists():
+        return False
+    _catalog_verify_managed_path(path, directory=False)
+    try:
+        for line in path.read_text(encoding="utf-8", errors="strict").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            fields = line.split()
+            if len(fields) >= 3 and alias in fields[0].split(","):
+                return True
+    except Exception as exc:
+        raise RuntimeError("catalog V5 host-key store is unavailable") from exc
+    return False
+
+
+def _catalog_v5_trust_probe(candidate: dict, endpoint: str, *, credential_store=None) -> None:
+    """TOFU exactly one absent alias without exposing that endpoint's password."""
+    normalized = _catalog_v5_candidate(candidate)
+    if endpoint not in {"target", "gateway"}:
+        raise RuntimeError("catalog V5 trust probe is invalid")
+    _strict_options = catalog_v5_ssh_policy_options(normalized)
+    _prefix, target_alias, gateway_alias = validate_catalog_v5_ssh_policy(_strict_options, normalized)
+    alias = target_alias if endpoint == "target" else gateway_alias
+    if not alias:
+        raise RuntimeError("catalog V5 trust probe is invalid")
+    if _catalog_v5_known_alias_exists(alias):
+        return
+    # Target trust requires only the already-pinned gateway password.  The
+    # target section has every authentication method disabled, so its map is
+    # deliberately absent and a host-key write failure cannot release it.
+    runtime = catalog_v5_password_runtime(
+        normalized, credential_store=credential_store,
+        include_target=False, include_gateway=(endpoint == "target"),
+    )
+    _digest, rendered = _catalog_v5_ssh_route_config_bytes(normalized, trust_endpoint=endpoint)
+    root = _catalog_ensure_managed_store()
+    with _CATALOG_KNOWN_HOSTS_LOCK:
+        # Another request can pin the exact same alias while this one was
+        # composing its local config.  Once present we never issue accept-new.
+        if _catalog_v5_known_alias_exists(alias):
+            return
+        fd, tmp_name = tempfile.mkstemp(prefix=".v5-trust-", suffix=".conf", dir=str(root))
+        tmp = Path(tmp_name)
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(rendered)
+                handle.flush()
+                os.fsync(handle.fileno())
+            _catalog_harden_managed_path(tmp, directory=False)
+            ssh = _password_ssh.system_openssh_executable("ssh.exe")
+            # Authentication failure is expected (the trusted endpoint has
+            # PreferredAuthentications=none); only an on-disk V5 HostKeyAlias
+            # pin proves that the SSH handshake completed safely.
+            subprocess.run(
+                [str(ssh), "-F", str(tmp).replace("\\", "/"), alias, "exit"],
+                capture_output=True, text=True, timeout=min(max(normalized["timeout"], 1), 45),
+                stdin=subprocess.DEVNULL, env=runtime.env,
+            )
+            path = _catalog_known_hosts_path()
+            if not path.exists() or path.is_symlink():
+                raise RuntimeError("catalog V5 host-key pin was not written")
+            _catalog_harden_managed_path(path, directory=False)
+            _catalog_verify_managed_path(path, directory=False)
+            if not _catalog_v5_known_alias_exists(alias):
+                raise RuntimeError("catalog V5 host-key pin was not written")
+        finally:
+            try:
+                if tmp.exists():
+                    tmp.unlink()
+            except OSError:
+                pass
+
+
+def catalog_v5_trust_host_keys(candidate: dict, *, credential_store=None) -> None:
+    """Pin all missing V5 endpoint aliases before a strict password launch."""
+    normalized = _catalog_v5_candidate(candidate)
+    # A target behind a gateway cannot be reached before the gateway itself
+    # has a strict pin.  Each branch is rechecked under the global pin lock.
+    if normalized.get("gateway"):
+        _catalog_v5_trust_probe(normalized, "gateway", credential_store=credential_store)
+    _catalog_v5_trust_probe(normalized, "target", credential_store=credential_store)
+
+
+def _catalog_v5_transient_nodes_config(candidate: dict) -> dict:
+    normalized = _catalog_v5_candidate(candidate)
+    _options, target_alias, gateway_alias = validate_catalog_v5_ssh_policy(
+        catalog_v5_ssh_policy_options(normalized), normalized,
+    )
+    entry = {
+        "connection_profile": True,
+        "catalog_v5_ssh_route": CATALOG_V5_SSH_ROUTE_MARKER,
+        "auth_mode": CATALOG_V5_PASSWORD_AUTH_MODE,
+        "catalog_account_id": normalized["account_id"],
+        "catalog_v5_target_alias": target_alias,
+        "catalog_v5_gateway_alias": gateway_alias,
+        "host": normalized["host"], "user": normalized["user"], "port": normalized["port"], "key": "",
+        "workdir": normalized["workdir"], "job_dir": normalized["job_dir"],
+        "local_root": normalized["local_root"], "remote_root": normalized["remote_root"],
+        "timeout": normalized["timeout"], "scheduler": normalized["scheduler"],
+        "partition": normalized["partition"], "queue": normalized["queue"],
+        "extra_ssh_options": catalog_v5_ssh_policy_options(normalized),
+    }
+    if normalized.get("gateway"):
+        gateway = dict(normalized["gateway"])
+        entry.update({
+            "gateway_account_id": gateway["account_id"],
+            # Durable V5 execution rebuilds its route solely from these
+            # non-secret fields.  The transient probe uses the same profile
+            # shape so a direct test cannot pass while the persisted route
+            # would later lose its gateway metadata.
+            "catalog_v5_gateway_host": gateway["host"],
+            "catalog_v5_gateway_user": gateway["user"],
+            "catalog_v5_gateway_port": gateway["port"],
+        })
+    cfg = dict(_DEFAULT_CFG)
+    cfg.update({"enabled": True, "nodes": {_CATALOG_PROBE_NODE: entry}, "default_node": _CATALOG_PROBE_NODE,
+                "allow_unlisted_nodes": False, "auto_record_env": False})
+    return cfg
+
+
+def probe_catalog_v5_password_connection(candidate: dict, *, credential_store=None) -> dict:
+    """Controlled V5 match: pin keys first, then run the normal nodes engine."""
+    try:
+        normalized = _catalog_v5_candidate(candidate)
+        catalog_v5_trust_host_keys(normalized, credential_store=credential_store)
+        # Building the final runtime after every pin is verified ensures the
+        # target password is never mapped during a failed TOFU phase.
+        catalog_v5_password_runtime(normalized, credential_store=credential_store)
+        raw = _action_nodes(_catalog_v5_transient_nodes_config(normalized), {"node": _CATALOG_PROBE_NODE})
+        payload = json.loads(raw)
+        items = payload.get("nodes") if isinstance(payload, dict) else None
+        item = items[0] if isinstance(items, list) and items else {}
+        if isinstance(payload, dict) and bool(item.get("reachable")):
+            return _catalog_probe_result(True, "nodes_probe", "ok", "密码连接和原始节点探测均已通过。",
+                                         node=str(item.get("name") or _CATALOG_PROBE_NODE))
+        return _catalog_probe_result(False, "nodes_probe", "nodes_probe_failed", "原始 SSH 节点探测未通过；连接尚未保存。")
+    except _password_ssh.PasswordSSHError as exc:
+        code = exc.code
+        if code == "credential_missing":
+            return _catalog_probe_result(False, "credential", code, "该集群账号尚未保存登录密码。")
+        return _catalog_probe_result(False, "credential", code, "本机密码登录组件不可用；连接尚未保存。")
+    except _CatalogManagedStorePermissionError:
+        return _catalog_managed_store_permission_failure()
+    except Exception:
+        return _catalog_probe_result(False, "host_key", "host_key_probe_failed", "主机密钥验证或密码连接未通过；连接尚未保存。")
+
+
+def _catalog_transient_nodes_config(candidate: dict) -> dict:
+    """Create an in-memory remote config for the unmodified nodes engine."""
+    entry = {
+        "connection_profile": True,
+        "catalog_v4_ssh_route": CATALOG_V4_SSH_ROUTE_MARKER,
+        "host": candidate["host"],
+        "user": candidate["user"],
+        "port": candidate["port"],
+        "key": candidate["key"],
+        "workdir": candidate["workdir"],
+        "job_dir": candidate["job_dir"],
+        "local_root": candidate["local_root"],
+        "remote_root": candidate["remote_root"],
+        "timeout": candidate["timeout"],
+        "scheduler": candidate["scheduler"],
+        "partition": candidate["partition"],
+        "queue": candidate["queue"],
+        # This one app-owned ``-F`` file is intentionally inherited by the
+        # standard OpenSSH ProxyJump child.  Outer ``-o`` values are not, so
+        # BatchMode/strict host-key/IdentityFile rules live in the generated
+        # config rather than user-controlled arguments.
+        "extra_ssh_options": catalog_ssh_policy_options(candidate),
+    }
+    cfg = dict(_DEFAULT_CFG)
+    cfg.update({"enabled": True, "nodes": {_CATALOG_PROBE_NODE: entry}, "default_node": _CATALOG_PROBE_NODE,
+                "allow_unlisted_nodes": False, "auto_record_env": False})
+    return cfg
+
+
+def _catalog_original_nodes_probe(candidate: dict) -> dict:
+    """Run the exact existing BatchMode nodes action against the transient cfg."""
+    try:
+        raw = _action_nodes(_catalog_transient_nodes_config(candidate), {"node": _CATALOG_PROBE_NODE})
+        payload = json.loads(raw)
+        items = payload.get("nodes") if isinstance(payload, dict) else None
+        item = items[0] if isinstance(items, list) and items else {}
+        if isinstance(payload, dict) and bool(item.get("reachable")):
+            return _catalog_probe_result(
+                True, "nodes_probe", "ok", "密钥连接和原始节点探测均已通过。",
+                node=str(item.get("name") or _CATALOG_PROBE_NODE),
+            )
+    except _CatalogManagedStorePermissionError:
+        return _catalog_managed_store_permission_failure()
+    except Exception:
+        pass
+    return _catalog_probe_result(
+        False, "nodes_probe", "nodes_probe_failed",
+        "密钥已验证，但原始 SSH 节点探测未通过；连接尚未保存。",
+    )
+
+
+def _catalog_is_auth_error(paramiko, exc: Exception) -> bool:
+    try:
+        auth_error = paramiko.ssh_exception.AuthenticationException
+        return isinstance(exc, auth_error)
+    except Exception:
+        return False
+
+
+def _catalog_is_host_key_error(paramiko, exc: Exception) -> bool:
+    if isinstance(exc, _CatalogHostKeyChangedError):
+        return True
+    try:
+        host_key_error = paramiko.ssh_exception.BadHostKeyException
+        return isinstance(exc, host_key_error)
+    except Exception:
+        return False
+
+
+def _catalog_is_managed_store_permission_error(exc: Exception) -> bool:
+    return isinstance(exc, _CatalogManagedStorePermissionError)
+
+
+def _catalog_managed_store_permission_failure() -> dict:
+    return _catalog_probe_result(
+        False, "key_auth", "key_permissions",
+        "应用管理的 SSH 安全文件权限检查失败；连接未保存。",
+    )
+
+
+def _catalog_host_key_changed(hop: str) -> dict:
+    label = "跳板" if hop == "gateway" else "目标节点"
+    return _catalog_probe_result(
+        False, "%s_key_auth" % hop, "host_key_changed",
+        "%s的 SSH 主机密钥与首次记录不一致；为安全起见未发送密码且未保存连接。" % label,
+    )
+
+
+def _catalog_password_required(hop: str) -> dict:
+    label = "跳板" if hop == "gateway" else "目标节点"
+    return _catalog_probe_result(
+        False, "%s_password" % hop, "%s_password_required" % hop,
+        "需要%s密码来一次性安装本地应用公钥；密码不会保存。" % label,
+        password_required=hop,
+    )
+
+
+def _catalog_auth_failure(paramiko, exc: Exception, hop: str) -> dict:
+    label = "跳板" if hop == "gateway" else "目标节点"
+    if _catalog_is_managed_store_permission_error(exc):
+        return _catalog_managed_store_permission_failure()
+    if _catalog_is_auth_error(paramiko, exc):
+        code = "%s_auth_failed" % hop
+        message = "%s认证失败；请检查该账号密码或其 SSH 策略。" % label
+    else:
+        code = "%s_ssh_failed" % hop
+        message = "%s SSH 握手或连接失败；请检查网络、端口和访问策略。" % label
+    return _catalog_probe_result(False, "%s_auth" % hop, code, message)
+
+
+def probe_connection(config: dict, *, target_password: str | None = None,
+                     gateway_password: str | None = None) -> dict:
+    """Test a V4 candidate without saving it, optionally installing its key.
+
+    Stages are deliberately explicit so the WebUI can request each account's
+    password independently.  Passwords are consumed only by Paramiko calls in
+    this function and are never returned, logged, stored in YAML/SQLite, or
+    inserted into the original BatchMode probe configuration.
+    """
+    candidate, failure = prepare_catalog_connection(
+        config, target_password=target_password, require_public_key=True,
+    )
+    if failure:
+        return failure
+    paramiko = _paramiko()
+    if paramiko is None:
+        return _catalog_probe_result(
+            False, "key_auth", "missing_dependency",
+            "缺少 paramiko，无法进行一次性密码认证和公钥安装；请安装应用依赖后重试。",
+        )
+
+    target_client = None
+    gateway_client = None
+    target_host_key = b""
+    try:
+        gateway = candidate.get("gateway")
+        if gateway:
+            try:
+                _catalog_tcp_handshake(gateway["host"], gateway["port"], candidate["timeout"])
+            except Exception:
+                return _catalog_probe_result(
+                    False, "tcp", "gateway_tcp_failed",
+                    "无法建立到跳板的 TCP 连接；请检查跳板主机、端口和网络。",
+                )
+            try:
+                gateway_client, gateway_mode = _p_connect(
+                    paramiko, gateway["host"], gateway["port"], gateway["user"], "", gateway["key"],
+                    known_hosts_path=candidate["known_hosts_path"],
+                )
+            except Exception as key_exc:
+                if _catalog_is_host_key_error(paramiko, key_exc):
+                    return _catalog_host_key_changed("gateway")
+                if _catalog_is_managed_store_permission_error(key_exc):
+                    return _catalog_managed_store_permission_failure()
+                if not str(gateway_password or ""):
+                    return _catalog_password_required("gateway")
+                try:
+                    gateway_client, gateway_mode = _p_connect(
+                        paramiko, gateway["host"], gateway["port"], gateway["user"], str(gateway_password), "",
+                        known_hosts_path=candidate["known_hosts_path"],
+                    )
+                except Exception as password_exc:
+                    if _catalog_is_host_key_error(paramiko, password_exc):
+                        return _catalog_host_key_changed("gateway")
+                    if _catalog_is_managed_store_permission_error(password_exc):
+                        return _catalog_managed_store_permission_failure()
+                    return _catalog_auth_failure(paramiko, password_exc, "gateway")
+            if gateway_mode == "password":
+                try:
+                    _exec_install(gateway_client, candidate["public_key"])
+                except Exception:
+                    return _catalog_probe_result(
+                        False, "install_key", "gateway_key_install_failed",
+                        "跳板已认证，但应用公钥安装失败；连接尚未保存。",
+                    )
+
+            def sock_factory():
+                transport = gateway_client.get_transport()
+                if transport is None:
+                    raise RuntimeError("gateway transport unavailable")
+                return transport.open_channel("direct-tcpip", (candidate["host"], candidate["port"]), ("127.0.0.1", 0))
+        else:
+            try:
+                _catalog_tcp_handshake(candidate["host"], candidate["port"], candidate["timeout"])
+            except Exception:
+                return _catalog_probe_result(
+                    False, "tcp", "target_tcp_failed",
+                    "无法建立到目标节点的 TCP 连接；请检查主机、端口和网络。",
+                )
+            sock_factory = None
+
+        try:
+            target_client, target_mode = _p_connect(
+                paramiko, candidate["host"], candidate["port"], candidate["user"], "", candidate["key"],
+                sock_factory=sock_factory, known_hosts_path=candidate["known_hosts_path"],
+            )
+        except Exception as key_exc:
+            if _catalog_is_host_key_error(paramiko, key_exc):
+                return _catalog_host_key_changed("target")
+            if _catalog_is_managed_store_permission_error(key_exc):
+                return _catalog_managed_store_permission_failure()
+            if not str(target_password or ""):
+                return _catalog_password_required("target")
+            try:
+                target_client, target_mode = _p_connect(
+                    paramiko, candidate["host"], candidate["port"], candidate["user"], str(target_password), "",
+                    sock_factory=sock_factory, known_hosts_path=candidate["known_hosts_path"],
+                )
+            except Exception as password_exc:
+                if _catalog_is_host_key_error(paramiko, password_exc):
+                    return _catalog_host_key_changed("target")
+                if _catalog_is_managed_store_permission_error(password_exc):
+                    return _catalog_managed_store_permission_failure()
+                return _catalog_auth_failure(paramiko, password_exc, "target")
+        target_host_key = _catalog_host_key_fingerprint(target_client)
+        if target_mode == "password":
+            try:
+                _exec_install(target_client, candidate["public_key"])
+            except Exception:
+                return _catalog_probe_result(
+                    False, "install_key", "target_key_install_failed",
+                    "目标节点已认证，但应用公钥安装失败；连接尚未保存。",
+                )
+            try:
+                target_client.close()
+            except Exception:
+                pass
+            target_client = None
+            try:
+                verified_client, _mode = _p_connect(
+                    paramiko, candidate["host"], candidate["port"], candidate["user"], "", candidate["key"],
+                    sock_factory=sock_factory, known_hosts_path=candidate["known_hosts_path"],
+                )
+            except Exception as verify_exc:
+                if _catalog_is_host_key_error(paramiko, verify_exc):
+                    return _catalog_host_key_changed("target")
+                if _catalog_is_managed_store_permission_error(verify_exc):
+                    return _catalog_managed_store_permission_failure()
+                return _catalog_auth_failure(paramiko, verify_exc, "target")
+            verified_host_key = _catalog_host_key_fingerprint(verified_client)
+            if target_host_key and verified_host_key and target_host_key != verified_host_key:
+                try:
+                    verified_client.close()
+                except Exception:
+                    pass
+                return _catalog_probe_result(
+                    False, "key_auth", "host_key_changed",
+                    "目标节点的主机密钥在认证期间发生变化；为安全起见未保存连接。",
+                )
+            target_client = verified_client
+
+        # Do not let a Paramiko success stand in for application usability.
+        # The actual existing OpenSSH/BatchMode nodes engine must pass before
+        # the catalog persists or enables this connection.
+        return _catalog_original_nodes_probe(candidate)
+    finally:
+        # Do not persist credentials in objects retained by this scope.  The
+        # local application key path is intentionally only used as an argv
+        # value by the existing SSH engine and never placed in a response.
+        target_password = None
+        gateway_password = None
+        for client in (target_client, gateway_client):
+            try:
+                if client is not None:
+                    client.close()
+            except Exception:
+                pass
+
+
+def probe_saved_connection(config: dict) -> dict:
+    """Retest a saved V4 profile through the original nodes engine only.
+
+    Unlike ``probe_connection``, this endpoint never prompts for or accepts a
+    password.  A saved connection is usable only if its configured key passes
+    the same BatchMode nodes probe users invoke elsewhere in MemOmics.
+    """
+    candidate, failure = prepare_catalog_connection(config, require_public_key=False)
+    if failure:
+        return failure
+    return _catalog_original_nodes_probe(candidate)
+
+
 def _install_cmd(pub_line: str) -> str:
-    """幂等安装命令：已有该行就报 ALREADY，否则追加并报 INSTALLED。"""
+    """幂等安装命令：已有该行就报 ALREADY，否则安全追加并报 INSTALLED。"""
     return ("umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; "
             "chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys; "
             "grep -qF '%s' ~/.ssh/authorized_keys 2>/dev/null && echo __MEMOMICS_KEY_ALREADY__ "
-            "|| { echo '%s' >> ~/.ssh/authorized_keys && echo __MEMOMICS_KEY_INSTALLED__; }"
+            # Always write a leading newline.  This preserves existing bytes
+            # while preventing a no-final-LF authorized_keys file from joining
+            # its final key to the new public-key line; an extra blank line is
+            # valid OpenSSH syntax.
+            "|| { printf '\\n%%s\\n' '%s' >> ~/.ssh/authorized_keys && echo __MEMOMICS_KEY_INSTALLED__; }"
             ) % (pub_line, pub_line)
 
 
@@ -2816,13 +5516,33 @@ def ensure_keypair(preferred: str = "") -> dict:
     return {"ok": True, "key": key_path.replace("\\", "/"), "pub": (key_path + ".pub").replace("\\", "/"), "created": True}
 
 
-def install_pubkey(cfg: dict, node_name: str, password: str) -> str:
+def install_pubkey(cfg: dict, node_name: str, password: str | None = None, *,
+                   target_password: str | None = None,
+                   gateway_password: str | None = None) -> str:
     """用密码登录一次，把本机公钥追加进远端 ~/.ssh/authorized_keys（幂等）。
 
     流程：解析节点（含 default_node/单节点兜底）→ 能密钥免密就直接报 already_ok
-    → 否则密码登录（带 proxy_jump 的先连跳板再开 direct-tcpip 通道，跳板优先用
-    共享密钥、密钥不行用同一密码）→ 幂等追加公钥 → 立刻用纯密钥重连验证整条链路。
+    → 否则密码登录（带 proxy_jump 的先连跳板再开 direct-tcpip 通道）→ 幂等追加
+    公钥 → 立刻用纯密钥重连验证整条链路。
+
+    ``password`` is the legacy single-password argument.  New callers must
+    pass ``target_password`` and ``gateway_password`` independently: a target
+    credential is never silently reused for a distinct gateway (nor vice
+    versa).  Keeping the legacy positional fallback preserves the existing
+    one-password WebUI endpoint until it can be retired safely.
     """
+    # Deliberately resolve the old compatibility argument once, before any
+    # connection attempt.  With either new keyword present, there is *no*
+    # cross-hop fallback: two accounts may legitimately have different
+    # passwords.
+    _legacy_password = str(password or "")
+    if target_password is None and gateway_password is None:
+        target_password = _legacy_password
+        gateway_password = _legacy_password
+    else:
+        target_password = str(target_password or "")
+        gateway_password = str(gateway_password or "")
+
     paramiko = _paramiko()
     if paramiko is None:
         return _err("缺少 paramiko 库（WebUI 密码装公钥靠它做密码认证，Windows 自带 ssh.exe "
@@ -2871,7 +5591,7 @@ def install_pubkey(cfg: dict, node_name: str, password: str) -> str:
             j_host = m.group(2)
             j_port = int(m.group(3) or 22)
             jump_client, j_mode = _p_connect(paramiko, j_host, j_port, j_user,
-                                             password, str(cfg.get("key") or ""))
+                                             gateway_password, str(cfg.get("key") or ""))
             via = "经跳板 %s@%s:%s(%s) → " % (j_user, j_host, j_port,
                                             "密钥" if j_mode == "key" else "密码")
             # 跳板是用密码登进来的 = 跳板上还没有我们的公钥 → 顺手装上。
@@ -2892,7 +5612,7 @@ def install_pubkey(cfg: dict, node_name: str, password: str) -> str:
         try:
             client, mode = _p_connect(paramiko, host, port, user, "", key_path, sock_factory=sock_factory)
         except Exception:
-            client, mode = _p_connect(paramiko, host, port, user, password, "", sock_factory=sock_factory)
+            client, mode = _p_connect(paramiko, host, port, user, target_password, "", sock_factory=sock_factory)
 
         if mode == "key":
             return _ok({
@@ -3262,12 +5982,18 @@ def _conn_hint(exc, node_cfg) -> str:
 
 
 def remote_cluster_handler(args=None, **kwargs) -> str:
-    args = args or {}
+    args = dict(args or {})
+    # This key is an internal exact-record hand-off from the selector below.
+    # Never let a REST/browser/model payload forge it to steer logs/status or a
+    # cancellation toward a different historical job.
+    args.pop(_INTERNAL_SELECTED_JOB_RECORD, None)
     cfg = _load_remote_config()
     action = str(args.get("action") or "").strip().lower()
-    # 集群触点（监督归属用）：某会话碰过这个节点，才算它「在这个集群上干活」。
-    # 纯记账、失败静默，绝不影响工具调用本身。
-    touch_session(str(args.get("node") or ""), action)
+    # REST callers supply chat_session_id; agent tool calls use the propagated
+    # ContextVar.  Neither path uses a process-global active server.
+    chat_session_id = str(args.get("chat_session_id") or "").strip()
+    if not chat_session_id:
+        chat_session_id = _current_agent_session()
     if action == "locate":
         # 路径判定：用户没说文件在哪时先用它查（远端没配也能用，只报本地那一半）
         try:
@@ -3275,24 +6001,8 @@ def remote_cluster_handler(args=None, **kwargs) -> str:
         except Exception as exc:
             logger.exception("remote_cluster action=locate 失败")
             return _err("locate 执行失败: %s" % exc)
-    if not remote_cluster_enabled():
-        return _err(
-            "远端集群未配置或未启用。请在 memomics_home/config.yaml 的 remote: 段配置，两种写法任选：\n"
-            "① 单节点：\n  enabled: true\n  host: <登录节点>\n  user: <用户名>\n"
-            "  key: <私钥路径>\n  workdir: <远端工作目录>\n"
-            "② 多节点（命名节点，用 node= 选机器）：\n  enabled: true\n  user: <用户名>\n"
-            "  key: <私钥路径>\n  workdir: <共享工作目录>\n  nodes:\n    node1: {}\n    node2: {}\n"
-            "（或用环境变量 MEMOMICS_REMOTE_ENABLED/HOST/USER/KEY/WORKDIR 临时覆盖）"
-        )
     if action not in _ACTIONS:
         return _err("未知 action: %r（可选：%s）" % (action, ", ".join(sorted(_ACTIONS))))
-    if action == "nodes":
-        # 体检所有节点，不需要先选定一个
-        try:
-            return _action_nodes(cfg, args)
-        except Exception as exc:
-            logger.exception("remote_cluster action=nodes 失败")
-            return _err("nodes 执行失败: %s" % exc)
 
     if action == "session_list":
         # 只看本机账本（列有哪些会话），不需要连节点
@@ -3303,28 +6013,98 @@ def remote_cluster_handler(args=None, **kwargs) -> str:
             logger.exception("remote_cluster action=session_list 失败")
             return _err("session_list 执行失败: %s" % exc)
 
+    recorded_target = False
+    recorded_snapshot = None
     if action.startswith("session_") and action != "session_start":
         # 会话动作默认跟随会话记录里的节点（否则会落到 default_node 上连错机器）
         args = dict(args)
-        if not str(args.get("node") or "").strip():
-            try:
-                from memomics.bio_tools import cluster_session as _cs
-                sid = str(args.get("session_id") or "").strip()
-                rec = _cs.find_session(sid) if sid else _cs.latest_session()
-                if rec:
-                    args["node"] = str(rec.get("node") or "")
-                elif not sid:
-                    return _err(
-                        "本机账本里还没有任何常驻会话，没法定位到节点。",
-                        hint=("用 action='session_list' 看全部会话；要新建用 "
-                              "action='session_start'（可带 input=<大 rds 路径>，读一次一直用）。"))
-            except Exception:
-                pass
+        try:
+            from memomics.bio_tools import cluster_session as _cs
+            sid = str(args.get("session_id") or "").strip()
+            rec = _cs.find_session(sid) if sid else _cs.latest_session()
+            if rec:
+                # A persisted daemon is a durable remote resource.  Its own
+                # snapshot is authoritative even if a caller supplied a
+                # different node after the chat was rebound.
+                args["node"] = str(rec.get("node") or rec.get("server_id") or "")
+                recorded_target = True
+                recorded_snapshot = dict(rec)
+            elif not sid:
+                return _err(
+                    "本机账本里还没有任何常驻会话，没法定位到节点。",
+                    hint=("用 action='session_list' 看全部会话；要新建用 "
+                          "action='session_start'（可带 input=<大 rds 路径>，读一次一直用）。"))
+        except Exception:
+            pass
+
+    # A submitted job is also a durable remote resource.  Its status, logs and
+    # cancellation must go back to its recorded node even after a user changes
+    # the chat session's default binding.
+    recorded_job_snapshot = None
+    if action in ("status", "logs", "cancel"):
+        job_id = str(args.get("job_id") or "").strip()
+        if job_id:
+            requested_target = str(args.get("node") or args.get("host") or "").strip()
+            recorded_job_snapshot, selection_error = _select_recorded_job_snapshot(
+                job_id, requested=requested_target, chat_session_id=chat_session_id,
+            )
+            if selection_error:
+                return selection_error
+            if recorded_job_snapshot:
+                owner = str(recorded_job_snapshot.get("node") or
+                            recorded_job_snapshot.get("server_id") or "")
+                if owner:
+                    args["node"] = owner
+                # The action must consume this exact full-ledger selection,
+                # not independently re-resolve a shorter recent-job window.
+                args[_INTERNAL_SELECTED_JOB_RECORD] = dict(recorded_job_snapshot)
+                recorded_target = True
+
+    resource_snapshot = recorded_snapshot or recorded_job_snapshot
+    has_reconnectable_snapshot = bool(
+        resource_snapshot and str(resource_snapshot.get("host") or "").strip()
+    )
+    # Historical jobs and R daemons remain operable from their complete local
+    # snapshot after their profile is deleted.  New work still requires an
+    # enabled, currently configured server.
+    if not remote_cluster_enabled() and not has_reconnectable_snapshot:
+        return _err(
+            "远端集群未配置或未启用。请在 memomics_home/config.yaml 的 remote: 段配置，两种写法任选：\n"
+            "① 单节点：\n  enabled: true\n  host: <登录节点>\n  user: <用户名>\n"
+            "  key: <私钥路径>\n  workdir: <远端工作目录>\n"
+            "② 多节点（命名节点，用 node= 选机器）：\n  enabled: true\n  user: <用户名>\n"
+            "  key: <私钥路径>\n  workdir: <共享工作目录>\n  nodes:\n    node1: {}\n    node2: {}\n"
+            "（或用环境变量 MEMOMICS_REMOTE_ENABLED/HOST/USER/KEY/WORKDIR 临时覆盖）"
+        )
+    if action == "nodes":
+        # 体检所有节点，不需要先选定一个
+        try:
+            return _action_nodes(cfg, args)
+        except Exception as exc:
+            logger.exception("remote_cluster action=nodes 失败")
+            return _err("nodes 执行失败: %s" % exc)
 
     requested = str(args.get("node") or args.get("host") or "").strip()
-    node_cfg, node_name, err = _select_node(cfg, requested)
+    if has_reconnectable_snapshot:
+        # A persisted R daemon owns a complete connection snapshot.  It must
+        # remain reachable even after its profile was renamed, edited, or
+        # removed from remote.nodes.
+        node_cfg = _apply_connection_snapshot(cfg, resource_snapshot)
+        node_name = str(resource_snapshot.get("server_id") or resource_snapshot.get("node") or
+                        requested or node_cfg.get("host") or "")
+        node_cfg["_name"] = node_name
+        err = None
+    else:
+        node_cfg, node_name, err = select_node_for_session(
+            cfg, requested, chat_session_id, recorded_target=recorded_target
+        )
     if err:
         return err
+    # Cluster touch evidence is written only after final target resolution;
+    # chat_session_id is attribution only and never constrains the selected
+    # profile.
+    touch_session(node_name, action, session_id=chat_session_id)
+    args["node"] = node_name
     try:
         return _ACTIONS[action](node_cfg, args)
     except Exception as exc:
@@ -3407,7 +6187,8 @@ SCHEMA = {
         "pull 支持通配符（远端 *.tsv 会展开成多个文件，放进 local_path 目录）和目录（递归）；"
         "默认不覆盖本机已有同名文件（返回 status=exists，给 overwrite=true 才覆盖）。\n"
         "连接配置在 memomics_home/config.yaml 的 remote: 段（host 或 nodes /user/port/key/workdir/"
-        "scheduler/local_root/remote_root），需密钥登录（BatchMode，不会弹密码输入）；未配置时本工具不可见。\n"
+        "scheduler/local_root/remote_root）。目录管理连接使用本机加密保存的密码；旧版手工配置仍使用 "
+        "BatchMode 密钥登录，均不会弹出浏览器密码输入；未配置时本工具不可见。\n"
         "⚠️ 两点别搞混：① 本工具只把**命令/作业/会话请求**送到远端；execute_python / execute_r 的持久内核仍在本地跑——"
         "要在集群上做**交互式分析**（读一次大 rds 后反复 FindMarkers / CellChat / 调参）用 session_*，"
         "一次性重活写成脚本交给 run/submit；② 远端路径（/home/you/...）与本地路径（E:/...）是两套，"
@@ -3427,10 +6208,17 @@ SCHEMA = {
             },
             "node": {
                 "type": "string",
-                "description": ("用哪个远端节点（remote.nodes 里配置的名字，如 node1/node2）。"
+                "description": ("用哪个远端节点（该集群 nodes 里配置的名字，如 node1/node2）。"
                                 "只配了一个节点时可省略；配了多个又没给这个参数，工具会拒绝执行"
                                 "并列出候选——这时必须先问用户要用哪个节点。"
-                                "也可以用 action='nodes' 先看各节点负载再决定。"),
+                                "也可以用 action='nodes' 先看各节点负载再决定。"
+                                "多集群时也可以写成 '<集群>/<节点>'。"),
+            },
+            "cluster": {
+                "type": "string",
+                "description": ("用哪个集群（remote.clusters 里配置的名字）。多集群时建议显式指定；"
+                                "省略 = 默认集群（remote.default_cluster，没配就是第一个）。"
+                                "指定的集群不存在时工具会拒绝并列候选——不要自己替换成别的集群。"),
             },
             "command": {
                 "type": "string",
@@ -3518,6 +6306,21 @@ SCHEMA = {
         "required": ["action"],
     },
 }
+
+
+def remote_cluster_enabled() -> bool:
+    """check_fn：没配置 remote: 段（或 nodes 段）时工具对模型不可见。
+
+    2026-11-04：多集群下只要**任一**集群可用就显示（切集群是调用时的事）。
+    """
+    cfg = _load_remote_config()
+    if cfg.get("multi_cluster"):
+        clusters = cfg.get("clusters") or {}
+        for name in (cfg.get("cluster_names") or []):
+            if _cluster_usable(_merge_cluster(cfg, clusters.get(name) or {}, name)):
+                return True
+        return False
+    return _cluster_usable(cfg)
 
 
 def _register():

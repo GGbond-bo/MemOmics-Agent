@@ -1,0 +1,280 @@
+type = "task"
+signature = "classify_wbc_pytorch.v1"
+name = "classify_wbc_pytorch"
+question = """Use the model at D:\\vscode_project\\ChatImageJ\\temp\\wbc_classification\\wbc_classification_20251225_214050\\ to identify the cell type in these images."""
+topic = ["image classification","white blood cells","pytorch","deep learning","microscopy"]
+tags = ["classify_wbc_pytorch"]
+
+description = """Classifies white blood cells (e.g., Neutrophils, Lymphocytes) in brightfield microscopy images by loading a pre-trained PyTorch EfficientNet-B0 model and performing inference via a Python script."""
+
+summary = """### Summary of ImageJ Task
+
+1.  **Task Overview**
+    The objective was to load a custom pre-trained PyTorch model located at a specific local directory (`D:/vscode_project/ChatImageJ/temp/wbc_classification/wbc_classification_20251225_214050/`) and use it to classify white blood cell types in currently open ImageJ images (`_3_625.jpeg`, `_0_1966.jpeg`, etc.).
+
+2.  **Key Actions Taken**
+    *   **Perception & Analysis**: Used `imagej_perception` to confirm the images were brightfield blood smears containing RBCs and WBCs.
+    *   **Configuration Inspection**: Executed Python scripts to read the `wbc_config.yaml` file, identifying the model architecture as `efficientnet_b0` and the input size as `224x224`.
+    *   **Model Diagnostics**: Ran multiple diagnostic scripts to inspect the checkpoint (`.pth`) file structure. This was necessary to resolve dependencies (`yacs`) and determine the correct model definition library.
+    *   **Inference Execution**: Developed and ran a Python script using `torchvision.models` to load the weights, preprocess images (Resize/Normalize), and perform inference on the GPU.
+    *   **Result Export**: Saved the classification results to a CSV file and used `run_macro` to open the results table in ImageJ.
+
+3.  **Critical Results**
+    *   **Model Identification**: The model was determined to be a standard `torchvision` implementation of EfficientNet-B0 (trained with 4 classes).
+    *   **Inference Predictions**:
+        *   `_3_625.jpeg`: **Neutrophil** (Class 3) - Confidence: 100.00%
+        *   `_0_1966.jpeg`: **Neutrophil** (Class 3) - Confidence: 36.19%
+        *   `_0_3975.jpeg`: **Neutrophil** (Class 3) - Confidence: 100.00%
+        *   `_2_4392.jpeg`: **Neutrophil** (Class 3) - Confidence: 100.00%
+    *   **Output**: A CSV file containing these predictions was created and opened.
+
+4.  **Error Handling**
+    *   **Syntax Error**: An initial Python script failed due to an unterminated string in the file path. **Resolved** by using forward slashes and correct string formatting.
+    *   **Dependency Error (`yacs`)**: The checkpoint relied on the `yacs` configuration library, which was missing. **Resolved** by creating a mock `MockCfgNode` class in the Python script to bypass the import error during `torch.load`.
+    *   **Architecture Mismatch**: Initial inference attempts using the `timm` library yielded random results (25% confidence for all classes). **Resolved** by inspecting state dictionary keys (`features.0.0...`), realizing the model was trained using `torchvision`, and switching the model definition accordingly.
+
+5.  **Current State**
+    The task is **complete**. The model was successfully loaded, inference was performed on all target images, and the results have been saved and displayed to the user.
+
+6.  **Technical Details**
+    *   **Model Path**: `D:/vscode_project/ChatImageJ/temp/wbc_classification/wbc_classification_20251225_214050/`
+    *   **Checkpoint**: `checkpoints/wbc_classification_20251225_214050_1-checkpoint-best.pth`
+    *   **Architecture**: `torchvision.models.efficientnet_b0` (Modified classifier for 4 output classes).
+    *   **Preprocessing**: Resize to `(224, 224)`, Normalization `mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]`.
+    *   **Class Mapping (Hypothetical)**: 0: Eosinophil, 1: Lymphocyte, 2: Monocyte, 3: Neutrophil.
+    *   **Results File**: `D:/vscode_project/ChatImageJ/temp/wbc_classification_results.csv`"""
+
+[[steps]]
+id = 1
+  [steps.action]
+  name = "execute_python_script"
+  script = """
+
+import os
+import torch
+import torch.nn as nn
+from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms
+from PIL import Image
+import numpy as np
+from pathlib import Path
+import yaml
+
+
+class WBCDataset(Dataset):
+    
+    def __init__(self, image_dir, transform=None):
+        self.image_dir = Path(image_dir)
+        self.transform = transform
+        
+        # Supported image formats - use set to avoid duplicates on case-insensitive filesystems
+        image_paths_set = set()
+        for ext in ['*.jpg', '*.jpeg', '*.png', '*.bmp', '*.tif', '*.tiff']:
+            image_paths_set.update(self.image_dir.glob(ext))
+            image_paths_set.update(self.image_dir.glob(ext.upper()))
+        
+        self.image_paths = sorted(list(image_paths_set))
+        
+    def __len__(self):
+        return len(self.image_paths)
+    
+    def __getitem__(self, idx):
+        img_path = self.image_paths[idx]
+        image = Image.open(img_path).convert('RGB')
+        
+        if self.transform:
+            image = self.transform(image)
+        
+        return image, str(img_path.name)
+
+
+def load_model(checkpoint_path, num_classes=4, device='cuda'):
+    from torchvision.models import efficientnet_b0, EfficientNet_B0_Weights
+    
+    # Load pretrained model architecture
+    model = efficientnet_b0(weights=None)
+    
+    # Modify the classifier for the number of classes
+    num_features = model.classifier[1].in_features
+    model.classifier[1] = nn.Linear(num_features, num_classes)
+    
+    # Load checkpoint (weights_only=False for compatibility with older checkpoints)
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    
+    # Handle different checkpoint formats
+    if 'model_state_dict' in checkpoint:
+        model.load_state_dict(checkpoint['model_state_dict'])
+    elif 'model' in checkpoint:
+        model.load_state_dict(checkpoint['model'])
+    elif 'state_dict' in checkpoint:
+        model.load_state_dict(checkpoint['state_dict'])
+    else:
+        model.load_state_dict(checkpoint)
+    
+    model = model.to(device)
+    model.eval()
+    
+    return model
+
+
+def get_transforms(image_size=(224, 224)):
+    # BiaPy uses TYPE: div normalization which just divides by 255 (no mean/std normalization)
+    return transforms.Compose([
+        transforms.Resize(image_size, interpolation=transforms.InterpolationMode.BILINEAR, antialias=True),
+        transforms.ToTensor(),
+        # ToTensor already converts to [0, 1] by dividing by 255, so no additional normalization needed
+    ])
+
+
+def predict(model, dataloader, class_names, device='cuda'):
+    predictions = []
+    
+    with torch.no_grad():
+        for images, filenames in dataloader:
+            images = images.to(device)
+            
+            # Forward pass
+            outputs = model(images)
+            probabilities = torch.softmax(outputs, dim=1)
+            predicted_classes = torch.argmax(probabilities, dim=1)
+            
+            # Store results
+            for i, filename in enumerate(filenames):
+                pred_class = predicted_classes[i].item()
+                probs = probabilities[i].cpu().numpy()
+                
+                predictions.append({
+                    'filename': filename,
+                    'predicted_class': class_names[pred_class],
+                    'predicted_class_idx': pred_class,
+                    'confidence': probs[pred_class],
+                    'probabilities': {class_names[j]: probs[j] for j in range(len(class_names))}
+                })
+    
+    return predictions
+
+
+def main():
+    # Configuration
+    MODEL_DIR = r"D:/vscode_project/ChatImageJ/temp/wbc_classification/wbc_classification_20251225_214050"
+    CHECKPOINT_PATH = os.path.join(MODEL_DIR, "checkpoints", "wbc_classification_20251225_214050_1-checkpoint-best.pth")
+    CONFIG_PATH = os.path.join(MODEL_DIR, "config_files", "wbc_config.yaml")
+    
+    # User to specify the test images directory
+    TEST_IMAGES_DIR = r"<用户目录>/OneDrive/copilotj/14_dl_cls/test_images"
+    
+    # WBC class names (adjust based on your training data)
+    # Common WBC types: Eosinophil, Lymphocyte, Monocyte, Neutrophil
+    CLASS_NAMES = ['Eosinophil', 'Lymphocyte', 'Monocyte', 'Neutrophil']
+    
+    # Device configuration
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
+    
+    # Load configuration
+    with open(CONFIG_PATH, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    num_classes = config['MODEL']['N_CLASSES']
+    image_size = tuple(config['DATA']['PATCH_SIZE'][:2])
+    
+    print(f"Model: {config['MODEL']['ARCHITECTURE']}")
+    print(f"Number of classes: {num_classes}")
+    print(f"Image size: {image_size}")
+    
+    # Verify class names match number of classes
+    if len(CLASS_NAMES) != num_classes:
+        print(f"Warning: Number of class names ({len(CLASS_NAMES)}) doesn't match model classes ({num_classes})")
+        CLASS_NAMES = [f'Class_{i}' for i in range(num_classes)]
+    
+    # Load model
+    print(f"\nLoading model from: {CHECKPOINT_PATH}")
+    model = load_model(CHECKPOINT_PATH, num_classes=num_classes, device=device)
+    print("Model loaded successfully!")
+    
+    # Prepare dataset and dataloader
+    transform = get_transforms(image_size)
+    dataset = WBCDataset(TEST_IMAGES_DIR, transform=transform)
+    
+    if len(dataset) == 0:
+        print(f"\nError: No images found in {TEST_IMAGES_DIR}")
+        print("Supported formats: jpg, jpeg, png, bmp, tif, tiff")
+        return
+    
+    print(f"\nFound {len(dataset)} images to classify")
+    
+    dataloader = DataLoader(dataset, batch_size=8, shuffle=False, num_workers=0)
+    
+    # Run predictions
+    print("\nRunning inference...")
+    predictions = predict(model, dataloader, CLASS_NAMES, device=device)
+    
+    # Display results
+    print("\n" + "="*80)
+    print("CLASSIFICATION RESULTS")
+    print("="*80)
+    
+    for pred in predictions:
+        print(f"\nImage: {pred['filename']}")
+        print(f"Predicted Class: {pred['predicted_class']}")
+        print(f"Confidence: {pred['confidence']:.4f}")
+        print("All Probabilities:")
+        for class_name, prob in pred['probabilities'].items():
+            print(f"  {class_name}: {prob:.4f}")
+    
+    # Save results to file
+    output_file = os.path.join(MODEL_DIR, "results", "inference_results.txt")
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    
+    with open(output_file, 'w') as f:
+        f.write("WBC Classification Results\n")
+        f.write("="*80 + "\n\n")
+        
+        for pred in predictions:
+            f.write(f"Image: {pred['filename']}\n")
+            f.write(f"Predicted Class: {pred['predicted_class']}\n")
+            f.write(f"Confidence: {pred['confidence']:.4f}\n")
+            f.write("All Probabilities:\n")
+            for class_name, prob in pred['probabilities'].items():
+                f.write(f"  {class_name}: {prob:.4f}\n")
+            f.write("\n")
+    
+    print(f"\nResults saved to: {output_file}")
+    
+    # Summary statistics
+    print("\n" + "="*80)
+    print("SUMMARY")
+    print("="*80)
+    
+    class_counts = {}
+    for pred in predictions:
+        class_name = pred['predicted_class']
+        class_counts[class_name] = class_counts.get(class_name, 0) + 1
+    
+    for class_name, count in sorted(class_counts.items()):
+        percentage = (count / len(predictions)) * 100
+        print(f"{class_name}: {count} ({percentage:.1f}%)")
+
+
+if __name__ == "__main__":
+    main()
+
+
+"""
+
+data_type = """RGB brightfield microscopy images of Romanowsky-stained peripheral blood smears"""
+[requirements]
+bit_depth = [8]
+min_size = [224, 224]
+channels = "RGB"
+
+[defaults]
+model_architecture = "efficientnet_b0"
+num_classes = "4"
+weights_only = "False"
+
+tips = [
+  """Ensure the model architecture in the script matches the training library (e.g., torchvision vs. timm) by inspecting state_dict keys.""",
+  """Legacy checkpoints containing configuration objects may require 'weights_only=False' and mocking of missing libraries (e.g., yacs) to load.""",
+]
+

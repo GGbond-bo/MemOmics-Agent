@@ -1,0 +1,225 @@
+type = "task"
+signature = "export_vsi_channels.v1"
+name = "export_vsi_channels"
+question = """1. Export VSI Files to TIF Iterate through multi-layer slice images in the input path. The file path is : <用户目录>\OneDrive\Desktop\cfos\c-Fos_Data\cfos_cy_pixiaHis_2-1_1
+    - For each slice and each tile image, check if the `.vsi` file exists:
+        - If it exists, open it with Bio-Formats Importer.
+        - Only process file 1-3
+        - Split channels (`split_channels`), and save both the **Cy3 channel (fluorescence)** and Nissl channel (tissue staining).
+        - Simultaneously generate:
+            - Original size .tif
+            - 0.1× downsampled version
+            - Contrast-enhanced & 8-bit converted version
+        - Folder named with cy3, nissl, cy3ds, nisslds, nissldsAB"""
+topic = ["batch processing","file conversion","channel splitting","vsi"]
+tags = ["export_vsi_channels"]
+
+description = """A workflow to batch process .vsi files by splitting them into Cy3 and Nissl channels, and saving multiple versions: original size TIFF, 0.1x downsampled, and a contrast-enhanced 8-bit version for the Nissl channel."""
+
+summary = """### Summary of ImageJ Task
+
+**1. Task Overview**
+The primary objective was to automate the processing of multi-channel `.vsi` image files. The task required iterating through the first three images (`Image_01.vsi` to `Image_03.vsi`) in a specified input directory, splitting them into Cy3 (fluorescence) and Nissl (tissue staining) channels, and exporting multiple versions of each channel as TIFF files. This included creating full-size, downsampled (0.1x), and contrast-enhanced 8-bit versions, and organizing them into appropriately named subfolders.
+
+**2. Key Actions Taken**
+- **Directory Inspection**: The `folder_summary` tool was initially used to verify the contents of the input directory and confirm the file naming convention (`Image_01.vsi`, `Image_02.vsi`, etc.).
+- **Initial Macro Execution**: An ImageJ macro was written and executed using the `run_macro` tool. This macro was designed to:
+    - Create five output directories: `cy3`, `nissl`, `cy3ds`, `nisslds`, and `nissldsAB`.
+    - Loop through the first three image files.
+    - Open each `.vsi` file using the Bio-Formats Importer.
+    - Split the image channels.
+    - Save the original Cy3 and Nissl channels.
+    - Create and save downsampled versions of both channels.
+    - Create, enhance contrast, convert to 8-bit, and save a version of the downsampled Nissl channel.
+- **Revised Macro Execution**: The first attempt failed due to a timeout. A revised macro with improved error handling and a longer timeout was executed successfully.
+- **Verification**: The `folder_summary` tool was used a final time to confirm that all output directories and processed TIFF files were created as expected.
+
+**3. Critical Results**
+- The automated batch processing was successfully completed for `Image_01.vsi`, `Image_02.vsi`, and `Image_03.vsi`.
+- All five specified output folders were created within the input directory.
+- Each output folder was populated with the correctly processed TIFF files, corresponding to the original task requirements (e.g., `cy3/Image_01_cy3.tif`, `cy3ds/Image_01_cy3_downsampled.tif`, `nissldsAB/Image_01_nissl_downsampled_AB.tif`, etc.).
+
+**4. Error Handling**
+- **Problem**: The first macro execution failed with a timeout error. This was likely due to the long processing time required for large VSI files and a potentially fragile method of selecting image windows by hardcoded names.
+- **Resolution**: The issue was resolved by implementing three key changes in the macro:
+    1.  **Increased Timeout**: The execution timeout was extended from 300 to 600 seconds to allow sufficient time for processing.
+    2.  **Robust Window Selection**: The logic was changed to dynamically retrieve the titles of the split-channel windows (`getList("image.titles")`) instead of relying on fixed names, making the script more reliable.
+    3.  **Improved Cleanup**: A `close("*");` command was added at the start of each loop iteration to ensure no leftover windows from a previous iteration could interfere with the current one.
+
+**5. Current State**
+The task is fully completed. All required image processing and file export operations have been successfully performed, and the results have been verified.
+
+**6. Technical Details**
+- **Input Path**: `<用户目录>/OneDrive/Desktop/cfos/c-Fos_Data/cfos_cy_pixiaHis_2-1_1/`
+- **Output Paths**:
+    - `<用户目录>/OneDrive/Desktop/cfos/c-Fos_Data/cfos_cy_pixiaHis_2-1_1/cy3/`
+    - `<用户目录>/OneDrive/Desktop/cfos/c-Fos_Data/cfos_cy_pixiaHis_2-1_1/nissl/`
+    - `<用户目录>/OneDrive/Desktop/cfos/c-Fos_Data/cfos_cy_pixiaHis_2-1_1/cy3ds/`
+    - `<用户目录>/OneDrive/Desktop/cfos/c-Fos_Data/cfos_cy_pixiaHis_2-1_1/nisslds/`
+    - `<用户目录>/OneDrive/Desktop/cfos/c-Fos_Data/cfos_cy_pixiaHis_2-1_1/nissldsAB/`
+- **Processing Parameters**:
+    - **Downsampling**: Scale factor of 0.1 for both x and y axes.
+    - **Contrast Enhancement**: Saturated pixels set to 0.1%.
+    - **Bit Depth Conversion**: Converted to 8-bit for the final Nissl version."""
+
+[[steps]]
+id = 1
+  [steps.action]
+  name = "run_macro"
+  script = """inputDir = "<用户目录>/OneDrive/Desktop/cfos/c-Fos_Data/cfos_cy_pixiaHis_2-1_1/";
+
+
+// Create output directories
+output_cy3 = inputDir + "cy3/";
+
+output_nissl = inputDir + "nissl/";
+
+output_cy3ds = inputDir + "cy3ds/";
+
+output_nisslds = inputDir + "nisslds/";
+
+output_nissldsAB = inputDir + "nissldsAB/";
+
+
+File.makeDirectory(output_cy3);
+
+File.makeDirectory(output_nissl);
+
+File.makeDirectory(output_cy3ds);
+
+File.makeDirectory(output_nisslds);
+
+File.makeDirectory(output_nissldsAB);
+
+
+setBatchMode(true);
+
+
+for (i = 1;
+ i <= 3;
+ i++) {
+    // Ensure a clean slate for each loop
+    close("*");
+ 
+
+    file_prefix = "Image_0" + i;
+
+    path = inputDir + file_prefix + ".vsi";
+
+
+    if (File.exists(path)) {
+        print("Processing: " + path);
+
+        
+        // Open VSI with Bio-Formats
+        run("Bio-Formats Importer", "open=[" + path + "] autoscale color_mode=Default view=Hyperstack stack_order=XYCZT");
+
+        
+        // Split Channels
+        run("Split Channels");
+
+
+        // Get titles of the split channel images
+        c1_title = "";
+
+        c2_title = "";
+
+        list = getList("image.titles");
+
+        for (j = 0;
+ j < list.length;
+ j++) {
+            if (startsWith(list[j], "C1-")) {
+                c1_title = list[j];
+
+            } else if (startsWith(list[j], "C2-")) {
+                c2_title = list[j];
+
+            }
+        }
+
+        // --- Process Cy3 Channel (C1) ---
+        if (c1_title != "") {
+            selectWindow(c1_title);
+
+            saveAs("Tiff", output_cy3 + file_prefix + "_cy3.tif");
+
+            run("Scale...", "x=0.1 y=0.1 z=1.0 interpolation=Bilinear average create title=cy3_downsampled");
+
+            saveAs("Tiff", output_cy3ds + file_prefix + "_cy3_downsampled.tif");
+
+            close();
+ // Close downsampled image
+        } else {
+            print("Could not find Cy3 (C1) window for " + file_prefix);
+
+        }
+
+        // --- Process Nissl Channel (C2) ---
+        if (c2_title != "") {
+            selectWindow(c2_title);
+
+            saveAs("Tiff", output_nissl + file_prefix + "_nissl.tif");
+
+            run("Scale...", "x=0.1 y=0.1 z=1.0 interpolation=Bilinear average create title=nissl_downsampled");
+
+            saveAs("Tiff", output_nisslds + file_prefix + "_nissl_downsampled.tif");
+
+
+            // Enhance contrast, convert to 8-bit, and save from the newly created downsampled window
+            selectWindow("nissl_downsampled");
+
+            run("Enhance Contrast", "saturated=0.1");
+
+            run("8-bit");
+
+            saveAs("Tiff", output_nissldsAB + file_prefix + "_nissl_downsampled_AB.tif");
+
+            close();
+ // Close adjusted image
+        } else {
+            print("Could not find Nissl (C2) window for " + file_prefix);
+
+        }
+
+        // Close all remaining open images for this file
+        run("Close All");
+
+    } else {
+        print("File not found: " + path);
+
+    }
+}
+
+setBatchMode(false);
+
+print("Batch processing complete.");
+"""
+
+
+data_type = """Multi-channel .vsi microscopic images containing a Cy3 fluorescence channel and a Nissl tissue staining channel."""
+question = """1. Export VSI Files to TIF Iterate through multi-layer slice images in the input path. The file path is : <用户目录>\OneDrive\Desktop\cfos\c-Fos_Data\cfos_cy_pixiaHis_2-1_1
+    - For each slice and each tile image, check if the `.vsi` file exists:
+        - If it exists, open it with Bio-Formats Importer.
+        - Only process file 1-3
+        - Split channels (`split_channels`), and save both the **Cy3 channel (fluorescence)** and Nissl channel (tissue staining).
+        - Simultaneously generate:
+            - Original size .tif
+            - 0.1× downsampled version
+            - Contrast-enhanced & 8-bit converted version
+        - Folder named with cy3, nissl, cy3ds, nisslds, nissldsAB"""
+
+[requirements]
+bit_depth = [16]
+min_size = []
+channels = "Requires at least two channels, identified as Cy3 (fluorescence) and Nissl (staining)."
+
+[defaults]
+downsample_factor = "0.1"
+contrast_saturation = "0.1"
+
+tips = [
+  """The macro assumes Cy3 is Channel 1 (C1) and Nissl is Channel 2 (C2); this may require adjustment based on acquisition settings.""",
+  """Output folders (cy3, nissl, cy3ds, nisslds, nissldsAB) are created automatically within the source directory.""",
+]
+

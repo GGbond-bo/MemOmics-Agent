@@ -1,0 +1,26 @@
+type = "macro"
+signature = "trainable-weka-segmentation.v1"
+name = "Trainable Weka Segmentation"
+topic = [
+  "machine learning",
+  "image segmentation",
+  "Weka",
+  "interactive training",
+]
+tags = ["Weka", "machine learning", "image segmentation", "interactive"]
+
+description = "Trainable Weka Segmentation plugin macro usage guide, machine learning based segmentation method"
+
+data_type = "macro"
+
+[content]
+plugin_name = "Trainable Weka Segmentation"
+description = "Machine learning segmentation. Opens GUI, no parameters needed."
+
+correct_syntax = 'run("Trainable Weka Segmentation", "");'
+
+tips = [
+  "Don't add parameters - this plugin opens a GUI for interactive training.",
+]
+
+site = "https://imagej.net/plugins/tws"

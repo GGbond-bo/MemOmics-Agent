@@ -108,6 +108,23 @@ objects=19 / rss_h=3.0GB`，`done/` 下 8 个结果文件，`out/` 下 `umap_ver
 
 ## 7. 运维口径
 
+- 🔴 **账本 ≠ 活进程：`session_list` 的 `status` 只是本机快照（2026-11-09 实测）**：`sessions.json` 在本机，
+  daemon 在集群 setsid 常驻 → 换会话 / 换节点 / 账本被覆盖就脱钩。实测 `session_list` 5 条全 `stopped`，
+  同时 `ps -u user` 里 **4 个 `r_session_daemon.R` 在跑**（分别 3–10 天），且它们的 session id
+  （`s-20261029-215224-z0ua` / `s-20261102-183743-q8lr` / `s-20261105-173721-hsz3` /
+  `s-20261105-120321-urb5`）**压根不在账本里**。
+  → 回答「现在有没有会话在跑 / 占多少内存」必须用
+  `ps -u <user> -o pid,etime,pcpu,pmem,cmd --sort=-pcpu | head -15`
+  （会话目录在 `--args --dir .../sessions/<id>`），或 `session_list(live=true)` 逐台核实；
+  `live=false` 只作「我用过哪些会话」的索引。遗留 daemon 清理属破坏性动作，**先问用户**（清了内存对象就没了）。
+  🔴 **`session_status` 不带 `node` 时可能落到别的节点的旧账本 —— 判活前必须核对「回执是不是我的」**（2026-11-09 实测）：
+  一次调用返回 `alive=false / daemon_status=MM_DEAD / readrds_calls=0`，据此差点判定「集群上没有存活会话」并重读 861MB；
+  但回执里的 `node=node4`、`started=2026-10-18`、`input=<另一个 rds>` 全都不是本次任务（我真正的会话在 `node1`、当天 14:37、
+  另一个 input 路径）——**读的是另一台机器上早已退出的旧账本**。
+  判活三要素，缺一不可：① 回执 `node` == 本次用的节点；② 回执 `input` == 本次要的对象路径；③ `pid` 在
+  `ps -p <pid>` 里真的在（或 `session_list(live=true)`）。三者任一不符 ⇒ 这次回执不可用，**显式带 `node=` 重查**，
+  不要据此推断「会话死了」。反之，只要 `readrds_calls` 与 `input` 都对得上，对象就还在内存里，绝不重读文件。
+  体检全流程 → `references/cluster-health-check.md`。
 - **内存**：会话 = 真占内存（MuSC ~2.5–3GB；22GB 的 `MF_*.rds` 会到几十 GB）。同节点建议 ≤2 个
   （`remote.session.max_sessions`，超了 `session_start` 只**提示**不硬拦）；**用完 `session_stop`**。
 - **检查点**：`session_save`（可 `objects=` 只存小对象，几秒；全存大对象要几分钟+GB 级磁盘）；

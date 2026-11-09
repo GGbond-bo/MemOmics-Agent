@@ -1,0 +1,89 @@
+{
+  "id": "csa",
+  "version": "1.0.2",
+  "name": "肌纤维横截面形态定量（CSA）",
+  "summary": "单通道（明场/荧光）阈值分割 → 分水岭拆分粘连 → 逐纤维测面积/周长/Feret/圆度；输出逐对象 CSV（像素域，工具侧换算 µm）+ 编号轮廓图。适用于 laminin/desmin 染色或 MyHC 单通道的肌纤维横截面。",
+  "status": "ready",
+  "requires": [],
+  "template": "macro.ijm.tmpl",
+  "outputs": [
+    "objects.csv",
+    "outlines.png"
+  ],
+  "params": {
+    "px_um": {
+      "type": "number",
+      "default": 0,
+      "desc": "物理像素尺寸（µm/px）。0 = 不换算，结果按像素报告（会判 warning）"
+    },
+    "channel": {
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 4,
+      "desc": "RGB/多通道取第几通道（1 起）"
+    },
+    "threshold": {
+      "type": "string",
+      "default": "Otsu",
+      "enum": [
+        "Otsu",
+        "Triangle",
+        "Yen",
+        "Li",
+        "Mean",
+        "Default",
+        "Huang",
+        "Intermodes",
+        "IsoData",
+        "MaxEntropy",
+        "MinError",
+        "Minimum",
+        "Moments",
+        "Percentile",
+        "RenyiEntropy",
+        "Shanbhag"
+      ],
+      "desc": "自动阈值方法"
+    },
+    "smooth": {
+      "type": "number",
+      "default": 0,
+      "desc": "高斯模糊 sigma（像素）：先降噪再阈值，噪声大的 12/16-bit 图给 1.5–3"
+    },
+    "invert": {
+      "type": "bool",
+      "default": false,
+      "desc": "前景比背景暗时置 true（如明场 DAB）"
+    },
+    "watershed": {
+      "type": "bool",
+      "default": true,
+      "desc": "分水岭拆粘连"
+    },
+    "project": {
+      "type": "bool",
+      "default": true,
+      "desc": "Z 堆栈先做最大强度投影"
+    },
+    "min_area_um2": {
+      "type": "number",
+      "default": 100,
+      "desc": "最小纤维面积（µm²）"
+    },
+    "max_area_um2": {
+      "type": "number",
+      "default": 0,
+      "desc": "最大纤维面积（µm²），0 = 不限"
+    }
+  },
+  "accept": {
+    "min_objects": 1,
+    "max_objects": 20000,
+    "area_fraction": [
+      0.005,
+      0.98
+    ],
+    "unit": "um"
+  }
+}

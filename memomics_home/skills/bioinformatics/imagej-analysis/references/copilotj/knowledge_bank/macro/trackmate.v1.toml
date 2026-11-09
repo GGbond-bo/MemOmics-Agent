@@ -1,0 +1,77 @@
+type = "macro"
+signature = "trackmate.v1"
+name = "TrackMate Spot Detection and Tracking"
+topic = [
+  "object tracking",
+  "spot detection",
+  "TrackMate",
+  "time series analysis",
+]
+tags = ["TrackMate", "object tracking", "spot detection", "time series"]
+
+description = "TrackMate general purpose spot detection and tracking plugin macro usage guide"
+
+data_type = "macro"
+
+[content]
+plugin_name = "TrackMate"
+description = """
+General-purpose spot detection and tracking plugin for ImageJ/Fiji. Headless mode supports full parameterization via macro calls.
+"""
+
+correct_syntax = """
+run("TrackMate", "use_gui=false detector=[LoG detector (Laplacian of Gaussian)] radius=5.0 \
+threshold=10.0 subpixel=false median=true channel=1 tracker=[Simple LAP tracker] \
+linking.max_distance=5.0 gap_closing.max_distance=5.0 gap_closing.max_frame_gap=0 \
+filter_spots=[QUALITY filter] QUALITY=0.0 filter_tracks=[TRACK_DURATION filter] TRACK_DURATION=1 \
+display_results=true save_to=[<用户目录>/OneDrive/Desktop/TrackMateSaveTest2.xml] \
+export_to=[<用户目录>/OneDrive/Desktop/TrackMateExportTest2.xml]");
+"""
+
+tips = [
+  """
+1. Use the Macro Recorder to generate the exact argument string for your data, and ensure the target image window is selected before running.
+  """,
+  """
+2. radius and threshold control spot detection—tune radius to your object size and threshold to eliminate background noise.
+  """,
+  """
+3. File paths for save_to and export_to must be enclosed in square brackets (e.g. save_to=[C:/path/to/file.xml]).
+  """,
+  """
+4. median=true applies a 3×3 median filter before detection to reduce salt-and-pepper noise.
+  """,
+  """
+5. channel selects which channel in a multi-channel stack to analyze.
+  """,
+  """
+6. linking.max_distance and gap_closing.max_distance define how far a spot may move between frames; gap_closing.max_frame_gap sets how many frames may be skipped.
+  """,
+  """
+7. If use_gui=true, the GUI will open and ignore other macro parameters as defaults.
+  """,
+  """
+8. save_to writes the full TrackMate model XML, while export_to writes a simplified tracks-only XML.
+  """,
+  """
+9. display_results=true overlays detected spots and tracks on the image.
+  """,
+  """
+10. Always specify both detector and tracker in square brackets (e.g. detector=[LoG detector…], tracker=[Simple LAP tracker]) or TrackMate will skip those steps.
+  """,
+  """
+11. Use forward-slashes or escape backslashes in Windows paths (e.g. C:/Users/… or C:\\\\Users\\\\…) to avoid file-not-found errors.
+  """,
+  """
+12. If you see "spot collection is empty," increase blob radius, lower threshold, or toggle median filtering, and test interactively in GUI mode (use_gui=true + Preview).
+  """,
+  """
+13. For batch processing, record working parameters with the Macro Recorder and paste them into a headless macro to ensure consistency.
+  """,
+  """
+14. After running TrackMate, you can check the files saved in the specified paths to verify the results.
+  """,
+]
+
+site = "https://imagej.net/plugins/trackmate"
+

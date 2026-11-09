@@ -1,0 +1,111 @@
+type = "task"
+signature = "measure_lanes.v1"
+name = "measure_lanes"
+question = """measure 6 lanes within the selected rectangle on the image"""
+topic = ["measurement", "densitometry", "gel_analysis"]
+tags = ["measure_lanes"]
+
+description = """Divides a selected rectangular ROI into a specified number of equal-width vertical lanes and measures the intensity properties (Area, Mean, IntDen) for each lane."""
+
+summary = """### Summary of ImageJ Task
+
+#### 1. Task Overview
+The primary objective was to measure the mean gray value and other intensity metrics for 6 distinct vertical lanes within a user-defined rectangular selection on the "Western_blot.jpeg" image.
+
+#### 2. Key Actions Taken
+1.  **User Confirmation**: The process began by proposing a clear, multi-step plan to the user: divide the selected rectangle into 6 equal vertical lanes and measure each one. The user approved this plan.
+2.  **ImageJ Macro Execution (Measurement)**: An ImageJ macro was executed to automate the measurement. It programmatically divided the initial rectangular selection into six smaller, equal-width rectangles. It then iterated through each of these "lane" rectangles and ran the "Measure" command, populating the ImageJ "Results" table.
+3.  **ImageJ Macro Execution (Save)**: A second macro was used to save the data from the "Results" table to a CSV file, making the measurements accessible for further analysis and reporting.
+4.  **File Verification**: The `folder_summary` tool was called to confirm that the results file was successfully created in the specified temporary directory.
+5.  **Python Script Execution**: A Python script utilizing the `pandas` library was run to read the generated CSV file and present the measurement data to the user in a clean, formatted table.
+
+#### 3. Critical Results
+The measurements for the six lanes were successfully calculated and are summarized below. The `Mean` column indicates the average pixel intensity for each lane.
+
+| | Area | Mean | IntDen | RawIntDen |
+| :--- | :--- | :--- | :--- | :--- |
+| **Lane 1** | 6480 | 47.649 | 308763 | 308763 |
+| **Lane 2** | 6480 | 39.980 | 259068 | 259068 |
+| **Lane 3** | 6480 | 40.577 | 262940 | 262940 |
+| **Lane 4** | 6480 | 43.645 | 282822 | 282822 |
+| **Lane 5** | 6480 | 45.869 | 297229 | 297229 |
+| **Lane 6** | 6480 | 48.902 | 316882 | 316882 |
+
+#### 4. Error Handling
+No errors were encountered during this task. Each step of the plan was executed successfully.
+
+#### 5. Current State
+The task is complete. The 6 lanes within the selected rectangle have been measured, and the results have been saved and displayed to the user. The system is ready for the next command.
+
+#### 6. Technical Details
+*   **Image File**: `Western_blot.jpeg`
+*   **Initial User Selection**: `[x=105, y=332, width=718, height=54]`
+*   **Output Data File**: The measurement results were saved to the following absolute path: `D:/vscode_project/ChatImageJ/temp/lane_measurements.csv`
+*   **Core ImageJ Macro**:
+    ```ijm
+    selectWindow("Western_blot.jpeg");
+    run("Clear Results");
+    // Convert to 8-bit
+    run("8-bit");
+
+    // Invert the image 
+    run("Invert");
+    getSelectionBounds(x, y, width, height);
+    laneWidth = width / 6;
+    for (i = 0; i < 6; i++) {
+      laneX = x + i * laneWidth;
+      makeRectangle(laneX, y, laneWidth, height);
+      run("Measure");
+    }
+    ```"""
+
+[[steps]]
+id = 1
+
+[steps.action]
+name = "run_macro"
+script = """
+  // Select the image window
+selectWindow("Western_blot.jpeg");
+
+// Clear old results
+run("Clear Results");
+
+// Convert to 8-bit
+run("8-bit");
+
+// Invert the image 
+run("Invert");
+
+// Get the ROI bounds
+getSelectionBounds(x, y, width, height);
+
+// Divide the selected region into 6 equal-width lanes
+laneWidth = width / 6;
+
+// Loop over each lane and measure
+for (i = 0; i < 6; i++) {
+    laneX = x + i * laneWidth;
+
+    // Create ROI for lane i
+    makeRectangle(laneX, y, laneWidth, height);
+
+    // Measure intensity (RawIntDen / Area / Mean will be output to Results)
+    run("Measure");
+}
+
+"""
+data_type = """Western blot image with a rectangular region of interest (ROI) selected."""
+
+[requirements]
+bit_depth = [8, 16]
+min_size = [64, 64]
+channels = "grayscale"
+
+[defaults]
+number_of_lanes = "6"
+tips = [
+  """Ensure the initial rectangular selection accurately spans the full width of all lanes you intend to measure.""",
+  """Clear the ImageJ Results table before running the macro to ensure a clean analysis.""",
+  """If the lanes are black on a white background, consider inverting the image to improve measurement accuracy.""",
+]

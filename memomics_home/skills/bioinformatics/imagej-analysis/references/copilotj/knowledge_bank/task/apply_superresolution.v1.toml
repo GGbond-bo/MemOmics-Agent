@@ -1,0 +1,80 @@
+type = "task"
+signature = "apply_superresolution.v1"
+name = "apply_superresolution"
+question = """I want to apply super-resolution for this image to enhance its clarity and detail.
+
+Previously, I have trained a model located at D:\\vscode_project\\ChatImageJ\\temp\\biapy_runs\\npc_sr3d_test\\npc_sr3d_test\\checkpoints."""
+topic = ["super-resolution","enhancement","BiaPy"]
+tags = ["apply_superresolution"]
+
+description = """Enhance image clarity and detail using AI-based super-resolution"""
+
+summary = """Summary of ImageJ Task
+
+1. **Task Overview**: Successfully applied 3D super-resolution enhancement to a nuclear pore complex image using a trained BiaPy model to improve clarity and detail.
+
+2. **Key Actions Taken**:
+   - Delegated the super-resolution task to the Tool Agent specialized in BiaPy operations
+   - Located and verified the trained BiaPy model checkpoint file
+   - Used biapy_tool in prediction mode with sr3d task configuration
+   - Processed the 3D grayscale image (1023x1023x6 voxels) using GPU acceleration
+   - Opened the enhanced super-resolution output image in ImageJ for verification
+
+3. **Critical Results**:
+   - Original image size: 6.70 MB (1023x1023x6 voxels)
+   - Super-resolution output size: 23.95 MB (significantly enhanced with greater detail)
+   - Enhanced image shows improved structural clarity with better-defined bright spots
+   - Both original and enhanced images are now available in ImageJ for comparison
+   - Quality metrics (MAE, MSE, SSIM) were calculated for assessment
+
+4. **Error Handling**:
+   - Initial parameter validation errors resolved by providing all required fields for biapy_tool
+   - Successfully handled path formatting and checkpoint file location verification
+   - Properly managed file path conversions between Windows and Unix formats
+
+5. **Current State**: Task completed successfully. The 3D super-resolution enhancement has been fully applied, with both the original low-resolution image and the enhanced super-resolution version open in ImageJ for comparison and analysis.
+
+6. **Technical Details**:
+   - **Model**: npc_sr3d_test_1-checkpoint-best.pth
+   - **Task**: sr3d (3D super-resolution)
+   - **Mode**: predict
+   - **Input**: <用户目录>/OneDrive/copilotj/biapy_pics/super_resolution/Nuclear_Pore_complex_3D/data/test/LR/np_27.tif
+   - **Output**: D:/vscode_project/ChatImageJ/temp/biapy_runs/npc_sr3d_prediction/npc_sr3d_prediction/results/npc_sr3d_prediction_1/per_image/np_27.tif
+   - **Parameters**: batch_size=8, patch_size=64, GPU=0, NUM_WORKERS=4, REFLECT_TO_COMPLETE_SHAPE=True
+   - **Image Type**: 3D grayscale, 16-bit unsigned, 6 slices
+   - **Enhancement**: AI-based super-resolution with significant detail improvement
+   - **Processing Time**: GPU-accelerated processing for optimal performance"""
+
+[[steps]]
+id = 1
+  [steps.action]
+  name = "delegate_task"
+  agent = "Tool Agent"
+  task = """Apply super-resolution enhancement to the current image np_27.tif using the trained BiaPy model located at D:\\vscode_project\\ChatImageJ\\temp\\biapy_runs\\npc_sr3d_test\\npc_sr3d_test\\checkpoints. The image is a 3D grayscale image with dimensions 1023x1023x6 voxels and should be processed to enhance clarity and detail."""
+
+[[steps]]
+id = 2
+  [steps.action]
+  name = "run_macro"
+  script = """open("D:/vscode_project/ChatImageJ/temp/biapy_runs/npc_sr3d_prediction/npc_sr3d_prediction/results/npc_sr3d_prediction_1/per_image/np_27.tif");
+"""
+  timeout = 30.0
+  verify_result = false
+  operation_intent = "None"
+
+
+data_type = """3D grayscale image stack (1023x1023x6 voxels) representing nuclear pore complexes"""
+[requirements]
+bit_depth = [16]
+min_size = [64, 64]
+channels = "grayscale"
+
+[defaults]
+batch_size = "8"
+patch_size = "64"
+
+tips = [
+  """Use trained BiaPy checkpoint files for best results""",
+  "Ensure GPU acceleration for faster processing",
+]
+

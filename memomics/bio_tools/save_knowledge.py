@@ -100,9 +100,39 @@ SCHEMA = {
             },
             "evidence_chain": {
                 "type": "object",
-                "description": "证据链元数据（kb-evidence-v1）：{standard, max_level, level_distribution, "
-                               "graded_conclusions}；生物学结论用 L0-L3 分级，方法/参数类标 source_only。"
-                               "可选，写入 YAML 顶层，供知识库图谱/检索展示可信度。",
+                "description": "证据链元数据（kb-evidence-v2）：{standard, max_level, level_distribution, "
+                               "graded_conclusions, source_verified, review_required}；生物学结论用 L0-L3 "
+                               "分级，方法/参数类标 source_only。可选，写入 YAML 顶层，供知识库图谱/检索展示可信度。",
+                "default": None
+            },
+            "claims": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": ("claim 级结构化结论（kb-evidence-v2）：每条含 text/evidence_level/source"
+                                "（doi/locator/quote/type）/species/assay/experimental_object/cohort/background/"
+                                "validation/evidence_type/grading_reason/source_verified/review_required。"
+                                "可选；写入 YAML 顶层 claims，供后续分析按 claim 检索与审计。"),
+                "default": None
+            },
+            "markers": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": ("文章明确用于注释/鉴定的 marker：gene/cell_type/direction/assay/context/source。"
+                                "可选；写入 YAML 顶层 markers。"),
+                "default": None
+            },
+            "wet_lab": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": ("湿实验条件与试剂：experiment/model/species/conditions/reagents"
+                                "（name/vendor/catalog/dose）/readout/n/source。可选；写入 YAML 顶层 wet_lab。"),
+                "default": None
+            },
+            "organoids": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": ("类器官/3D 培养：name/species/tissue/model_type/media/cytokines/matrix/"
+                                "duration/passage/readout/source。可选；写入 YAML 顶层 organoids。"),
                 "default": None
             }
         },
@@ -118,6 +148,8 @@ _KB_CATEGORIES = ("01_生物学知识", "02_质控参数", "03_测序方法", "0
 _KB_ASSAYS = ("RNA", "ATAC", "spatial", "bulk")
 # 化学域类别（批O3 2026-08-16：化学类文章知识库）
 _CHEM_CATEGORIES = ("compounds", "pharmacology", "reactions", "reagents", "conditions")
+_AI_SUBCATEGORIES = ("frameworks", "benchmarks", "evaluation", "agent_design",
+                     "systems", "applications", "overview", "general")
 
 # 物种标准化：俗名/学名/中文 → 知识库标准目录名（批O3 2026-08-16）
 # 与 kb_search.SYNONYMS 的检索变体兼容（human→Homo_sapiens、mouse→Mus_musculus、monkey→monkey）
@@ -126,15 +158,21 @@ _SPECIES_CANONICAL = {
     "智人": "Homo_sapiens", "人": "Homo_sapiens", "人类": "Homo_sapiens", "患者": "Homo_sapiens",
     "mouse": "Mus_musculus", "mus musculus": "Mus_musculus", "mus_musculus": "Mus_musculus",
     "小鼠": "Mus_musculus", "mice": "Mus_musculus",
-    "rat": "rat", "rattus norvegicus": "rat", "rattus": "rat", "大鼠": "rat",
-    "monkey": "monkey", "macaque": "monkey", "rhesus": "monkey", "cynomolgus": "monkey",
-    "猕猴": "monkey", "食蟹猴": "monkey", "玻尾猴": "monkey",
-    "zebrafish": "zebrafish", "danio rerio": "zebrafish", "danio": "zebrafish", "斑马鱼": "zebrafish",
-    "drosophila": "drosophila", "drosophila melanogaster": "drosophila", "fly": "drosophila", "果蝇": "drosophila",
-    "c.elegans": "c_elegans", "c. elegans": "c_elegans", "caenorhabditis elegans": "c_elegans",
-    "worm": "c_elegans", "线虫": "c_elegans",
-    "pig": "pig", "sus scrofa": "pig", "porcine": "pig", "猪": "pig",
-    "rabbit": "rabbit", "oryctolagus cuniculus": "rabbit", "兔": "rabbit",
+    "rat": "Rattus_norvegicus", "rattus norvegicus": "Rattus_norvegicus",
+    "rattus_norvegicus": "Rattus_norvegicus", "大鼠": "Rattus_norvegicus",
+    "monkey": "Macaca_mulatta", "macaque": "Macaca_mulatta", "rhesus": "Macaca_mulatta",
+    "macaca mulatta": "Macaca_mulatta", "猕猴": "Macaca_mulatta",
+    "cynomolgus": "Macaca_fascicularis", "食蟹猴": "Macaca_fascicularis",
+    "macaca fascicularis": "Macaca_fascicularis", "玻尾猴": "Macaca_fascicularis",
+    "zebrafish": "Danio_rerio", "danio rerio": "Danio_rerio", "danio": "Danio_rerio", "斑马鱼": "Danio_rerio",
+    "drosophila": "Drosophila_melanogaster", "drosophila melanogaster": "Drosophila_melanogaster",
+    "fly": "Drosophila_melanogaster", "果蝇": "Drosophila_melanogaster",
+    "c.elegans": "Caenorhabditis_elegans", "c. elegans": "Caenorhabditis_elegans",
+    "caenorhabditis elegans": "Caenorhabditis_elegans", "worm": "Caenorhabditis_elegans",
+    "线虫": "Caenorhabditis_elegans",
+    "pig": "Sus_scrofa", "sus scrofa": "Sus_scrofa", "porcine": "Sus_scrofa", "猪": "Sus_scrofa",
+    "rabbit": "Oryctolagus_cuniculus", "oryctolagus cuniculus": "Oryctolagus_cuniculus",
+    "兔": "Oryctolagus_cuniculus",
     "other": "other", "unknown": "other", "未提及": "other", "na": "other", "n/a": "other",
 }
 
@@ -159,6 +197,48 @@ def canonical_species(name: str) -> str:
         # 学名形式 "Homo Sapiens" / 已有目录名直通（做基本规范化）
         if re.fullmatch(r"[A-Za-z]+ [a-z]+", seg) and not canon:
             return seg.replace(" ", "_").capitalize()
+    return "other"
+
+
+_TISSUE_CANONICAL = {
+    "skeletal muscle": "skeletal_muscle", "skeletal_muscle": "skeletal_muscle",
+    "muscle": "skeletal_muscle", "示例组织": "skeletal_muscle", "肌肉": "skeletal_muscle",
+    "cardiac muscle": "cardiac_muscle", "cardiac_muscle": "cardiac_muscle", "心肌": "cardiac_muscle",
+    "smooth muscle": "smooth_muscle", "smooth_muscle": "smooth_muscle", "平滑肌": "smooth_muscle",
+    "liver": "liver", "肝": "liver", "肝脏": "liver", "hepatic": "liver",
+    "brain": "brain", "脑": "brain", "大脑": "brain", "cortex": "brain", "皮层": "brain",
+    "lung": "lung", "肺": "lung", "肺部": "lung", "pulmonary": "lung",
+    "kidney": "kidney", "肾": "kidney", "肾脏": "kidney", "renal": "kidney",
+    "heart": "heart", "心脏": "heart", "cardiac": "heart",
+    "blood": "blood", "血液": "blood", "pbmc": "pbmc", "外周血": "pbmc",
+    "bone marrow": "bone_marrow", "bone_marrow": "bone_marrow", "骨髓": "bone_marrow",
+    "spleen": "spleen", "脾": "spleen", "脾脏": "spleen",
+    "intestine": "intestine", "肠道": "intestine", "肠": "intestine",
+    "colon": "colon", "结肠": "colon", "skin": "skin", "皮肤": "skin",
+    "adipose": "adipose", "fat": "adipose", "脂肪": "adipose",
+    "pancreas": "pancreas", "胰腺": "pancreas", "retina": "retina", "视网膜": "retina",
+    "eye": "eye", "眼": "eye", "bladder": "bladder", "膀胱": "bladder",
+    "uterus": "uterus", "子宫": "uterus", "prostate": "prostate", "前列腺": "prostate",
+    "ovary": "ovary", "卵巢": "ovary", "testis": "testis", "睾丸": "testis",
+    "thymus": "thymus", "胸腺": "thymus", "tumor": "tumor", "肿瘤": "tumor",
+    "other": "other", "unknown": "other", "未提及": "other", "n/a": "other",
+}
+
+
+def canonical_tissue(name: str) -> str:
+    s = (name or "").strip()
+    key = s.lower().replace("-", " ").replace("_", " ").strip()
+    if key in _TISSUE_CANONICAL:
+        return _TISSUE_CANONICAL[key]
+    key2 = s.lower().replace(" ", "_").replace("-", "_").strip()
+    if key2 in _TISSUE_CANONICAL:
+        return _TISSUE_CANONICAL[key2]
+    for token, canon in sorted(_TISSUE_CANONICAL.items(), key=lambda kv: -len(kv[0])):
+        if token in key:
+            return canon
+    if any(t in key for t in ("musc", "myo", "sarcomere", "plantaris", "soleus",
+                              "gastrocnemius", "tibialis", "nmj", "synm", "schwann")):
+        return "skeletal_muscle"
     return "other"
 
 
@@ -225,12 +305,14 @@ def _preserve_external_fields(entry: dict, entry_path: str) -> dict:
         return entry
 
 
-def save_knowledge(name: str = "", content: str = "", source: str = "manual",
+def _save_knowledge_impl(name: str = "", content: str = "", source: str = "manual",
                    evidence: str = "", verified: str = "partially_verified",
                    category: str = "bioinformatics", force: bool = False,
                    species: str = "", tissue: str = "", direction: str = "",
                    kb_category: str = "01_生物学知识", assay_type: str = "RNA",
-                   domain: str = "biology", evidence_chain: dict = None) -> str:
+                   domain: str = "biology", evidence_chain: dict = None,
+                   claims: list = None, markers: list = None, wet_lab: list = None,
+                   organoids: list = None) -> str:
     """知识入库 — 铁轨强制验证，不可绕过。
 
     domain（批O3 2026-08-16）:
@@ -266,8 +348,8 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
         return _err("⛔ 入库拒绝：verified=unverified 的条目禁止入库（铁轨铁律）。"
                     "请补充验证后改为 verified/partially_verified，或确认后重试。")
 
-    # 铁轨 2: data_driven/domain_convention → 必须带 evidence
-    if source in ("data_driven", "domain_convention") and not evidence:
+    # 铁轨 2: 文献/数据/领域约定 → 必须带 evidence（kb-evidence-v2 起 literature 也强制）
+    if source in ("data_driven", "domain_convention", "literature") and not evidence:
         return _err(f"⛔ 入库拒绝：source={source} 必须提供 evidence（引用原文/数据来源），"
                     "否则拒绝写入（铁轨铁律）。")
 
@@ -286,6 +368,8 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
         _seg_sub = (direction or "general").strip().lower().replace(" ", "_").replace("-", "_")
         if not _SAFE_PATH_SEG_RE.match(_seg_sub):
             return _err(f"⛔ 入库拒绝：路径段 '{_seg_sub}' 非法（仅字母/数字/下划线/中文，≤64 字符）")
+        if _seg_sub not in _AI_SUBCATEGORIES:
+            return _err(f"⛔ 入库拒绝：AI 子类必须是 {_AI_SUBCATEGORIES} 之一，收到 '{_seg_sub}'")
         entry_dir = os.path.join(root, "ai_agent", _seg_sub)
         entry_path = os.path.join(entry_dir, f"{name}.yaml")
         entry = {
@@ -299,6 +383,14 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
             entry["evidence"] = evidence
         if evidence_chain:
             entry["evidence_chain"] = evidence_chain
+        if claims:
+            entry["claims"] = claims
+        if markers:
+            entry["markers"] = markers
+        if wet_lab:
+            entry["wet_lab"] = wet_lab
+        if organoids:
+            entry["organoids"] = organoids
         if yaml is None:
             return _err("⛔ 入库失败：PyYAML 不可用，无法写 YAML 条目")
         try:
@@ -332,6 +424,14 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
             entry["evidence"] = evidence
         if evidence_chain:
             entry["evidence_chain"] = evidence_chain
+        if claims:
+            entry["claims"] = claims
+        if markers:
+            entry["markers"] = markers
+        if wet_lab:
+            entry["wet_lab"] = wet_lab
+        if organoids:
+            entry["organoids"] = organoids
         if yaml is None:
             return _err("⛔ 入库失败：PyYAML 不可用，无法写 YAML 条目")
         try:
@@ -371,6 +471,14 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
             entry["evidence"] = evidence
         if evidence_chain:
             entry["evidence_chain"] = evidence_chain
+        if claims:
+            entry["claims"] = claims
+        if markers:
+            entry["markers"] = markers
+        if wet_lab:
+            entry["wet_lab"] = wet_lab
+        if organoids:
+            entry["organoids"] = organoids
         if yaml is None:
             return _err("⛔ 入库失败：PyYAML 不可用，无法写 YAML 条目")
         try:
@@ -392,7 +500,7 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
         if not tissue or not direction:
             return _err("⛔ 五级目录模式需要 tissue 和 direction（提供了 species 时必填）")
         _seg_species = canonical_species(species)
-        _seg_tissue = tissue.strip().lower().replace(" ", "_").replace("-", "_")
+        _seg_tissue = canonical_tissue(tissue)
         _seg_dir = direction.strip().lower().replace(" ", "_").replace("-", "_")
         _seg_cat = (kb_category or "01_生物学知识").strip()
         _seg_assay = (assay_type or "RNA").strip().upper()
@@ -423,6 +531,14 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
             entry["evidence"] = evidence
         if evidence_chain:
             entry["evidence_chain"] = evidence_chain
+        if claims:
+            entry["claims"] = claims
+        if markers:
+            entry["markers"] = markers
+        if wet_lab:
+            entry["wet_lab"] = wet_lab
+        if organoids:
+            entry["organoids"] = organoids
         if yaml is None:
             return _err("⛔ 入库失败：PyYAML 不可用，无法写 YAML 条目")
         try:
@@ -480,6 +596,30 @@ def save_knowledge(name: str = "", content: str = "", source: str = "manual",
     }, ensure_ascii=False)
 
 
+def _invalidate_search_cache():
+    """Make a just-written KB entry immediately searchable (FTS5 is in-memory)."""
+    try:
+        from memomics.bio_tools import kb_search
+        kb_search.invalidate_cache()
+    except Exception:
+        try:
+            import kb_search
+            kb_search.invalidate_cache()
+        except Exception:
+            pass
+
+
+def save_knowledge(*args, **kwargs):
+    """Public wrapper: run the validated write, then invalidate search caches on success."""
+    out = _save_knowledge_impl(*args, **kwargs)
+    try:
+        if json.loads(out).get("status") == "success":
+            _invalidate_search_cache()
+    except Exception:
+        pass
+    return out
+
+
 def _register():
     from tools.registry import registry
     registry.register(
@@ -501,6 +641,10 @@ def _register():
             args.get("assay_type", "RNA"),
             args.get("domain", "biology"),
             args.get("evidence_chain"),
+            args.get("claims"),
+            args.get("markers"),
+            args.get("wet_lab"),
+            args.get("organoids"),
         ),
     )
 

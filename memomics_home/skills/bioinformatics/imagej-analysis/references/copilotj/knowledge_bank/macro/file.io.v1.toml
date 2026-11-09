@@ -1,0 +1,26 @@
+type = "macro"
+signature = "file.io.v1"
+name = "File Io"
+topic = [
+  "file io",
+  "macros",
+]
+
+description = """Opens an image file from a specified disk path."""
+
+
+[content]
+plugin_name = "Open..."
+
+plugin_description = """A core ImageJ command to open an image file from the file system."""
+
+correct_syntax = """open("/path/to/your/image.tif");"""
+
+tips = [
+  """Prevent 'File not found' errors by using absolute paths, especially when the file was created by an external script (e.g., Python).""",
+  """In ImageJ macros, forward slashes '/' are generally safer for paths than backslashes '\', which may need to be escaped ('\\').""",
+  """Before calling `open()`, programmatically verify that the file exists at the specified path to avoid script failure.""",
+]
+
+site = "https://imagej.nih.gov/ij/developer/macro/functions.html#open"
+

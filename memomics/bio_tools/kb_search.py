@@ -22,10 +22,12 @@ logger = logging.getLogger(__name__)
 SCHEMA = {
     "name": "search_knowledge",
     "description": (
-        "Search the MemOmics knowledge base for bioinformatics analysis "
-        "templates, QC parameters, method recommendations, and biological knowledge. "
-        "ALWAYS call this BEFORE writing any analysis code to get the correct "
-        "parameters and templates. "
+        "Search the MemOmics knowledge base for bioinformatics analysis templates, QC parameters, "
+        "method recommendations, biological claims, and their source evidence. "
+        "ALWAYS call this BEFORE choosing parameters, writing analysis code, making a conclusion, "
+        "or starting a debate. It returns claim-level evidence with L0-L3, DOI/quote/locator, "
+        "experimental object, cohort, background, annotated markers, wet-lab conditions/reagents, "
+        "organoid/3D culture conditions, parameters and conflict candidates. "
         "Pass species, tissue, and direction for targeted search. "
         "支持中英文语义匹配（如 '人' → 'human', '智人', 'Homo sapiens')."
     ),
@@ -38,7 +40,13 @@ SCHEMA = {
             },
             "species": {"type": "string", "description": "Species (e.g. human, mouse, Homo sapiens, 人)"},
             "tissue": {"type": "string", "description": "Tissue (e.g. skeletal_muscle, brain, heart, 示例组织)"},
-            "direction": {"type": "string", "description": "Research direction (e.g. aging, ad, development, 衰老)"}
+            "direction": {"type": "string", "description": "Research direction (e.g. aging, ad, development, 衰老)"},
+            "kind": {"type": "string", "enum": ["all", "claims", "parameters", "markers", "wet_lab", "organoids"],
+                     "description": "all=all structured knowledge; claims=conclusions/evidence; parameters=methods/QC/software; markers=annotated markers; wet_lab=experimental conditions/reagents; organoids=organoid/3D culture", "default": "all"},
+            "level": {"type": "string", "enum": ["", "L0", "L1", "L2", "L3"],
+                      "description": "Optional claim evidence level filter", "default": ""},
+            "max_claims": {"type": "integer", "description": "Max claims to return (1-20, default 8)", "default": 8},
+            "max_parameters": {"type": "integer", "description": "Max parameter rows to return (1-30, default 10)", "default": 10}
         },
         "required": ["query"]
     }
@@ -49,12 +57,12 @@ SYNONYMS = {
     # 物种 — 标准目录名为 Homo_sapiens / Mus_musculus / monkey / zebrafish
     "human": ["human", "智人", "homo sapiens", "人类", "人", "homo_sapiens", "human pbmc"],
     "mouse": ["mouse", "小鼠", "mus musculus", "老鼠", "鼠", "mus_musculus", "mice"],
-    "monkey": ["monkey", "猴", "猕猴", "macaque", "cynomolgus", "食蟹猴", "玻尾猴", "猴子"],
-    "zebrafish": ["zebrafish", "斑马鱼", "danio rerio", "danio"],
-    "rat": ["rat", "大鼠", "珉鼠", "rattus norvegicus"],
-    "fly": ["fly", "果蝇", "drosophila", "drosophila melanogaster"],
-    "worm": ["worm", "线虫", "c. elegans", "caenorhabditis elegans"],
-    "pig": ["pig", "猪", "sus scrofa", "porcine"],
+    "monkey": ["monkey", "猴", "猕猴", "macaque", "rhesus", "macaca mulatta", "macaca_mulatta", "食蟹猴", "cynomolgus", "macaca fascicularis", "玻尾猴", "猴子"],
+    "zebrafish": ["zebrafish", "斑马鱼", "danio rerio", "danio", "danio_rerio"],
+    "rat": ["rat", "大鼠", "珉鼠", "rattus norvegicus", "rattus_norvegicus"],
+    "fly": ["fly", "果蝇", "drosophila", "drosophila melanogaster", "drosophila_melanogaster"],
+    "worm": ["worm", "线虫", "c. elegans", "caenorhabditis elegans", "caenorhabditis_elegans"],
+    "pig": ["pig", "猪", "sus scrofa", "sus_scrofa", "porcine"],
     # 组织
     "skeletal_muscle": ["skeletal_muscle", "skeletal muscle", "muscle", "肌", "肌肉", "示例组织", "skeletal"],
     "brain": ["brain", "脑", "cerebral", "大脑", "cortex", "皮层", "cerebellum", "小脑", "hippocampus", "海马"],
@@ -157,6 +165,28 @@ _file_cache_lock = threading.Lock()
 _CACHE_TTL = 300  # 缓存5分钟
 
 
+def invalidate_cache() -> None:
+    """清空文件缓存与 FTS 索引，让刚写入的 KB 条目立即可检索。
+
+    FTS5 是进程内内存索引，只在首次检索时构建；save_knowledge 写完后不失效
+    会导致新条目在重启前完全查不到。写入端成功落盘后必须调用本函数。
+    """
+    global _fts_conn, _fts_file_map, _KB_SPECIES_ROOTS_CACHE
+    with _fts_lock:
+        try:
+            if _fts_conn is not None:
+                _fts_conn.close()
+        except Exception:
+            pass
+        _fts_conn = None
+        _fts_file_map = {}
+        _fts_initialized.clear()
+    with _file_cache_lock:
+        _file_cache.clear()
+    _KB_SPECIES_ROOTS_CACHE = None
+    logger.info("kb_search cache invalidated")
+
+
 def _find_kb_root() -> Path:
     """动态检测知识库根目录，不硬编码路径。
 
@@ -232,6 +262,270 @@ def _read_file_cached(fpath: Path) -> str:
                 del _file_cache[k]
 
     return content
+
+
+def _load_yaml_doc(content: str) -> dict:
+    try:
+        import yaml
+        doc = yaml.safe_load(content)
+        return doc if isinstance(doc, dict) else {}
+    except Exception:
+        return {}
+
+
+def _claim_public(c: dict, rel_path: str, idx: int) -> dict:
+    src = c.get("source") if isinstance(c.get("source"), dict) else {}
+    val = c.get("validation") if isinstance(c.get("validation"), dict) else {}
+    return {
+        "claim_id": c.get("id") or f"{rel_path}#C{idx:02d}",
+        "evidence_level": str(c.get("evidence_level") or "L1"),
+        "domain": str(c.get("domain") or "").strip(),
+        "subcategory": str(c.get("subcategory") or "").strip(),
+        "text": str(c.get("text") or "").strip(),
+        "source": {
+            "doi": str(src.get("doi") or "").strip(),
+            "locator": str(src.get("locator") or c.get("locator") or "").strip(),
+            "quote": str(src.get("quote") or c.get("quote") or "").strip(),
+            "type": str(src.get("type") or "primary").strip(),
+        },
+        "assay": str(c.get("assay") or "").strip(),
+        "species": c.get("species") or [],
+        "tissue": str(c.get("tissue") or "").strip(),
+        "experimental_object": str(c.get("experimental_object") or "").strip(),
+        "cohort": str(c.get("cohort") or "").strip(),
+        "background": str(c.get("background") or "").strip(),
+        "validation": {
+            "method": str(val.get("method") or "").strip(),
+            "locator": str(val.get("locator") or "").strip(),
+            "claim_specific": bool(val.get("claim_specific")),
+            "design": str(val.get("design") or "").strip(),
+        },
+        "evidence_type": str(c.get("evidence_type") or "").strip(),
+        "evaluation": str(c.get("evaluation") or "").strip(),
+        "grading_reason": str(c.get("grading_reason") or "").strip(),
+        "source_verified": c.get("source_verified"),
+        "review_required": bool(c.get("review_required")),
+        "source_file": rel_path.replace("\\", "/"),
+    }
+
+
+def _extract_claims(content: str, rel_path: str, limit: int = 4) -> list:
+    doc = _load_yaml_doc(content)
+    claims = doc.get("claims") if isinstance(doc.get("claims"), list) else []
+    out = []
+    for i, c in enumerate(claims, 1):
+        if not isinstance(c, dict) or not str(c.get("text") or "").strip():
+            continue
+        pub = _claim_public(c, rel_path, i)
+        pub["domain"] = doc.get("domain") or pub.get("domain") or ""
+        pub["subcategory"] = doc.get("subcategory") or pub.get("subcategory") or ""
+        out.append(pub)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _extract_parameters(content: str, rel_path: str, limit: int = 30) -> list:
+    """Parse parameter/QC/software rows from kb-evidence-v2 Markdown content.
+
+    v2 writes both Markdown tables and compact bullet lines
+    (``- Seurat.FindClusters resolution = 0.03（...）``), so support both.
+    """
+    rows, section, headers = [], "", []
+    for line in (content or "").splitlines():
+        s = line.strip()
+        if s.startswith("## "):
+            section = s[3:].strip()
+            headers = []
+            continue
+        if s.startswith("|"):
+            cells = [x.strip() for x in s.strip("|").split("|")]
+            if not cells or all(set(x) <= set("-: ") for x in cells):
+                continue
+            if not headers:
+                headers = cells
+                continue
+            row = dict(zip(headers, cells))
+            row["section"] = section
+            row["source_file"] = rel_path.replace("\\", "/")
+            rows.append(row)
+        elif s.startswith("- ") and section:
+            body = s[2:].strip()
+            # sequencing: "- tech | 平台 X | 建库 Y | 深度 Z"
+            if " | " in body:
+                parts = [p.strip() for p in body.split(" | ") if p.strip()]
+                tool = parts[0]
+                for part in parts[1:]:
+                    if " " in part:
+                        k, v = part.split(" ", 1)
+                        rows.append({"tool": tool, "param": k, "value": v,
+                                     "context": section, "section": section,
+                                     "source_file": rel_path.replace("\\", "/")})
+            elif " = " in body:
+                left, right = body.split(" = ", 1)
+                context = ""
+                m = re.search(r"[（(]([^）)]*)[）)]\s*$", right)
+                if m:
+                    context = m.group(1).strip()
+                    right = right[:m.start()].strip()
+                rows.append({"tool": "", "param": left.strip(), "value": right.strip(),
+                             "context": context or section, "section": section,
+                             "source_file": rel_path.replace("\\", "/")})
+                if "." in left:
+                    _tool, _param = left.split(".", 1)
+                    rows[-1]["tool"] = _tool.strip()
+                    rows[-1]["param"] = _param.strip()
+            elif "：" in body or ":" in body:
+                left, right = re.split(r"[：:]", body, maxsplit=1)
+                rows.append({"tool": "", "param": left.strip(), "value": right.strip(),
+                             "context": section, "section": section,
+                             "source_file": rel_path.replace("\\", "/")})
+        if len(rows) >= 200:
+            break
+    priority = {"关键参数": 0, "质控参数": 1, "软件/包": 2, "测序方法": 3, "数据库": 4}
+    rows.sort(key=lambda r: priority.get(r.get("section", ""), 9))
+    return rows[:limit]
+
+
+def _extract_markers(content: str, rel_path: str, limit: int = 8) -> list:
+    doc = _load_yaml_doc(content)
+    rows = doc.get("markers") if isinstance(doc.get("markers"), list) else []
+    out = []
+    for m in rows:
+        if not isinstance(m, dict) or not str(m.get("gene") or "").strip():
+            continue
+        out.append({
+            "gene": str(m.get("gene") or "").strip(),
+            "cell_type": str(m.get("cell_type") or "").strip(),
+            "direction": str(m.get("direction") or "na").strip(),
+            "species": m.get("species") or [],
+            "assay": str(m.get("assay") or "").strip(),
+            "context": str(m.get("context") or "").strip(),
+            "source": m.get("source") if isinstance(m.get("source"), dict) else {},
+            "source_file": rel_path.replace("\\", "/"),
+        })
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _extract_wet_lab(content: str, rel_path: str, limit: int = 4) -> list:
+    doc = _load_yaml_doc(content)
+    rows = doc.get("wet_lab") if isinstance(doc.get("wet_lab"), list) else []
+    out = []
+    for w in rows:
+        if not isinstance(w, dict) or not str(w.get("experiment") or "").strip():
+            continue
+        out.append({
+            "experiment": str(w.get("experiment") or "").strip(),
+            "model": str(w.get("model") or "").strip(),
+            "species": w.get("species") or [],
+            "conditions": str(w.get("conditions") or "").strip(),
+            "reagents": w.get("reagents") if isinstance(w.get("reagents"), list) else [],
+            "readout": str(w.get("readout") or "").strip(),
+            "n": str(w.get("n") or "").strip(),
+            "source": w.get("source") if isinstance(w.get("source"), dict) else {},
+            "source_file": rel_path.replace("\\", "/"),
+        })
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _extract_organoids(content: str, rel_path: str, limit: int = 4) -> list:
+    doc = _load_yaml_doc(content)
+    rows = doc.get("organoids") if isinstance(doc.get("organoids"), list) else []
+    out = []
+    for o in rows:
+        if not isinstance(o, dict) or not str(o.get("name") or "").strip():
+            continue
+        out.append({
+            "name": str(o.get("name") or "").strip(),
+            "species": o.get("species") or [],
+            "tissue": str(o.get("tissue") or "").strip(),
+            "model_type": str(o.get("model_type") or "organoid").strip(),
+            "media": str(o.get("media") or "").strip(),
+            "cytokines": o.get("cytokines") if isinstance(o.get("cytokines"), list) else [],
+            "matrix": str(o.get("matrix") or "").strip(),
+            "duration": str(o.get("duration") or "").strip(),
+            "passage": str(o.get("passage") or "").strip(),
+            "readout": str(o.get("readout") or "").strip(),
+            "source": o.get("source") if isinstance(o.get("source"), dict) else {},
+            "source_file": rel_path.replace("\\", "/"),
+        })
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _enrich_hits(results: list, max_claims_per_hit: int = 3,
+                 max_params_per_hit: int = 4) -> list:
+    root = _find_kb_root()
+    if root is None:
+        return results
+    for hit in results:
+        rel = hit.get("file", "")
+        if not rel:
+            continue
+        content = _read_file_cached(Path(root) / rel)
+        if not content:
+            continue
+        hit["claim_count"] = 0
+        hit["parameter_count"] = 0
+        content_text = content
+        if rel.lower().endswith((".yaml", ".yml")):
+            doc = _load_yaml_doc(content)
+            if isinstance(doc.get("content"), str):
+                content_text = doc["content"]
+            claims = _extract_claims(content, rel, max_claims_per_hit)
+            if claims:
+                hit["claims"] = claims
+                hit["claim_count"] = len(claims)
+        params = _extract_parameters(content_text, rel, max_params_per_hit)
+        if params:
+            hit["parameters"] = params
+            hit["parameter_count"] = len(params)
+        markers = _extract_markers(content, rel, 6)
+        if markers:
+            hit["markers"] = markers
+            hit["marker_count"] = len(markers)
+        wet = _extract_wet_lab(content, rel, 3)
+        if wet:
+            hit["wet_lab"] = wet
+            hit["wet_lab_count"] = len(wet)
+        organoids = _extract_organoids(content, rel, 3)
+        if organoids:
+            hit["organoids"] = organoids
+            hit["organoid_count"] = len(organoids)
+    return results
+
+
+def format_claims_for_prompt(claims: list, max_claims: int = 8) -> str:
+    """Compact, citation-ready claim block for analysis/debate prompt injection."""
+    order = {"L3": 3, "L2": 2, "L1": 1, "L0": 0}
+    picked = sorted(claims or [], key=lambda c: order.get(str(c.get("evidence_level")), 1),
+                    reverse=True)[:max_claims]
+    lines = ["【知识库 claim 证据（可引用；冲突并列，不要合并）】"]
+    for c in picked:
+        src = c.get("source") or {}
+        lines.append(
+            f"- [{c.get('evidence_level', 'L1')}] {c.get('text', '')}\n"
+            f"  来源：DOI {src.get('doi') or '未报告'} ｜ {src.get('locator') or '未报告'}\n"
+            f"  原文：{str(src.get('quote') or '')[:400]}"
+        )
+        if c.get("domain") == "ai":
+            lines.append(f"  评估：{c.get('evaluation') or '未报告'} ｜ "
+                         f"分类：ai/{c.get('subcategory') or 'general'}")
+        else:
+            lines.append(
+                f"  对象/队列/背景：{c.get('experimental_object') or '未报告'} ｜ "
+                f"物种：{', '.join(c.get('species') or []) or '未报告'} ｜ "
+                f"组织：{c.get('tissue') or '未报告'} ｜ "
+                f"{c.get('cohort') or '未报告'} ｜ {c.get('background') or '未报告'}\n"
+                f"  验证：{(c.get('validation') or {}).get('method') or '未报告'}"
+                + (f"\n  评估：{c.get('evaluation')}" if c.get("evaluation") else "")
+            )
+    return "\n".join(lines)
 
 
 def _word_match(term: str, text: str) -> bool:
@@ -336,10 +630,19 @@ def _normalize_species(species: str) -> list:
         path_variants.update(["Homo_sapiens", "Homo sapiens", "human"])
     elif matched_key == "mouse" or s in ("鼠", "小鼠", "老鼠", "mus musculus"):
         path_variants.update(["Mus_musculus", "Mus musculus", "mouse"])
+    elif matched_key == "rat":
+        path_variants.update(["Rattus_norvegicus", "Rattus norvegicus", "rat"])
     elif matched_key == "monkey":
-        path_variants.update(["monkey", "Monkey"])
+        path_variants.update(["Macaca_mulatta", "Macaca mulatta", "monkey",
+                              "Macaca_fascicularis", "Macaca fascicularis"])
     elif matched_key == "zebrafish":
-        path_variants.update(["zebrafish", "Zebrafish"])
+        path_variants.update(["Danio_rerio", "Danio rerio", "zebrafish"])
+    elif matched_key == "fly":
+        path_variants.update(["Drosophila_melanogaster", "Drosophila melanogaster", "drosophila"])
+    elif matched_key == "worm":
+        path_variants.update(["Caenorhabditis_elegans", "Caenorhabditis elegans", "c_elegans"])
+    elif matched_key == "pig":
+        path_variants.update(["Sus_scrofa", "Sus scrofa", "pig"])
     return list(path_variants)
 
 
@@ -551,7 +854,9 @@ def _structured_boost(rel_path, species_variants, tissue_variants, direction_var
     return boost
 
 
-def _search_kb(query: str, species: str = "", tissue: str = "", direction: str = "") -> dict:
+def _search_kb(query: str, species: str = "", tissue: str = "", direction: str = "",
+               include_details: bool = False, max_claims_per_hit: int = 3,
+               max_params_per_hit: int = 4) -> dict:
     """Search knowledge base files with enhanced logic (v3)."""
     kb_root = _find_kb_root()
     if kb_root is None:
@@ -666,6 +971,8 @@ def _search_kb(query: str, species: str = "", tissue: str = "", direction: str =
                     if key not in seen or r["score"] > seen[key]["score"]:
                         seen[key] = r
                 results = sorted(seen.values(), key=lambda x: x["score"], reverse=True)
+                if include_details:
+                    results = _enrich_hits(results, max_claims_per_hit, max_params_per_hit)
                 return {"query": query, "species": species, "tissue": tissue, "direction": direction,
                         "total": len(results), "results": results[:15], "engine": "fts5"}
             except sqlite3.OperationalError:
@@ -734,14 +1041,132 @@ def _search_kb(query: str, species: str = "", tissue: str = "", direction: str =
         if key not in seen or r["score"] > seen[key]["score"]:
             seen[key] = r
     results = sorted(seen.values(), key=lambda x: x["score"], reverse=True)
+    if include_details:
+        results = _enrich_hits(results, max_claims_per_hit, max_params_per_hit)
 
     return {"query": query, "species": species, "tissue": tissue, "direction": direction,
             "total": len(results), "results": results[:15]}
 
 
-def search_knowledge(query: str, species: str = "", tissue: str = "", direction: str = "") -> str:
-    """Search knowledge base and return JSON results."""
-    result = _search_kb(query, species, tissue, direction)
+def _claim_terms(text: str) -> set:
+    genes = {g.upper() for g in re.findall(r"\b[A-Z][A-Z0-9-]{2,}\b", text or "")}
+    words = {w.lower() for w in re.findall(r"[A-Za-z]{4,}", text or "")
+             if w.lower() not in {"with", "from", "that", "this", "were", "using", "into",
+                                  "muscle", "cells", "cell", "nuclei", "mice", "human"}}
+    return genes | words
+
+
+def _conflict_candidates(claims: list, limit: int = 5) -> list:
+    out = []
+    for i in range(len(claims)):
+        for j in range(i + 1, len(claims)):
+            a, b = claims[i], claims[j]
+            if a.get("text") == b.get("text"):
+                continue
+            if (a.get("source") or {}).get("doi") == (b.get("source") or {}).get("doi"):
+                continue
+            shared = _claim_terms(a.get("text", "")) & _claim_terms(b.get("text", ""))
+            if len(shared) < 2:
+                continue
+            out.append({
+                "a": {"claim_id": a.get("claim_id"), "text": a.get("text"),
+                      "level": a.get("evidence_level"), "doi": (a.get("source") or {}).get("doi"),
+                      "cohort": a.get("cohort"), "object": a.get("experimental_object")},
+                "b": {"claim_id": b.get("claim_id"), "text": b.get("text"),
+                      "level": b.get("evidence_level"), "doi": (b.get("source") or {}).get("doi"),
+                      "cohort": b.get("cohort"), "object": b.get("experimental_object")},
+                "shared_terms": sorted(shared)[:8],
+                "note": "同主题不同来源：按 cohort/object/background 并列比较，不要合并成单一结论。",
+            })
+            if len(out) >= limit:
+                return out
+    return out
+
+
+def search_knowledge(query: str, species: str = "", tissue: str = "", direction: str = "",
+                     kind: str = "all", level: str = "", max_claims: int = 8,
+                     max_parameters: int = 10) -> str:
+    """Search KB and return citation-ready claims + parameters + conflict candidates."""
+    kind = (kind or "all").strip().lower()
+    if kind not in ("all", "claims", "parameters", "markers", "wet_lab", "organoids"):
+        kind = "all"
+    try:
+        max_claims = max(1, min(20, int(max_claims)))
+        max_parameters = max(1, min(30, int(max_parameters)))
+    except Exception:
+        max_claims, max_parameters = 8, 10
+
+    result = _search_kb(query, species, tissue, direction, include_details=True,
+                        max_claims_per_hit=4, max_params_per_hit=6)
+    claims, params = [], []
+    markers, wet, organoids = [], [], []
+    for hit in result.get("results", []):
+        claims.extend(hit.get("claims") or [])
+        params.extend(hit.get("parameters") or [])
+        markers.extend(hit.get("markers") or [])
+        wet.extend(hit.get("wet_lab") or [])
+        organoids.extend(hit.get("organoids") or [])
+    # Dedupe claims across species-duplicated YAML entries.
+    seen, uniq = set(), []
+    for c in claims:
+        key = (c.get("text", ""), (c.get("source") or {}).get("doi", ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        if level and c.get("evidence_level") != level:
+            continue
+        uniq.append(c)
+    order = {"L3": 3, "L2": 2, "L1": 1, "L0": 0}
+    uniq.sort(key=lambda c: order.get(str(c.get("evidence_level")), 1), reverse=True)
+    claims = uniq[:max_claims] if kind in ("all", "claims") else []
+    if kind == "parameters":
+        claims = []
+
+    seen_p, uniq_p = set(), []
+    for p in params:
+        key = tuple(str(p.get(k, "")) for k in ("tool", "param", "value", "section", "source_file"))
+        if key in seen_p:
+            continue
+        seen_p.add(key)
+        uniq_p.append(p)
+    params = uniq_p[:max_parameters] if kind in ("all", "parameters") else []
+
+    _seen_m, _uniq_m = set(), []
+    for m in markers:
+        key = (m.get("gene"), m.get("cell_type"), m.get("source_file"))
+        if key in _seen_m:
+            continue
+        _seen_m.add(key)
+        _uniq_m.append(m)
+    _seen_w, _uniq_w = set(), []
+    for w in wet:
+        key = (w.get("experiment"), w.get("model"), w.get("source_file"))
+        if key in _seen_w:
+            continue
+        _seen_w.add(key)
+        _uniq_w.append(w)
+    _seen_o, _uniq_o = set(), []
+    for o in organoids:
+        key = (o.get("name"), o.get("tissue"), o.get("source_file"))
+        if key in _seen_o:
+            continue
+        _seen_o.add(key)
+        _uniq_o.append(o)
+    result["claims"] = claims
+    result["parameters"] = params
+    result["markers"] = _uniq_m[:20] if kind in ("all", "markers") else []
+    result["wet_lab"] = _uniq_w[:8] if kind in ("all", "wet_lab") else []
+    result["organoids"] = _uniq_o[:8] if kind in ("all", "organoids") else []
+    result["conflict_candidates"] = _conflict_candidates(claims) if claims else []
+    result["claim_level_counts"] = {
+        lv: sum(1 for c in claims if c.get("evidence_level") == lv)
+        for lv in ("L3", "L2", "L1", "L0")
+    }
+    result["evidence_policy"] = (
+        "KB claim 可直接作为论据，但引用时必须带 DOI/quote/locator，并写清 experimental_object、"
+        "cohort 和 background；多篇结论冲突时并列呈现，不得合并或隐去队列差异。"
+        "markers/wet_lab/organoids 是 source_only 方法证据，引用时写来源文件/图号。"
+    )
     if result["total"] == 0:
         result["suggestion"] = (
             "知识库未找到匹配。请用 web 工具搜索相关文献，"
@@ -847,10 +1272,14 @@ def _register():
                 args.get("query", ""),
                 args.get("species", ""),
                 args.get("tissue", ""),
-                args.get("direction", "")
+                args.get("direction", ""),
+                args.get("kind", "all"),
+                args.get("level", ""),
+                args.get("max_claims", 8),
+                args.get("max_parameters", 10),
             ),
             emoji="📚",
-            max_result_size_chars=20_000,
+            max_result_size_chars=60_000,
         )
         registry.register(
             name="kb_coverage",

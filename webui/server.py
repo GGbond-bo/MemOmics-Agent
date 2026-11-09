@@ -23,8 +23,11 @@ import re
 import time
 import hashlib
 import shutil
+import subprocess
+import ipaddress
 from pathlib import Path
 from datetime import datetime
+from contextlib import contextmanager
 
 # === MemOmics UTF-8 bootstrap (Windows 中文支持) ===
 # 必须在所有其他 import 之前，确保 Windows 上 stdio 用 UTF-8
@@ -287,6 +290,12 @@ if HERMES_DIR not in sys.path:
 if MEMOMICS_DIR not in sys.path:
     sys.path.insert(0, MEMOMICS_DIR)
 
+# Application-owned project and per-session remote-server metadata.  This is
+# deliberately separate from Hermes' session schema: ``sessions.cwd`` is the
+# persistent results-directory pointer and must never be reused as a project
+# working directory.
+from memomics.session_metadata import MetadataError, SessionMetadataStore
+
 # 重新尝试 hermes_bootstrap（此时 sys.path 已含 hermes-agent）
 try:
     import hermes_bootstrap  # noqa: F401
@@ -320,6 +329,13 @@ from pydantic import BaseModel
 from typing import Optional
 
 app = FastAPI(title="MemOmics WebUI v2")
+
+# New cluster mutations are owned exclusively by the catalog router.  This
+# starts false while the module is loading; the registration block near the
+# adapter flips it only after ``include_router`` succeeds.  Keeping the old
+# execution/read paths available must never reactivate their legacy mutation
+# endpoints if the catalog router is unavailable.
+_CLUSTER_CATALOG_ROUTER_READY = False
 
 # === P2-1 入口侧中间件链（2026-09-23）：request_id / 路由归类 / 会话守卫 / 限流 / 审计 ===
 # 设计前提：只观察不拦截，默认行为与接链之前完全一致（A/B 对拍见
@@ -1228,30 +1244,280 @@ def _get_session_db():
     return _session_db
 
 
-def _restore_session_model_config(sid, base_cfg):
-    """从 MemOmics state.db 恢复会话级模型配置（会话级切换后重启/重连恢复）。
+def _session_has_conversation(session):
+    """会话是否已经开始；惰性恢复时不能只看尚未载入的 messages 数组。"""
+    if not session:
+        return False
+    try:
+        if int(session.get("_msg_count") or 0) > 0:
+            return True
+    except (TypeError, ValueError):
+        pass
+    return bool(session.get("messages") or [])
 
-    只认 sessions.model_config 列（会话级切换时写入的完整 JSON，含 api_key）；
-    该列没有值 = 该会话从未做过会话级切换 → 跟随全局 base_cfg。
-    不回退 model/billing 列：那两列是 MemOmics 首次调用时自动填的，
-    可能过时（全局切换后未更新），会导致重启后会话用了旧模型。
+
+def _model_snapshot_complete(cfg):
+    """快照是否包含可创建 Agent 的完整路由（本地免 Key 例外）。"""
+    if not isinstance(cfg, dict) or not cfg.get("model") or not cfg.get("base_url"):
+        return False
+    return bool(_is_valid_api_key(cfg.get("api_key"))
+                or _is_local_model_route(cfg.get("base_url")))
+
+
+def _persist_session_model_snapshot(sid, cfg):
+    """把会话开始时的完整模型路由落盘，供重启后保持同一路由。"""
+    db = _get_session_db()
+    if not db:
+        return False
+    import json as _json
+    payload = dict(cfg or {})
+    try:
+        # 执行恢复只认 model_config；这是必须成功的主事务。
+        db.update_session_meta(
+            sid, _json.dumps(payload, ensure_ascii=False), payload.get("model") or None
+        )
+    except Exception as e:
+        print(f"[MemOmics] 会话模型快照持久化失败 ({sid}): {e}", flush=True)
+        return False
+    if payload.get("base_url"):
+        try:
+            # 计费元数据不参与执行恢复，失败不把已成功的模型快照误报为失败。
+            db.update_session_billing_route(
+                sid,
+                provider=payload.get("provider", "openai"),
+                base_url=payload.get("base_url", ""),
+            )
+        except Exception as e:
+            print(f"[MemOmics] 会话计费路由更新失败 ({sid}): {e}", flush=True)
+    return True
+
+
+def _model_config_belongs_to_provider(cfg, pid):
+    """配置是否属于指定 Provider；优先 provider_id，旧数据仅在 URL 唯一时回退。"""
+    provider = _PROVIDERS_INDEX.get(pid) or {}
+    expected = str(provider.get("api") or "").rstrip("/").lower()
+    if not expected or not isinstance(cfg, dict):
+        return False
+    cfg_pid = str(cfg.get("provider_id") or "")
+    if cfg_pid:
+        return cfg_pid == pid
+    if str(cfg.get("base_url") or "").rstrip("/").lower() != expected:
+        return False
+    same_url_pids = [
+        _pid for _pid, _p in (_PROVIDERS_INDEX or {}).items()
+        if str((_p or {}).get("api") or "").rstrip("/").lower() == expected
+    ]
+    return len(same_url_pids) == 1
+
+
+def _complete_model_route_from_saved(cfg):
+    """保留 cfg 自己的 model/base/provider，只从已保存 Provider 补凭据。"""
+    if _model_snapshot_complete(cfg):
+        return dict(cfg)
+    if not isinstance(cfg, dict) or not cfg.get("model") or not cfg.get("base_url"):
+        return None
+    matches = []
+    for pid, saved in (_provider_keys or {}).items():
+        if not _model_config_belongs_to_provider(cfg, pid):
+            continue
+        if _is_valid_api_key((saved or {}).get("api_key")) or (saved or {}).get("local"):
+            matches.append((pid, saved or {}))
+    if len(matches) != 1:
+        return None
+    pid, saved = matches[0]
+    out = dict(cfg)
+    out["provider_id"] = pid
+    out["api_key"] = saved.get("api_key", "")
+    if not out.get("provider"):
+        out["provider"] = "openai"
+    return out if _model_snapshot_complete(out) else None
+
+
+def _refresh_provider_key_in_session_routes(pid, key):
+    """同通道 Key 轮换只更新凭据，不改变任何会话的模型/Base URL。
+
+    自动 pin 与显式模型锁都不能把会话锁死在旧 Key；已卸载会话的持久化
+    快照也要一起更新。返回实际更新的内存/DB 配置份数（尽力而为）。
+    """
+    provider = _PROVIDERS_INDEX.get(pid) or {}
+    expected = str(provider.get("api") or "").rstrip("/").lower()
+    if not expected:
+        return 0
+    import json as _json
+    updated = 0
+    persisted = set()
+
+    def _matches(cfg):
+        return _model_config_belongs_to_provider(cfg, pid)
+
+    for sid, session in list(_sessions.items()):
+        cfg = session.get("model_config")
+        if not _matches(cfg) or cfg.get("api_key") == key:
+            continue
+        cfg["api_key"] = key
+        updated += 1
+        agent = session.get("agent")
+        if agent is not None:
+            running = bool(session.get("running_agent") or session.get("running_task")
+                           or session.get("_user_turn_active"))
+            if not running:
+                try:
+                    agent.close()
+                except Exception:
+                    pass
+            # 运行中的 running_agent 保留到本轮结束（不硬杀）；session.agent
+            # 置空保证下一回合用新 Key 重建，空闲 Agent 则已立即关闭。
+            session["agent"] = None
+        if session.get("model_locked"):
+            if _persist_session_model_snapshot(sid, cfg):
+                persisted.add(sid)
+
+    db = _get_session_db()
+    if not db or not getattr(db, "_conn", None):
+        return updated
+    try:
+        rows = db._conn.execute(
+            "SELECT id, model_config FROM sessions "
+            "WHERE id LIKE 'memomics-%' AND model_config IS NOT NULL"
+        ).fetchall()
+        for sid, raw in rows:
+            if sid in persisted or not raw:
+                continue
+            try:
+                cfg = _json.loads(raw)
+            except Exception:
+                continue
+            if not isinstance(cfg, dict) or not _matches(cfg):
+                continue
+            if cfg.get("api_key") == key:
+                continue
+            cfg["api_key"] = key
+            db.update_session_meta(sid, _json.dumps(cfg, ensure_ascii=False), cfg.get("model") or None)
+            updated += 1
+    except Exception as e:
+        print(f"[MemOmics] provider {pid} 的会话快照 Key 同步失败: {e}", flush=True)
+    return updated
+
+
+def _pin_started_session_models_before_global_switch():
+    """全局变更前钉住所有已开始会话，空会话才继续跟随全局。
+
+    内存广播只能保护已加载会话，因此还要查 state.db：未加载的旧会话若已有
+    消息但尚无 sessions.model_config，就把切换前的全局配置补写成它的快照。
+    任一快照无法持久化时必须抛错，由调用方取消全局切换，绝不假报成功。
+    """
+    db = _get_session_db()
+    if not db or not getattr(db, "_conn", None):
+        raise RuntimeError("state.db 不可用，无法保护旧会话模型")
+    previous_global = dict(_current_model)
+    handled = set()
+    for sid, session in list(_sessions.items()):
+        if session.get("model_locked") or not _session_has_conversation(session):
+            continue
+        cfg = dict(session.get("model_config") or previous_global)
+        if not _persist_session_model_snapshot(sid, cfg):
+            raise RuntimeError(f"旧会话 {sid} 的模型快照写入失败")
+        session["model_config"] = cfg
+        session["model_locked"] = True
+        handled.add(sid)
+
+    try:
+        rows = db._conn.execute(
+            "SELECT s.id, s.model_config FROM sessions s "
+            "WHERE s.id LIKE 'memomics-%' "
+            "AND EXISTS (SELECT 1 FROM messages m WHERE m.session_id = s.id)"
+        ).fetchall()
+    except Exception as e:
+        raise RuntimeError(f"旧会话模型快照扫描失败: {e}") from e
+    import json as _json
+    for row in rows:
+        sid, raw_cfg = row[0], row[1]
+        if not sid or sid in handled:
+            continue
+        # 与 _restore_session_model_config 共用同一有效性口径：合法 JSON 但
+        # 缺 model/base_url，或远程路由缺有效 api_key，都不能视为已保护。
+        parsed = None
+        repaired = False
+        if raw_cfg:
+            try:
+                candidate = _json.loads(raw_cfg)
+                if _model_snapshot_complete(candidate):
+                    parsed = candidate
+                elif isinstance(candidate, dict) and candidate.get("model") and candidate.get("base_url"):
+                    # 保留旧会话自己的路由，只补它对应 Provider 的凭据；
+                    # 绝不能拿 previous_global 整份覆盖成另一个模型。
+                    parsed = _complete_model_route_from_saved(candidate)
+                    repaired = parsed is not None
+                    if not repaired:
+                        raise RuntimeError(f"旧会话 {sid} 的路由缺少 Key，且无法唯一匹配 Provider")
+            except RuntimeError:
+                raise
+            except Exception:
+                parsed = None
+        session = _sessions.get(sid)
+        if parsed is not None:
+            if repaired and not _persist_session_model_snapshot(sid, parsed):
+                raise RuntimeError(f"旧会话 {sid} 的模型快照写入失败")
+            if session is not None:
+                session["model_config"] = dict(parsed)
+                session["model_locked"] = True
+            continue
+        cfg = dict((session or {}).get("model_config") or previous_global)
+        if not _persist_session_model_snapshot(sid, cfg):
+            raise RuntimeError(f"旧会话 {sid} 的模型快照写入失败")
+        if session is not None:
+            session["model_locked"] = True
+            session["model_config"] = cfg
+
+
+# ``state.db`` is already the durable session store.  The metadata layer only
+# creates additive ``memomics_*`` tables and uses short-lived connections, so
+# it is safe beside Hermes' long-lived SessionDB connection.
+_session_metadata_store = SessionMetadataStore(os.path.join(MEMOMICS_HOME_DIR, "state.db"))
+
+
+def _session_metadata() -> SessionMetadataStore:
+    """Return the metadata store and make first use migration-safe."""
+    _session_metadata_store.ensure_schema()
+    return _session_metadata_store
+
+
+def _known_session(sid: str):
+    """Find an in-memory or persisted MemOmics session without creating one."""
+    if sid in _sessions:
+        return _sessions[sid]
+    return _restore_single_session(sid)
+
+
+def _metadata_error_response(exc: Exception, status: int = 400):
+    return JSONResponse({"ok": False, "error": str(exc)}, status_code=status)
+
+
+def _restore_session_model_config(sid, base_cfg):
+    """恢复会话级模型配置；无快照的零消息会话才跟随当前全局模型。
+
+    sessions.model_config 可能来自显式会话切换，也可能来自全局变更前为
+    已开始会话补写的快照；两种情况都不能被之后的全局默认值覆盖。
     """
     try:
         db = _get_session_db()
         if not db or not db._conn:
-            return dict(base_cfg)
+            return dict(base_cfg), False
         row = db._conn.execute(
             "SELECT model_config FROM sessions WHERE id = ?", (sid,)
         ).fetchone()
         if row and row[0]:
             import json as _json
             parsed = _json.loads(row[0])
-            if isinstance(parsed, dict) and parsed.get("model") and parsed.get("base_url"):
+            if isinstance(parsed, dict) and _model_config_ready(parsed):
                 # 该会话做过会话级切换 → locked=True，全局切换不再覆盖它
                 return dict(parsed), True
+            repaired = _complete_model_route_from_saved(parsed)
+            if repaired is not None:
+                return repaired, True
     except Exception:
         pass
-    # 从未做过会话级切换 → 跟随全局
+    # 无快照的零消息会话跟随全局；旧会话会在全局切换前补写快照。
     return dict(base_cfg), False
 
 
@@ -3535,6 +3801,18 @@ def _build_task_plan_context(session):
 
 # === 全局状态 ===
 _sessions = {}       # session_id -> {id, title, created, messages, model_config, results_dir, todos, agent}
+# ``POST /api/sessions/new`` may be double-fired by a browser transition or
+# two windows.  Keep project validation, empty-session lookup, creation, and
+# metadata assignment in one short synchronous section so the second request
+# sees the first request's reusable sid instead of fabricating another blank
+# chat.  It is intentionally separate from the per-turn claim lock: creation
+# does not wait for model work and must not serialize normal chat turns.
+_SESSION_CREATE_LOCK = _threading.RLock()
+# A short synchronous critical section protects the transition from an inbound
+# chat frame to an owned user turn.  Multiple WebSocket connections can target
+# the same session, so checking a plain dictionary flag after an ``await`` is
+# not sufficient.
+_SESSION_TURN_CLAIM_LOCK = _threading.RLock()
 
 # === P2-1 入口中间件：把「会话是否存在」注入会话守卫 ===
 # 守卫拿到 False 且开了 MEMOMICS_MW_SESSION_ENFORCE 才会拦；任何异常都放行，
@@ -3636,6 +3914,15 @@ def _memomics_config_write(updates: dict) -> bool:
         return False
 
 
+def _is_loopback_model_base(base_url):
+    """模型配置文件重载时识别本地免 Key 端点（无需 provider_keys 已加载）。"""
+    try:
+        from urllib.parse import urlparse
+        return urlparse(str(base_url or "")).hostname in ("127.0.0.1", "localhost", "::1")
+    except Exception:
+        return False
+
+
 def _load_model_config():
     """从 MemOmics 底座 config.yaml 加载模型配置（唯一真相源，修复 2026-08-08）。
 
@@ -3656,29 +3943,35 @@ def _load_model_config():
         except Exception:
             _legacy = None
     if _legacy and _legacy.get("api_key") and _legacy.get("base_url") and _legacy.get("model"):
-        for k in ("provider", "base_url", "api_key", "model"):
+        for k in ("provider", "provider_id", "base_url", "api_key", "model"):
             if _legacy.get(k):
                 _current_model[k] = _legacy[k]
+        _current_model["api_key"] = _legacy.get("api_key", "")
+        if not _legacy.get("provider_id"):
+            _current_model.pop("provider_id", None)
         print(f"[INFO] 已加载模型配置: model={_current_model['model']}, base_url={_current_model['base_url'][:40]} (回写 MemOmics config.yaml)")
         _save_model_config()
         return
     # 回退：MemOmics config.yaml（load_config 会把 model 规范化为 dict:
     # {default, provider, base_url}，此处兼容两种形态）
     _full, _raw = _memomics_config_read()
-    if _raw.get("api_key") and _raw.get("api_base"):
+    if _raw.get("api_base") and (_raw.get("api_key") or _is_loopback_model_base(_raw.get("api_base"))):
         _m = _full.get("model")
         _m_dict = _m if isinstance(_m, dict) else {}
         _model_name = _m_dict.get("default") or (None if isinstance(_m, dict) else _m)
         _model_provider = _m_dict.get("provider") or _full.get("provider")
+        _model_provider_id = (_m_dict.get("provider_id") or _full.get("provider_id")
+                              or _raw.get("provider_id"))
         _model_base = _m_dict.get("base_url") or _full.get("api_base")
         _model_key = _full.get("api_key")
         if _model_name:
             _current_model["model"] = _model_name
         if _model_base:
             _current_model["base_url"] = _model_base
-        if _model_key:
-            _current_model["api_key"] = _model_key
+        _current_model["api_key"] = _model_key or ""
         _current_model["provider"] = _model_provider or _current_model.get("provider", "openai")
+        if _model_provider_id:
+            _current_model["provider_id"] = _model_provider_id
         print(f"[INFO] 已从 MemOmics config.yaml 加载模型配置: model={_current_model['model']}, base_url={_current_model['base_url'][:40]}")
         try:
             _atomic_write_json(_MODEL_CONFIG_FILE, _current_model)  # 镜像同步（兼容）
@@ -3690,12 +3983,13 @@ def _load_model_config():
         try:
             with open(_MODEL_CONFIG_FILE, "r", encoding="utf-8") as f:
                 saved = json.load(f)
-            for k in ("provider", "base_url", "api_key", "model"):
+            for k in ("provider", "provider_id", "base_url", "api_key", "model"):
                 if saved.get(k):
                     _current_model[k] = saved[k]
             print(f"[INFO] 已加载旧 model_config.json（迁移回写 MemOmics config.yaml）: model={_current_model['model']}")
             _memomics_config_write({
                 "provider": _current_model["provider"],
+                "provider_id": _current_model.get("provider_id", ""),
                 "api_base": _current_model["base_url"],
                 "api_key": _current_model["api_key"],
                 "model": _current_model["model"],
@@ -3705,17 +3999,20 @@ def _load_model_config():
 
 
 def _save_model_config():
-    """写 MemOmics config.yaml（真相源）+ 镜像 model_config.json（兼容旧读取方）。"""
-    _memomics_config_write({
+    """写 MemOmics config.yaml（真相源）+ 镜像 model_config.json，返回整体是否成功。"""
+    ok = _memomics_config_write({
         "provider": _current_model.get("provider", "openai"),
+        "provider_id": _current_model.get("provider_id", ""),
         "api_base": _current_model.get("base_url", ""),
         "api_key": _current_model.get("api_key", ""),
         "model": _current_model.get("model", ""),
     })
     try:
         _atomic_write_json(_MODEL_CONFIG_FILE, _current_model)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[WARN] 保存模型配置镜像失败: {e}")
+        return False
+    return bool(ok)
 
 # 启动时加载
 _load_model_config()
@@ -3802,12 +4099,21 @@ def _register_job_limits(session, req):
         logger.warning(f"[MemOmics] job limits injection failed: {e}")
 
 
-def _clear_session_running(sid):
-    """按会话 id 精确清理运行状态（done_callback 用，绕过闭包变量陷阱）"""
+def _clear_session_running(sid, request_id: str = "", task=None):
+    """Clear only the matching completed turn (done-callback safe)."""
     s = _sessions.get(sid)
     if s is not None:
-        s["running_agent"] = None
-        s["running_task"] = None
+        with _SESSION_TURN_CLAIM_LOCK:
+            if request_id and str(s.get("_running_request_id") or "") not in ("", str(request_id)):
+                return
+            if task is not None and s.get("running_task") not in (None, task):
+                return
+            s["running_agent"] = None
+            s["running_task"] = None
+            if not request_id or str(s.get("_running_request_id") or "") == str(request_id):
+                s.pop("_running_request_id", None)
+        _release_session_user_turn(s, request_id)
+        _apply_deferred_model_update(s)
 
 
 def _session_run_flags(s) -> bool:
@@ -3830,6 +4136,74 @@ def _session_run_flags(s) -> bool:
     if isinstance(rt, str):
         return True
     return s.get("running_agent") is not None
+
+
+def _session_turn_is_active(session) -> bool:
+    """A model change must not redirect an agent already answering a turn."""
+    return bool((session or {}).get("_user_turn_active") or _session_run_flags(session or {}))
+
+
+def _claim_session_user_turn(session, request_id: str) -> tuple[bool, str]:
+    """Atomically claim one chat turn before acknowledging or writing history.
+
+    Returns ``(claimed, owner_request_id)``.  A rejected second chat leaves
+    the original owner, its message history, and its agent untouched; callers
+    can therefore ask the browser to restore the second draft safely.
+    """
+    if not session:
+        return False, ""
+    request_id = str(request_id or "")
+    with _SESSION_TURN_CLAIM_LOCK:
+        if _session_turn_is_active(session):
+            return False, str(
+                session.get("_turn_claim_request_id")
+                or session.get("_running_request_id")
+                or session.get("_active_request_id")
+                or ""
+            )
+        session["_user_turn_active"] = True
+        session["_turn_claim_request_id"] = request_id
+        session["_active_request_id"] = request_id
+        return True, request_id
+
+
+def _release_session_user_turn(session, request_id: str) -> bool:
+    """Release only the turn owned by ``request_id``; never clear a newer one."""
+    if not session:
+        return False
+    request_id = str(request_id or "")
+    with _SESSION_TURN_CLAIM_LOCK:
+        if str(session.get("_turn_claim_request_id") or "") != request_id:
+            return False
+        session["_user_turn_active"] = False
+        session.pop("_turn_claim_request_id", None)
+        if str(session.get("_active_request_id") or "") == request_id:
+            session.pop("_active_request_id", None)
+        return True
+
+
+def _drop_cached_session_agent(session) -> None:
+    """Close an idle cached agent so its next turn uses the new model config."""
+    agent = session.get("agent")
+    if agent is not None:
+        try:
+            agent.close()
+        except Exception:
+            pass
+    session["agent"] = None
+
+
+def _apply_deferred_model_update(session) -> None:
+    """Apply a global change after an in-flight unlocked turn has finished."""
+    if not session or _session_turn_is_active(session):
+        return
+    changed = bool(session.pop("_reset_agent_after_turn", False))
+    pending = session.pop("_pending_global_model_config", None)
+    if isinstance(pending, dict) and not session.get("model_locked"):
+        session["model_config"] = dict(pending)
+        changed = True
+    if changed:
+        _drop_cached_session_agent(session)
 
 
 def _release_lease(session_id, lease):
@@ -4190,8 +4564,10 @@ _provider_keys = {}  # provider_id -> {api_key, base_url}
 def _save_provider_keys():
     try:
         _atomic_write_json(_PROVIDER_KEYS_FILE, _provider_keys)
+        return True
     except Exception as e:
         print(f"[WARN] 保存 provider keys 失败: {e}")
+        return False
 
 # 2026-09-10: 占位符 key 判定 —— 打包模板里的 YOUR_API_KEY_HERE 等绝不能被当成
 # "已配置"。此前首启把占位符同步进 provider_keys.json，导致设置页显示"已保存"、
@@ -4222,6 +4598,235 @@ def _is_valid_api_key(value) -> bool:
     if len(set(s)) <= 3:
         return False
     return True
+
+
+def _is_local_model_route(base_url):
+    """该 Base URL 是否属于已登记的本地免 Key Provider。"""
+    target = str(base_url or "").rstrip("/").lower()
+    if not target:
+        return False
+    for _pid, _saved in (_provider_keys or {}).items():
+        if not (_saved or {}).get("local"):
+            continue
+        _p = (_PROVIDERS_INDEX or {}).get(_pid) or {}
+        _local_base = str((_saved or {}).get("base_url") or _p.get("api") or "").rstrip("/").lower()
+        if target == _local_base:
+            return True
+    return False
+
+
+def _normalized_model_base_url(value) -> str:
+    """Return the comparison form used for provider endpoint identity."""
+    return str(value or "").strip().rstrip("/").lower()
+
+
+def _is_loopback_model_url(base_url) -> bool:
+    """Whether a model endpoint is local and therefore legitimately keyless."""
+    try:
+        from urllib.parse import urlparse
+        host = (urlparse(str(base_url or "")).hostname or "").lower()
+    except Exception:
+        return False
+    return host in {"localhost", "127.0.0.1", "::1"}
+
+
+def _provider_saved_entry(provider_keys, provider_id) -> dict:
+    """Normalize legacy provider-key records without mutating their store."""
+    raw = (provider_keys or {}).get(provider_id, {})
+    if isinstance(raw, dict):
+        return dict(raw)
+    if isinstance(raw, str) and raw.strip():
+        return {"api_key": raw.strip()}
+    return {}
+
+
+def _provider_effective_base_url(provider_id, provider_keys, index) -> str:
+    """Saved endpoint wins over the provider catalogue endpoint."""
+    saved = _provider_saved_entry(provider_keys, provider_id)
+    provider = ((index or {}).get(provider_id) or {})
+    return str(saved.get("base_url") or provider.get("api") or "").strip()
+
+
+def _provider_ids_for_base_url(base_url, provider_keys, index) -> list:
+    """Find every known provider sharing an endpoint; never choose arbitrarily."""
+    target = _normalized_model_base_url(base_url)
+    if not target:
+        return []
+    ids = set((provider_keys or {}).keys()) | set((index or {}).keys())
+    return sorted(
+        str(pid) for pid in ids
+        if _normalized_model_base_url(
+            _provider_effective_base_url(str(pid), provider_keys, index)
+        ) == target
+    )
+
+
+def _is_local_model_config(cfg) -> bool:
+    """Keyless mode is allowed only for explicitly-local or loopback providers."""
+    cfg = cfg if isinstance(cfg, dict) else {}
+    return bool(cfg.get("local")) or _is_loopback_model_url(cfg.get("base_url"))
+
+
+def _model_config_ready(cfg) -> bool:
+    """Whether a config can safely create an agent without exposing its key."""
+    cfg = cfg if isinstance(cfg, dict) else {}
+    return bool(
+        str(cfg.get("model") or "").strip()
+        and str(cfg.get("base_url") or "").strip()
+        and (_is_valid_api_key(cfg.get("api_key")) or _is_local_model_config(cfg))
+    )
+
+
+def _provider_id_for_config(cfg, provider_keys=None, index=None) -> str:
+    """Return a stable provider id only when it is explicit or uniquely inferable."""
+    cfg = cfg if isinstance(cfg, dict) else {}
+    provider_keys = _provider_keys if provider_keys is None else provider_keys
+    index = _PROVIDERS_INDEX if index is None else index
+    requested = str(cfg.get("provider_id") or "").strip()
+    known = set((provider_keys or {}).keys()) | set((index or {}).keys())
+    if requested and requested in known:
+        return requested
+    matches = _provider_ids_for_base_url(cfg.get("base_url"), provider_keys, index)
+    return matches[0] if len(matches) == 1 else ""
+
+
+def resolve_model_switch(payload, current, provider_keys, index) -> dict:
+    """Build a complete model configuration without mutating live state.
+
+    ``provider`` is the transport protocol (normally ``openai``), not a stable
+    provider identity.  Identity must therefore be supplied as ``provider_id``
+    or inferred only from one unambiguous endpoint.  Keeping this resolver
+    pure makes failed requests safely zero-state-change and prevents an empty
+    browser API-key field from erasing a saved provider key.
+    """
+    if not isinstance(payload, dict):
+        return {"ok": False, "error": "invalid_payload", "message": "请求体必须是 JSON 对象"}
+
+    base_cfg = dict(current) if isinstance(current, dict) else {}
+    model = str(payload.get("model") or "").strip()
+    if not model:
+        return {"ok": False, "error": "missing_model", "message": "model 是必填项"}
+
+    provider_keys = provider_keys if isinstance(provider_keys, dict) else {}
+    index = index if isinstance(index, dict) else {}
+    known_ids = set(provider_keys.keys()) | set(index.keys())
+    requested_pid = str(payload.get("provider_id") or "").strip()
+    requested_base = str(payload.get("base_url") or "").strip()
+    selected_pid = ""
+    selected_saved = {}
+    selected_definition = {}
+
+    if requested_pid:
+        if requested_pid not in known_ids:
+            return {
+                "ok": False,
+                "error": "unknown_provider",
+                "message": "指定的 provider_id 不存在",
+            }
+        selected_pid = requested_pid
+        selected_saved = _provider_saved_entry(provider_keys, selected_pid)
+        selected_definition = dict(index.get(selected_pid) or {})
+        effective_base = _provider_effective_base_url(selected_pid, provider_keys, index)
+        if (requested_base and effective_base
+                and _normalized_model_base_url(requested_base) != _normalized_model_base_url(effective_base)):
+            return {
+                "ok": False,
+                "error": "provider_url_conflict",
+                "message": "provider_id 与 base_url 指向不同的提供商",
+            }
+        base_url = effective_base or requested_base
+    else:
+        # A model-only change inherits the *already resolved* current provider.
+        # A supplied endpoint, however, must stand on its own and be unique.
+        lookup_base = requested_base or str(base_cfg.get("base_url") or "").strip()
+        matches = _provider_ids_for_base_url(lookup_base, provider_keys, index)
+        if requested_base and len(matches) > 1:
+            return {
+                "ok": False,
+                "error": "ambiguous_provider",
+                "message": "该 base_url 关联多个 provider，请显式传 provider_id",
+            }
+        current_pid = str(base_cfg.get("provider_id") or "").strip()
+        if len(matches) == 1:
+            selected_pid = matches[0]
+        elif not requested_base and current_pid in known_ids:
+            selected_pid = current_pid
+        elif requested_base and len(matches) == 0:
+            # Explicit keys retain legacy custom-endpoint support.  Keyless
+            # loopback endpoints are also valid local providers.
+            raw_key = payload.get("api_key")
+            explicit_valid_key = _is_valid_api_key(raw_key)
+            if not explicit_valid_key and not _is_loopback_model_url(requested_base):
+                return {
+                    "ok": False,
+                    "error": "unknown_provider",
+                    "message": "无法根据 base_url 唯一识别 provider，请传 provider_id",
+                }
+        if selected_pid:
+            selected_saved = _provider_saved_entry(provider_keys, selected_pid)
+            selected_definition = dict(index.get(selected_pid) or {})
+            base_url = _provider_effective_base_url(selected_pid, provider_keys, index) or lookup_base
+        else:
+            base_url = lookup_base
+
+    base_url = str(base_url or "").strip()
+    if not base_url:
+        return {"ok": False, "error": "missing_base_url", "message": "还没有配置 API Base URL"}
+
+    raw_key = payload.get("api_key")
+    explicit_key = raw_key.strip() if isinstance(raw_key, str) and raw_key.strip() else ""
+    current_pid = _provider_id_for_config(base_cfg, provider_keys, index)
+    same_provider = bool(
+        selected_pid
+        and current_pid == selected_pid
+        and _normalized_model_base_url(base_cfg.get("base_url")) == _normalized_model_base_url(base_url)
+    )
+    local = bool(selected_saved.get("local") or selected_definition.get("local")
+                 or _is_loopback_model_url(base_url))
+
+    if _is_valid_api_key(explicit_key):
+        api_key = explicit_key
+    elif _is_valid_api_key(selected_saved.get("api_key")):
+        api_key = str(selected_saved.get("api_key") or "").strip()
+    elif (same_provider or (not selected_pid and not requested_base)) and _is_valid_api_key(base_cfg.get("api_key")):
+        # Only retain a current key when the provider identity is unchanged;
+        # never leak a key across an endpoint/provider switch.
+        api_key = str(base_cfg.get("api_key") or "").strip()
+    else:
+        api_key = ""
+
+    candidate = dict(base_cfg)
+    candidate.update({
+        "model": model,
+        "base_url": base_url,
+        "api_key": api_key,
+        # ``provider`` remains the SDK protocol.  In particular, the common
+        # value "openai" must not be used to look up a provider key.
+        "provider": str(payload.get("provider") or candidate.get("provider")
+                        or selected_definition.get("provider") or "openai").strip() or "openai",
+    })
+    if selected_pid:
+        candidate["provider_id"] = selected_pid
+    else:
+        candidate.pop("provider_id", None)
+    if local:
+        candidate["local"] = True
+    else:
+        candidate.pop("local", None)
+
+    if not _model_config_ready(candidate):
+        return {
+            "ok": False,
+            "error": "need_key",
+            "message": "该 provider 尚未配置有效 API Key",
+            "need_key": True,
+        }
+    return {
+        "ok": True,
+        "config": candidate,
+        "provider_id": str(candidate.get("provider_id") or ""),
+        "model_ready": True,
+    }
 
 
 def _heal_current_model_from_provider_keys() -> bool:
@@ -4260,6 +4865,7 @@ def _heal_current_model_from_provider_keys() -> bool:
     if cand is None:
         return False
     pid, saved, p = cand
+    _current_model["provider_id"] = pid
     if not _is_valid_api_key(_current_model.get("api_key")):
         _current_model["api_key"] = saved.get("api_key") or ""
     if not _current_model.get("base_url"):
@@ -5668,20 +6274,51 @@ def _auto_search_knowledge(user_text: str) -> str:
                     break
         
         query = user_text[:200]  # 截取前 200 字符
-        result_json = search_knowledge(query=query, species=species, tissue=tissue, direction=direction)
+        from memomics.bio_tools.kb_search import format_claims_for_prompt
+        result_json = search_knowledge(query=query, species=species, tissue=tissue,
+                                       direction=direction, kind="all",
+                                       max_claims=8, max_parameters=8)
         result = json.loads(result_json)
-        if result.get("total", 0) == 0:
+        if result.get("total", 0) == 0 and not result.get("claims"):
             return ""  # 无 KB 匹配，不注入空内容
-        # 格式化 KB 结果为可读文本
         lines = [f"物种={species or '未识别'}, 组织={tissue or '未识别'}, 方向={direction or '未识别'}",
                  f"匹配条目: {result.get('total', 0)}"]
-        for item in result.get("results", [])[:5]:
-            fname = item.get("file", "")
-            snippet = item.get("snippet", "")
-            if fname:
-                lines.append(f"\n### {fname}")
-            if snippet:
-                lines.append(str(snippet)[:500])
+        claims = result.get("claims") or []
+        if claims:
+            lines.append(format_claims_for_prompt(claims, max_claims=8))
+        params = result.get("parameters") or []
+        if params:
+            lines.append("【知识库参数（可直接用于分析，引用时写来源文件）】")
+            for p in params[:8]:
+                lines.append(f"- {p.get('tool') or ''} {p.get('param') or ''} = "
+                             f"{p.get('value') or ''}（{p.get('context') or p.get('section') or ''}）"
+                             f"  ← {p.get('source_file') or ''}")
+        markers = result.get("markers") or []
+        if markers:
+            lines.append("【知识库注释 Marker】")
+            for m in markers[:10]:
+                lines.append(f"- {m.get('gene')} → {m.get('cell_type') or '—'}（{m.get('assay') or '—'}）"
+                             f"  ← {m.get('source_file') or ''}")
+        wet = result.get("wet_lab") or []
+        if wet:
+            lines.append("【知识库湿实验条件/试剂】")
+            for w in wet[:4]:
+                lines.append(f"- {w.get('experiment')} ｜ {w.get('model')} ｜ {w.get('conditions')} ｜ "
+                             f"试剂 {len(w.get('reagents') or [])} 项 ｜ 读数 {w.get('readout')}")
+        organoids = result.get("organoids") or []
+        if organoids:
+            lines.append("【知识库类器官/3D 培养】")
+            for o in organoids[:4]:
+                lines.append(f"- {o.get('name')} ｜ {', '.join(o.get('species') or [])} ｜ "
+                             f"{o.get('tissue')} ｜ 培养基 {o.get('media')} ｜ 基质 {o.get('matrix')}")
+        if not claims and not params and not markers and not wet and not organoids:
+            for item in result.get("results", [])[:5]:
+                fname = item.get("file", "")
+                snippet = item.get("snippet", "")
+                if fname:
+                    lines.append(f"\n### {fname}")
+                if snippet:
+                    lines.append(str(snippet)[:500])
         return "\n".join(lines)
     except Exception:
         return ""  # 失败不阻断
@@ -6225,13 +6862,11 @@ def _build_kb_tail_injection(user_text: str, intent: str, is_heavy: bool) -> str
         _kb_result = _auto_search_knowledge(user_text)
         if _kb_result and ('"total": 0' not in _kb_result.split('\n')[0] if _kb_result else False):
             return (
-                "\n\n## 📚 知识库预查询（线索，非文献来源）\n"
-                "以下是系统自动从知识库检索的内容，**仅作为分析线索和背景参考**。\n"
-                "⚠️ KB 中的文献引用可能缺少 PMID/DOI，**不可直接作为辩论引用来源**。\n\n"
-                "**铁律 5 强制要求**：\n"
-                "1. 辩论前必须先调 `search_papers()` 获取带 PMID/DOI 的真实文献\n"
-                "2. KB 内容作为 `knowledge_base_info` 传入辩论，提供生物学背景\n"
-                "3. 辩论中**只能引用 search_papers 返回的真实文献**\n\n"
+                "\n\n## 📚 知识库预查询（claim 级证据，带 DOI/quote/队列）\n"
+                "以下是系统自动从知识库检索的 claim 证据与参数，**可直接作为分析背景和论据**。\n"
+                "引用规则：必须带 DOI/quote/locator，并写清 experimental_object、cohort、background；"
+                "多篇结论冲突时并列呈现，不得合并或隐去队列差异。\n"
+                "若 KB 覆盖不足，再调用 `search_papers()` 补充带 PMID/DOI 的外部文献。\n\n"
                 + _kb_result
             )
         if intent in ("analysis", "research_plan", "analysis_plan"):
@@ -6274,6 +6909,76 @@ def _grill_mode() -> str:
     return "auto"
 
 
+# 候选注入的最低分：低于此分视为噪声（实测「画图配色」19 分、「差异表达分析」34 分，
+# 闲聊/无领域词基本 0 分）。候选只做提示，不改变「语义判定优先」的纪律。
+_SKILL_CAND_MIN_SCORE = 12.0
+
+
+def _match_skill_candidates(user_text: str, limit: int = 5, exclude=None,
+                            min_score: float = _SKILL_CAND_MIN_SCORE) -> list:
+    """全量技能候选检索（406 条索引，含此前没有入口的 YEL/GRN）。
+
+    与 skill_search 工具共用 memomics.skill_router 的打分口径，避免两套逻辑漂移。
+    任何异常都返回 []，绝不影响主流程。
+    """
+    text = (user_text or "").strip()
+    if len(text) < 4:
+        return []
+    try:
+        from memomics import skill_router
+        res = skill_router.search(text, top_k=max(1, min(int(limit or 5), 10)) + len(exclude or []))
+    except Exception as e:
+        logger.debug("[skill-router] 候选检索失败: %s", e)
+        return []
+    if not isinstance(res, dict) or not res.get("success"):
+        return []
+    skip = {str(x or "").strip().lower() for x in (exclude or [])}
+    out = []
+    for item in res.get("results") or []:
+        name = str(item.get("name") or "").strip()
+        if not name or name.lower() in skip:
+            continue
+        if float(item.get("score") or 0) < float(min_score):
+            continue
+        out.append(item)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _skill_candidates_block(user_text: str, lang: str = "zh", limit: int = 5, exclude=None) -> str:
+    """把候选清单拼成一段系统指令；无候选返回空串（不占 token）。"""
+    cands = _match_skill_candidates(user_text, limit=limit, exclude=exclude)
+    if not cands:
+        return ""
+    zh = (lang or "zh") == "zh"
+    L = []
+    if zh:
+        L.append("【本轮技能候选（从 406 条技能库检索，含 YEL/GRN；候选≠强制）】")
+    else:
+        L.append("[Skill candidates retrieved from the 406-skill library (YEL/GRN included; candidates are NOT mandates)]")
+    for item in cands:
+        name = str(item.get("name") or "")
+        lv = str(item.get("level") or "").strip()
+        when = re.sub(r"\s+", " ", str(item.get("when_to_use") or "")).strip()[:110]
+        hit = ", ".join(str(x) for x in (item.get("matched_on") or [])[:3])
+        line = "- " + name + ((" [" + lv + "]") if lv else "")
+        if when:
+            line += (" | 适用：" if zh else " | use when: ") + when
+        if hit:
+            line += (" | 命中：" if zh else " | matched: ") + hit
+        L.append(line)
+    if zh:
+        L.append("判定规则：某条确实覆盖本轮目标 → 先 skill_view(name='<名字>') 再按它执行；")
+        L.append("都不匹配 → 直接按用户目标干活，不要为了用技能而用（说明跳过的理由即可）。")
+        L.append("候选不够或想换说法 → 调用 skill_search(query='<用户原话>') 再检索一次。")
+    else:
+        L.append("Rule: if a candidate truly covers this turn, call skill_view(name=...) first and follow it;")
+        L.append("if none fits, proceed with the user's actual goal and say why you skipped (never use a skill just to use one).")
+        L.append("Need more candidates → call skill_search(query='<user wording>').")
+    return "\n".join(L) + "\n"
+
+
 def _semantic_trigger_block(red_hits, user_text: str, lang: str = "zh") -> str:
     """RED 命中 → **候选清单 + 意图判定纪律**（替换旧的"立即调用、禁止跳过"）。
 
@@ -6285,7 +6990,9 @@ def _semantic_trigger_block(red_hits, user_text: str, lang: str = "zh") -> str:
     zh = (lang or "zh") == "zh"
     names = ", ".join(red_hits or [])
     lines = []
-    if zh:
+    # 没有 RED 命中时不输出「命中了：（空）」这种空话——候选清单由
+    # _skill_candidates_block 负责，这里只保留 grill 前置（如有）。
+    if red_hits and zh:
         lines += [
             "【技能触发纪律：语义优先（关键词只是候选，不构成触发）】",
             f"本次用户消息在词表上命中了：{names}（只是候选，不代表该用）。",
@@ -6297,7 +7004,7 @@ def _semantic_trigger_block(red_hits, user_text: str, lang: str = "zh") -> str:
             "判定为“跳过”时，用一句话说明为什么跳过，然后按用户真实目标继续，不要为了用而用。",
             "⛔ 禁止仅凭关键词命中就直接加载技能或开跑任务。",
         ]
-    else:
+    elif red_hits:
         lines += [
             "[Skill trigger discipline: semantics first (keywords are candidates, not triggers)]",
             f"Keyword hits: {names} — candidate only, NOT a mandate.",
@@ -6372,7 +7079,9 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
             "",
         ]) + "\n"
     if intent == "chat":
-        return explicit_prefix + pinned_prefix + _semantic_trigger_block(red_hits, user_text, session_lang)
+        return (explicit_prefix + pinned_prefix
+                + _semantic_trigger_block(red_hits, user_text, session_lang)
+                + _skill_candidates_block(user_text, session_lang, exclude=red_hits))
     if intent == "self_intro":
         # 2026-09-26: 不再硬注入"必须逐字输出"的成品文案 —— 改成给模型事实参考 +
         # 语境判断要求，由模型决定怎么答（这才是"结合上下文语境"）。
@@ -6496,7 +7205,7 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
     elif intent == "analysis":
         lines += [
             "这是一个生物信息学分析任务。你必须严格执行以下步骤，不可跳过：",
-            "1. 调用 skill_search(query='你的分析需求', stage='auto') 查找合适的 skill（stage参数自动缩小搜索范围到当前分析阶段）",
+            "1. 调用 skill_search(query='你的分析需求') 查找合适的 skill（本轮候选已在上方列出，返回不理想时再检索）",
             "1b. 🎯【技能选择规则】若 skill_search 返回多个名称相似的 skill（如 survival-analysis 和 survival-analysis-clinical），",
             "    必须对比各 skill 的 when_to_use（使用场景）描述！选择与用户数据和需求最匹配的那个。",
             "    如果不确定，在回复中列出候选 skill 及其使用场景让用户选择。",
@@ -6508,7 +7217,7 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
             "",
         ] if zh else [
             "Bioinformatics analysis task. Follow SOUL.md iron rules:",
-            "1. skill_search(query='your analysis', stage='auto') to find skills (stage narrows search by analysis phase)",
+            "1. skill_search(query='your analysis') to find skills (candidates are already listed above; re-search if they miss)",
             "1b. [Skill Selection Rule] If skill_search returns multiple similarly-named skills (e.g. survival-analysis vs survival-analysis-clinical), compare their when_to_use descriptions! Pick the one that best matches the user's data and research goal. If unsure, list candidates with their use-case descriptions for the user to choose.",
             "2. skill_view() to load complete skill instructions",
             "3. terminal to execute code after confirming parameters",
@@ -6621,7 +7330,10 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
                 "5. 生成专利方案后 rail_review(phase='post') 检查专利铁律",
                 "",
             ]
-            return explicit_prefix + pinned_prefix + _semantic_trigger_block(red_hits, user_text, session_lang) + "\n".join(lines)
+            return (explicit_prefix + pinned_prefix
+                    + _semantic_trigger_block(red_hits, user_text, session_lang)
+                    + _skill_candidates_block(user_text, session_lang, exclude=red_hits)
+                    + "\n".join(lines))
         # Detect paper-writing sub-intent
         lit_text = user_text if zh else user_text.lower()
         paper_write_kw = ["写论文", "写文章", "论文写作", "写一篇", "manuscript", "paper writing",
@@ -6667,7 +7379,10 @@ def _build_skill_injection(intent: str, domain: str, session_lang: str = "zh", u
         lines.append("知识库查询。使用 search_knowledge_base 检索已有知识和经验。" if zh else
                      "Knowledge query. Use search_knowledge_base.")
     
-    return explicit_prefix + pinned_prefix + _semantic_trigger_block(red_hits, user_text, session_lang) + "\n".join(lines)
+    return (explicit_prefix + pinned_prefix
+            + _semantic_trigger_block(red_hits, user_text, session_lang)
+            + _skill_candidates_block(user_text, session_lang, exclude=red_hits)
+            + "\n".join(lines))
 
 
 # Progress text map (moved down from above)
@@ -6761,6 +7476,14 @@ def _session_emit(session, msg_dict):
     if "session_id" not in msg_dict:
         msg_dict["session_id"] = session.get("id", "")
     msg_type = msg_dict.get("type", "")
+    # Turn errors must remain visible after the browser has switched projects:
+    # the client filters messages by both session and request identity.
+    if msg_type == "error" and not msg_dict.get("request_id"):
+        active_request_id = str(
+            session.get("_running_request_id") or session.get("_active_request_id") or ""
+        )
+        if active_request_id:
+            msg_dict["request_id"] = active_request_id
     # P1-1(2026-09-23): 待办事件的唯一回写收口。
     # 历史问题：四个推送点（debate 计划 / 心跳匹配 / 裁决同步 / 管线兜底）都只发 WS
     # 事件、不回写 session["todos"]，于是刷新或切回会话时 /api/todos 拿到的还是
@@ -6823,10 +7546,14 @@ def _session_emit(session, msg_dict):
 
 
 def _create_session(title="新会话"):
+    # Take one immutable snapshot before touching state.db.  A concurrent global
+    # switch must yield either the old complete config or the new complete
+    # config, never a mixture of both fields in a just-created project session.
+    model_snapshot = dict(_current_model)
     sid = f"memomics-{str(uuid.uuid4())[:8]}"
     db = _get_session_db()
     if db:
-        db.ensure_session(sid, source="memomics", model=_current_model.get("model", ""))
+        db.ensure_session(sid, source="memomics", model=model_snapshot.get("model", ""))
         if title and title != "新会话":
             db.set_session_title(sid, title)
     session = {
@@ -6836,7 +7563,7 @@ def _create_session(title="新会话"):
         "created": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "last_active": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "messages": [],
-        "model_config": dict(_current_model),
+        "model_config": model_snapshot,
         "model_locked": False,  # 未做会话级切换 → 跟随全局模型
         "results_dir": os.path.join(RESULTS_DIR, sid),
         "todos": [],
@@ -6969,7 +7696,7 @@ def _restore_single_session(sid):
             session = {
                 "id": sid,
                 "title": s.get("title") or (_first_msg[:30] if _first_msg else sid[:20]),
-                "title_source": _load_title_source(sid),
+                "title_source": _resolve_title_source(sid, s.get("_lineage_root_id") or ""),
                 "created": created_str,
                 "last_active": active_str,
                 "messages": messages,
@@ -7061,6 +7788,8 @@ def _restore_one_persisted_session(db, s):
     session = {
         "id": sid,
         "title": s.get("title") or (_first_msg[:30] if _first_msg else sid[:20]),
+        # 2026-10-27：title_source 沿压缩链继承（此前这里完全没设，默认按 auto 处理）
+        "title_source": _resolve_title_source(sid, s.get("_lineage_root_id") or ""),
         "created": created_str,
         "last_active": active_str,
         "messages": messages,
@@ -7503,6 +8232,7 @@ _REPLY_STYLE = """
 - 禁止半截交付：最终回答必须自成一体——用户只看最后这一条也能完全看懂结果。
 - 禁止「整轮正文为空」：中间回合不写正文 = 用户看不到任何进度（思考通道不显示），也拿不到「阶段小结」折叠层；每轮至少 2–3 句阶段小结。
 - 最终回答**以结论开头**，不要带「阶段小结」标记、也不要出现「阶段小结」字样；**交付最终结论后不要再调用工具**（要落盘 / 归档 / 记录就放在交付之前），避免「结论后面又补一句收尾话」把真正的结论挤成过程。
+- **最终回答的第一行必须是加粗的一句话答案**（`**结论：…**` 或直接陈述结果）。系统的分层规则是「以阶段小结开头 = 过程」：整篇答案若写成「阶段小结：…」，会被折进「关键过程」，正文就空了 —— 实测用户只在交互框里看到一段小结、拿不到结论（2026-11-01 用户实测）。
 - **思考通道不是交付通道**：思考内容再多也不等于给了用户答案。结论必须写在**正文**里；若本轮思考已很长的，先收住思考、立刻把最终答案写进正文（否则输出预算被思考吃光，用户就只看到阶段小结）。
 - **停下之前先自检**：本次回复若还不是"用户只看这一条就完全看懂结果"的最终答案，就不要停——要么继续调工具把事情做完，要么在本轮正文里把结论写清楚。
 """
@@ -7671,7 +8401,11 @@ def _strip_scaffold_text(text):
 # 2026-08-26: 服务端系统注入脚手架前缀（写历史时常以 role=user 形式喂给模型，
 # 显示层按 role 过滤不到 → 刷新后刷屏实测复现）。命中即视为注入消息，不进前端对话流。
 _INJECT_PREFIXES = ("[会话要求", "[相关历史记忆", "[会话锚点", "[系统唤醒",
-                    "📊 LoopX 状态", "[System:", "[数据读取配方", "[wakeup-progress-check]")
+                    "📊 LoopX 状态", "[System:", "[数据读取配方", "[wakeup-progress-check]",
+                    # 2026-11-01：交付闸的补写指令是**系统对模型说的话**，模型框架会把它按
+                    # role=user 落进 state.db —— 不拦的话刷新后交互框里冒出一条假的用户消息
+                    # 「【交付补齐】系统检查到…」（实测 memomics-187a097e 已中招）。
+                    "【交付补齐】")
 
 
 # 2026-08-27: task_plan 文本"整体完成"判定（纯函数，供唤醒注入最后防线 + 测试直测）。
@@ -8926,16 +9660,17 @@ def _current_model_config_error(cfg=None) -> str:
     hermes-agent 的原始报错（Provider 'openai' is set in config.yaml but no API key
     was found）。这里提前判出「还没配 Key / Base URL / 模型」，给一句人话。
     """
-    c = cfg or _current_model or {}
+    c = (_current_model or {}) if cfg is None else (cfg if isinstance(cfg, dict) else {})
     try:
-        if not _is_valid_api_key(c.get("api_key")):
+        if not _is_valid_api_key(c.get("api_key")) and not _is_local_model_config(c):
             return "还没有配置 API Key —— 请点左下角「⚙️ 设置」或下面的「配置 API 提供商」填好 Key 再开始对话。"
         if not (c.get("base_url") or "").strip():
             return "还没有配置 API Base URL —— 请在「⚙️ 设置 → API 提供商」里选一家提供商并填写。"
         if not (c.get("model") or "").strip():
             return "还没有选择模型 —— 请在「⚙️ 设置」里选一个模型。"
     except Exception as e:
-        return "模型配置读取异常：%s" % (str(e)[:120],)
+        logger.warning("[model] config validation failed type=%s", type(e).__name__)
+        return "模型配置读取失败，请检查设置后重试。"
     return ""
 
 
@@ -8967,9 +9702,14 @@ def _create_agent(model_config=None, session_id=None, session=None):
     except Exception:
         pass
     skills_index = _read_skills_index()
+    _agent_api_key = cfg.get("api_key", "")
+    if not _agent_api_key and _is_local_model_route(cfg.get("base_url")):
+        # hermes-agent 的显式客户端分支要求 base_url 与 api_key 同时非空；
+        # 本地免 Key 使用底座约定的占位，避免回落到全局 provider 路由。
+        _agent_api_key = "no-key-required"
     agent = AIAgent(
         base_url=cfg["base_url"],
-        api_key=cfg["api_key"],
+        api_key=_agent_api_key,
         provider=_provider,
         model=cfg["model"],
         max_iterations=300,
@@ -9007,17 +9747,26 @@ async def list_sessions():
                      key=lambda s: (s.get("last_active", s["created"]), s.get("created", "")),
                      reverse=True)
     result = []
+    try:
+        _metadata_by_sid = _session_metadata().metadata_for_sessions([s["id"] for s in ordered])
+    except Exception as _metadata_exc:
+        logger.warning("[projects] failed to read session metadata: %s", _metadata_exc)
+        _metadata_by_sid = {}
     for s in ordered:
         msgs = s.get("messages") or []
+        # ``msg_count`` is the reusable-session contract: it is a numeric,
+        # conservative count for both eagerly loaded and lazily restored
+        # sessions.  A first in-memory message/claimed turn must never look
+        # empty merely because SessionDB has not appended it yet.
+        _count = _session_message_count_for_reuse(s)
         if s.get("_messages_loaded", True):
-            _count = len(msgs)
             _first = (msgs[0].get("content") or msgs[0].get("text", ""))[:60] if msgs else ""
             _last = (msgs[-1].get("content") or msgs[-1].get("text", ""))[:80] if msgs else ""
         else:
             # 惰性会话：用启动时已取的元数据（不触发全量消息加载）
-            _count = int(s.get("_msg_count") or 0)
             _first = (s.get("_first_msg") or "")[:60]
             _last = (s.get("_last_msg") or "")[:80]
+        _meta = _metadata_by_sid.get(s["id"], {"project_id": None, "cluster_server_id": None})
         result.append({
             "id": s["id"], "title": s["title"], "created": s["created"],
             "bg_running": s.get("bg_running", False),
@@ -9029,15 +9778,351 @@ async def list_sessions():
             "source": s.get("source", "weixin" if s.get("wx_sender_id") else ""),
             "first_message": _first,
             "last_message": _last,
+            # Additive metadata; legacy clients may ignore these keys.
+            "project_id": _meta.get("project_id"),
+            "cluster_server_id": _meta.get("cluster_server_id"),
         })
     return {"sessions": result}
 
 
+def _normalise_session_project_id(value):
+    """Use one equality rule for explicit and unclassified projects."""
+    text = "" if value is None else str(value).strip()
+    return text or None
+
+
+def _session_message_count_for_reuse(session) -> int:
+    """Return the same count contract exposed by ``GET /api/sessions``.
+
+    Restored sessions intentionally load history lazily.  Their ``_msg_count``
+    comes from SessionDB metadata, whereas an in-memory first user message may
+    precede its DB append.  Looking at both values prevents a just-asked
+    question from being mistaken for a reusable blank session.
+    """
+    messages = session.get("messages") or []
+    try:
+        loaded_count = len(messages)
+    except Exception:
+        loaded_count = 0
+    try:
+        persisted_count = int(session.get("_msg_count") or 0)
+    except Exception:
+        persisted_count = 0
+    if session.get("_messages_loaded", True):
+        return max(0, loaded_count, persisted_count)
+    # A non-empty preview with a zero legacy count is conservative: do not
+    # recycle a session when older SessionDB metadata is internally stale.
+    if str(session.get("_first_msg") or "").strip():
+        return max(1, persisted_count, loaded_count)
+    return max(0, persisted_count, loaded_count)
+
+
+def _session_is_reusable_blank(session) -> bool:
+    if not isinstance(session, dict):
+        return False
+    # ``_user_turn_active`` closes the narrow window after a WebSocket has
+    # claimed the first turn but before its user message is persisted.
+    if _session_turn_is_active(session):
+        return False
+    # A draft is defined by the absence of its first *user* question, not by a
+    # presentation placeholder.  System/assistant welcome cards may exist in
+    # memory or persistence without consuming the one reusable project draft.
+    messages = session.get("messages") or []
+    if any(str(item.get("role") or "").lower() in {"user", "human"}
+           for item in messages if isinstance(item, dict)):
+        return False
+    if session.get("_messages_loaded", True):
+        return True
+
+    # Restored sessions are lazy.  Metadata count/preview has no role data, so
+    # it cannot safely distinguish an assistant placeholder from a genuine
+    # historical user question.  Load only this candidate's history before
+    # reusing it; if the DB cannot answer and it advertises history, fail
+    # closed rather than recycling a possibly used chat.
+    db = _get_session_db()
+    if not db:
+        return _session_message_count_for_reuse(session) == 0
+    try:
+        loaded = _conv_messages_to_memomics(db.get_messages_as_conversation(session.get("id") or "", limit=None))
+    except Exception:
+        return _session_message_count_for_reuse(session) == 0
+    session["messages"] = loaded
+    session["_messages_loaded"] = True
+    try:
+        session["_msg_count"] = max(int(session.get("_msg_count") or 0), len(loaded))
+    except Exception:
+        session["_msg_count"] = len(loaded)
+    return not any(str(item.get("role") or "").lower() in {"user", "human"}
+                   for item in loaded if isinstance(item, dict))
+
+
+def _metadata_for_session_creation(store, session_ids):
+    """Read project ownership for a bounded in-memory session snapshot."""
+    ids = [str(sid) for sid in session_ids if str(sid or "").strip()]
+    reader = getattr(store, "metadata_for_sessions", None)
+    if callable(reader):
+        rows = reader(ids)
+        return rows if isinstance(rows, dict) else {}
+    # Small adapter doubles in older focused tests only exposed the singular
+    # method.  This compatibility path preserves the same exact semantics.
+    single = getattr(store, "get_session_metadata", None)
+    if not callable(single):
+        return {}
+    result = {}
+    for sid in ids:
+        item = single(sid)
+        result[sid] = item if isinstance(item, dict) else {}
+    return result
+
+
+def _latest_reusable_session_for_project(store, project_id):
+    """Find exactly one newest reusable sid; never delete old empty chats."""
+    snapshot = list(_sessions.values())
+    metadata = _metadata_for_session_creation(store, [item.get("id") for item in snapshot])
+    candidates = []
+    for session in snapshot:
+        sid = str(session.get("id") or "")
+        if not sid or not _session_is_reusable_blank(session):
+            continue
+        meta = metadata.get(sid) or {}
+        if _normalise_session_project_id(meta.get("project_id")) != project_id:
+            continue
+        candidates.append((session, meta))
+    if not candidates:
+        return None, None
+    # Timestamps are ISO-like strings in both live and restored sessions.  The
+    # sid tie-breaker makes simultaneous test-created records deterministic.
+    session, meta = max(
+        candidates,
+        key=lambda pair: (
+            str(pair[0].get("last_active") or ""),
+            str(pair[0].get("created") or ""),
+            str(pair[0].get("id") or ""),
+        ),
+    )
+    return session, meta
+
+
+def _new_session_payload(session, *, metadata=None, reused=False, metadata_warning=""):
+    """Render one creation response without implying a metadata write succeeded."""
+    meta = metadata if isinstance(metadata, dict) else {
+        "project_id": None, "cluster_server_id": None,
+    }
+    model_state = _public_model_config(session.get("model_config"))
+    payload = {
+        "id": session["id"],
+        "title": session["title"],
+        "reused": bool(reused),
+        "model_ready": model_state["model_ready"],
+        "provider_id": model_state.get("provider_id", ""),
+        **meta,
+    }
+    if metadata_warning:
+        payload["metadata_warning"] = metadata_warning
+    return payload
+
+
+def _compensate_unaccepted_project_session(session, store) -> list[str]:
+    """Best-effort inverse of create+project-assignment under the create lock.
+
+    SessionDB and the metadata tables cannot share one transaction through the
+    existing Hermes API.  We therefore remove durable metadata first; only
+    after that succeeds do we remove the freshly-created in-memory/SessionDB
+    chat.  If metadata cleanup cannot be confirmed, retain and identify the
+    chat in the error response rather than creating a hidden orphan that a
+    retry would duplicate.
+    """
+    sid = str((session or {}).get("id") or "")
+    if not sid:
+        return ["created session has no id"]
+    cleanup_errors = []
+    delete_metadata = getattr(store, "delete_session_metadata", None)
+    if not callable(delete_metadata):
+        return ["metadata cleanup is unavailable"]
+    try:
+        delete_metadata(sid)
+    except Exception as exc:
+        logger.exception("[projects] failed to compensate metadata for %s", sid)
+        cleanup_errors.append("metadata cleanup failed: %s" % exc)
+    if cleanup_errors:
+        return cleanup_errors
+    # ``_create_session`` registers the exact object before returning.  Do not
+    # delete a same-id session a test/other caller might have replaced.
+    if _sessions.get(sid) is session:
+        _sessions.pop(sid, None)
+        db = _get_session_db()
+        if db:
+            try:
+                db.delete_session(sid)
+            except Exception as exc:
+                logger.exception("[projects] failed to compensate SessionDB for %s", sid)
+                cleanup_errors.append("session cleanup failed: %s" % exc)
+    return cleanup_errors
+
+
 @app.post("/api/sessions/new")
-async def new_session(title: str = "新会话"):
-    """新建会话"""
-    s = _create_session(title)
-    return {"id": s["id"], "title": s["title"]}
+async def new_session(request: Request, title: str = "新会话"):
+    """Create a session, optionally placing it in a project.
+
+    ``?title=...`` remains supported for old WebUI clients.  JSON is optional
+    so a body-less POST remains exactly the old request shape.  A legacy
+    ``cluster_server_id`` body field is intentionally ignored: chats no longer
+    select or lock a cluster profile.
+    """
+    body = {}
+    try:
+        raw = await request.body()
+        if raw:
+            body = json.loads(raw.decode("utf-8"))
+    except Exception:
+        return _metadata_error_response(MetadataError("request body is not valid JSON"))
+    if not isinstance(body, dict):
+        return _metadata_error_response(MetadataError("request body must be an object"))
+    requested_title = str(body.get("title", title) or "新会话").strip() or "新会话"
+    requested_project = _normalise_session_project_id(body.get("project_id"))
+    s = None
+    meta = None
+    reused = False
+    try:
+        # Keep the complete read/check/create/assign sequence under one lock.
+        # There is no await in this section: SessionMetadataStore is
+        # synchronous and _create_session only performs local state/DB work.
+        with _SESSION_CREATE_LOCK:
+            store = _session_metadata()
+            if requested_project is not None and not store.has_project(requested_project):
+                raise MetadataError("project not found")
+            # 2026-11-08 修：只在「指定了项目」时才复用该项目的空会话。
+            # 未归类（project_id=None）不��用 —— 否则点「＋ 新建会话」可能拿回
+            # 一个不在会话列表里的历史空壳，界面看起来就像"没新建、也没置顶"。
+            if requested_project is not None:
+                s, meta = _latest_reusable_session_for_project(store, requested_project)
+            if s is not None:
+                reused = True
+            else:
+                s = _create_session(requested_title)
+                # Persist a null project too.  It makes an unclassified
+                # session's ownership explicit and keeps the following
+                # concurrent request in the same equality domain.
+                meta = store.set_session_project(s["id"], requested_project)
+    except MetadataError as exc:
+        failure = exc
+    except Exception as exc:
+        failure = exc
+    else:
+        failure = None
+
+    if failure is not None:
+        if requested_project is None:
+            # Metadata is additive to the old chat store.  When it is locked,
+            # read-only, or cannot be migrated, a plain POST keeps the legacy
+            # product behavior: make a fresh unclassified chat.  It must not
+            # inspect/reuse an unknown empty session because that could belong
+            # to a project whose ownership read failed.
+            logger.warning("[projects] metadata unavailable for legacy new session: %s", failure)
+            if s is None or reused:
+                with _SESSION_CREATE_LOCK:
+                    s = _create_session(requested_title)
+                reused = False
+            return _new_session_payload(
+                s, reused=False,
+                metadata={"project_id": None, "cluster_server_id": None},
+                metadata_warning=(
+                    "项目元数据暂不可用；已创建未分类新会话，未复用或绑定任何项目。"
+                ),
+            )
+
+        # An explicit project request is isolation-sensitive: never return a
+        # session until its project assignment is durable.  If creation got as
+        # far as SessionDB, compensate it (and the metadata row if a commit
+        # happened before a later read error) before returning the failure.
+        if s is not None and not reused:
+            cleanup_errors = _compensate_unaccepted_project_session(s, locals().get("store"))
+            logger.error("[projects] failed to assign new session metadata: %s", failure)
+            payload = {"ok": False, "error": str(failure)}
+            if cleanup_errors:
+                payload.update({
+                    "id": s.get("id"), "title": s.get("title"),
+                    "cleanup_error": "; ".join(cleanup_errors),
+                })
+            return JSONResponse(payload, status_code=500)
+        if isinstance(failure, MetadataError):
+            return _metadata_error_response(failure)
+        return _metadata_error_response(failure, status=500)
+
+    if not isinstance(meta, dict):
+        # A custom metadata adapter may return no record from set_project;
+        # querying after the lock would re-open the duplicate-create race, so
+        # use the exact known requested ownership instead.
+        meta = {"project_id": requested_project, "cluster_server_id": None}
+    return _new_session_payload(s, metadata=meta, reused=reused)
+
+
+@app.get("/api/projects")
+async def list_projects():
+    try:
+        return {"projects": _session_metadata().list_projects()}
+    except Exception as exc:
+        return _metadata_error_response(exc, status=500)
+
+
+@app.post("/api/projects")
+async def create_project(request: Request):
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise MetadataError("request body must be an object")
+        project = _session_metadata().create_project(
+            body.get("name"), body.get("description", ""), body.get("workdir", "")
+        )
+        return JSONResponse({"ok": True, "project": project}, status_code=201)
+    except MetadataError as exc:
+        return _metadata_error_response(exc)
+    except Exception as exc:
+        logger.exception("[projects] create failed")
+        return _metadata_error_response(exc, status=500)
+
+
+@app.patch("/api/projects/{project_id}")
+async def update_project(project_id: str, request: Request):
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise MetadataError("request body must be an object")
+        return {"ok": True, "project": _session_metadata().update_project(project_id, body)}
+    except MetadataError as exc:
+        return _metadata_error_response(exc)
+    except Exception as exc:
+        logger.exception("[projects] update failed")
+        return _metadata_error_response(exc, status=500)
+
+
+@app.delete("/api/projects/{project_id}")
+async def remove_project(project_id: str):
+    try:
+        count = _session_metadata().delete_project(project_id)
+        return {"ok": True, "project_id": project_id, "unassigned_session_count": count}
+    except MetadataError as exc:
+        return _metadata_error_response(exc)
+    except Exception as exc:
+        logger.exception("[projects] delete failed")
+        return _metadata_error_response(exc, status=500)
+
+
+@app.put("/api/sessions/{sid}/project")
+async def set_session_project(sid: str, request: Request):
+    if not _known_session(sid):
+        return JSONResponse({"ok": False, "error": "session not found"}, status_code=404)
+    try:
+        body = await request.json()
+        if not isinstance(body, dict) or "project_id" not in body:
+            raise MetadataError("project_id is required (use null to unassign)")
+        meta = _session_metadata().set_session_project(sid, body.get("project_id"))
+        return {"ok": True, "session_id": sid, "project_id": meta.get("project_id")}
+    except MetadataError as exc:
+        return _metadata_error_response(exc)
+    except Exception as exc:
+        logger.exception("[projects] move session failed")
+        return _metadata_error_response(exc, status=500)
 
 
 def _sanitize_dir_name(s: str) -> str:
@@ -9232,6 +10317,25 @@ def _load_title_source(sid):
     return "auto"
 
 
+def _resolve_title_source(sid, lineage_root_id=""):
+    """标题来源（auto/manual）沿压缩链继承（2026-10-27）。
+
+    压缩续写会生成新的 session id，而用户手动改名时写的 kv 标记只在被改名的那条
+    （通常是根/当时 tip）上。重启后列表投影到新 tip，若只看 tip 的标记就会当成
+    auto → 后续自动总结把用户改的名字覆盖掉。这里沿链继承并落库。
+    """
+    src = _load_title_source(sid)
+    if src == "manual":
+        return src
+    try:
+        if lineage_root_id and lineage_root_id != sid and _load_title_source(lineage_root_id) == "manual":
+            _persist_title_source(sid, "manual")  # 继承并落库，防后续自动覆盖
+            return "manual"
+    except Exception:
+        pass
+    return src
+
+
 def _schedule_title_summary(sid):
     """自动标题总结调度（幂等）：手动改名的会话跳过；防抖；防重入。
 
@@ -9244,6 +10348,12 @@ def _schedule_title_summary(sid):
             return
         if s.get("title_source") == "manual":
             return  # 用户手动改过名 → 尊重用户，永不自动覆盖
+        # 2026-10-27：压缩链上的手动改名同样生效（标记可能只落在根会话上）
+        _root_tid = s.get("_lineage_root_id")
+        if _root_tid and _root_tid != sid and _load_title_source(_root_tid) == "manual":
+            s["title_source"] = "manual"
+            _persist_title_source(sid, "manual")
+            return
         if sid in _title_summary_locks:
             return  # 已有总结线程在跑
         # 防抖：距上次总结至少新增 4 条用户消息
@@ -9313,6 +10423,12 @@ def _auto_summarize_title(sid):
             return  # 输出无效，静默放弃
         if title == s.get("title"):
             return  # 与现名相同，不写
+        # 2026-10-27：LLM 总结期间用户可能刚改过名（或链上手改过，标记在根上）→ 放弃写回
+        if s.get("title_source") == "manual" or _load_title_source(sid) == "manual":
+            return
+        _root_tid2 = s.get("_lineage_root_id")
+        if _root_tid2 and _root_tid2 != sid and _load_title_source(_root_tid2) == "manual":
+            return
         # 写回 state.db（title 唯一约束：撞名 → 自动续号 "xxx #2"）
         new_title = title
         db = _get_session_db()
@@ -9531,7 +10647,15 @@ def _mark_phases(normalized) -> list:
                     # 2026-10-25（用户反馈）：整轮只有阶段小结、没有实质结论时，
                     # 不要再"硬挑"一条小结冒充最终结论（实测：「阶段小结：审查已通过…」
                     # 被标成最终结论）。改判该末单元为 process，本轮不设 conclusion。
-                    _concl = None
+                    # 2026-11-01（v3 修订）：但若末单元其实是「误标的完整交付」
+                    # （剥掉标记后 ≥300 字或含代码块），仍按结论交付，并打 strip_stage_prefix
+                    # 让前端把这句「阶段小结：」从正文里去掉 —— 否则刷新/切会话后正文全空
+                    # （用户实测：交互框里只剩阶段小结折叠层，没有正文结论）。
+                    if _is_delivery_like(_strip_stage_summary_prefix(_unit_text(_concl))[0]):
+                        for _m in _concl:
+                            _m["strip_stage_prefix"] = True
+                    else:
+                        _concl = None
             for _u in _units:
                 _ph = "conclusion" if (_concl is not None and _u is _concl) else "process"
                 for _m in _u:
@@ -9786,6 +10910,12 @@ async def delete_session(sid: str):
             db.delete_session(sid)
         except Exception:
             pass
+    # Project/server metadata is application-owned and must not survive a
+    # permanent chat deletion as an orphaned binding.
+    try:
+        _session_metadata().delete_session_metadata(sid)
+    except Exception as _metadata_exc:
+        logger.warning("[projects] failed to delete metadata for %s: %s", sid, _metadata_exc)
     # 会话删除 = 数据删除（用户要求 2026-09-13）：results/ 下该会话的目录连同全部
     # 分析产物（figures/results/scripts/data/log、token_usage.jsonl 等）物理删除。
     # 放在 agent 清理之后，避免「边写边删」把目录复活。
@@ -9898,10 +11028,17 @@ async def put_skills_manage(request: Request):
     _save_skills_disabled(disabled_list)
     return {"ok": True, "disabled_count": len(disabled_list)}
 
-def _public_model_config() -> dict:
-    """对浏览器脱敏的模型配置：不含 api_key 明文，只带 has_key 状态"""
-    cfg = dict(_current_model)
+def _public_model_config(cfg=None) -> dict:
+    """Browser-safe model state: no API key, stable identity, and readiness."""
+    cfg = dict(_current_model if cfg is None else (cfg or {}))
+    provider_id = _provider_id_for_config(cfg)
+    if provider_id:
+        cfg["provider_id"] = provider_id
+    else:
+        cfg.pop("provider_id", None)
     cfg["has_key"] = _is_valid_api_key(cfg.get("api_key"))
+    cfg["local"] = _is_local_model_config(cfg)
+    cfg["model_ready"] = _model_config_ready(cfg)
     cfg.pop("api_key", None)
     return cfg
 
@@ -9980,6 +11117,71 @@ def _is_stage_summary_text(text: str) -> bool:
     return False
 
 
+# 2026-11-01 交付闸 v3（用户实测 Fig6a 那轮）：v2 只判「要不要补写」，**从不验收补写结果** ——
+#   ① 补写那一轮又写了一段「阶段小结：…」（长文 + 代码），被原样当最终结论
+#      → 阶段小结顶进正文，正文照样没有结论；
+#   ② 补写只回「已完成」三个字，也被当成最终结论（正文只剩三个字）；
+#   ③ 「正在补写」的 info 直接塞进气泡正文，永久留在交互框里。
+# v3 三条对应：净化（剥掉阶段小结标记）/ 验收（必须达到交付标准，最多补 2 次）/
+#   提示只进「实时进度」时间线（progress pending→done，不进正文气泡）。
+_STAGE_SUMMARY_PREFIXES = (
+    "**阶段小结：**", "**阶段小结**：", "**阶段小结**:", "阶段小结**：",
+    "阶段小结：", "阶段小结:", "**阶段小结**", "阶段小结",
+)
+_SALVAGE_MIN_CHARS = 300     # 剥掉标记后仍算「完整交付」的字数下限（与 _mark_phases 的实质单元同口径）
+
+
+def _strip_stage_summary_prefix(text: str):
+    """剥掉正文开头的「阶段小结：」标记 → (正文, 是否剥掉了)。
+
+    模型偶尔把整段答案误标成阶段小结（用户实测：Fig6a 那一轮整篇答案都以
+    「阶段小结：主人问得对…」开头）。标记本身必须从正文里消失，否则用户第一句
+    看到的就是「阶段小结：」，与「这段是最终结论」互相矛盾。
+    """
+    t = (text or "").lstrip()
+    for _p in _STAGE_SUMMARY_PREFIXES:      # 长前缀在前，避免先命中裸「阶段小结」
+        if not t.startswith(_p):
+            continue
+        _rest = t[len(_p):]
+        # 裸标记后面必须是分隔符，否则可能只是正文里恰好以这两个字开头的词
+        if _p in ("**阶段小结**", "阶段小结") and _rest[:1] not in ("", "：", ":", " ", "\t", "\n", "\r"):
+            continue
+        _rest = _rest.lstrip("：: \t\r")
+        if _rest.startswith("\n"):
+            _rest = _rest[1:]
+        return _rest.lstrip(), True
+    return t, False
+
+
+def _is_delivery_like(text: str) -> bool:
+    """剥掉阶段小结标记后，这段文字是否已经是一次完整交付（而不是一句进度汇报）。
+
+    判据与 _mark_phases 挑「实质单元」同口径：≥300 字，或含代码块（```）。
+    """
+    _t = (text or "").strip()
+    return len(_t) >= _SALVAGE_MIN_CHARS or "```" in _t
+
+
+def _prepare_final_answer(text: str):
+    """交付闸 v3：净化 + 验收一段「本应是最终结论」的正文 → (正文, 是否达到交付标准)。
+
+    - 空正文 → 不达标（内容多半写进了思考通道）；
+    - 以「阶段小结」开头：剥掉标记后仍是完整交付（≥300 字 / 含代码块）→ 达标
+      （模型误标，按结论交付）；否则判为"还是一段过程小结" → 不达标；
+    - 其余按 _answer_delivered 的交付标准验收（≥80 字、不是阶段小结）。
+    """
+    t = (text or "").strip()
+    if not t:
+        return "", False
+    _clean, _had_marker = _strip_stage_summary_prefix(t)
+    _clean = (_clean or "").strip()
+    if not _had_marker:
+        return _clean, _answer_delivered(_clean)
+    if not _clean:
+        return "", False
+    return _clean, _is_delivery_like(_clean)
+
+
 # 2026-10-27（用户实测）：回合"结束"判定太早 —— 模型这一轮没交付最终结论就发 complete，
 # 前端随即关掉"运行中"、把输入框交还，用户看到的就是「还没完成却已显示结束」；
 # 若思考内容吃满输出预算，正文只剩阶段小结，任务就"结束"在小结上。
@@ -10032,13 +11234,14 @@ def _should_nudge_final_answer(result: str, tool_calls=None, user_text: str = ""
     return False
 
 
-def _final_answer_nudge_text() -> str:
-    """交付补齐指令（内联补跑那一轮的输入，2026-10-27 v2）。
+def _final_answer_nudge_text(attempt: int = 1, previous: str = "") -> str:
+    """交付补齐指令（内联补跑那一轮的输入）。
 
     v1 把它交给自检唤醒调度器 → 实测调度器闸门太多，根本不触发，回合会永久挂起；
-    现在由回合收尾处**当场内联执行**，所以这里只负责给出指令文本。
+    v2 改由回合收尾处**当场内联执行**；v3 支持第 2 次（第一次补写不合格时给出更硬的
+    指令，并把上一次的失败样子摆出来，避免它再写一遍阶段小结或只回「已完成」）。
     """
-    return (
+    base = (
         "【交付补齐】系统检查到：你刚结束的这一轮没有给出最终结论"
         "（正文为空，或只有「阶段小结」/工具调用摘要）。\n"
         "现在**不要再调用任何工具**，直接用正文写出本任务的最终结论：\n"
@@ -10046,6 +11249,180 @@ def _final_answer_nudge_text() -> str:
         "3) 关键过程 ≤3 行；4) 可选后续建议。\n"
         "禁止再以「阶段小结：」开头，禁止空正文（思考通道里的内容用户看不到）。"
     )
+    if attempt <= 1:
+        return base
+    _prev = (previous or "").strip().replace("\n", " ")
+    _shown = ("；你上一轮写的是「" + _prev[:60] + "…」") if _prev else ""
+    return base + (
+        "\n\n【第 2 次补写】上一轮补写**仍然不合格**" + _shown +
+        "——系统只把「结论本身」当交付。这次第一行必须是 `**结论：<一句话答案>**`，"
+        "随后写结果要点（产物路径 / 关键指标 / 判断），不要再复述过程、"
+        "不要再出现「阶段小结」四个字，也不要只回「已完成/好的」。"
+    )
+
+
+async def _apply_final_answer_gate(session, result, tool_calls, user_text, agent, loop):
+    """交付闸 v3（回合收尾处调用）：净化误标 → 判定 → 内联补写 → 验收 → 权威正文。
+
+    抽成独立函数的两个理由：① 收尾处那段代码已经两次修出用户可见 bug（v1 挂死、v2 不验收），
+    必须能被单元测试直接跑；② 事件/历史/日志的处置集中在一处，别再散落在 websocket 处理器里。
+
+    返回 dict：
+      result        更新后的正文（净化稿 / 补写稿 / 原样）
+      authoritative 非空 → 前端要按「最终结论」重建正文（final_answer / complete.final_replace）
+      retry_done    是否成功补写（调用方据此决定 complete 要不要带正文）
+    """
+    out = {"result": result, "authoritative": "", "retry_done": False,
+           "replace": False, "nudge_used": bool(session.get("_final_nudge_used"))}
+    _res = result
+    # ⓪ 误标净化：正文以「阶段小结：」开头、但内容已是完整交付 → 剥掉标记按结论交付
+    #    （不再空转一轮补写：用户实测 Fig6a 那轮整篇答案都被标成了阶段小结）。
+    try:
+        _pre_clean, _pre_ok = _prepare_final_answer(_res)
+        if _pre_ok and _pre_clean != (_res or "").strip():
+            logger.info("[MemOmics] 交付闸：正文把答案误标成了阶段小结，剥掉标记按结论交付（%d 字）",
+                        len(_pre_clean))
+            _res = _pre_clean
+            out["authoritative"] = _pre_clean
+            # 会话历史里那条 assistant（本回合刚 append）同步成净化后的正文，
+            # 否则刷新/切会话后还是带「阶段小结：」的原文。
+            try:
+                for _mh in reversed(session.get("messages") or []):
+                    if _mh.get("role") == "assistant":
+                        _mh["content"] = _pre_clean
+                        break
+            except Exception:
+                pass
+    except Exception:
+        pass
+    # ① 判定 + 内联补写（每用户回合最多触发一次，新回合重置）
+    if _should_nudge_final_answer(_res, tool_calls, user_text) and not session.get("_final_nudge_used"):
+        session["_final_nudge_used"] = True
+        out["nudge_used"] = True
+        _retry_step = "补写最终结论"
+
+        def _retry_progress(status, detail):
+            """补写进度：只进「实时进度」时间线（同一 step 原地更新）。
+
+            v2 用 info 直接塞进气泡正文 → 那句「正在补写…」永久留在交互框里；而且 info 不算
+            活动事件，补写期间静默会同时触发前端「疑似卡住」和后端 stall watchdog。
+            """
+            try:
+                _session_emit(session, {"type": "progress", "step": _retry_step,
+                                        "status": status, "detail": detail,
+                                        "ts": datetime.now().strftime("%H:%M:%S"),
+                                        "session_id": session.get("id", "")})
+            except Exception:
+                pass
+
+        _retry_progress("pending", "本轮还没有最终结论 → 只写结论、不调工具")
+        logger.info("[MemOmics] 交付闸生效：内联补写最终结论（补写内容先验收，不直接进正文）")
+        _last_bad = ""
+        _retry_orphan = False        # 补写超时：线程可能还在跑，回调要一直静默
+        _saved_sdc = getattr(agent, "stream_delta_callback", None)
+        try:
+            # 补写轮的流式 token 不进正文：先验收，再由 final_answer 事件一次性权威重建
+            # （v2 直接流进气泡 → 一段「阶段小结：…」顶进正文，用户实测）。
+            agent.stream_delta_callback = (lambda *a, **k: None)
+        except Exception:
+            _saved_sdc = None
+        try:
+            for _attempt in (1, 2):
+                _nudge_text = _final_answer_nudge_text(_attempt, _last_bad)
+                try:
+                    # 补写期间没有 delta → 手动刷新活动时间戳，免得 stall watchdog 按
+                    # 「静默 600s」把正在补写的回合硬中断（长代码结论写起来本来就不快）。
+                    session["_turn_activity_ts"] = time.time()
+                except Exception:
+                    pass
+                _retry_progress("pending", "补写最终结论（第 %d 次：只写结论、不调工具）" % _attempt)
+                try:
+                    session.setdefault("messages", []).append({
+                        "role": "system", "content": _nudge_text,
+                        "time": datetime.now().strftime("%H:%M:%S"),
+                        "source": "final_answer_nudge"})
+                except Exception:
+                    pass
+                _retry_res = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: agent.run_conversation(
+                            _nudge_text, task_id=session.get("id", ""))),
+                    timeout=420)
+                _retry_final = (""
+                                if _retry_res is None else
+                                (_retry_res.get("final_response", "")
+                                 if isinstance(_retry_res, dict) else str(_retry_res)))
+                _retry_clean, _retry_ok = _prepare_final_answer(_retry_final)
+                if _retry_ok:
+                    _res = _retry_clean
+                    out["retry_done"] = True
+                    out["authoritative"] = _retry_clean
+                    try:
+                        session.setdefault("messages", []).append({
+                            "role": "assistant", "content": _retry_clean,
+                            "time": datetime.now().strftime("%H:%M:%S"),
+                            "source": "final_answer_round"})
+                    except Exception:
+                        pass
+                    logger.info("[MemOmics] 交付补齐完成（第 %d 次，%d 字）",
+                                _attempt, len(_retry_clean))
+                    break
+                _last_bad = (_retry_final or "").strip()
+                logger.warning("[MemOmics] 交付补齐第 %d 次不合格（%d 字，开头=%r）→ %s",
+                               _attempt, len(_last_bad), _last_bad[:24],
+                               "再补一次" if _attempt < 2 else "放弃，照常收尾")
+        except asyncio.TimeoutError:
+            # 超时后 executor 线程可能仍在跑：**保持静默回调**，免得它事后又往已经
+            # 收尾的气泡里流一段文字（下一回合开始时 handler 会重新绑定 stream_cb）。
+            _retry_orphan = True
+            logger.warning("[MemOmics] 交付补齐超时（420s）→ 照常收尾，残留输出不再进正文")
+        except Exception as _e_r:
+            logger.warning("[MemOmics] 交付补齐失败（照常收尾，不阻塞）: %s", _e_r)
+        finally:
+            if not _retry_orphan:
+                try:
+                    # 必须还原（哪怕是 None）：否则补写用的空回调会一直挂着，
+                    # 之后所有回合的流式正文都被吞掉。
+                    agent.stream_delta_callback = _saved_sdc
+                except Exception:
+                    pass
+        # ② 补写两次都没达标：退一步把原正文当「误标交付」净化；再不行就给一句如实的兜底正文
+        #    —— 正文空着 / 拿阶段小结顶正文，都是 v2 的老毛病。
+        if not out["authoritative"]:
+            try:
+                _fb_clean, _fb_ok = _prepare_final_answer(_res)
+                if _fb_ok:
+                    _res = _fb_clean
+                    out["authoritative"] = _fb_clean
+            except Exception:
+                pass
+        if not out["authoritative"]:
+            out["authoritative"] = (
+                "⚠️ 本轮没能生成可交付的最终结论（模型两次补写都不达标）。"
+                "已完成的阶段见上方「关键过程」。")
+            logger.warning("[MemOmics] 交付闸：补写两次均未达标，正文用如实兜底提示")
+            try:
+                session.setdefault("messages", []).append({
+                    "role": "assistant", "content": out["authoritative"],
+                    "time": datetime.now().strftime("%H:%M:%S"),
+                    "source": "final_answer_missing"})
+            except Exception:
+                pass
+        _retry_progress("done",
+                        ("已补写最终结论" if out["retry_done"]
+                         else "两次补写仍未达标（正文已给如实提示）"))
+    # ③ 权威正文一次性重建（前端把本轮小结全折进「关键过程」，正文 = 结论）
+    if out["authoritative"]:
+        out["replace"] = True
+        try:
+            _session_emit(session, {"type": "final_answer",
+                "content": out["authoritative"], "replace": True,
+                "session_id": session.get("id", "")})
+        except Exception:
+            pass
+    out["result"] = _res
+    return out
 
 
 @app.get("/api/models")
@@ -10060,7 +11437,7 @@ async def list_models(session_id: str = ""):
         s = _sessions.get(session_id)
         if s and s.get("model_config"):
             cur = dict(s["model_config"])
-    return {"presets": _preset_models, "current": cur}
+    return {"presets": _preset_models, "current": _public_model_config(cur)}
 
 
 @app.post("/api/models/switch")
@@ -10070,149 +11447,100 @@ async def switch_model(payload: dict):
     - 带 session_id：会话级切换 — 只影响该会话（独立 model_config + 重建该会话 agent），
       持久化到 MemOmics state.db（update_session_model / update_session_billing_route），
       重启/重连后自动恢复；不影响其他会话和全局 _current_model。
-    - 不带 session_id：全局切换（兼容旧行为）— 广播所有会话 + 写 model_config.json。
+    - 不带 session_id：全局切换 — 只同步零消息会话 + 写 model_config.json；
+      已有对话的会话在变更前持久化原路由，之后与重启都保持原模型。
     """
     global _current_model
-    sid = payload.get("session_id") or ""
-    model = payload.get("model", "")
-    base_url = payload.get("base_url", "")
-    api_key = payload.get("api_key", "")
-    provider = payload.get("provider", "")
+    if not isinstance(payload, dict):
+        return JSONResponse({"ok": False, "error": "invalid_payload", "message": "请求体必须是 JSON 对象"}, status_code=400)
 
-    # 2026-10-11：前端已不再持有明文 key（后端永不外发明文，见 _mask_keys_deep）。
-    # 前端只传 base_url/provider 时，这里按已保存的 provider 记录把 key 查补回来，
-    # 否则"换提供商但沿用上一个 key"会静默失败。
-    if not api_key and model:
-        _need = str(base_url or "").rstrip("/")
-        _hint = str(payload.get("provider_id") or provider or "")
-        for _pid, _saved in _provider_keys.items():
-            _s2 = _saved or {}
-            if not _s2.get("api_key"):
-                continue
-            if _hint and _pid != _hint:
-                continue
-            _p2 = _PROVIDERS_INDEX.get(_pid) or {}
-            _api2 = str(_p2.get("api") or "").rstrip("/")
-            if not _need or _api2 == _need:
-                api_key = _s2["api_key"]
-                break
-
-    # ── 自动补全（2026-08-08 重新设计）：前端只需传 model id（+可选 provider_id）。
-    # 原来要求前端把 base_url/api_key 都传全，旧页面/简化调用方缺字段时切换
-    # 静默失败或串 key。现在后端按 model id 在已配置的 provider 里查补。
-    if model and not base_url:
-        _prov_hint = payload.get("provider_id") or ""
-        _found = False
-        for _pid, _saved in _provider_keys.items():
-            if not (_saved or {}).get("api_key") and not (_saved or {}).get("local"):
-                continue
-            _p = _PROVIDERS_INDEX.get(_pid)
-            if not _p:
-                continue
-            if _prov_hint and _pid != _prov_hint:
-                continue
-            # 2026-10-22：改走 _effective_models —— 原来只查目录预设（_p["models"]），
-            # 于是「拉取到的模型」（如 opencode-go 的 36 个）一律查不到 → 报
-            # 「模型 'xxx' 未配置 API Key」，而用户明明刚保存过 key。用户实测踩到过。
-            for _m in _effective_models(_p, _saved):
-                if _m["id"] == model:
-                    base_url = _p["api"]
-                    api_key = _saved["api_key"]
-                    provider = provider or "openai"
-                    _found = True
-                    break
-            if _found:
-                break
-        if not _found:
-            return JSONResponse(
-                {"error": f"模型 '{model}' 未配置 API Key，请先到设置页选择 Provider 并保存 Key"},
-                status_code=400,
-            )
-
+    sid = str(payload.get("session_id") or "").strip()
+    session = None
+    current_cfg = _current_model
     if sid:
-        # ── 会话级切换 ──
-        s = _sessions.get(sid)
-        if s is None:
-            return JSONResponse({"error": f"Session '{sid}' 不存在"}, status_code=404)
-        new_cfg = dict(s.get("model_config") or _current_model)
-        if model:
-            new_cfg["model"] = model
-        if base_url:
-            new_cfg["base_url"] = base_url
-        if api_key:
-            new_cfg["api_key"] = api_key
-        if provider:
-            new_cfg["provider"] = provider
-        s["model_config"] = new_cfg
-        # 2026-10-24（用户反馈「切模型后又被要求配置 API」）：会话级切换只改会话配置，
-        # 全局 _current_model 可能还停在"未配置"状态 → /api/setup/status 判 needs_config
-        # 成立 → 欢迎窗反复弹。这里把会话里的有效配置同步到全局。
-        try:
-            if _is_valid_api_key(new_cfg.get("api_key")):
-                _changed = False
-                for _k in ("provider", "base_url", "api_key", "model"):
-                    if new_cfg.get(_k) and _current_model.get(_k) != new_cfg.get(_k):
-                        _current_model[_k] = new_cfg[_k]
-                        _changed = True
-                if _changed:
-                    _save_model_config()
-        except Exception as _se:
-            print(f"[MemOmics] 同步全局模型配置失败: {_se}", flush=True)
-        # 2026-08-08：切换模型 = 用户活跃操作 → 更新 last_active，
-        # 让该会话在 /api/sessions 列表排到最前（刷新后 autoSelectLatestSession
-        # 选中的是它，而不是某个空配置的自检/新会话 → 下拉框显示切过的模型）。
-        s["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # 清除该会话缓存的 agent — 下次发消息时用新模型重建
-        if s.get("agent"):
-            try:
-                s["agent"].close()
-            except Exception:
-                pass
-            s["agent"] = None
-        # 持久化到 MemOmics state.db（重启后自动恢复会话级模型）
-        # 会话级锁定：此后全局模型切换不再覆盖本会话（互不影响）
-        s["model_locked"] = True
+        session = _sessions.get(sid)
+        if session is None:
+            return JSONResponse({"ok": False, "error": "session_not_found", "session_id": sid}, status_code=404)
+        current_cfg = session.get("model_config") or _current_model
+
+    # Resolver failure has no writes, no agent teardown, and no partial session
+    # changes.  This is particularly important for duplicate endpoints: choosing
+    # one key at random would send a request through the wrong account.
+    resolved = resolve_model_switch(payload, current_cfg, _provider_keys, _PROVIDERS_INDEX)
+    if not resolved.get("ok"):
+        body = {
+            "ok": False,
+            "error": resolved.get("error", "invalid_model_config"),
+            "message": resolved.get("message", "模型配置无效"),
+        }
+        if resolved.get("need_key"):
+            body["need_key"] = True
+        if sid:
+            body["session_id"] = sid
+        return JSONResponse(body, status_code=400)
+
+    new_cfg = dict(resolved["config"])
+    public = _public_model_config(new_cfg)
+
+    if session is not None:
+        # A session override is only committed after its full candidate has
+        # passed resolver validation.  It deliberately does not rewrite the
+        # global default: project conversations remain independent.
+        session["model_config"] = new_cfg
+        session["model_locked"] = True
+        session.pop("_pending_global_model_config", None)
+        session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if _session_turn_is_active(session):
+            # The in-flight agent owns a copy of its original config.  Defer
+            # only cache disposal until it finishes rather than redirecting it.
+            session["_reset_agent_after_turn"] = True
+        else:
+            _drop_cached_session_agent(session)
         try:
             db = _get_session_db()
             if db:
                 import json as _json
-                db.update_session_meta(sid, _json.dumps(new_cfg, ensure_ascii=False), model or new_cfg.get("model"))
-                if provider or base_url:
-                    db.update_session_billing_route(
-                        sid,
-                        provider=provider or new_cfg.get("provider", "openai"),
-                        base_url=base_url or new_cfg.get("base_url", ""),
-                    )
+                db.update_session_meta(sid, _json.dumps(new_cfg, ensure_ascii=False), new_cfg.get("model", ""))
+                db.update_session_billing_route(
+                    sid,
+                    provider=new_cfg.get("provider", "openai"),
+                    base_url=new_cfg.get("base_url", ""),
+                )
         except Exception as e:
             print(f"[MemOmics] 会话模型持久化失败: {e}", flush=True)
-        return {"ok": True, "session_id": sid, "current": dict(new_cfg)}
+        return {
+            "ok": True,
+            "session_id": sid,
+            "provider_id": public.get("provider_id", ""),
+            "model_ready": public["model_ready"],
+            "current": public,
+        }
 
-    # ── 全局切换（原行为） ──
-    _current_model["model"] = payload.get("model", _current_model["model"])
-    _current_model["api_key"] = payload.get("api_key", _current_model["api_key"])
-    _current_model["base_url"] = payload.get("base_url", _current_model["base_url"])
-    _current_model["provider"] = payload.get("provider", _current_model["provider"])
-    # 同步到所有跟随全局的 session（修复: 旧 session 用旧配置的 bug）
-    # 做过会话级切换（model_locked）的会话保持自己的模型，互不影响
+    # Atomically publish the validated global candidate, then move only idle,
+    # unlocked sessions.  An active session receives the same config after its
+    # current turn finishes; its agent is never switched beneath it.
+    _current_model = new_cfg
     for s in _sessions.values():
-        if s.get("model_locked"):
+        # model_locked 包含显式会话切换与本次自动钉住的旧会话；消息检查再兜底，
+        # 防止持久化异常时已有对话仍被广播覆盖。
+        if s.get("model_locked") or _session_has_conversation(s):
             continue
-        s["model_config"] = dict(_current_model)
-        # 清除缓存的 agent — 下次发消息时用新模型重建
-        if s.get("agent"):
-            try:
-                s["agent"].close()
-            except Exception:
-                pass
-            s["agent"] = None
-    # 持久化到文件 (重启后自动恢复)
+        if _session_turn_is_active(s):
+            s["_pending_global_model_config"] = dict(new_cfg)
+            continue
+        s["model_config"] = dict(new_cfg)
+        _drop_cached_session_agent(s)
     _save_model_config()
-    # 2026-09-13: 全局换模型后同步刷新辩论 env（无会话上下文的调用走这条兜底通道）
     try:
         _sync_debate_env()
     except Exception:
         pass
-    return {"ok": True, "current": _public_model_config()}
+    return {
+        "ok": True,
+        "provider_id": public.get("provider_id", ""),
+        "model_ready": public["model_ready"],
+        "current": public,
+    }
 
 
 @app.post("/api/context/window")
@@ -10320,6 +11648,81 @@ async def set_context_window(payload: dict):
 
 
 # --- Provider 列表 (国内 + 国际热门) ---
+
+
+# ---------------------------------------------------------------------------
+# ImageJ 端点（2026-11-09）
+#   GET  /api/imagej/state?session_id=...   UI 初始化：配没配、本会话开没开
+#   GET  /api/imagej/config                 读端点配置（本机路径 / 集群名-节点-目录）
+#   POST /api/imagej/config                 保存端点配置
+#   POST /api/imagej/probe                  真探测（本机找 exe/ij.jar；集群 ssh 探活）
+#   POST /api/imagej/session                会话开关（关掉即停止注入）
+# ---------------------------------------------------------------------------
+@app.get("/api/imagej/state")
+async def imagej_state(session_id: str = ""):
+    try:
+        from memomics.bio_tools import imagej_settings as _ij
+        return _ij.status(session_id)
+    except Exception as exc:
+        return JSONResponse({"error": f"读取 ImageJ 状态失败: {exc}"}, status_code=500)
+
+
+@app.get("/api/imagej/config")
+async def imagej_get_config():
+    try:
+        from memomics.bio_tools import imagej_settings as _ij
+        cfg = _ij.load()
+        return {"local": cfg.get("local") or {}, "cluster": cfg.get("cluster") or {},
+                "updated_at": cfg.get("updated_at") or ""}
+    except Exception as exc:
+        return JSONResponse({"error": f"读取 ImageJ 配置失败: {exc}"}, status_code=500)
+
+
+@app.post("/api/imagej/config")
+async def imagej_save_config(body: dict):
+    try:
+        from memomics.bio_tools import imagej_settings as _ij
+        cfg = _ij.save(body or {})
+        return {"ok": True, "local": cfg.get("local") or {}, "cluster": cfg.get("cluster") or {}}
+    except Exception as exc:
+        return JSONResponse({"error": f"保存 ImageJ 配置失败: {exc}"}, status_code=400)
+
+
+@app.post("/api/imagej/probe")
+async def imagej_probe(body: dict):
+    payload = body or {}
+    backend = str(payload.get("backend") or "local").lower()
+    try:
+        from memomics.bio_tools import imagej_settings as _ij
+        if backend == "cluster":
+            info = _ij.probe_cluster(payload.get("cluster") or "", payload.get("node") or "",
+                                     payload.get("root") or "")
+        else:
+            info = _ij.probe_local(payload.get("root") or "", payload.get("launcher") or "",
+                                   payload.get("java") or "")
+        info["backend"] = backend
+        return info
+    except Exception as exc:
+        return JSONResponse({"error": f"探测 ImageJ 失败: {exc}"}, status_code=500)
+
+
+@app.post("/api/imagej/session")
+async def imagej_session(body: dict):
+    payload = body or {}
+    sid = str(payload.get("session_id") or "").strip()
+    enabled = bool(payload.get("enabled"))
+    try:
+        from memomics.bio_tools import imagej_settings as _ij
+        if enabled and not _ij.status(sid).get("configured"):
+            return JSONResponse({"ok": False, "needs_setup": True,
+                                 "error": "还没设置 ImageJ 路径：先在本机路径或集群节点里选一个"},
+                                status_code=409)
+        _ij.set_session(sid, enabled)
+        return {"ok": True, "session_id": sid, "enabled": enabled,
+                "prompt_chars": len(_ij.prompt_block(sid))}
+    except Exception as exc:
+        return JSONResponse({"error": f"设置 ImageJ 会话开关失败: {exc}"}, status_code=400)
+
 
 @app.get("/api/providers")
 async def list_providers():
@@ -11221,7 +12624,7 @@ async def save_provider_key(pid: str, payload: dict):
     if pid not in _PROVIDERS_INDEX:
         return JSONResponse({"error": f"Provider '{pid}' not found"}, status_code=404)
     key = (payload.get("api_key") or "").strip()
-    _prev_saved = _provider_keys.get(pid) or {}
+    _prev_saved = dict(_provider_keys.get(pid) or {})
     kept_existing = False
     if not key:
         _bound = str(_prev_saved.get("api_key") or "")
@@ -11235,24 +12638,47 @@ async def save_provider_key(pid: str, payload: dict):
                           f"填入 Key 保存一次即可（之后拉取模型不用再输）",
                  "need_key": True}, status_code=400)
     _provider_keys[pid] = {"api_key": key, "base_url": _PROVIDERS_INDEX[pid]["api"]}
+    if _prev_saved.get("local"):
+        # 本地免 Key 的“空 Key 刷新”只是沿用绑定，不能丢掉 local 身份。
+        _provider_keys[pid]["local"] = True
     if _prev_saved.get("models"):
         # 换 key 不清空已拉取的模型列表（下次拉取会覆盖）
         _provider_keys[pid]["models"] = _prev_saved["models"]
         _provider_keys[pid]["models_source"] = _prev_saved.get("models_source", "")
         _provider_keys[pid]["models_updated_at"] = _prev_saved.get("models_updated_at", "")
-    _save_provider_keys()
+    if _save_provider_keys() is False:
+        if _prev_saved:
+            _provider_keys[pid] = _prev_saved
+        else:
+            _provider_keys.pop(pid, None)
+        return JSONResponse({"error": "Provider Key 保存失败，未更改模型配置"}, status_code=500)
     _sync_custom_providers_to_memomics(pid)
     # 联动：全局模型正在用这个 provider 时，同步新 key——
     # 否则"设置页存 key + 设全局模型"的顺序反了就会用旧 key（微信/新会话都会中招）
-    if _current_model.get("provider") == pid or _current_model.get("base_url") == _PROVIDERS_INDEX[pid]["api"]:
+    _current_pid = _provider_id_for_config(_current_model)
+    _current_matches = _provider_ids_for_base_url(
+        _current_model.get("base_url"), _provider_keys, _PROVIDERS_INDEX)
+    if (_current_pid == pid
+            or _current_model.get("provider") == pid  # legacy stable-id config
+            or (not _current_pid and len(_current_matches) == 1 and _current_matches[0] == pid)):
         _current_model["api_key"] = key
+        _current_model["provider_id"] = pid
         _save_model_config()
         for s in _sessions.values():
             if s.get("model_locked"):
                 continue  # 会话级锁定的配置不联动
-            if s.get("model_config") and s["model_config"].get("base_url") == _PROVIDERS_INDEX[pid]["api"]:
+            _session_cfg = s.get("model_config") or {}
+            _session_pid = _provider_id_for_config(_session_cfg)
+            _session_matches = _provider_ids_for_base_url(
+                _session_cfg.get("base_url"), _provider_keys, _PROVIDERS_INDEX)
+            if (_session_pid == pid
+                    or _session_cfg.get("provider") == pid
+                    or (not _session_pid and len(_session_matches) == 1 and _session_matches[0] == pid)):
                 s["model_config"]["api_key"] = key
+                s["model_config"]["provider_id"] = pid
         print(f"[MemOmics] provider {pid} 的 key 已同步到全局模型配置", flush=True)
+    # 自动 pin 只固定模型路由，不固定凭据；显式锁及未加载快照也同步新 Key。
+    _refresh_provider_key_in_session_routes(pid, key)
     _resp = {"ok": True, "provider": pid, "has_key": True}
     # 编程套餐（Kimi For Coding / GLM / 百炼 Coding / Step Plan）：保存 key 后自动拉模型。
     # 失败不阻断保存，只把结果回传前端提示。
@@ -11267,10 +12693,48 @@ async def save_provider_key(pid: str, payload: dict):
 @app.delete("/api/providers/{pid}/key")
 async def delete_provider_key(pid: str):
     """删除指定 provider 的 API Key（同步移除 MemOmics config.yaml custom_providers 条目）"""
+    pid = str(pid or "").strip()
+    removed_key = str(_provider_saved_entry(_provider_keys, pid).get("api_key") or "").strip()
     if pid in _provider_keys:
         del _provider_keys[pid]
         _save_provider_keys()
         _sync_custom_providers_to_memomics(pid)
+    # A delete must also revoke every in-memory config carrying this exact
+    # provider key.  Otherwise an empty-key model switch could retain a stale
+    # value and silently bypass the user's explicit key removal.  A distinct
+    # session-only key is intentionally left alone.
+    def _uses_deleted_provider(cfg):
+        cfg = cfg if isinstance(cfg, dict) else {}
+        explicit = str(cfg.get("provider_id") or "").strip()
+        if explicit:
+            return explicit == pid
+        if str(cfg.get("provider") or "").strip() == pid:
+            return True  # legacy configs stored the stable id in ``provider``
+        matches = _provider_ids_for_base_url(cfg.get("base_url"), _provider_keys, _PROVIDERS_INDEX)
+        return len(matches) == 1 and matches[0] == pid
+
+    def _holds_deleted_key(cfg):
+        return (_uses_deleted_provider(cfg)
+                and _is_valid_api_key(removed_key)
+                and str((cfg or {}).get("api_key") or "").strip() == removed_key)
+
+    if _holds_deleted_key(_current_model):
+        _current_model["api_key"] = ""
+        _save_model_config()
+        for session in _sessions.values():
+            if not _holds_deleted_key(session.get("model_config")):
+                continue
+            revoked = dict(session.get("model_config") or {})
+            revoked["api_key"] = ""
+            if _session_turn_is_active(session):
+                # The live agent owns its original constructor arguments, so
+                # changing the stored config does not redirect an in-flight
+                # request.  Rebuild only after that turn completes.
+                session["model_config"] = revoked
+                session["_reset_agent_after_turn"] = True
+            else:
+                session["model_config"] = revoked
+                _drop_cached_session_agent(session)
     return {"ok": True}
 
 
@@ -11572,6 +13036,7 @@ async def list_available_models(session_id: str = ""):
                 "base_url": p["api"],
                 "api_key": _mask_key(saved.get("api_key") or ""),   # 2026-10-11：明文不出后端
                 "has_key": bool(saved.get("api_key")),
+                "local": bool(saved.get("local")),
                 "reasoning": m.get("reasoning", False),
                 "tool_call": m.get("tool_call", False),
                 "is_current": is_current and cur_cfg.get("model") == m["id"],
@@ -11621,6 +13086,59 @@ async def usage_overview(fresh: int = 0, days: int = 30):
     except Exception as exc:
         return JSONResponse({"error": f"用量查询失败: {exc}"}, status_code=500)
     return _mask_keys_deep(data)
+
+
+@app.post("/api/imagej/upload")
+async def imagej_upload(files: list[UploadFile] = File(...)):
+    """ImageJ 专用上传：多文件、TIFF 与厂商格式；写入选配目录并返回本地绝对路径。
+
+    集群不在这里接收文件：后续 imagej(backend=cluster) 会通过 remote_cluster 的 SFTP
+    把这些本地路径传到该次作业的 in/ 目录，用户不需要先手工上传集群。
+    """
+    import uuid
+    from pathlib import Path as _Path
+    try:
+        from memomics.bio_tools import imagej_settings as _ij
+        cfg = _ij.load().get("local") or {}
+        target_root = os.path.abspath(os.path.expanduser(
+            str(cfg.get("upload_dir") or "").strip() or os.path.join(_uploads_dir, "imagej")))
+        os.makedirs(target_root, exist_ok=True)
+        allowed = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg",
+                   ".tif", ".tiff", ".czi", ".lif", ".nd2", ".vsi", ".oib", ".oif",
+                   ".ndpi", ".ims", ".svs", ".scn", ".nd", ".dm3", ".zvi"}
+        uploaded = []
+        for file in files:
+            original = os.path.basename(file.filename or "image.tif")
+            ext = _Path(original).suffix.lower()
+            if ext not in allowed:
+                return JSONResponse({"error": f"ImageJ 上传不支持该格式: {ext or original}"}, status_code=400)
+            # 不覆盖同名文件；保留原始扩展名供 ImageJ/Bio-Formats 识别
+            fname = f"{int(time.time() * 1000)}_{uuid.uuid4().hex[:8]}_{original}"
+            fpath = os.path.join(target_root, fname)
+            denied = _sandbox_precheck("fs.write", fpath, [target_root], "upload.imagej")
+            if denied:
+                return JSONResponse({"error": f"sandbox denied: {denied}"}, status_code=403)
+            total = 0
+            with open(fpath, "wb") as out:
+                while True:
+                    chunk = await file.read(8 * 1024 * 1024)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > 4 * 1024 * 1024 * 1024:
+                        out.close()
+                        os.remove(fpath)
+                        return JSONResponse({"error": f"{original} 超过 4GB 单文件上限"}, status_code=400)
+                    out.write(chunk)
+            rel = os.path.relpath(fpath, _uploads_dir)
+            url = "/uploads/" + rel.replace(os.sep, "/") if not rel.startswith("..") else ""
+            uploaded.append({"name": original, "path": fpath, "bytes": total, "url": url})
+        return {"ok": True, "upload_dir": target_root, "count": len(uploaded), "files": uploaded,
+                "paths": [x["path"] for x in uploaded]}
+    except Exception as exc:
+        logger.exception("ImageJ upload failed")
+        return JSONResponse({"error": f"ImageJ 上传失败: {exc}"}, status_code=500)
+
 
 
 # --- 微信 iLink 连接 ---
@@ -12387,7 +13905,7 @@ def _tasks_fingerprint():
 # 真机实测（2026-09-24）：debate_analysis 一跑就是 4-7 分钟（3 正 + 3 反 + 评委），
 # 长 R 脚本十几分钟也正常 —— 统一按 180 秒判"卡住"会把正常干活的会话全标成告警。
 # 按工具给一个"合理的沉默时长"，超过才提示可能卡住。
-_TOOL_EXPECT_SEC = {"debate_analysis": 900, "execute_r": 1800, "execute_python": 1800,
+_TOOL_EXPECT_SEC = {"debate_analysis": 900, "evidence_ledger": 420, "execute_r": 1800, "execute_python": 1800,
                     "terminal": 1800, "cellbender": 3600}
 
 
@@ -17544,6 +19062,76 @@ async def mark_result_viewed(sid: str, req: ResultViewedRequest):
             "viewed": bool(req.viewed), "viewed_count": len(data)}
 
 
+class ResultDeleteRequest(BaseModel):
+    paths: list = []            # 结果目录内的相对路径（也容忍绝对路径，但必须在结果目录内）
+
+
+@app.post("/api/results/{sid}/delete")
+async def delete_result_items(sid: str, req: ResultDeleteRequest):
+    """删除分析结果里的文件/文件夹（2026-11-04 用户要求：结果栏加「管理」按钮，
+    图片和文件用户可以自己删掉）。
+
+    安全口径与 viewed 一致：目标必须落在会话结果目录内（越界 403 风格地记入 failed）；
+    目录递归删除（_force_rmtree 先放开只读位）；点开头的内部文件（.viewed.json 等）不删；
+    删除成功后同步清理 .viewed.json 里对应的「已查看」记录。
+    单项失败不拖垮整批：逐项报 failed。
+    """
+    base = _find_best_results_dir(sid)
+    if not base and sid in _sessions:
+        base = _sessions[sid]["results_dir"]
+    if not base:
+        base = os.path.join(RESULTS_DIR, sid)
+    if not os.path.isdir(base):
+        return JSONResponse({"error": "No results directory for this session"}, status_code=404)
+    root = os.path.abspath(base)
+    raw_paths = req.paths if isinstance(req.paths, list) else []
+    raw_paths = [str(x).strip() for x in raw_paths if str(x or "").strip()][:200]
+    if not raw_paths:
+        return JSONResponse({"error": "paths is required"}, status_code=400)
+    deleted, failed = [], []
+    viewed = _viewed_load(root)
+    viewed_changed = False
+    for raw in raw_paths:
+        full = os.path.abspath(raw if os.path.isabs(raw) else os.path.join(root, raw))
+        if full == root or not full.startswith(root + os.sep):
+            failed.append({"path": raw, "error": "Path is outside the session results directory"})
+            continue
+        rel = os.path.relpath(full, root).replace(os.sep, "/")
+        if any(part.startswith(".") for part in rel.split("/")):
+            failed.append({"path": raw, "error": "Internal dot-files cannot be deleted"})
+            continue
+        if not os.path.lexists(full):
+            failed.append({"path": raw, "error": "File not found"})
+            continue
+        # P2-4 同款删动作过门：强制 fs.delete 观察期不拦，强制后越界/无授权即拒
+        _denied = _sandbox_precheck("fs.delete", full, [root], "results.delete")
+        if _denied:
+            failed.append({"path": raw, "error": "sandbox denied: %s" % _denied})
+            continue
+        try:
+            if os.path.isdir(full) and not os.path.islink(full):
+                _force_rmtree(full)
+            else:
+                os.remove(full)
+        except Exception as e:
+            failed.append({"path": raw, "error": str(e)})
+            continue
+        deleted.append(rel)
+        # 同步清掉「已查看」记录（目录 → 其前缀下全部条目）
+        for k in list(viewed.keys()):
+            if k == rel or k.startswith(rel.rstrip("/") + "/"):
+                viewed.pop(k, None)
+                viewed_changed = True
+    if viewed_changed:
+        try:
+            _viewed_save(root, viewed)
+        except Exception:
+            pass
+    logger.info("[MemOmics] 结果删除 sid=%s deleted=%d failed=%d", sid, len(deleted), len(failed))
+    return {"ok": not failed, "deleted": deleted, "failed": failed,
+            "deleted_count": len(deleted), "failed_count": len(failed)}
+
+
 # ============ 结果完成契约（P0-2）：analysis_manifest 协议 ============
 MANIFEST_SCHEMA = "memomics.analysis_manifest.v1"
 
@@ -18373,6 +19961,10 @@ def _debate_richness(x) -> int:
         n += 15
     if isinstance(x.get("judge_digest"), dict) and x.get("judge_digest"):
         n += 25
+    if isinstance(x.get("evidence_ledger"), dict) and x["evidence_ledger"].get("evidence_items"):
+        n += 18
+    if isinstance(x.get("assessment"), dict) and x["assessment"].get("label"):
+        n += 4
     if x.get("neutral_reviews"):
         n += 8
     if x.get("error"):
@@ -18417,6 +20009,16 @@ def _debate_display_count(sid: str, ts_epoch: float = 0.0) -> int:
 
 def _debate_verdict_bits(x: dict):
     """(结论文字, tone, 置信度原文, 置信度中文)"""
+    a = x.get("assessment") if isinstance(x.get("assessment"), dict) else {}
+    if a.get("label"):
+        label, tone = {
+            "supported": ("证据支持当前结论", "ok"),
+            "contradicted": ("当前结论需修正或被证据反对", "con"),
+            "unresolved": ("暂不能判断，先补决定性证据", "warn"),
+        }.get(str(a.get("label") or "").lower(), ("裁决：" + str(a.get("label")), "none"))
+        conf = str(a.get("confidence") or x.get("confidence") or "").strip()
+        conf_cn = {"high": "高", "medium": "中", "low": "低"}.get(conf.lower(), conf)
+        return label, tone, conf, conf_cn
     v = str(x.get("verdict") or "").strip()
     conf = str(x.get("confidence") or "").strip()
     jv = x.get("judge_verdict")
@@ -18436,6 +20038,9 @@ def _debate_verdict_bits(x: dict):
 def _debate_one_line(x: dict, limit: int = 300) -> str:
     """一句话依据：先说整理稿总结，其次裁判正文首句；都没有就给空串。"""
     cands = []
+    a = x.get("assessment") if isinstance(x.get("assessment"), dict) else {}
+    if a.get("summary"):
+        cands.append(str(a.get("summary")))
     d = x.get("judge_digest")
     if isinstance(d, dict):
         for k in ("summary", "overview", "note"):
@@ -18565,6 +20170,8 @@ def _debate_index_entry(sid: str, base: str, rel: str, abspath: str, x: dict, ke
     d = x.get("judge_digest") if isinstance(x.get("judge_digest"), dict) else {}
     # 2026-09-18 v4：赛前场景预判（辩论前先判「这是哪类问题」→ 席位身份与裁判 rubric 按场景生成）
     sc = x.get("scenario") if isinstance(x.get("scenario"), dict) else {}
+    ledger = x.get("evidence_ledger") if isinstance(x.get("evidence_ledger"), dict) else {}
+    evidence_items = ledger.get("evidence_items") if isinstance(ledger.get("evidence_items"), list) else []
     entry = {
         "key": key,
         "rel_path": rel,
@@ -18595,6 +20202,15 @@ def _debate_index_entry(sid: str, base: str, rel: str, abspath: str, x: dict, ke
         "scenario_error": str(x.get("scenario_error") or "").strip()[:200],
         "has_scenario": bool(sc),
         "models": models[:8],
+        # 历史折叠卡与实时卡同源：保留下一步与证据账摘要，不塞入完整长表。
+        "decision": str(x.get("decision") or ""),
+        "next_actions": x.get("next_actions") if isinstance(x.get("next_actions"), list) else [],
+        "fallback": x.get("fallback") if isinstance(x.get("fallback"), dict) else None,
+        "reopen_condition": str(x.get("reopen_condition") or ""),
+        "decision_source": str(x.get("decision_source") or ""),
+        "decision_warnings": x.get("decision_warnings") if isinstance(x.get("decision_warnings"), list) else [],
+        "has_evidence_ledger": bool(ledger),
+        "evidence_count": len(evidence_items),
     }
     entry.update(_debate_chain_bits(x))   # 2026-10-13：证据链状态（折叠卡片直接显示）
     return entry
@@ -20512,18 +22128,43 @@ def _auto_system_log(session, tool_name, args, result_str, tool_id=""):
 
 
 # === WebSocket ===
+def _clean_ws_request_id(value) -> str:
+    """Keep client request ids safe to echo and bounded in every WS response."""
+    raw = str(value or "").strip()
+    cleaned = re.sub(r"[^A-Za-z0-9._:-]", "", raw)[:128]
+    return cleaned or uuid.uuid4().hex
+
 
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
     """WebSocket 端点 — 支持多会话 + 后台任务"""
     await ws.accept()
     current_sid = None
+    current_request_id = ""
+    current_request_sid = ""
     loop = asyncio.get_event_loop()
 
     try:
         while True:
             data = await ws.receive_text()
-            msg = json.loads(data)
+            try:
+                msg = json.loads(data)
+            except Exception:
+                await ws.send_text(json.dumps({
+                    "type": "error", "scope": "protocol",
+                    "request_id": _clean_ws_request_id(None),
+                    "content": "WebSocket 消息不是有效 JSON",
+                }, ensure_ascii=False))
+                continue
+            if not isinstance(msg, dict):
+                await ws.send_text(json.dumps({
+                    "type": "error", "scope": "protocol",
+                    "request_id": _clean_ws_request_id(None),
+                    "content": "WebSocket 消息必须是 JSON 对象",
+                }, ensure_ascii=False))
+                continue
+            current_request_id = _clean_ws_request_id(msg.get("request_id"))
+            current_request_sid = ""
 
             # --- 消息类型 ---
             msg_type = msg.get("type", "chat")
@@ -20565,6 +22206,9 @@ async def ws_endpoint(ws: WebSocket):
                 continue
 
             sid = msg.get("session_id")
+            if sid is not None:
+                sid = str(sid).strip()
+                current_request_sid = sid
             prev_sid = current_sid  # 保存上一轮的 sid（switch_session 需要）
             # 2026-10-12：只读/控制类消息不再**隐式新建会话**。
             # 前端 ws.onopen 会立刻发 get_context_usage（此时 currentSid 还是 null），
@@ -20575,17 +22219,22 @@ async def ws_endpoint(ws: WebSocket):
                 if not sid:
                     await ws.send_text(json.dumps({
                         "type": "error",
+                        "scope": "protocol",
+                        "request_id": current_request_id,
                         "content": "该消息需要 session_id（type=%s）；本次不新建会话" % msg_type,
                     }, ensure_ascii=False))
                     continue
                 if sid not in _sessions and not _restore_single_session(sid):
                     await ws.send_text(json.dumps({
                         "type": "error",
+                        "session_id": sid,
+                        "request_id": current_request_id,
                         "content": "会话不存在：%s" % sid,
                     }, ensure_ascii=False))
                     continue
             session = _get_or_create_session(sid)
             current_sid = session["id"]
+            current_request_sid = session["id"]
 
             # 2026-10-19（steer 落空归一化）：会话当前没有可引导的运行中 agent 时，
             # 把"引导"直接转成普通新消息走 chat 通道（对齐 DSH best-effort 语义：
@@ -20638,6 +22287,42 @@ async def ws_endpoint(ws: WebSocket):
             elif msg_type == "chat":
                 user_text = msg.get("message", msg.get("content", "")).strip()
                 image_urls = msg.get("images", []) or []
+                # 允许仅图片无文字；空回合不进入聊天状态机。
+                if not user_text and not image_urls:
+                    continue
+                # Claim before any acknowledgement, history mutation, or
+                # agent/setup work.  A rapid second chat for the same session
+                # must not overwrite the first turn's request id or context.
+                turn_request_id = current_request_id
+                turn_session = session
+                turn_user_text = str(user_text)
+                turn_image_urls = list(image_urls) if isinstance(image_urls, (list, tuple)) else image_urls
+                claimed, owner_request_id = _claim_session_user_turn(turn_session, turn_request_id)
+                if not claimed:
+                    await ws.send_text(json.dumps({
+                        "type": "error",
+                        "code": "turn_in_progress",
+                        "preserve_draft": True,
+                        "session_id": turn_session["id"],
+                        "request_id": turn_request_id,
+                        "owner_request_id": owner_request_id,
+                        "content": "该会话正在处理上一条消息；本次草稿未提交，已保留，请等待完成后再发送。",
+                    }, ensure_ascii=False))
+                    continue
+                # From here through task scheduling these names describe one
+                # immutable turn.  Closures below capture the frozen aliases,
+                # not the WebSocket loop's next inbound message.
+                session = turn_session
+                user_text = turn_user_text
+                image_urls = turn_image_urls
+                # Receipt means the server has accepted a valid user turn; it
+                # deliberately does not claim that model creation or inference
+                # has succeeded.  It is the first session-scoped chat event.
+                await ws.send_text(json.dumps({
+                    "type": "chat_accepted",
+                    "session_id": session["id"],
+                    "request_id": turn_request_id,
+                }, ensure_ascii=False))
                 # P3(2026-09-22): 用户直接回消息 = 对确认弹窗的答复 → 立即解除执行门禁
                 # （弹窗提交走 /api/ask_form/answer 后也把答复当消息发回，会命中这里）
                 try:
@@ -20659,9 +22344,6 @@ async def ws_endpoint(ws: WebSocket):
                         session["_intent_confirmed"] = True
                 except Exception:
                     pass
-                # 允许仅图片无文字
-                if not user_text and not image_urls:
-                    continue
                 # 新一轮用户指令：重置循环守卫的检测窗口（保留注入计数）
                 try:
                     _lg = session.get("_loop_guard")
@@ -20748,11 +22430,9 @@ async def ws_endpoint(ws: WebSocket):
                 # 记录用户消息到 session + state.db
                 session["messages"].append({"role": "user", "content": user_text, "time": datetime.now().strftime("%H:%M:%S")})
                 session["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                # 并发护栏(2026-08-20 memomics-2274ab75 只说不做): 用户消息一进来就置位,
-                # 自检唤醒/心跳在该标记为真期间不得启动并发 agent 回合——否则两个回合在
-                # 同一 agent 上交错流, single-writer 护栏砍掉在飞流导致工具参数被截断为空。
-                # 在 self_intro/agent创建失败/run_agent finally 三处清除。
-                session["_user_turn_active"] = True
+                # The turn was atomically claimed before its receipt/history
+                # mutation.  Keep the explicit thread-state accounting here,
+                # but never overwrite the claim with a later inbound chat.
                 # P2-2：显式回合记账（默认只记账，不改行为；同一会话第二个回合起飞时计 conflicts）。
                 # P2-2 补丁：MEMOMICS_THREAD_SERIALIZE=1 时先过串行化门——等同会话上一个回合收尾
                 # 再开新回合，conflicts 归零；默认关 = 立刻返回、零开销、行为与以前完全一致。
@@ -20912,9 +22592,12 @@ async def ws_endpoint(ws: WebSocket):
                         # 2026-10-24：未配置就发消息 → 给可读提示并让前端弹回配置向导，
                         # 不再转发 hermes-agent 的原始报错（用户看不懂、也不知去哪配）
                         _session_emit(session, {"type": "error", "content": "⚠️ " + _cfg_err,
-                                                "need_setup": True})
-                        session["_user_turn_active"] = False
-                        if _thread_state is not None:
+                                                "need_setup": True,
+                                                "code": "model_not_ready",
+                                                "request_id": turn_request_id})
+                        _released_turn = _release_session_user_turn(session, turn_request_id)
+                        _apply_deferred_model_update(session)
+                        if _released_turn and _thread_state is not None:
                             _thread_state.mark_turn_end(session["id"])
                         continue
                     try:
@@ -20923,14 +22606,18 @@ async def ws_endpoint(ws: WebSocket):
                         _session_emit(session, {"type": "progress", "step": _ei, "status": "done",
                             "detail": _pt(session, "engine_ready"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
                     except Exception as e:
-                        # 兜底：仍然失败时把原始信息附在人话后面，便于排查
-                        _msg = str(e)
-                        if "no API key" in _msg or "API key was found" in _msg:
-                            _msg = ("还没有配置 API Key（或 Key 无效）—— 请在「⚙️ 设置」里填好再试。"
-                                    "\n技术细节：" + _msg[:200])
-                        _session_emit(session, {"type": "error", "content": f"Agent 创建失败: {_msg}"})
-                        session["_user_turn_active"] = False  # 并发护栏: 失败路径也需清除
-                        if _thread_state is not None:
+                        # Exception text may include a provider URL, key path,
+                        # or proxy argument.  Keep diagnostics server-side
+                        # without echoing it to this WebSocket/browser.
+                        logger.error("[agent] initialization failed type=%s session=%s",
+                                     type(e).__name__, session["id"][:16])
+                        _session_emit(session, {"type": "error", "content": "Agent 初始化失败，请检查模型设置后重试。",
+                                                "need_setup": True,
+                                                "code": "agent_initialization_failed",
+                                                "request_id": turn_request_id})
+                        _released_turn = _release_session_user_turn(session, turn_request_id)
+                        _apply_deferred_model_update(session)
+                        if _released_turn and _thread_state is not None:
                             _thread_state.mark_turn_end(session["id"])
                         continue
 
@@ -21062,21 +22749,34 @@ async def ws_endpoint(ws: WebSocket):
                         "请使用**中文**回复用户（包括图表标题与图注、报告正文）。"
                     )
 
+                # 2026-11-09：ImageJ 会话开关 —— 每回合重新读配置与开关（不缓存整段），
+                # 上下文再长也不会忘记怎么调；关掉按钮即刻停止注入。
+                try:
+                    from memomics.bio_tools import imagej_settings as _ij_settings
+                    _ij_block = _ij_settings.prompt_block(session.get("id", ""))
+                    if _ij_block:
+                        agent.ephemeral_system_prompt += "\n\n" + _ij_block
+                except Exception as _e_ij:
+                    logger.warning(f"[imagej] 注入失败(不阻断): {_e_ij}")
+
+
                 # 进度发送辅助函数
                 def _send_progress(step, status, detail="", _s=session):
                     """发送进度时间线条目 - 同时存储到 progress_log"""
                     _session_emit(_s, {"type": "progress", "step": step, "status": status, "detail": detail, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
 
                 # 回调
-                has_delta = False  # 追踪是否已通过流式发送过文本
+                # Mutable per-turn state is captured by callbacks below.  Do
+                # not use a loop-local scalar here: the next WebSocket frame
+                # would otherwise rebind it while this agent is streaming.
+                turn_stream_state = {"has_delta": False}
                 session.pop("_narration", None)   # 2026-10-23：阶段小结提醒按回合重置
                 session.pop("_final_nudge_used", None)   # 2026-10-27：交付补齐每用户回合最多 1 次
 
-                def stream_cb(delta, _s=session):
-                    nonlocal has_delta
+                def stream_cb(delta, _s=session, _turn_stream_state=turn_stream_state):
                     try:
                         if delta is None: return
-                        has_delta = True
+                        _turn_stream_state["has_delta"] = True
                         _narr = _s.setdefault("_narration", {"round_chars": 0, "nudges": 0, "tools": 0})
                         _narr["round_chars"] = _narr.get("round_chars", 0) + len(str(delta))   # 2026-10-23 正文计数
                         _s["_turn_activity_ts"] = time.time()
@@ -21093,9 +22793,11 @@ async def ws_endpoint(ws: WebSocket):
                     except Exception:
                         pass
 
-                _tool_call_log = []
+                turn_tool_call_log = []
                 
-                def tool_start_cb(tool_id, tool_name, args=None, _s=session):
+                def tool_start_cb(tool_id, tool_name, args=None, _s=session,
+                                  _turn_tool_call_log=turn_tool_call_log,
+                                  _send_progress_fn=_send_progress):
                     try:
                         # 循环检测：连续重复工具调用（如反复 tail 日志监控安装）
                         _loop_check(_s, None, "tool_start", tool_name=tool_name, args=args, tool_id=tool_id)
@@ -21234,7 +22936,7 @@ async def ws_endpoint(ws: WebSocket):
                         if tool_name in _PRODUCING_TOOLS and isinstance(args, dict):
                             if "[⛔ 执行保护]" not in str(args.get("command", args.get("code", ""))):
                                 _s["_real_exec_this_turn"] = True
-                        _tool_call_log.append({"tool": tool_name, "id": tool_id})
+                        _turn_tool_call_log.append({"tool": tool_name, "id": tool_id})
                         _s["_api_calls"] = int(_s.get("_api_calls", 0)) + 1
                         _s["_live_tool"] = tool_name
                         _s["_live_tool_ts"] = time.time()
@@ -21253,7 +22955,7 @@ async def ws_endpoint(ws: WebSocket):
                             pass
 
                         # 问题4: 激活进度时间线 — 工具开始时推送进度
-                        _send_progress(_pt(_s, "executing") + ": " + tool_name, "pending", tool_name)
+                        _send_progress_fn(_pt(_s, "executing") + ": " + tool_name, "pending", tool_name)
                     except Exception:
                         pass
 
@@ -21270,7 +22972,7 @@ async def ws_endpoint(ws: WebSocket):
                 except Exception:
                     pass
 
-                def _scan_new_figures(_s=session):
+                def _scan_new_figures(_s=session, _known_figures=_known_figures):
                     """扫描 results_dir 下的新图片，返回新增列表"""
                     new_figs = []
                     base = _s.get("results_dir", "")
@@ -21295,7 +22997,8 @@ async def ws_endpoint(ws: WebSocket):
 
                 _main_loop = asyncio.get_running_loop()  # for thread-safe async scheduling
 
-                def tool_complete_cb(tool_id, tool_name, args=None, result=None, _s=session, _agent=agent):
+                def tool_complete_cb(tool_id, tool_name, args=None, result=None, _s=session, _agent=agent,
+                                     _send_progress_fn=_send_progress, _scan_new_figures_fn=_scan_new_figures):
                     try:
                         result_str = str(result or "")
                         # 2026-08-16: 长工具完成后刷新活动时间 + 清除工具在飞标记——
@@ -21355,7 +23058,7 @@ async def ws_endpoint(ws: WebSocket):
                             except Exception as _e_plan:
                                 logger.warning(f"[DEBATE-PLAN] 待办同步失败: {_e_plan}")
                         # 问题4: 激活进度时间线 — 工具完成时推送进度
-                        _send_progress(_pt(_s, "tool_completed") + ": " + tool_name, "done", tool_name)
+                        _send_progress_fn(_pt(_s, "tool_completed") + ": " + tool_name, "done", tool_name)
                         # 2026-08-16 任务类型：管线启动命令 = 长任务运行时证据
                         _is_launch = tool_name in ("terminal", "execute_code", "execute_python") and _is_launch_command(str(args))
                         if _is_launch:
@@ -21491,7 +23194,7 @@ async def ws_endpoint(ws: WebSocket):
                                                             "status": "pending",
                                                         })
                                                     _agent._todo_store.write(memomics_todos)
-                                                    session["_pipeline_todos"] = pipe_todos
+                                                    _s["_pipeline_todos"] = pipe_todos
                                                     logger.info(f"[TODO-FALLBACK] 自动生成 {len(pipe_todos)} 个默认待办")
                                                 except Exception:
                                                     pass
@@ -21515,7 +23218,7 @@ async def ws_endpoint(ws: WebSocket):
                                             })
                                         else:
                                             store_todos.append(t)
-                                pipeline_todos = session.get("_pipeline_todos", [])
+                                pipeline_todos = _s.get("_pipeline_todos", [])
                                 if not store_todos and pipeline_todos:
                                     todos = pipeline_todos
                                 else:
@@ -21546,17 +23249,17 @@ async def ws_endpoint(ws: WebSocket):
                                                         st["skill"] = best.get("skill", "")
                                                         st["module"] = best.get("module", "")
                                 # 空清单也要推（见 _should_emit_todos）：清空必须让前端知道
-                                if _should_emit_todos(todos, session.get("todos")):
+                                if _should_emit_todos(todos, _s.get("todos")):
                                     # P2(2026-09-22): 裁决待办完成状态回写（blocks 硬约束据此解除）
                                     try:
                                         from webui import enforcement as _enf_sync
                                         _n_sync = _enf_sync.sync_debate_todos(
-                                            _enf_sync.get_enforcement(session["id"]), todos)
+                                            _enf_sync.get_enforcement(_s["id"]), todos)
                                         if _n_sync:
                                             logger.info(f"[DEBATE-PLAN] 裁决待办状态同步 {_n_sync} 条")
                                     except Exception:
                                         pass
-                                    _session_emit(session, {"type": "todos_update", "todos": todos, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                                    _session_emit(_s, {"type": "todos_update", "todos": todos, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                             except Exception:
                                 pass
                         # P5: 文献结果缓存 (去重, 24h 有效)
@@ -21564,24 +23267,24 @@ async def ws_endpoint(ws: WebSocket):
                             try:
                                 import hashlib as _hl
                                 query_key = _hl.md5(str(args).encode()).hexdigest()[:16]
-                                _lit_cache[query_key] = (time.time(), result_str[:10000], session["id"])
+                                _lit_cache[query_key] = (time.time(), result_str[:10000], _s["id"])
                                 now2 = time.time()
                                 _lit_cache.update({k: v for k, v in list(_lit_cache.items()) if now2 - v[0] < 86400})
                             except Exception: pass
                         # terminal 执行后检测新图片
                         if tool_name in ("terminal", "run_command", "execute_code"):
-                            new_figs = _scan_new_figures()
+                            new_figs = _scan_new_figures_fn()
                             for fig in new_figs:
-                                _session_emit(session, {"type": "new_figure", "figure": fig, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]})
+                                _session_emit(_s, {"type": "new_figure", "figure": fig, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                                 # 📱 新图片自动推送微信
-                                img_path = os.path.join(session.get("results_dir", ""), fig["rel_path"])
+                                img_path = os.path.join(_s.get("results_dir", ""), fig["rel_path"])
                                 _weixin_push_image(img_path, f"🖼️ {fig['name']}", loop=_main_loop)
                         # 🔧 系统级自动日志：每个关键工具调用都写入 log/ 目录
                         # 先确保 results_dir 物理目录存在（纯聊天不创建，首次分析自动创建）
-                        _ensure_results_dir(session)
-                        _auto_system_log(session, tool_name, args, result_str, tool_id=tool_id)
+                        _ensure_results_dir(_s)
+                        _auto_system_log(_s, tool_name, args, result_str, tool_id=tool_id)
                         # 📱 微信进度推送：关键步骤完成时推送到微信
-                        _weixin_push_progress(session, tool_name, result_str, loop=_main_loop)
+                        _weixin_push_progress(_s, tool_name, result_str, loop=_main_loop)
                         # 🔧 update_results_dir 后同步更新 session 的 results_dir
                         # 安全规则：results_dir 必须在 results/ 下，外部路径改为 output_root 镜像
                         if tool_name == "update_results_dir":
@@ -21593,13 +23296,13 @@ async def ws_endpoint(ws: WebSocket):
                                     if os.path.abspath(new_dir).startswith(_results_base + os.sep) or \
                                        os.path.abspath(new_dir) == _results_base:
                                         # 合法：在 results/ 下，直接更新
-                                        session["results_dir"] = new_dir
+                                        _s["results_dir"] = new_dir
                                         db = _get_session_db()
                                         if db:
-                                            db.update_session_cwd(session["id"], new_dir.replace("\\", "/"))
+                                            db.update_session_cwd(_s["id"], new_dir.replace("\\", "/"))
                                     else:
                                         # 外部路径（如桌面）：不覆盖 results_dir，记录为 output_root
-                                        session["output_root"] = new_dir
+                                        _s["output_root"] = new_dir
                                         logger.info(f"[MemOmics] update_results_dir 外部路径记录为 output_root: {new_dir}")
                             except Exception:
                                 pass
@@ -21636,7 +23339,8 @@ async def ws_endpoint(ws: WebSocket):
                     except Exception:
                         pass
 
-                def tool_progress_cb(tool_name, progress_msg, percent=None, _s=session):
+                def tool_progress_cb(tool_name, progress_msg, percent=None, _s=session,
+                                     _send_progress_fn=_send_progress):
                     try:
                         _s["_turn_activity_ts"] = time.time()
                     except Exception:
@@ -21651,7 +23355,7 @@ async def ws_endpoint(ws: WebSocket):
                             msg_str = _pt(_s, "tool_completed")
                         _session_emit(_s, {"type": "tool_progress", "tool": tool_name, "content": msg_str[:500], "percent": percent, "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                         # 问题4: 同步推送到进度时间线
-                        _send_progress(_pt(_s, "executing") + ": " + tool_name, "pending", msg_str[:200])
+                        _send_progress_fn(_pt(_s, "executing") + ": " + tool_name, "pending", msg_str[:200])
                     except Exception:
                         pass
 
@@ -21661,28 +23365,44 @@ async def ws_endpoint(ws: WebSocket):
                 # 之前本地回调直接覆盖，导致审查硬阻断（es.blocked / 自杀命令 / record_run 门禁）在主聊天路径失效。
                 # enforcement 回调返回 {"blocked": True, "message": ...} 时透传给 tool_executor 硬拦截。
                 # 2026-08-17: 幂等合并——此前每次进入都再包一层，链长随触发次数增长
-                # （实测单事件被触发 984 次 → system_log 写放大 984x、UI 卡顿）
+                # （实测单事件被触发 984 次 → system_log 写放大 984x、UI 卡顿）。
+                #
+                # 这两个回调本身必须每轮更新：agent 是会话级复用的，而 tool_start_cb /
+                # tool_complete_cb 捕获的是本轮独立的 turn_tool_call_log。外层 enforcement
+                # wrapper 只装一次，但通过 agent 属性在实际触发时取本轮回调，不能把首轮
+                # closure 固定在默认参数中；否则第二轮工具会写回首轮日志，导致本轮的摘要、
+                # 空响应检查和交付检查都误判。
+                agent._memomics_turn_tool_start_cb = tool_start_cb
+                agent._memomics_turn_tool_complete_cb = tool_complete_cb
                 if not getattr(agent, "_memomics_ws_cbs_merged", False):
                     _enf_tool_start = getattr(agent, "tool_start_callback", None)
                     _enf_tool_complete = getattr(agent, "tool_complete_callback", None)
-                    def _merged_tool_start(tool_id, tool_name, args=None, _s=session):
+                    def _merged_tool_start(tool_id, tool_name, args=None, _agent=agent,
+                                           _enf_tool_start=_enf_tool_start):
                         _block = None
                         if _enf_tool_start:
                             try:
                                 _block = _enf_tool_start(tool_id, tool_name, args)
                             except Exception:
                                 pass
-                        tool_start_cb(tool_id, tool_name, args)
+                        _turn_tool_start_cb = getattr(_agent, "_memomics_turn_tool_start_cb", None)
+                        if callable(_turn_tool_start_cb):
+                            _turn_tool_start_cb(tool_id, tool_name, args)
                         return _block
-                    def _merged_tool_complete(tool_id, tool_name, args=None, result=None, _s=session):
+                    def _merged_tool_complete(tool_id, tool_name, args=None, result=None, _agent=agent,
+                                              _anchor_session=session,
+                                              _enf_tool_complete=_enf_tool_complete):
                         if _enf_tool_complete:
                             try:
                                 _enf_tool_complete(tool_id, tool_name, args, result)
                             except Exception:
                                 pass
-                        tool_complete_cb(tool_id, tool_name, args, result)
+                        _turn_tool_complete_cb = getattr(_agent, "_memomics_turn_tool_complete_cb", None)
+                        if callable(_turn_tool_complete_cb):
+                            _turn_tool_complete_cb(tool_id, tool_name, args, result)
                         # 2026-08-14: 自动锚定本轮新产物文件（会话锚点）
-                        _auto_anchor_turn(_s, tool_name=tool_name, args=args)
+                        _auto_anchor_turn(getattr(_agent, "memomics_session", None) or _anchor_session,
+                                          tool_name=tool_name, args=args)
                     agent.tool_start_callback = _merged_tool_start
                     agent.tool_complete_callback = _merged_tool_complete
                     agent._memomics_ws_cbs_merged = True
@@ -21693,21 +23413,24 @@ async def ws_endpoint(ws: WebSocket):
                 agent.tool_progress_callback = tool_progress_cb
 
                 # 问题4: 接通 clarify_callback — agent 提问时不中断进度，改为 waiting 状态
-                def clarify_cb(question=None, _s=session, **kwargs):
+                def clarify_cb(question=None, _s=session, _send_progress_fn=_send_progress, **kwargs):
                     try:
                         q_text = str(question) if question else "Please confirm"
                         # 进度不停，只改为 waiting 状态
-                        _send_progress(_pt(_s, "waiting"), "waiting", q_text[:200])
+                        _send_progress_fn(_pt(_s, "waiting"), "waiting", q_text[:200])
                         _session_emit(_s, {"type": "clarify", "content": q_text[:500], "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _s["id"]})
                     except Exception:
                         pass
                 agent.clarify_callback = clarify_cb
 
                 # 问题4: 长任务心跳监控 — 每 30s 检查磁盘进度并汇报
-                _heartbeat_active = {"on": True}
-                _heartbeat_last_report = {"ts": 0}
+                turn_heartbeat_active = {"on": True}
+                turn_heartbeat_last_report = {"ts": 0}
 
-                async def _heartbeat_loop(_s=session, _agent=agent):
+                async def _heartbeat_loop(_s=session, _agent=agent,
+                                          _heartbeat_active=turn_heartbeat_active,
+                                          _heartbeat_last_report=turn_heartbeat_last_report,
+                                          _send_progress_fn=_send_progress):
                     while _heartbeat_active["on"]:
                         await asyncio.sleep(30)
                         try:
@@ -21913,13 +23636,13 @@ async def ws_endpoint(ws: WebSocket):
 
                             if _report_parts:
                                 _detail = " | ".join(_report_parts)
-                                _send_progress(_pt(_s, "monitoring"), "pending",
-                                               f"🕐 {datetime.now().strftime('%H:%M')} {_detail}")
+                                _send_progress_fn(_pt(_s, "monitoring"), "pending",
+                                                  f"🕐 {datetime.now().strftime('%H:%M')} {_detail}")
                             else:
-                                _send_progress(_pt(_s, "thinking"), "pending", _pt(_s, "running_task"))
+                                _send_progress_fn(_pt(_s, "thinking"), "pending", _pt(_s, "running_task"))
                         except Exception:
                             pass
-                _heartbeat_task = asyncio.ensure_future(_heartbeat_loop())
+                turn_heartbeat_task = asyncio.ensure_future(_heartbeat_loop())
 
                 # 统一事件流：MemOmics event_callback 转发所有结构化事件到 WebSocket
                 def event_cb(event_type, data, _s=session):
@@ -22015,7 +23738,14 @@ async def ws_endpoint(ws: WebSocket):
                 # 是否后台运行
                 is_bg = msg.get("background", False)
 
-                async def run_agent(_intent=_intent, _skill_ctx=_skill_ctx, _env_ctx=_env_ctx, _html_ctx=_html_ctx, _session=session, _agent=agent):
+                async def run_agent(_intent=_intent, _skill_ctx=_skill_ctx, _env_ctx=_env_ctx, _html_ctx=_html_ctx,
+                                    _session=session, _agent=agent, _request_id=turn_request_id,
+                                    _user_text=turn_user_text, _turn_run_text=_run_text,
+                                    _turn_loop=loop, _turn_tool_call_log=turn_tool_call_log,
+                                    _turn_stream_state=turn_stream_state,
+                                    _turn_heartbeat_active=turn_heartbeat_active,
+                                    _turn_heartbeat_task=turn_heartbeat_task,
+                                    _turn_is_heavy=_is_heavy):
                     """在 executor 中运行 _agent — 用 run_conversation + conversation_history"""
                     try:
                         # 惰性加载兜底：确保上下文构建器（task_plan/resume 等）能读到完整历史
@@ -22088,7 +23818,7 @@ async def ws_endpoint(ws: WebSocket):
                                 _dedupe.append(_m)
                                 _prev_key = _key
                             conversation_history = _dedupe
-                            _mem_digest = _build_memory_digest(_session, user_text or "")
+                            _mem_digest = _build_memory_digest(_session, _user_text or "")
                             if _mem_digest:
                                 conversation_history = [m for m in conversation_history
                                     if not (isinstance(m.get("content"), str)
@@ -22133,7 +23863,7 @@ async def ws_endpoint(ws: WebSocket):
                         # 把本会话已登记的数据集清单注入系统提示 —— 模型才知道哪些可以直接复用。
                         try:
                             from memomics.bio_tools.dataset_cache import build_cache_hint as _cache_hint
-                            _ch = _cache_hint(session.get("results_dir", "") or "")
+                            _ch = _cache_hint(_session.get("results_dir", "") or "")
                             if _ch:
                                 conversation_history.append({"role": "system", "content": _ch})
                         except Exception:
@@ -22141,7 +23871,7 @@ async def ws_endpoint(ws: WebSocket):
                         # 2026-10-18：集群作业摘要（跨回合"记得"在跑的任务，几天后回来也对得上）
                         try:
                             from memomics.bio_tools.node_state import jobs_summary as _jobs_summary
-                            _jh = _jobs_summary(session.get("id") or "")
+                            _jh = _jobs_summary(_session.get("id") or "")
                             if _jh:
                                 conversation_history.append({"role": "system", "content": _jh})
                         except Exception:
@@ -22158,7 +23888,7 @@ async def ws_endpoint(ws: WebSocket):
                         # 🔧 KB 预查询/领域引导 → 尾部 system 消息（2026-08-21 缓存优化：
                         # 放前缀会破坏 DeepSeek 前缀缓存，放尾部只影响最新请求段）
                         try:
-                            _kb_tail = _build_kb_tail_injection(user_text or "", _intent, _is_heavy)
+                            _kb_tail = _build_kb_tail_injection(_user_text or "", _intent, _turn_is_heavy)
                             if _kb_tail:
                                 conversation_history.append({"role": "system", "content": _kb_tail})
                         except Exception:
@@ -22166,7 +23896,7 @@ async def ws_endpoint(ws: WebSocket):
 
                         # P3(2026-09-22): 确认弹窗的结构化答复 → 确定性上下文（只注入一次）
                         try:
-                            _form_ctx = _build_ask_form_context(_session, user_text or "")
+                            _form_ctx = _build_ask_form_context(_session, _user_text or "")
                             if _form_ctx:
                                 conversation_history.append({"role": "system", "content": _form_ctx})
                         except Exception:
@@ -22179,14 +23909,14 @@ async def ws_endpoint(ws: WebSocket):
                         # 记忆里正好有他的数据 → **服务器自己**弹窗问"要不要用数据验证"。
                         _ce_mode, _ce_data = "", []
                         try:
-                            _ce_mode = _code_edit_mode(user_text or "")
-                            _is_form_ans = _is_form_answer_text(user_text or "", _session)
+                            _ce_mode = _code_edit_mode(_user_text or "")
+                            _is_form_ans = _is_form_answer_text(_user_text or "", _session)
                             from webui import enforcement as _enf_ce
                             _es_ce = _enf_ce.get_enforcement(_session.get("id", ""))
                             if _ce_mode == "edit":
-                                _ce_data = _find_memory_data(_session, user_text or "")
+                                _ce_data = _find_memory_data(_session, _user_text or "")
                                 _enf_ce.arm_code_edit(
-                                    _es_ce, "用户要求改代码、没说要跑：%s" % (user_text or "")[:60],
+                                    _es_ce, "用户要求改代码、没说要跑：%s" % (_user_text or "")[:60],
                                     data=_ce_data)
                                 if _ce_data and not _session.get("_code_edit_asked"):
                                     _fid_ce, _ok_ce = _emit_code_edit_form(_session, _ce_data)
@@ -22205,7 +23935,7 @@ async def ws_endpoint(ws: WebSocket):
                             try:
                                 conversation_history.append({
                                     "role": "system",
-                                    "content": _build_code_edit_prompt(_session, user_text or "",
+                                    "content": _build_code_edit_prompt(_session, _user_text or "",
                                                                        _ce_mode, _ce_data)})
                                 logger.info("[code_edit] session %s mode=%s data=%d asked=%s",
                                             str(_session.get("id", ""))[:12], _ce_mode, len(_ce_data),
@@ -22218,17 +23948,17 @@ async def ws_endpoint(ws: WebSocket):
                                 from webui import enforcement as _enf_ce2
                                 _es_ce2 = _enf_ce2.get_enforcement(_session.get("id", ""))
                                 if _enf_ce2.code_edit_pending(_es_ce2) and not \
-                                        _is_form_answer_text(user_text or "", _session):
+                                        _is_form_answer_text(_user_text or "", _session):
                                     _enf_ce2.clear_code_edit(_es_ce2)
                                     logger.info("[code_edit] 用户新消息 → 解锁代码修改模式")
                             except Exception:
                                 pass
                             try:
-                                _grill = _build_grill_prompt(_session, user_text or "", _intent)
+                                _grill = _build_grill_prompt(_session, _user_text or "", _intent)
                                 if _grill:
                                     conversation_history.append({"role": "system", "content": _grill})
                                 else:
-                                    _iconf = _build_intent_confirm_prompt(_session, user_text or "", _intent)
+                                    _iconf = _build_intent_confirm_prompt(_session, _user_text or "", _intent)
                                     if _iconf:
                                         conversation_history.append({"role": "system", "content": _iconf})
                                         try:
@@ -22247,10 +23977,10 @@ async def ws_endpoint(ws: WebSocket):
                         # 用户消息带新数据路径且不是"继续/接着"→ 视为新任务，
                         # 跳过 task_plan 恢复 + 主线续跑注入，先干净回答新问题。
                         _new_data_task = False
-                        if user_text:
+                        if _user_text:
                             try:
-                                _new_paths = re.findall(r'[A-Za-z]:[/\\]\S+', user_text)
-                                _is_continue = any(w in user_text for w in
+                                _new_paths = re.findall(r'[A-Za-z]:[/\\]\S+', _user_text)
+                                _is_continue = any(w in _user_text for w in
                                     ("继续", "接着", "下一步", "然后", "继续跑", "接着跑", "继续做", "接着做"))
                                 _new_data_task = bool(_new_paths) and not _is_continue
                             except Exception:
@@ -22302,7 +24032,7 @@ async def ws_endpoint(ws: WebSocket):
                         # ── 2026-08-31 L0/L1 结论注册表注入（关键结论/修复/决策，勿重跑） ──
                         try:
                             from conclusion_store import build_memory_budget_context
-                            _l1_ctx = build_memory_budget_context(_session, user_text or "", limit=20, max_chars=4000)
+                            _l1_ctx = build_memory_budget_context(_session, _user_text or "", limit=20, max_chars=4000)
                             if _l1_ctx:
                                 conversation_history.append({"role": "system", "content": _l1_ctx})
                         except Exception:
@@ -22310,7 +24040,7 @@ async def ws_endpoint(ws: WebSocket):
 
                         # ── 2026-08-31 待确认问题追踪：用户“需要”必须绑定上一轮问话 ──
                         try:
-                            _pend_ctx = _build_pending_question_context(_session, user_text or "")
+                            _pend_ctx = _build_pending_question_context(_session, _user_text or "")
                             if _pend_ctx:
                                 conversation_history.append({"role": "system", "content": _pend_ctx})
                         except Exception:
@@ -22325,21 +24055,10 @@ async def ws_endpoint(ws: WebSocket):
                             pass
 
                         # ── 2026-08-29 注意力聚焦：最新用户消息前放“本轮唯一任务”转向标记 ──
-                        # 实证：历史里紧邻的旧问答会把模型注意力吸走 → 回答上一个问题。
-                        # 把用户本轮消息摘抄到 system 尾部，明确“只回答这一条、以本轮为准”。
+                        # 历史用于理解指代/选项，不是让模型忽略上下文；短选项答复先由确定性机制展开。
                         try:
-                            # 2026-10-21：短回答自动锚定（只改这一份 system 文本，不动 user_text）
-                            try:
-                                _focus_text = _answer_anchor(conversation_history or [], (user_text or "").strip())
-                            except Exception:
-                                _focus_text = (user_text or "").strip()
-                            if _focus_text:
-                                _turn_focus = (
-                                    "【本轮唯一任务 — 最高优先级】下面是用户刚刚发送的消息，"
-                                    "请只回答这一条，不要延续或重复你上一轮的输出；"
-                                    "历史对话仅供背景，若与历史相似，以本轮用户消息为准。\n"
-                                    f"用户本轮消息：{_focus_text[:800]}"
-                                )
+                            _turn_focus = _build_turn_focus_prompt(conversation_history or [], user_text)
+                            if _turn_focus:
                                 conversation_history.append({"role": "system", "content": _turn_focus})
                         except Exception:
                             pass
@@ -22359,7 +24078,7 @@ async def ws_endpoint(ws: WebSocket):
                             except Exception:
                                 pass
                             result = _agent.run_conversation(
-                                _run_text,
+                                _turn_run_text,
                                 conversation_history=conversation_history if conversation_history else None,
                                 task_id=_session["id"],
                             )
@@ -22381,7 +24100,7 @@ async def ws_endpoint(ws: WebSocket):
                         if _intent == "research_plan":
                             try:
                                 result = await asyncio.wait_for(
-                                    loop.run_in_executor(None, _do_run),
+                                    _turn_loop.run_in_executor(None, _do_run),
                                     timeout=480
                                 )
                             except asyncio.TimeoutError:
@@ -22392,16 +24111,16 @@ async def ws_endpoint(ws: WebSocket):
                         else:
                             # 2026-08-27 用户要求：去除 15 分钟绝对超时保护（长任务会被误杀）。
                             # 不再设置 turn 级绝对上限；服务端仍保留 5 分钟无输出 stall watchdog 兜底。
-                            result = await loop.run_in_executor(None, _do_run)
+                            result = await _turn_loop.run_in_executor(None, _do_run)
 
                         # ── 2026-08-31 L0 结论注册表：本轮结论/修复/失败/决策自动沉淀 + L3 归档索引 ──
                         try:
                             from conclusion_store import extract_turn_conclusions, append_conclusions, archive_turn, link_archive
-                            _l0 = extract_turn_conclusions(user_text or "", str(result or ""))
+                            _l0 = extract_turn_conclusions(_user_text or "", str(result or ""))
                             if _l0:
                                 _ids = append_conclusions(_session, _l0)
                                 if _ids:
-                                    _arc = archive_turn(_session, user_text or "", str(result or ""))
+                                    _arc = archive_turn(_session, _user_text or "", str(result or ""))
                                     if _arc:
                                         link_archive(_session, _ids, _arc)
                                     logger.info(f"[MemOmics] L0 conclusions +{len(_ids)} ids={_ids} (session {_session['id'][:12]})")
@@ -22411,7 +24130,7 @@ async def ws_endpoint(ws: WebSocket):
                         # ⚡ Bug 3: 工具调用事后验证 — intent需要工具但agent没调则追加警告
                         if _intent in ("research_plan", "plan_refine") and result and len(result.strip()) > 50:
                             # 检查是否调过核心工具
-                            _tool_list = _tool_call_log
+                            _tool_list = _turn_tool_call_log
                             _all_tool_names = [t.get("tool", "") for t in _tool_list]
                             _core_tools = {"memomics_pipeline", "skill_search", "search_knowledge", "search_papers", "literature_search"}
                             _called_core = _core_tools & set(_all_tool_names)
@@ -22433,7 +24152,7 @@ async def ws_endpoint(ws: WebSocket):
                             has_conc = any(k in result.lower() for k in ["conclusion", "validation", "experiment", "follow-up"])
                             if not has_conc:
                                 quality_warnings.append("[INTERP] no conclusion or validation section")
-                            unique_tools = set(t.get("tool", "") for t in _tool_call_log)
+                            unique_tools = set(t.get("tool", "") for t in _turn_tool_call_log)
                             if len(unique_tools) < 2 and _intent not in ("chat", "self_intro"):
                                 quality_warnings.append("[TOOLS] only " + str(len(unique_tools)) + " tool types called")
                             if quality_warnings:
@@ -22446,7 +24165,7 @@ async def ws_endpoint(ws: WebSocket):
                         # 兜底：plan_refine 结束后若未调用 memomics_pipeline，自动触发生成待办
 # 兜底：plan_refine 结束后若未调用 memomics_pipeline，直接调用 Python 函数生成待办
                         if _intent == "plan_refine":
-                            did_call = any(t for t in _tool_call_log if t.get("tool") == "memomics_pipeline")
+                            did_call = any(t for t in _turn_tool_call_log if t.get("tool") == "memomics_pipeline")
                             if not did_call:
                                 try:
                                     import sys
@@ -22514,75 +24233,44 @@ async def ws_endpoint(ws: WebSocket):
 
                         # 发送进度完成
                         _session_emit(_session, {"type": "progress", "step": _pt(_session, "complete"), "status": "done", "detail": _pt(_session, "reply_generated"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
-                        # 2026-10-27 交付闸 v2：本轮没有实质结论（正文为空 / 只有阶段小结 / 过短）→
-                        # **当场内联补跑一轮**「只写最终结论、不调工具」，再宣布结束。
-                        # v1 曾把它交给自检唤醒调度器，实测调度器闸门太多（无 results_dir / RunGate 未武装等）
-                        # 根本不触发 → 回合永久挂起（用户实际遇到）。内联执行确定性更强。
-                        # 每用户回合最多补 1 次（_final_nudge_used，新回合重置）；补跑失败也照常收尾，绝不挂死。
+                        # 2026-10-27 交付闸 v2 / 2026-11-01 v3：
+                        # 本轮没有实质结论（正文为空 / 只有阶段小结 / 过短）→ **当场内联补跑**
+                        # 「只写最终结论、不调工具」，再宣布结束。v1 交给自检唤醒调度器（闸门太多、
+                        # 根本不触发 → 回合挂起）；v2 内联但**不验收补写结果**（实测：补写又写成
+                        # 「阶段小结：…」或只回「已完成」，被原样顶进正文）→ v3 把整段处置抽成
+                        # _apply_final_answer_gate()：净化误标 → 判定 → 补写 → 验收 → 权威正文。
                         _final_retry_done = False
-                        if _should_nudge_final_answer(result, _tool_call_log, user_text) \
-                                and not _session.get("_final_nudge_used"):
-                            _session["_final_nudge_used"] = True
-                            _nudge_text = _final_answer_nudge_text()
-                            try:
-                                _session.setdefault("messages", []).append({
-                                    "role": "system", "content": _nudge_text,
-                                    "time": datetime.now().strftime("%H:%M:%S"),
-                                    "source": "final_answer_nudge"})
-                            except Exception:
-                                pass
-                            try:
-                                _session_emit(_session, {"type": "info",
-                                    "content": "🧾 本轮还没有最终结论，正在让模型补写（只写结论、不调工具）——请稍等这一轮结束",
-                                    "session_id": _session["id"]})
-                            except Exception:
-                                pass
-                            logger.info("[MemOmics] 交付闸生效：内联补跑一轮交付最终结论")
-                            try:
-                                _retry_res = await asyncio.wait_for(
-                                    loop.run_in_executor(
-                                        None,
-                                        lambda: _agent.run_conversation(
-                                            _nudge_text, task_id=_session["id"])),
-                                    timeout=900)
-                                _retry_final = (""
-                                                if _retry_res is None else
-                                                (_retry_res.get("final_response", "")
-                                                 if isinstance(_retry_res, dict) else str(_retry_res)))
-                                if _retry_final and _retry_final.strip():
-                                    result = _retry_final
-                                    # 注意：不要给 has_delta 赋值 —— 它在更外层作用域，
-                                    # 在这里赋值会把它变成内层局部变量（实测 UnboundLocalError）。
-                                    _final_retry_done = True
-                                    try:
-                                        _session.setdefault("messages", []).append({
-                                            "role": "assistant", "content": _retry_final,
-                                            "time": datetime.now().strftime("%H:%M:%S"),
-                                            "source": "final_answer_round"})
-                                    except Exception:
-                                        pass
-                                    logger.info("[MemOmics] 交付补齐完成：%d 字", len(_retry_final))
-                                else:
-                                    logger.warning("[MemOmics] 交付补齐未产出正文（照常收尾）")
-                            except Exception as _e_r:
-                                logger.warning("[MemOmics] 交付补齐失败（照常收尾，不阻塞）: %s", _e_r)
+                        _final_authoritative = ""    # 非空 = 前端要按「最终结论」重建正文
+                        _final_replace = False
+                        try:
+                            _gate_out = await _apply_final_answer_gate(
+                                _session, result, _turn_tool_call_log, user_text, _agent, loop)
+                            result = _gate_out.get("result", result)
+                            _final_authoritative = _gate_out.get("authoritative") or ""
+                            _final_retry_done = bool(_gate_out.get("retry_done"))
+                        except Exception as _e_gate:
+                            # 闸门自身出错绝不允许阻塞回合收尾（v1 的挂死就是这么来的）
+                            logger.warning("[MemOmics] 交付闸执行异常（照常收尾，不阻塞）: %s", _e_gate)
                         # 聊天框内容：有文本回复就用文本，纯工具调用时生成操作摘要
-                        if has_delta or _final_retry_done:
+                        if _final_authoritative:
+                            _chat_content = _final_authoritative   # 权威正文（前端 replace 重建）
+                            _final_replace = True
+                        elif _turn_stream_state.get("has_delta") or _final_retry_done:
                             _chat_content = ""  # 已通过 delta 流式发送，不重复
                         elif result and result.strip():
                             _chat_content = result
-                        elif _tool_call_log:
-                            _tools_done = [t["tool"] for t in _tool_call_log]
+                        elif _turn_tool_call_log:
+                            _tools_done = [t["tool"] for t in _turn_tool_call_log]
                             _unique = list(dict.fromkeys(_tools_done))
                             _chat_content = "✅ 已完成: " + " → ".join(_unique[:6])
                         else:
                             _chat_content = ""
-                        _session_emit(_session, {"type": "complete", "content": _chat_content, "session_id": _session["id"]})
+                        _session_emit(_session, {"type": "complete", "content": _chat_content, "final_replace": _final_replace, "session_id": _session["id"]})
 
                         # 代码级反"说而不做"：检测到行动承诺但未执行 → 自动补发执行指令
                         # 2026-08-14 v3 三重 AND 判定 → 2026-08-16 v4 提取为 _detect_action_promise
                         # （扩充词表 + Tier B 编号计划承诺，修复 memomics-2274ab75 "先并行扫描"漏检）
-                        _has_action_promise = _detect_action_promise(result, _tool_call_log)
+                        _has_action_promise = _detect_action_promise(result, _turn_tool_call_log)
                         _has_plan = bool(_session.get("plan_path") or
                                          os.path.isfile(os.path.join(_session.get("results_dir", ""), "task_plan.md")))
                         # 每用户回合最多紧急唤醒 2 次，防"做完了又不停"
@@ -22658,12 +24346,12 @@ async def ws_endpoint(ws: WebSocket):
                         _claim_prod_words = ("完成", "已生成", "已保存", "已复制", "已写入",
                                              "已交付", "已导出", "已输出", "已合并", "已创建",
                                              "已写好", "已出", "产物", "结果如下", "文件已")
-                        _real_exec_this_turn = _session.get("_real_exec_this_turn") or bool(_tool_call_log)
+                        _real_exec_this_turn = _session.get("_real_exec_this_turn") or bool(_turn_tool_call_log)
                         if _real_exec_this_turn and any(_w in (result or "") for _w in _claim_prod_words):
                             try:
                                 # 用户目标路径产物可能不在 results_dir，一并检查
                                 _extra_dirs = []
-                                for _p in re.findall(r'[A-Za-z]:[\\/][^\s"\'，。；：、]*', _run_text or ""):
+                                for _p in re.findall(r'[A-Za-z]:[\\/][^\s"\'，。；：、]*', _turn_run_text or ""):
                                     _dir_c = _p if os.path.isdir(_p) else os.path.dirname(_p)
                                     if _dir_c and os.path.isdir(_dir_c):
                                         _extra_dirs.append(_dir_c)
@@ -22688,7 +24376,7 @@ async def ws_endpoint(ws: WebSocket):
                                     logger.info("[MemOmics] 产物终检未过（声称完成但无新产物）→ 提醒核实")
                         # 🔧 空响应检测：只有模型真正返回空（无任何文本且无工具调用）才重试。
                         # 注意：短回复（如用户要求"只回复两个字"）是合法回复，不能按空处理
-                        if not _tool_call_log and (not result or not result.strip()):
+                        if not _turn_tool_call_log and (not result or not result.strip()):
                             logger.info(f"[MemOmics] 检测到空响应(len={len(result.strip()) if result else 0}) → 触发自唤醒重试")
                             _session_emit(_session, {"type": "info",
                                 "content": "⚠️ 模型返回空响应，系统将在3秒后自动重试",
@@ -22700,13 +24388,27 @@ async def ws_endpoint(ws: WebSocket):
                         _session_emit(_session, {"type": "progress", "step": _pt(_session, "stopped"), "status": "done", "detail": _pt(_session, "user_stopped"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
                         _session_emit(_session, {"type": "cancelled", "session_id": _session["id"]})
                     except Exception as e:
-                        import traceback
-                        _session_emit(_session, {"type": "error", "content": f"Agent 执行出错: {e}\n{traceback.format_exc()[-500:]}", "session_id": _session["id"]})
+                        logger.error("[agent] execution failed type=%s session=%s",
+                                     type(e).__name__, _session["id"][:16])
+                        _session_emit(_session, {
+                            "type": "error",
+                            "code": "agent_execution_failed",
+                            "content": "Agent 执行失败，请重试；若持续出现请查看本地服务日志。",
+                            "session_id": _session["id"],
+                            "request_id": _request_id,
+                        })
                     finally:
-                        _session["running_agent"] = None
-                        _session["running_task"] = None
-                        _session["_user_turn_active"] = False  # 并发护栏: 用户回合结束清除
-                        if _thread_state is not None:
+                        _current_task = asyncio.current_task()
+                        with _SESSION_TURN_CLAIM_LOCK:
+                            if _session.get("running_agent") is _agent:
+                                _session["running_agent"] = None
+                            if _session.get("running_task") is _current_task:
+                                _session["running_task"] = None
+                            if _session.get("_running_request_id") == _request_id:
+                                _session.pop("_running_request_id", None)
+                        _released_turn = _release_session_user_turn(_session, _request_id)
+                        _apply_deferred_model_update(_session)
+                        if _released_turn and _thread_state is not None:
                             _thread_state.mark_turn_end(_session["id"])
                         # 技能索引自愈（2026-09-24）：agent 会话中途用 write 直接造出来的技能目录不在
                         # 启动 scan 范围内，不补就永远不进 SKILLS_INDEX.md（模型唯一能看到的技能清单）。
@@ -22738,11 +24440,11 @@ async def ws_endpoint(ws: WebSocket):
                         except Exception:
                             pass
                         # 停止本轮心跳
-                        _heartbeat_active["on"] = False
-                        if '_heartbeat_task' in dir() and _heartbeat_task and not _heartbeat_task.done():
-                            _heartbeat_task.cancel()
+                        _turn_heartbeat_active["on"] = False
+                        if _turn_heartbeat_task and not _turn_heartbeat_task.done():
+                            _turn_heartbeat_task.cancel()
                         # 🔧 自唤醒：如果有未完成的主线任务，延迟5分钟后自动触发下一轮
-                        _schedule_self_check(_session, _agent, loop, trigger="turn_end")
+                        _schedule_self_check(_session, _agent, _turn_loop, trigger="turn_end")
                         # 2026-08-25: 用户回合结束刷新产出资产索引（供 digest 跨轮复用）
                         try:
                             _save_assets_index(_session)
@@ -22753,7 +24455,18 @@ async def ws_endpoint(ws: WebSocket):
                 # 前台/后台均不阻塞 WebSocket 循环，以便接收 cancel 消息
                 # 任务账本 + 资源租约 + Job Object 硬限制（借鉴重构版）
                 if _task_supervisor.is_running(session["id"]):
-                    _session_emit(session, {"type": "info", "content": "该会话已有任务在运行，请先发送取消后再试", "session_id": session["id"]})
+                    # Defensive fallback: the atomic claim normally catches
+                    # this before ACK/history mutation.  If an external task
+                    # supervisor is briefly ahead of the session flags, do not
+                    # leave this newly claimed turn wedged.
+                    _session_emit(session, {
+                        "type": "error", "code": "turn_in_progress", "preserve_draft": True,
+                        "content": "该会话已有任务在运行；本次消息未启动，请稍后重试。",
+                        "session_id": session["id"], "request_id": turn_request_id,
+                    })
+                    _released_turn = _release_session_user_turn(session, turn_request_id)
+                    if _released_turn and _thread_state is not None:
+                        _thread_state.mark_turn_end(session["id"])
                 else:
                     session["running_agent"] = agent
                     _res_req = _session_resource_request(session)
@@ -22768,9 +24481,13 @@ async def ws_endpoint(ws: WebSocket):
                         logger.warning(f"[MemOmics] resource acquire failed for session {session['id'][:12]}, running without lease")
                     # 注：不再 _register_job_limits（方案 A，2026-08-13）——Job Object
                     # CPU/内存硬限制因 task_id 断链从未生效，用户要求多核自由。
+                    session["_running_request_id"] = turn_request_id
                     task = asyncio.ensure_future(run_agent())
                     session["running_task"] = task
-                    task.add_done_callback(lambda _t, _sid=session["id"], _ls=_lease: (_release_lease(_sid, _ls), _clear_session_running(_sid)))
+                    task.add_done_callback(
+                        lambda _t, _sid=session["id"], _ls=_lease, _rid=turn_request_id:
+                        (_release_lease(_sid, _ls), _clear_session_running(_sid, request_id=_rid, task=_t))
+                    )
                     try:
                         _task_supervisor.register(session["id"], task, label="agent_conversation")
                     except RuntimeError:
@@ -22943,7 +24660,15 @@ async def ws_endpoint(ws: WebSocket):
                             except Exception as _e_st:
                                 logger.warning(f"[steer] 插话落历史失败(不阻断): {_e_st}")
                     except Exception as e:
-                        _session_emit(session, {"type": "error", "content": f"引导失败: {e}", "session_id": session["id"]})
+                        logger.error("[steer] delivery failed type=%s session=%s",
+                                     type(e).__name__, session["id"][:16])
+                        _session_emit(session, {
+                            "type": "error",
+                            "code": "steer_failed",
+                            "content": "引导消息未能送达，请作为新消息重试。",
+                            "session_id": session["id"],
+                            "request_id": current_request_id,
+                        })
                 else:
                     # 走到这里只剩竞态（归一化判定之后 agent 刚好跑完）——如实告知，不再静默。
                     # （空闲态的正常落空已由入口处的 steer→chat 归一化兜住，不会再到这里。）
@@ -22958,16 +24683,31 @@ async def ws_endpoint(ws: WebSocket):
         if current_sid and current_sid in _sessions:
             _cleanup_session_agent(_sessions[current_sid], kill_agent=False)
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        print(f'WS EXCEPTION: {type(e).__name__}: {e}', flush=True)
+        logger.error("[ws] unhandled exception type=%s", type(e).__name__)
+        error_sid = current_request_sid or ""
         try:
-            await ws.send_text(json.dumps({"type": "error", "content": f"WebSocket 错误: {e}"}, ensure_ascii=False))
+            error_payload = {
+                "type": "error",
+                "code": "websocket_error",
+                "content": "通信处理失败，请重试。",
+                "request_id": current_request_id or _clean_ws_request_id(None),
+            }
+            if error_sid:
+                error_payload["session_id"] = error_sid
+            else:
+                # Keep the historic message type for clients, while making it
+                # explicit that no session can safely receive this error.
+                error_payload["scope"] = "protocol"
+            await ws.send_text(json.dumps(error_payload, ensure_ascii=False))
         except Exception:
             pass
         _detach_ws(ws)
-        if current_sid and current_sid in _sessions:
-            _cleanup_session_agent(_sessions[current_sid], kill_agent=False)
+        if error_sid and error_sid in _sessions:
+            _err_session = _sessions[error_sid]
+            if _release_session_user_turn(_err_session, current_request_id):
+                if _thread_state is not None:
+                    _thread_state.mark_turn_end(error_sid)
+            _cleanup_session_agent(_err_session, kill_agent=False)
 
 
 # === 远端集群控制台（2026-09-19）===
@@ -22980,11 +24720,18 @@ _CLUSTER_FIELDS = (
     "enabled", "host", "user", "port", "key", "workdir", "scheduler",
     "partition", "queue", "local_root", "remote_root", "timeout", "job_dir",
     "extra_ssh_options", "default_node", "node_policy", "auto_record_env",
+    # 2026-11-04（用户报「label 写了界面不换」）：人读标记必须能存下来 ——
+    # 之前它不在白名单里，老的单集群配置一保存就被静默丢掉。
+    "label", "note",
 )
 # 单个命名节点里允许覆盖的字段（前端节点编辑器渲染的就是这些；其余字段走共享配置）
 _CLUSTER_NODE_FIELDS = (
-    "name", "host", "port", "user", "key", "workdir", "note", "role",
-    "proxy_jump", "scheduler", "partition", "queue",
+    "name", "display_name", "host", "port", "user", "key", "workdir", "note", "role",
+    "job_dir", "local_root", "remote_root", "timeout", "proxy_jump", "scheduler", "partition", "queue",
+    "connection_profile",
+    "auth_mode", "catalog_v4_ssh_route", "catalog_account_id", "gateway_account_id",
+    "catalog_v5_ssh_route", "catalog_v5_target_alias", "catalog_v5_gateway_alias",
+    "catalog_v5_gateway_host", "catalog_v5_gateway_user", "catalog_v5_gateway_port",
 )
 _CLUSTER_NODE_LIST_FIELDS = ("extra_ssh_options",)
 _CLUSTER_ACTIONS = ("locate", "nodes", "check", "run", "push", "pull", "submit", "status", "logs", "cancel", "jobs", "session_start", "session_exec", "session_save", "session_restore", "session_status", "session_stop", "session_list", "session_cells", "session_plot", "r_packages")
@@ -22996,10 +24743,22 @@ def _cluster_mod():
     return _rc
 
 
-def _cluster_view() -> dict:
-    """配置视图：只回显当前生效值，不建连接（连通性自检是单独的 action=check）。"""
+def _cluster_view(cluster: str = "") -> dict:
+    """配置视图：只回显当前生效值，不建连接（连通性自检是单独的 action=check）。
+
+    2026-11-04（多集群）：视图按**指定集群**给出；同时带上 clusters / default_cluster，
+    前端据此渲染集群下拉与「默认」标记。legacy 配置（没有 clusters 段）行为不变。
+    """
     rc = _cluster_mod()
-    cfg = rc._load_remote_config(force=True)
+    cfg_all = rc._load_remote_config(force=True)
+    resolved, cfg, err = rc.resolve_cluster(cfg_all, cluster)
+    if err:
+        # 指定了不存在的集群：把全部候选交还前端，绝不静默退回默认集群（集群不能串）
+        return {"error": err, "clusters": rc.cluster_list(cfg_all),
+                "cluster": str(cluster or ""),
+                "default_cluster": cfg_all.get("default_cluster") or "",
+                "multi_cluster": bool(cfg_all.get("multi_cluster")),
+                "ready": False}
     out = {k: cfg.get(k) for k in _CLUSTER_FIELDS}
     out["enabled"] = bool(cfg.get("enabled"))
     key = str(cfg.get("key") or "")
@@ -23019,13 +24778,22 @@ def _cluster_view() -> dict:
     out["tool_visible"] = bool(rc.remote_cluster_enabled())
     out["job_dir_effective"] = cfg.get("job_dir")
     # 2026-10-10：给前端一个"到底能不能用"的判断 + 还缺哪个字段，别再让用户猜
-    out["ready"] = bool(cfg.get("enabled")) and bool(cfg.get("host") or cfg.get("nodes")) and bool(cfg.get("user"))
+    # A node may override the shared user.  Treat any effective node with a
+    # user as configured rather than incorrectly marking multi-server setups
+    # unusable because remote.user itself is blank.
+    _effective_for_ready = rc._node_table(cfg)
+    out["ready"] = bool(cfg.get("enabled")) and bool(_effective_for_ready) and any(
+        str(item.get("host") or "").strip() and str(item.get("user") or "").strip()
+        for item in _effective_for_ready.values()
+    )
     _miss = []
     if not cfg.get("enabled"):
         _miss.append("启用")
     if not (cfg.get("host") or cfg.get("nodes")):
         _miss.append("登录节点")
-    if not cfg.get("user"):
+    if not cfg.get("user") and not any(
+            str(item.get("host") or "").strip() and str(item.get("user") or "").strip()
+            for item in _effective_for_ready.values()):
         _miss.append("用户名")
     # 私钥路径不再算缺项：探测不到会自动生成（2026-10-11）
     out["missing"] = _miss
@@ -23042,6 +24810,8 @@ def _cluster_view() -> dict:
             val = entry.get(k)
             if val not in (None, "", [], {}):
                 spec[k] = val
+        if entry.get("display_name"):
+            spec["display_name"] = entry.get("display_name")
         nodes.append({
             "name": name,
             "spec": spec,
@@ -23050,6 +24820,7 @@ def _cluster_view() -> dict:
                 "key": eff.get("key"), "workdir": eff.get("workdir"),
                 "job_dir": eff.get("job_dir"), "scheduler": eff.get("scheduler"),
                 "proxy_jump": str(entry.get("proxy_jump") or ""),
+                "display_name": str(entry.get("display_name") or name),
                 "note": eff.get("_note") or "",
             },
             "is_default": name == str(cfg.get("default_node") or ""),
@@ -23058,6 +24829,13 @@ def _cluster_view() -> dict:
     out["nodes"] = nodes
     out["nodes_effective_count"] = len(table)
     out["node_policy"] = cfg.get("node_policy") or "ask"
+    # --- 多集群：当前集群名 + 全部集群摘要（前端下拉/默认标记）---
+    out["cluster"] = resolved
+    out["label"] = str(cfg.get("label") or "")
+    out["clusters"] = rc.cluster_list(cfg_all)
+    out["default_cluster"] = cfg_all.get("default_cluster") or resolved
+    out["multi_cluster"] = bool(cfg_all.get("multi_cluster"))
+    out["is_default_cluster"] = (resolved == out["default_cluster"])
     return out
 
 
@@ -23108,7 +24886,8 @@ def _cluster_node_lines(nodes) -> list:
             val = item.get(k)
             if val is None:
                 continue
-            if isinstance(val, str) and not val.strip():
+            if (isinstance(val, str) and not val.strip()
+                    and not item.get("connection_profile")):
                 continue
             if k == "port":
                 try:
@@ -23117,8 +24896,17 @@ def _cluster_node_lines(nodes) -> list:
                     raise ValueError("节点 %r 的 port 不是数字：%r" % (name, item.get(k)))
             spec[k] = val
         extra = item.get("extra_ssh_options")
-        if extra:
+        if extra is not None and (extra or item.get("connection_profile")):
             spec["extra_ssh_options"] = extra if isinstance(extra, (list, tuple)) else [str(extra)]
+        # This private provenance field is intentionally not a console form
+        # field, but a generic console save must retain it for catalog-created
+        # V4 profiles.  Losing it would let a durable route snapshot downgrade
+        # to legacy ``-F`` handling after an unrelated settings edit.
+        _v4_marker = item.get("catalog_v4_ssh_route")
+        if _v4_marker not in (None, ""):
+            if _v4_marker != _CATALOG_V4_SSH_ROUTE_MARKER:
+                raise ValueError("节点 %r 的 V4 SSH route provenance 无效，已拒绝保存" % name)
+            spec["catalog_v4_ssh_route"] = _CATALOG_V4_SSH_ROUTE_MARKER
         if not spec:
             lines.append("    %s: {}" % name)
             continue
@@ -23133,6 +24921,22 @@ def _cluster_node_lines(nodes) -> list:
     return lines
 
 
+def _raw_cluster_node_lines(raw_nodes) -> list:
+    """Render an unchanged raw ``remote.nodes`` value without normalising it.
+
+    The legacy configuration form can update only a shared field such as
+    ``enabled``.  In that case its existing node profiles must survive with
+    every explicit empty value and the managed-profile marker intact; deriving
+    them from the effective config would accidentally reintroduce inherited
+    credentials.  The value was already parsed from the current local YAML,
+    so serialize it as-is under the replacement ``remote:`` block.
+    """
+    import yaml as _yaml
+    rendered = _yaml.safe_dump({"nodes": raw_nodes}, allow_unicode=True,
+                               sort_keys=False, default_flow_style=False).rstrip("\n")
+    return [("  " + line) if line else line for line in rendered.splitlines()]
+
+
 def _cluster_write_config(values: dict) -> dict:
     rc = _cluster_mod()
     cfg = rc._load_remote_config(force=True)  # 合并的底：当前生效值
@@ -23141,6 +24945,15 @@ def _cluster_write_config(values: dict) -> dict:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         text = ""
+    import yaml as _yaml
+    try:
+        original_doc = _yaml.safe_load(text) or {}
+    except Exception as exc:
+        raise ValueError("现有 config.yaml 无法解析，未写入远端配置: %s" % exc) from exc
+    original_remote = original_doc.get("remote") if isinstance(original_doc, dict) else None
+    original_remote = original_remote if isinstance(original_remote, dict) else {}
+    _missing_nodes = object()
+    original_nodes = original_remote.get("nodes", _missing_nodes)
     # 合并而不是替换：从当前生效配置起底，只覆盖前端提交的字段。
     # 这样手写在 config.yaml 里、表单没有的字段（extra_ssh_options 等）不会被抹掉。
     merged = {}
@@ -23150,7 +24963,11 @@ def _cluster_write_config(values: dict) -> dict:
             merged[key] = bool(cur)
         elif cur is not None and cur != "" and cur != [] and cur != {}:
             merged[key] = cur
-    nodes_in = values.pop("nodes", None) if "nodes" in values else None
+    # 没带节点 = 这次只改别的字段：把现有节点原样写回（否则会静默把 nodes 整段删掉）
+    # 2026-11-08 合并修：「用户显式提交 nodes」与「原样写回」必须分开 —— 前者里的
+    # 空串表示清掉该覆盖，后者是既有配置，一字不改写回。
+    _nodes_from_user = "nodes" in values
+    nodes_in = values.pop("nodes", None) if _nodes_from_user else (cfg.get("nodes") or {})
     for key, val in values.items():
         if key not in _CLUSTER_FIELDS:
             continue
@@ -23183,7 +25000,7 @@ def _cluster_write_config(values: dict) -> dict:
             for k, v in list(item.items()):
                 if k == "name":
                     continue
-                if isinstance(v, str) and not v.strip():
+                if _nodes_from_user and isinstance(v, str) and not v.strip():
                     item.pop(k)
                     old.pop(k, None)
             for k, v in old.items():
@@ -23192,8 +25009,18 @@ def _cluster_write_config(values: dict) -> dict:
     # 2026-10-10（用户报「保存后还说没配置远端」+「default_node='https://…' 不在 nodes 里」）：
     # 落盘前把 default_node 规范化、把"填了 host 却没启用"自动打开，别再让用户对着报错猜。
     notes = []
+    if "nodes" in values:
+        _nodes_for_validation = values.get("nodes") or []
+    elif original_nodes is _missing_nodes:
+        _nodes_for_validation = []
+    elif isinstance(original_nodes, dict):
+        _nodes_for_validation = [dict(spec, name=name) if isinstance(spec, dict)
+                                 else {"name": name}
+                                 for name, spec in original_nodes.items()]
+    else:
+        _nodes_for_validation = original_nodes or []
     node_names = [str((x or {}).get("name") or "").strip()
-                  for x in (values.get("nodes") or []) if isinstance(x, dict)]
+                  for x in _nodes_for_validation if isinstance(x, dict)]
     node_names = [x for x in node_names if x]
     dn = str(merged.get("default_node") or "").strip()
     if dn and dn not in node_names:
@@ -23203,10 +25030,12 @@ def _cluster_write_config(values: dict) -> dict:
         else:
             merged.pop("default_node", None)
             notes.append("默认节点 %r 不在节点列表里，已清空（多节点时请在调用里点名）" % dn)
-    if not merged.get("enabled") and (merged.get("host") or merged.get("nodes")):
+    if not merged.get("enabled") and (merged.get("host") or node_names):
         merged["enabled"] = True
         notes.append("填了 host/节点但没勾「启用」，已自动启用（不启用时所有集群动作都会报『还没配置远端』）")
-    if merged.get("enabled") and not merged.get("user"):
+    _profile_users = any(str((x or {}).get("user") or "").strip()
+                         for x in _nodes_for_validation if isinstance(x, dict))
+    if merged.get("enabled") and not merged.get("user") and not _profile_users:
         notes.append("还没填「用户名」：SSH 登录需要它，补齐后再保存一次")
     lines = ["remote:"]
     for key in _CLUSTER_FIELDS:
@@ -23219,6 +25048,9 @@ def _cluster_write_config(values: dict) -> dict:
             lines.append("  %s: %s" % (key, _cluster_yaml_scalar(val)))
     if "nodes" in values:
         lines += _cluster_node_lines(values["nodes"])
+    elif original_nodes is not _missing_nodes:
+        # Partial legacy-form saves must not drop existing managed profiles.
+        lines += _raw_cluster_node_lines(original_nodes)
     block = "\n".join(lines) + "\n"
     # 顶层 remote: 块（后续行必须缩进；注释行以 # 开头，不会被误吞）
     pat = re.compile(r"(?m)^remote:[ \t]*\n(?:[ \t]+[^\n]*\n)*")
@@ -23230,7 +25062,6 @@ def _cluster_write_config(values: dict) -> dict:
             text += "\n"
         new_text = text + block
     # 落盘前先校验：新文件必须能解析出 remote 段，宁可写不进去也不写坏 config.yaml
-    import yaml as _yaml
     parsed = _yaml.safe_load(new_text) or {}
     if not isinstance(parsed, dict) or not isinstance(parsed.get("remote"), dict):
         raise ValueError("生成的 remote 段无法被 YAML 解析，已放弃写入（config.yaml 未改动）")
@@ -23247,6 +25078,508 @@ def _cluster_write_config(values: dict) -> dict:
     out = _cluster_view()
     out["notes"] = notes
     return out
+
+
+# Stable server records -----------------------------------------------------
+# ``remote.nodes`` remains the only connection configuration source.  Its map
+# key is a stable ID; the human-readable name lives in ``display_name`` so a
+# rename never invalidates existing per-chat bindings.
+_CLUSTER_SERVER_LOCK = _threading.RLock()
+_LEGACY_SERVER_ID = "legacy-default"
+# Internal-only V4 SSH provenance.  The catalog adapter, rather than a REST
+# body, selects this marker; it is persisted with the profile and copied into
+# durable job/session snapshots so a moved route file cannot become legacy
+# ``-F`` input at a later execution boundary.
+_CATALOG_V4_SSH_ROUTE_MARKER = "v4-managed-route-1"
+_SERVER_EDITABLE_FIELDS = (
+    "host", "user", "port", "key", "workdir", "job_dir", "scheduler", "partition",
+    "queue", "local_root", "remote_root", "timeout", "proxy_jump", "extra_ssh_options", "note", "role", "display_name",
+)
+
+
+def _server_text(value, field, maximum=200, required=False):
+    text = "" if value is None else str(value)
+    if re.search(r"[\x00-\x1f\x7f]", text):
+        raise MetadataError("%s cannot contain control characters" % field)
+    text = text.strip()
+    if required and not text:
+        raise MetadataError("%s is required" % field)
+    if len(text) > maximum:
+        raise MetadataError("%s is too long" % field)
+    return text
+
+
+def _cluster_server_catalog():
+    """Return sanitized server descriptors derived from effective remote.nodes."""
+    rc = _cluster_mod()
+    cfg = rc._load_remote_config(force=True)
+    table = rc._node_table(cfg)
+    raw_nodes = cfg.get("nodes") or {}
+    legacy = not bool(raw_nodes) and bool(table)
+    rows = []
+    for node_id, effective in table.items():
+        raw = raw_nodes.get(node_id) if isinstance(raw_nodes, dict) else {}
+        raw = raw if isinstance(raw, dict) else {}
+        stable_id = "legacy-default" if legacy else node_id
+        rows.append({
+            "id": stable_id,
+            "node_id": node_id,
+            "name": str(raw.get("display_name") or effective.get("_display_name") or node_id),
+            "host": str(effective.get("host") or ""),
+            "user": str(effective.get("user") or ""),
+            "port": int(effective.get("port") or 22),
+            "workdir": str(effective.get("workdir") or ""),
+            "job_dir": str(effective.get("job_dir") or ""),
+            "scheduler": str(effective.get("scheduler") or "auto"),
+            "partition": str(effective.get("partition") or ""),
+            "queue": str(effective.get("queue") or ""),
+            "local_root": str(effective.get("local_root") or ""),
+            "remote_root": str(effective.get("remote_root") or ""),
+            "timeout": int(effective.get("timeout") or 300),
+            "note": str(effective.get("_note") or raw.get("note") or ""),
+            "role": str(effective.get("_role") or raw.get("role") or ""),
+            # These are edit-form defaults, not credentials.  proxy_jump is
+            # stored per profile; raw extra options stay private because they
+            # can reveal infrastructure details.  Critically, use the raw
+            # profile list for this boolean: _node_table synthesizes a -J
+            # option from proxy_jump, which must not make a cleared explicit
+            # extra-options field look saved again.
+            "proxy_jump": str(raw.get("proxy_jump") or ""),
+            "has_extra_ssh_options": bool(raw.get("extra_ssh_options") or []),
+            "is_default": node_id == str(cfg.get("default_node") or ""),
+            "configured": bool(cfg.get("enabled")) and bool(effective.get("host")) and bool(effective.get("user")),
+            # Deliberately boolean-only.  Private-key paths and passwords never
+            # leave the configuration endpoint.
+            "has_key": bool(str(effective.get("key") or "").strip()),
+            # Password-route provenance is non-secret and is needed by the
+            # catalog adapter to reject a partial V5 record instead of falling
+            # back to an old key route.  Account ids, aliases and route paths
+            # deliberately stay private to this server module.
+            "auth_mode": str(effective.get("auth_mode") or ""),
+            "catalog_v5_ssh_route": str(effective.get("catalog_v5_ssh_route") or ""),
+            "legacy": legacy,
+        })
+    return cfg, rows, legacy
+
+
+def _cluster_server_by_id(server_id: str):
+    wanted = str(server_id or "").strip()
+    for item in _cluster_server_catalog()[1]:
+        if item["id"].lower() == wanted.lower():
+            return item
+    return None
+
+
+def _active_bound_sessions(server_id: str) -> list[str]:
+    """Only in-process tasks are active; restored sessions cannot be running."""
+    try:
+        bound = _session_metadata().sessions_bound_to_server(server_id)
+    except Exception as exc:
+        # A failed metadata read must block a connection edit.  Treating it as
+        # "no bound chats" can retarget an in-flight agent to a new host/key.
+        raise MetadataError("cannot verify bound chat sessions: %s" % exc) from exc
+    active = []
+    for sid in bound:
+        session = _sessions.get(sid)
+        if session and _session_run_flags(session):
+            active.append(sid)
+    return active
+
+
+def _promote_legacy_single_server(remote: dict, nodes: dict) -> bool:
+    """Materialize the old single-host profile before adding named servers.
+
+    The catalog exposes a legacy single-host connection as the stable id
+    ``legacy-default``.  If the first named server were appended directly,
+    ``remote.nodes`` would make the old host disappear from the effective
+    table, breaking both existing bindings and unbound single-server behavior.
+    Copy the explicit legacy connection values into a real node under that
+    same stable id, and retain it as the default unless the user had already
+    selected another explicit default.
+    """
+    if nodes:
+        return False
+    host = str(remote.get("host") or "").strip()
+    if not host:
+        return False
+    import copy as _copy
+    legacy = {}
+    for field in _SERVER_EDITABLE_FIELDS:
+        if field in remote:
+            legacy[field] = _copy.deepcopy(remote.get(field))
+    legacy["host"] = host
+    legacy.setdefault("display_name", host)
+    nodes[_LEGACY_SERVER_ID] = legacy
+    old_default = str(remote.get("default_node") or "").strip()
+    if not old_default or old_default == host:
+        remote["default_node"] = _LEGACY_SERVER_ID
+    return True
+
+
+def _atomic_update_remote_nodes(mutator, *, promote_legacy: bool = False):
+    """Atomically mutate ``remote.nodes`` and, when requested, preserve legacy host.
+
+    YAML replacement preserves all values but not hand-written comments; the
+    older configuration form retains its text-preserving path.  Server CRUD
+    uses this lock-protected read/modify/write transaction so server creation
+    cannot race a binding or another server edit.
+    """
+    rc = _cluster_mod()
+    path = rc._get_config_path()
+    import yaml as _yaml
+    with _CLUSTER_SERVER_LOCK:
+        try:
+            current = _yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except FileNotFoundError:
+            current = {}
+        if not isinstance(current, dict):
+            raise MetadataError("config.yaml root must be a mapping")
+        remote = current.get("remote") or {}
+        if not isinstance(remote, dict):
+            raise MetadataError("config.yaml remote section must be a mapping")
+        import copy as _copy
+        # 2026-11-09：多集群模式（remote.clusters 非空）下节点属于
+        # remote.clusters.<default_cluster>.nodes，不是顶层 remote.nodes。
+        # 只写顶层会导致「写完立刻读不到」——登录节点匹配时表现为
+        # 「配置已被修改，本次连接未保存」。
+        clusters = remote.get("clusters")
+        if isinstance(clusters, dict) and clusters:
+            _want = str(remote.get("default_cluster") or "").strip()
+            container = clusters.get(_want) if _want else None
+            if not isinstance(container, dict):
+                container = next((v for v in clusters.values() if isinstance(v, dict)), None)
+            if not isinstance(container, dict):
+                raise MetadataError("remote.clusters has no usable cluster mapping")
+            nodes = container.get("nodes") or {}
+            if not isinstance(nodes, dict):
+                raise MetadataError("remote.nodes must be a mapping")
+            nodes = _copy.deepcopy(nodes)
+            result = mutator(nodes)
+            default_node = str(container.get("default_node") or "").strip()
+            if default_node and not any(str(name).lower() == default_node.lower() for name in nodes):
+                container.pop("default_node", None)
+            container["nodes"] = nodes
+            current["remote"] = remote
+        else:
+            nodes = remote.get("nodes") or {}
+            if not isinstance(nodes, dict):
+                raise MetadataError("remote.nodes must be a mapping")
+            # Work on a real deep copy so a failed mutation never alters cached
+            # config objects or the object used for serialization.
+            nodes = _copy.deepcopy(nodes)
+            if promote_legacy:
+                _promote_legacy_single_server(remote, nodes)
+            # A promoted single-host profile is materialized as the named
+            # ``legacy-default`` node.  If it is later removed, retaining the old
+            # top-level host would silently resurrect it via _node_table's
+            # compatibility fallback.  Retire that fallback in this same write.
+            had_promoted_legacy = _LEGACY_SERVER_ID in nodes
+            result = mutator(nodes)
+            if had_promoted_legacy and _LEGACY_SERVER_ID not in nodes:
+                remote.pop("host", None)
+                if str(remote.get("default_node") or "").strip().lower() == _LEGACY_SERVER_ID:
+                    remote.pop("default_node", None)
+            default_node = str(remote.get("default_node") or "").strip()
+            if default_node and not any(str(name).lower() == default_node.lower() for name in nodes):
+                remote.pop("default_node", None)
+            remote["nodes"] = nodes
+            current["remote"] = remote
+        rendered = _yaml.safe_dump(current, allow_unicode=True, sort_keys=False, default_flow_style=False)
+        tmp = str(path) + ".servers.tmp"
+        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(rendered)
+        os.replace(tmp, path)
+        rc._load_remote_config(force=True)
+        return result
+
+
+class ClusterCatalogRecoveryRequired(RuntimeError):
+    """A catalog/YAML rollback failed and the local journal must be recovered.
+
+    The public attributes intentionally contain only an opaque backup id.  The
+    persisted journal is local configuration recovery material; it may contain
+    private-key *paths*, but this exception must never serialize it into an
+    HTTP response, log line, or catalog error message.
+    """
+
+    catalog_recovery_required = True
+
+    def __init__(self, backup_id: str):
+        self.backup_id = str(backup_id)
+        super().__init__("cluster catalog configuration recovery is required (backup_id=%s)" % self.backup_id)
+
+
+_PROFILE_TRANSACTION_STATE = _threading.local()
+_MISSING_REMOTE_SECTION = object()
+
+
+def _read_cluster_config_root(path: Path) -> dict:
+    """Read the local YAML root without loading a key file or printing values."""
+    import yaml as _yaml
+    try:
+        current = _yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except FileNotFoundError:
+        current = {}
+    if not isinstance(current, dict):
+        raise MetadataError("config.yaml root must be a mapping")
+    return current
+
+
+def _write_cluster_config_root_atomic(path: Path, current: dict, *, label: str) -> None:
+    """Atomically persist a complete YAML root using a unique local temp file."""
+    import yaml as _yaml
+    if not isinstance(current, dict):
+        raise MetadataError("config.yaml root must be a mapping")
+    rendered = _yaml.safe_dump(current, allow_unicode=True, sort_keys=False, default_flow_style=False)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(".%s.%s.%s.tmp" % (path.name, label, uuid.uuid4().hex))
+    try:
+        tmp.write_text(rendered, encoding="utf-8", newline="\n")
+        os.replace(tmp, path)
+    finally:
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except OSError:
+            pass
+
+
+def _write_cluster_remote_recovery_journal(config_path: Path, remote_snapshot, remote_present: bool):
+    """Persist a local-only pre-mutation remote-section backup.
+
+    The journal stores YAML-derived configuration only.  It never opens a
+    private key and is deliberately not logged or returned to browser clients.
+    """
+    import copy as _copy
+
+    backup_id = uuid.uuid4().hex
+    journal = config_path.with_name(".cluster-catalog-remote-%s.recovery.json" % backup_id)
+    tmp = journal.with_name(".%s.%s.tmp" % (journal.name, uuid.uuid4().hex))
+    payload = {
+        "version": 1,
+        "backup_id": backup_id,
+        "remote_present": bool(remote_present),
+        "remote": _copy.deepcopy(remote_snapshot),
+    }
+    try:
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8", newline="\n")
+        os.replace(tmp, journal)
+    finally:
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except OSError:
+            pass
+    return backup_id, journal
+
+
+def _best_effort_unlink(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except Exception:
+        # A committed profile change must not be reported as failed solely
+        # because cleanup of a local recovery journal is delayed.
+        pass
+
+
+def _restore_cluster_remote_section(config_path: Path, remote_snapshot, remote_present: bool) -> None:
+    """Restore only ``remote`` while retaining all current non-remote config."""
+    import copy as _copy
+
+    current = _read_cluster_config_root(config_path)
+    current_remote = current.get("remote", _MISSING_REMOTE_SECTION)
+    wanted_remote = _copy.deepcopy(remote_snapshot) if remote_present else _MISSING_REMOTE_SECTION
+    if current_remote == wanted_remote:
+        return
+    if remote_present:
+        if not isinstance(remote_snapshot, dict):
+            raise MetadataError("recovery snapshot remote section must be a mapping")
+        current["remote"] = _copy.deepcopy(remote_snapshot)
+    else:
+        current.pop("remote", None)
+    _write_cluster_config_root_atomic(config_path, current, label="catalog-restore")
+    _cluster_mod()._load_remote_config(force=True)
+
+
+@contextmanager
+def _cluster_profile_transaction():
+    """Coordinate a catalog SQLite transaction with local remote YAML rollback.
+
+    Callers may additionally hold ``_CLUSTER_SERVER_LOCK``; it is reentrant.
+    On a body exception, only the ``remote`` section is restored from the
+    pre-mutation snapshot so an unrelated concurrent model/config update at
+    the YAML root is retained.  If that restore fails, the journal remains and
+    a structured, credential-free recovery exception is raised.
+    """
+    import copy as _copy
+
+    with _CLUSTER_SERVER_LOCK:
+        rc = _cluster_mod()
+        config_path = Path(rc._get_config_path())
+        root = _read_cluster_config_root(config_path)
+        raw_remote = root.get("remote", _MISSING_REMOTE_SECTION)
+        if raw_remote is not _MISSING_REMOTE_SECTION and not isinstance(raw_remote, dict):
+            raise MetadataError("config.yaml remote section must be a mapping")
+        remote_present = raw_remote is not _MISSING_REMOTE_SECTION
+        remote_snapshot = _copy.deepcopy(raw_remote) if remote_present else None
+        backup_id, journal = _write_cluster_remote_recovery_journal(
+            config_path, remote_snapshot, remote_present
+        )
+        old_depth = int(getattr(_PROFILE_TRANSACTION_STATE, "depth", 0) or 0)
+        _PROFILE_TRANSACTION_STATE.depth = old_depth + 1
+        try:
+            try:
+                yield
+            except BaseException:
+                try:
+                    _restore_cluster_remote_section(config_path, remote_snapshot, remote_present)
+                except Exception as restore_exc:
+                    # Do not log ``restore_exc``: filesystem/config exceptions
+                    # can include paths.  The retained local journal plus opaque
+                    # backup id are the recovery contract.
+                    raise ClusterCatalogRecoveryRequired(backup_id) from restore_exc
+                _best_effort_unlink(journal)
+                raise
+            else:
+                _best_effort_unlink(journal)
+        finally:
+            _PROFILE_TRANSACTION_STATE.depth = old_depth
+
+
+def _set_cluster_remote_enabled(enabled: bool) -> None:
+    """Change ``remote.enabled`` only while a catalog profile transaction runs."""
+    if int(getattr(_PROFILE_TRANSACTION_STATE, "depth", 0) or 0) <= 0:
+        raise MetadataError("remote.enabled may only be changed inside a profile transaction")
+    rc = _cluster_mod()
+    config_path = Path(rc._get_config_path())
+    with _CLUSTER_SERVER_LOCK:
+        current = _read_cluster_config_root(config_path)
+        remote = current.get("remote") or {}
+        if not isinstance(remote, dict):
+            raise MetadataError("config.yaml remote section must be a mapping")
+        remote["enabled"] = bool(enabled)
+        current["remote"] = remote
+        _write_cluster_config_root_atomic(config_path, current, label="catalog-enabled")
+        rc._load_remote_config(force=True)
+
+
+def _invalidate_cluster_server_cache(server_id: str, old_effective: dict | None = None,
+                                    *, preserve_remote_resources: bool = False):
+    """Drop stale local connection state after an edit or deletion.
+
+    A profile deletion must not stop an existing remote kernel/daemon or cancel
+    a scheduler job.  It therefore drops only the local reusable SSH connection
+    cache; durable resources reconnect later from their recorded snapshot.
+    """
+    try:
+        rc = _cluster_mod()
+        if old_effective:
+            rc._drop_conn(old_effective)
+        if not preserve_remote_resources:
+            from memomics.bio_tools import cluster_kernel as _cluster_kernel
+            _cluster_kernel.invalidate_server_kernels(server_id)
+    except Exception as exc:
+        logger.warning("[cluster] cache invalidation skipped for %s: %s", server_id, exc)
+
+
+_ACCOUNT_EXPLICIT_EMPTY_MARKER = "_memomics_explicit_empty_overrides"
+_ACCOUNT_EXPLICIT_EMPTY_FIELDS = frozenset({
+    "key", "workdir", "job_dir", "local_root", "remote_root", "proxy_jump", "extra_ssh_options",
+})
+
+
+def _server_payload_to_node(body: dict, existing: dict | None = None, *, preserve_account_empty: bool = False,
+                             catalog_v4_route: bool = False, catalog_v5_route: bool = False,
+                             catalog_v5_metadata: dict | None = None) -> dict:
+    node = dict(existing or {})
+    # New API profiles are independent server/account records.  Do not add the
+    # marker while editing an older hand-written node: that node may rely on
+    # top-level user/key/workdir inheritance and a label-only edit must not
+    # silently change its connection identity.
+    if existing is None:
+        node["connection_profile"] = True
+    if catalog_v4_route:
+        node["catalog_v4_ssh_route"] = _CATALOG_V4_SSH_ROUTE_MARKER
+    if "name" in body:
+        node["display_name"] = _server_text(body.get("name"), "name", 80, required=True)
+    elif not node.get("display_name"):
+        node["display_name"] = ""
+    body = dict(body or {})
+    aliases = {"key_path": "key"}
+    for incoming, target in aliases.items():
+        if incoming in body:
+            body[target] = body[incoming]
+    raw_empty = node.get(_ACCOUNT_EXPLICIT_EMPTY_MARKER) or []
+    explicit_empty = {
+        str(field) for field in raw_empty if str(field) in _ACCOUNT_EXPLICIT_EMPTY_FIELDS
+    } if isinstance(raw_empty, (list, tuple, set)) else set()
+    for field in _SERVER_EDITABLE_FIELDS:
+        if field not in body:
+            continue
+        value = body.get(field)
+        if field == "port":
+            try:
+                value = int(str(value).strip())
+            except Exception as exc:
+                raise MetadataError("port must be a number") from exc
+            if not 1 <= value <= 65535:
+                raise MetadataError("port must be between 1 and 65535")
+        elif field == "timeout":
+            try:
+                value = int(str(value).strip())
+            except Exception as exc:
+                raise MetadataError("timeout must be a number") from exc
+            if not 1 <= value <= 7200:
+                raise MetadataError("timeout must be between 1 and 7200")
+        elif field == "extra_ssh_options":
+            if value in (None, ""):
+                value = []
+            elif not isinstance(value, list) or not all(isinstance(v, str) and v.strip() for v in value):
+                raise MetadataError("extra_ssh_options must be a list of non-empty strings")
+        else:
+            value = _server_text(value, field, 1000)
+        if preserve_account_empty and field in _ACCOUNT_EXPLICIT_EMPTY_FIELDS:
+            if value in (None, "", []):
+                # Do not pop an intentional clear on a legacy named node: an
+                # omitted field inherits the top-level config, while an explicit
+                # empty value must block that inheritance for this account.
+                node[field] = [] if field == "extra_ssh_options" else ""
+                explicit_empty.add(field)
+                continue
+            explicit_empty.discard(field)
+        if value in (None, "", []):
+            node.pop(field, None)
+        else:
+            node[field] = value
+    if preserve_account_empty:
+        if explicit_empty:
+            node[_ACCOUNT_EXPLICIT_EMPTY_MARKER] = sorted(explicit_empty)
+        else:
+            node.pop(_ACCOUNT_EXPLICIT_EMPTY_MARKER, None)
+    if catalog_v5_route:
+        # This path is selected solely by the server-owned catalog adapter.
+        # Do not accept these opaque route fields from an ordinary profile
+        # request: they bind a Windows Credential Manager account to the
+        # generated, content-addressed password-only OpenSSH route.
+        if not isinstance(catalog_v5_metadata, dict):
+            raise MetadataError("password route metadata is unavailable")
+        required = {
+            "auth_mode", "catalog_v5_ssh_route", "catalog_account_id",
+            "catalog_v5_target_alias", "catalog_v5_gateway_alias",
+            "gateway_account_id", "catalog_v5_gateway_host",
+            "catalog_v5_gateway_user", "catalog_v5_gateway_port",
+            "extra_ssh_options",
+        }
+        if set(catalog_v5_metadata) != required:
+            raise MetadataError("password route metadata is invalid")
+        node.pop("catalog_v4_ssh_route", None)
+        # V5 never inherits an identity/key or a user-controlled jump option.
+        # The generated -F config carries the full strict target/gateway route.
+        node["key"] = ""
+        node["proxy_jump"] = ""
+        for field in required:
+            node[field] = catalog_v5_metadata[field]
+    return node
 
 
 import threading as _threading_fs
@@ -23360,10 +25693,91 @@ async def fs_browse(path: str = ""):
         return {"error": f"读取失败: {exc}"}
 
 
-# ===== 短回答自动锚定（2026-10-21）=====
-# 用户只回一个编号时，把「在回答哪一条提问的第几项」写进消息本身（纯机制，不依赖模型自觉）。
-_NUM_ANSWER_RE = re.compile(r"^\s*(?:选项\s*)?[#（(]?\s*(\d{1,2})\s*[.、)）]?\s*$")
-_NUM_ITEM_RE = re.compile(r"(?m)^\s*(?:选项\s*)?(\d{1,2})\s*[.、)）]\s*(\S[^\n]{0,150})$")
+# ===== 短回答自动锚定（2026-10-21；字母选项修复 2026-10-29）=====
+# 用户只回编号/字母/简短确认时，把「选择了哪一项、同意或拒绝什么」写进模型可见的本轮聚焦提示。
+# 只增强 system 提示，不改用户持久化原文；只查最近一条 assistant，避免绑定过期菜单或提问。
+_NUM_ANSWER_RE = re.compile(r"^\s*(?:选项\s*)?[#（(]?\s*(\d{1,2})\s*[.、。)）]?\s*$")
+_ALPHA_ANSWER_RE = re.compile(r"^\s*(?:(?:选项|选)\s*)?[（(]?\s*([A-Za-z])\s*[.、。:：)）]?\s*$")
+_NUM_ITEM_RE = re.compile(
+    r"(?m)^\s*(?:[-*+]\s+)?(?:\*\*)?(?:选项\s*)?[（(]?(\d{1,2})(?:\*\*)?\s*"
+    r"[.、。)）]\s*(?:\*\*)?\s*(\S[^\n]{0,500})$")
+_ALPHA_ITEM_RE = re.compile(
+    r"(?m)^\s*(?:[-*+]\s+)?(?:\*\*)?(?:选项\s*)?[（(]?([A-Za-z])(?:\*\*)?\s*"
+    r"(?:[.、。:：)）]|[—–-])\s*(?:\*\*)?\s*(\S[^\n]{0,500})$")
+
+_AFFIRM_SHORT_ANSWERS = frozenset({
+    "可以", "可以的", "可以啊", "行", "好", "好的", "好呀", "好嘞", "嗯", "嗯嗯",
+    "是", "是的", "对", "对的", "同意", "没问题", "要", "需要", "确认",
+    "继续", "接着来", "开始吧", "做吧", "跑吧",
+    "ok", "okay", "yes", "y", "sure",
+})
+_DECLINE_SHORT_ANSWERS = frozenset({
+    "不", "不用", "不用了", "不需要", "不要", "先不", "先别", "算了", "别",
+    "取消", "停", "否", "不同意", "no", "n", "nope",
+})
+
+
+def _short_confirmation_polarity(user_text):
+    """只识别整条短答复的肯定/否定；带补充条件的句子交给模型正常理解。"""
+    t = re.sub(r"[\s。！？!?~～]+", "", (user_text or "")).lower()
+    if not t or len(t) > 12:
+        return ""
+    if t in _AFFIRM_SHORT_ANSWERS:
+        return "affirm"
+    if t in _DECLINE_SHORT_ANSWERS:
+        return "decline"
+    return ""
+
+
+def _pending_confirmation_directive(content):
+    """提取最近 assistant 末尾的单一待确认行动，不处理开放式选择或让用户操作的问题。"""
+    text = str(content or "").strip()
+    if not text:
+        return ""
+    parts = [p.strip() for p in re.split(r"(?<=[。！？!?])\s*|\n+", text[-1600:]) if p.strip()]
+    for part in reversed(parts[-6:]):
+        # “请回复继续/确认/开始”是显式等待指令；排除“不要/别回复”等否定句式。
+        if not re.search(r"(?:不要|别|无需)回复", part):
+            if re.search(
+                    r"(?:回复|告诉我|说)\s*[“\"']?(?:继续|开始|确认|执行|跑|好|可以|yes|no)"
+                    r"(?:[”\"']|\s|即|[，。！？!?]|$)", part, re.I):
+                return re.sub(r"\s+", " ", part)[:300]
+        if not part.endswith(("？", "?")):
+            continue
+        # 必须是 assistant 提议自己执行（或提议共同开始）的是/否确认；
+        # “你可以上传文件吗”等要求用户行动的问题不算。
+        offer = re.search(
+            r"(需要我|要我|要不要我|我可以|我来|我继续|我开始|我跑|我出图|我定稿|"
+            r"要不要(?:继续|开始|执行|跑)|是否(?:现在)?(?:开始|继续|执行|运行|按))", part)
+        action_question = re.search(
+            r"(?:现在|按|确认)[^？?]{0,80}(?:开始|继续|执行|运行|出图|定稿|做)", part)
+        if offer or action_question:
+            return re.sub(r"\s+", " ", part)[:300]
+    return ""
+
+
+def _confirmation_anchor(prev_msgs, user_text):
+    """把“可以/好的/不用”等短答复绑定到最近一条待确认意图，且只绑定这一条。"""
+    t = (user_text or "").strip()
+    polarity = _short_confirmation_polarity(t)
+    if not polarity:
+        return user_text
+    for msg in reversed(prev_msgs or []):
+        if msg.get("role") != "assistant":
+            continue
+        directive = _pending_confirmation_directive(msg.get("content") or "")
+        if not directive:
+            return user_text
+        if polarity == "affirm":
+            return (
+                f"{t}（= 用户在回应你上一条待确认指令：{directive}\n"
+                "这是明确的肯定确认，不是误触或闲聊；用户已允许按上一轮约定的单一行动继续，"
+                "请直接执行该行动，不要重复询问。）")
+        return (
+            f"{t}（= 用户在回应你上一条待确认指令：{directive}\n"
+            "这是明确的否定/拒绝；不要执行上一轮提议，也不要自动复活任务。"
+            "如需继续，等待用户新的明确指示。）")
+    return user_text
 
 
 def _answer_anchor(prev_msgs, user_text):
@@ -23371,20 +25785,57 @@ def _answer_anchor(prev_msgs, user_text):
     if not t:
         return user_text
     m = _NUM_ANSWER_RE.match(t)
+    is_alpha = False
     if not m:
-        return user_text
-    n = int(m.group(1))
+        m = _ALPHA_ANSWER_RE.match(t)
+        is_alpha = bool(m)
+    if not m:
+        return _confirmation_anchor(prev_msgs, user_text)
     for msg in reversed(prev_msgs or []):
         if msg.get("role") != "assistant":
             continue
         content = str(msg.get("content") or "")
-        items = {}
-        for mm in _NUM_ITEM_RE.finditer(content):
-            items[int(mm.group(1))] = mm.group(2).strip()
-        if n in items:
-            return (f"{t}（= 在回答你上一条提问的第 {n} 项：{items[n][:140]}）")
-        return user_text
-    return user_text
+        if is_alpha:
+            # 单个字母脱离菜单很容易只是普通文本；至少两个字母选项才确认这是菜单。
+            items = {}
+            for mm in _ALPHA_ITEM_RE.finditer(content):
+                items[mm.group(1).upper()] = mm.group(2).strip()
+            key = m.group(1).upper()
+            if len(items) >= 2 and key in items:
+                return (
+                    f"{t}（= 用户明确选择你上一条消息的 {key} 项：{items[key][:240]}\n"
+                    "这是正式的选项答复，不是误触或占位消息；若所选项包含行动方案，"
+                    "即表示用户已确认按该项继续，不要重复询问已选内容。）")
+        else:
+            items = {}
+            for mm in _NUM_ITEM_RE.finditer(content):
+                items[int(mm.group(1))] = mm.group(2).strip()
+            n = int(m.group(1))
+            if n in items:
+                return (
+                    f"{t}（= 在回答你上一条提问的第 {n} 项：{items[n][:140]}；"
+                    "这是正式选项答复，不是误触。）")
+        # 最近一条 assistant 不是可容纳该答案的菜单时，不回溯更老的菜单；
+        # 但 y/n 等单字母仍可能是自然语言确认，再尝试待确认意图绑定。
+        return _confirmation_anchor(prev_msgs, user_text)
+    return _confirmation_anchor(prev_msgs, user_text)
+
+
+def _build_turn_focus_prompt(prev_msgs, user_text):
+    """构造模型实际看到的本轮聚焦提示；短选项/确认答复先展开，避免脱离上下文误判。"""
+    t = (user_text or "").strip()
+    if not t:
+        return ""
+    try:
+        focus_text = _answer_anchor(prev_msgs or [], t)
+    except Exception:
+        focus_text = t
+    return (
+        "【本轮唯一任务 — 最高优先级】下面是用户刚刚发送的消息，"
+        "请只处理这一条消息在当前上下文中的意图，不要延续或重复你上一轮的输出；"
+        "历史对话用于理解本条消息的指代、确认与选项，若与本轮明确的新指令冲突，以本轮为准。\n"
+        f"用户本轮消息：{focus_text[:800]}"
+    )
 
 
 _UI_PREFS_PATH = os.path.join(MEMOMICS_HOME_DIR, "ui_prefs.json")
@@ -23519,64 +25970,9 @@ async def bundle_list(out: str = ""):
 
 @app.post("/api/cluster/node/delete")
 async def cluster_node_delete(request: Request):
-    """删除 remote.nodes 下的一个节点（2026-10-18 用户要求：能加就该能删）。
-
-    行级删除：只摘掉 `  nodes:` 里以 `    <name>:` 开头的那个子块，其余配置一字不动
-    （避免 yaml.dump 重排整份 config 造成的格式噪音）。
-    """
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
-    name = str(body.get("name") or "").strip()
-    if not name or not name.replace("-", "").replace("_", "").replace(".", "").isalnum():
-        return {"ok": False, "error": "节点名不合法"}
-    p = os.path.join(MEMOMICS_HOME_DIR, "config.yaml")
-    try:
-        with open(p, "r", encoding="utf-8", newline="") as f:
-            raw = f.read()
-    except Exception as exc:
-        return {"ok": False, "error": f"读配置失败: {exc}"}
-    eol2 = "\r\n" if "\r\n" in raw else "\n"
-    lines = raw.replace("\r\n", "\n").split("\n")
-    in_nodes = False
-    removed = []
-    out = []
-    skip_indent = None
-    for ln in lines:
-        if ln.rstrip() == "  nodes:":
-            in_nodes = True
-            out.append(ln)
-            continue
-        if in_nodes:
-            # 退出 nodes 段：出现比 4 空格浅的顶层键
-            if ln and not ln.startswith("    ") and not ln.startswith("      "):
-                in_nodes = False
-                skip_indent = None
-                out.append(ln)
-                continue
-            if ln.startswith("    ") and ln.strip().startswith(name + ":"):
-                skip_indent = len(ln) - len(ln.lstrip())
-                removed.append(ln.strip())
-                continue
-            if skip_indent is not None:
-                cur = len(ln) - len(ln.lstrip()) if ln.strip() else 999
-                if ln.strip() and cur > skip_indent:
-                    continue      # 该节点的子键（host/note/proxy_jump…）一起删
-                skip_indent = None
-        out.append(ln)
-    if not removed:
-        return {"ok": False, "error": f"没有这个节点: {name}"}
-    new_text = "\n".join(out)
-    try:
-        with open(p, "w", encoding="utf-8", newline="") as f:
-            f.write(new_text.replace("\n", eol2) if eol2 != "\n" else new_text)
-        from memomics.bio_tools import remote_cluster as _rc
-        _rc._load_remote_config(force=True)   # 清缓存，立即生效
-    except Exception as exc:
-        return {"ok": False, "error": f"写配置失败: {exc}"}
-    logger.info(f"[cluster] 删除节点 {name}")
-    return {"ok": True, "deleted": name, "note": "已从 config.yaml 的 remote.nodes 移除"}
+    """Retired flat-node deletion; catalog deletion owns cascade semantics."""
+    _ = request
+    return _retired_cluster_catalog_mutation_response()
 
 
 @app.get("/api/cluster/status")
@@ -23587,19 +25983,1633 @@ async def api_cluster_status():
         return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
 
 
+@app.get("/api/cluster/servers")
+async def api_cluster_servers():
+    """List sanitized, effective server profiles without creating SSH connections."""
+    try:
+        _cfg, servers, legacy = _cluster_server_catalog()
+        return {"servers": servers, "legacy_single_server": legacy}
+    except Exception as exc:
+        return _metadata_error_response(exc, status=500)
+
+
+def _retired_cluster_catalog_mutation_response():
+    """Reject V3/flat writes without ever falling back to their YAML logic."""
+    if not _CLUSTER_CATALOG_ROUTER_READY:
+        # Preserve existing chat and remote execution, but make a damaged
+        # catalog registration visible instead of silently reopening an old
+        # unaudited write path.
+        return JSONResponse({
+            "ok": False,
+            "code": "catalog_unavailable",
+            "error": "集群目录未加载，旧配置入口已停用；请重启或修复本机安装后重试。",
+        }, status_code=503)
+    return JSONResponse({
+        "ok": False,
+        "code": "workflow_changed",
+        "error": "旧服务器配置入口已停用；请在“远端集群管理”中使用服务器、节点、用户和匹配连接流程。",
+    }, status_code=410)
+
+
+def _new_server_id(preferred: str = "") -> str:
+    candidate = str(preferred or "").strip()
+    if candidate:
+        if not _CLUSTER_NODE_NAME_RE.fullmatch(candidate):
+            raise MetadataError("server id may contain only letters, numbers, dot, underscore and hyphen (max 48)")
+        return candidate
+    return "server-" + uuid.uuid4().hex[:12]
+
+
+def _create_cluster_server_profile(body: dict, *, catalog_v4_route: bool = False,
+                                   catalog_v5_route: bool = False,
+                                   catalog_v5_metadata: dict | None = None) -> dict:
+    """Create one stable ``remote.nodes`` profile without an HTTP self-call.
+
+    Both the legacy ``/api/cluster/servers`` endpoint and the new catalog use
+    this function.  It preserves the old atomic YAML write and legacy-host
+    promotion semantics while making account creation safe to call from a
+    synchronous catalog adapter.
+    """
+    if not isinstance(body, dict):
+        raise MetadataError("request body must be an object")
+    display_name = _server_text(body.get("name"), "name", 80, required=True)
+    server_id = _new_server_id(body.get("id"))
+    node = _server_payload_to_node(
+        dict(body, name=display_name), catalog_v4_route=catalog_v4_route,
+        catalog_v5_route=catalog_v5_route, catalog_v5_metadata=catalog_v5_metadata,
+    )
+    node["display_name"] = display_name
+    with _CLUSTER_SERVER_LOCK:
+        if _cluster_server_by_id(server_id):
+            raise MetadataError("server id already exists")
+
+        def _add(nodes):
+            if server_id in nodes:
+                raise MetadataError("server id already exists")
+            nodes[server_id] = node
+
+        # The first addition to an old single-host setup promotes that host to
+        # the stable legacy-default node in the same atomic write.  Existing
+        # bindings and the unbound default selection retain their target.
+        _atomic_update_remote_nodes(_add, promote_legacy=True)
+        server = _cluster_server_by_id(server_id)
+    if server is None:
+        raise RuntimeError("server was not readable after saving")
+    return server
+
+
+@app.post("/api/cluster/servers")
+async def create_cluster_server(request: Request):
+    _ = request
+    return _retired_cluster_catalog_mutation_response()
+
+
+_ACCOUNT_PROFILE_EDITABLE_FIELDS = {
+    "name", "user", "key_path", "workdir", "job_dir", "local_root", "remote_root",
+    "timeout", "proxy_jump", "extra_ssh_options", "scheduler", "partition", "queue",
+    "note", "role", "display_name",
+}
+
+
+def _update_cluster_server_profile(server_id: str, body: dict, *, account_only: bool = False,
+                                   catalog_v4_route: bool = False, catalog_v5_route: bool = False,
+                                   catalog_v5_metadata: dict | None = None) -> dict:
+    """Update a local profile and invalidate only its live connection caches.
+
+    ``account_only`` is used by the hierarchy catalog: a login-account edit
+    must retain its node endpoint (host/port) even if a stale client includes
+    those values in its form payload.
+    """
+    if not isinstance(body, dict) or not body:
+        raise MetadataError("request body must be a non-empty object")
+    if "id" in body and str(body.get("id") or "").strip().lower() != str(server_id or "").strip().lower():
+        raise MetadataError("server id is immutable; change name to rename the display label")
+    updates = dict(body)
+    if account_only:
+        updates = {key: value for key, value in updates.items() if key in _ACCOUNT_PROFILE_EDITABLE_FIELDS}
+        if not updates:
+            raise MetadataError("account update contains no editable fields")
+    with _CLUSTER_SERVER_LOCK:
+        before = _cluster_server_by_id(server_id)
+        if before is None:
+            raise MetadataError("cluster server not found")
+        if before.get("legacy"):
+            raise MetadataError("the legacy single server is managed by the existing cluster configuration form")
+        old_effective = dict((_cluster_mod()._node_table(_cluster_mod()._load_remote_config(force=True)).get(before["node_id"]) or {}))
+
+        def _update(nodes):
+            current = nodes.get(before["node_id"])
+            if current is None:
+                raise MetadataError("cluster server not found")
+            if not isinstance(current, dict):
+                current = {"host": current}
+            nodes[before["node_id"]] = _server_payload_to_node(
+                dict(updates), current, preserve_account_empty=account_only,
+                catalog_v4_route=catalog_v4_route, catalog_v5_route=catalog_v5_route,
+                catalog_v5_metadata=catalog_v5_metadata,
+            )
+
+        _atomic_update_remote_nodes(_update)
+        _invalidate_cluster_server_cache(str(before["id"]), old_effective)
+        updated = _cluster_server_by_id(str(before["id"]))
+    if updated is None:
+        raise RuntimeError("server was not readable after saving")
+    return updated
+
+
+@app.patch("/api/cluster/servers/{server_id}")
+async def update_cluster_server(server_id: str, request: Request):
+    _ = server_id, request
+    return _retired_cluster_catalog_mutation_response()
+
+
+def _delete_cluster_server_profiles(profile_ids) -> dict:
+    """Atomically remove one or more local ``remote.nodes`` profiles.
+
+    Deletion is deliberately a local configuration operation: it neither
+    reads old chat bindings nor attempts to cancel remote jobs/sessions.  Jobs
+    and persistent R sessions retain their own immutable connection snapshots.
+    The catalog router owns SQLite link deletion in its surrounding transaction
+    and therefore uses this batch primitive directly.
+    """
+    if isinstance(profile_ids, str):
+        profile_ids = [profile_ids]
+    if not isinstance(profile_ids, (list, tuple, set)):
+        raise MetadataError("profile_ids must be a list")
+    wanted = []
+    seen = set()
+    for raw_id in profile_ids:
+        value = str(raw_id or "").strip()
+        if not value:
+            raise MetadataError("profile id is required")
+        key = value.lower()
+        if key not in seen:
+            seen.add(key)
+            wanted.append(value)
+    if not wanted:
+        raise MetadataError("profile_ids is required")
+
+    with _CLUSTER_SERVER_LOCK:
+        cfg, rows, _legacy = _cluster_server_catalog()
+        by_id = {str(row.get("id") or "").lower(): row for row in rows}
+        missing = [value for value in wanted if value.lower() not in by_id]
+        if missing:
+            raise MetadataError("cluster server not found")
+        selected = [by_id[value.lower()] for value in wanted]
+        # A legacy flat profile must first be materialized as legacy-default in
+        # the same YAML mutation.  Removing that promoted node also retires the
+        # top-level host/default fallback, preventing a deleted profile from
+        # silently reappearing on the next config load.
+        promote_legacy = any(bool(item.get("legacy")) for item in selected)
+        node_ids = [
+            _LEGACY_SERVER_ID if item.get("legacy") else str(item.get("node_id") or item.get("id") or "")
+            for item in selected
+        ]
+        if not all(node_ids):
+            raise MetadataError("cluster server is missing a node id")
+        table = _cluster_mod()._node_table(cfg)
+        old_effective = {
+            str(item["id"]): dict(table.get(str(item.get("node_id") or "")) or {})
+            for item in selected
+        }
+
+        def _remove(nodes):
+            for node_id in node_ids:
+                if node_id not in nodes:
+                    raise MetadataError("cluster server not found")
+            for node_id in node_ids:
+                del nodes[node_id]
+
+        _atomic_update_remote_nodes(_remove, promote_legacy=promote_legacy)
+        deleted = [str(item["id"]) for item in selected]
+        for profile_id in deleted:
+            _invalidate_cluster_server_cache(profile_id, old_effective.get(profile_id),
+                                             preserve_remote_resources=True)
+        return {"ok": True, "deleted": deleted}
+
+
+def _delete_cluster_server(server_id: str):
+    """Legacy single-delete wrapper around the atomic batch primitive."""
+    result = _delete_cluster_server_profiles([server_id])
+    deleted = result["deleted"][0]
+    # Old flat endpoints historically repaired a catalog link best-effort.  Do
+    # that only here for compatibility; catalog batch deletion commits its own
+    # SQLite cascade and must never race a per-profile unlink callback.
+    try:
+        from memomics.cluster_catalog import ClusterCatalogStore
+        ClusterCatalogStore(os.path.join(MEMOMICS_HOME_DIR, "state.db")).unlink_profile_anywhere(deleted)
+    except Exception:
+        logger.warning("[cluster-catalog] legacy profile unlink deferred after local YAML deletion")
+    return {"ok": True, "deleted": deleted}, None
+
+
+@app.delete("/api/cluster/servers/{server_id}")
+async def delete_cluster_server(server_id: str):
+    _ = server_id
+    return _retired_cluster_catalog_mutation_response()
+
+
+class _ClusterCatalogAdapter:
+    """Small, synchronous bridge from the hierarchy router to ``remote.nodes``.
+
+    The SQLite catalog owns only grouping metadata.  This adapter deliberately
+    owns no credentials: profile connection configuration remains in local
+    YAML, while catalog link rows remain in SQLite.  Deprecated chat bindings
+    are never consulted for profile selection, mutation, or deletion.
+    """
+
+    lock = _CLUSTER_SERVER_LOCK
+
+    def list_profiles(self):
+        return _cluster_server_catalog()
+
+    def get_profile(self, profile_id):
+        return _cluster_server_by_id(str(profile_id or ""))
+
+    def create_profile(self, payload):
+        return _create_cluster_server_profile(dict(payload or {}))
+
+    def update_profile(self, profile_id, payload):
+        return _update_cluster_server_profile(str(profile_id or ""), dict(payload or {}), account_only=True)
+
+    def profile_transaction(self):
+        return _cluster_profile_transaction()
+
+    def set_remote_enabled(self, enabled):
+        _set_cluster_remote_enabled(bool(enabled))
+        return {"ok": True, "enabled": bool(enabled)}
+
+    def delete_profiles(self, profile_ids):
+        return _delete_cluster_server_profiles(profile_ids)
+
+    def delete_profile(self, profile_id):
+        result = self.delete_profiles([str(profile_id or "")])
+        deleted = list(result.get("deleted") or []) if isinstance(result, dict) else []
+        return {"ok": bool(result.get("ok")) and bool(deleted) if isinstance(result, dict) else False,
+                "deleted": deleted[0] if deleted else ""}
+
+    def bound_session_ids(self, profile_id):
+        # Compatibility presentation field only.  Reading stale metadata must
+        # not prevent catalog use or profile deletion.
+        _ = profile_id
+        return []
+
+    def is_profile_running(self, profile_id):
+        _ = profile_id
+        return False
+
+    # V4 connection matching -------------------------------------------------
+    # The catalog passes only records it has loaded from its own SQLite store.
+    # This adapter still revalidates their relationship and is the *only*
+    # layer allowed to turn them into a temporary SSH configuration or a
+    # persisted remote.nodes profile.  In particular, the browser never gets
+    # an arbitrary ProxyCommand / SSH options / shell-command escape hatch.
+    _MATCH_CONNECTION_FIELDS = {
+        "name", "display_name", "key_path", "workdir", "job_dir", "local_root", "remote_root",
+        "timeout", "scheduler", "partition", "queue", "note", "clear_fields",
+    }
+    # V5 never receives an identity-file path, a password, or arbitrary SSH
+    # options from the HTTP/catalog record.  Passwords are owned by the local
+    # Credential Manager provider and routes are generated below.
+    _V5_MATCH_CONNECTION_FIELDS = {
+        "name", "display_name", "workdir", "job_dir", "local_root", "remote_root",
+        "timeout", "scheduler", "partition", "queue", "note", "clear_fields",
+    }
+    _MATCH_ROUTE_FIELDS = {"mode", "gateway_profile_id"}
+    _MATCH_HOST_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$")
+    _MATCH_USER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+    _MATCH_CLEAR_FIELDS = frozenset({
+        "key_path", "workdir", "job_dir", "local_root", "remote_root", "timeout",
+        "scheduler", "partition", "queue", "note",
+    })
+    _MATCH_RECEIPT_TTL_SECONDS = 300
+    _MATCH_RECEIPT_MAX_PER_KIND = 64
+
+    def __init__(self, credential_store=None):
+        # A successful password/bootstrap probe has resolved an application
+        # identity that must be persisted verbatim, not recomposed later from
+        # sparse browser fields.  This stays adapter-local and never crosses
+        # the HTTP/catalog boundary; it contains no password or public-key
+        # line and expires quickly.
+        self._matched_receipts = {}
+        self._verified_candidates = {}
+        self._saved_test_receipts = {}
+        self._receipt_lock = _threading.RLock()
+        # Production injects one CredentialManagerStore into both the HTTP
+        # router and this adapter.  Tests may inject MemoryCredentialStore;
+        # the fallback is intentionally only for direct adapter construction.
+        self._credential_store = credential_store
+
+    @staticmethod
+    def _match_failure(stage, code, message, **extra):
+        result = {"ok": False, "stage": str(stage), "code": str(code), "message": str(message)}
+        result.update({key: value for key, value in extra.items() if value is not None})
+        return result
+
+    @classmethod
+    def _match_text(cls, value, field, *, required=False, maximum=1024):
+        text = "" if value is None else str(value).strip()
+        if any(ord(ch) < 32 or ord(ch) == 127 for ch in text):
+            raise MetadataError("%s cannot contain control characters" % field)
+        if required and not text:
+            raise MetadataError("%s is required" % field)
+        if len(text) > maximum:
+            raise MetadataError("%s is too long" % field)
+        return text
+
+    @classmethod
+    def _match_port(cls, value, field="port"):
+        try:
+            port = int(str(value).strip())
+        except Exception as exc:
+            raise MetadataError("%s must be a number" % field) from exc
+        if not 1 <= port <= 65535:
+            raise MetadataError("%s must be between 1 and 65535" % field)
+        return port
+
+    @classmethod
+    def _match_host(cls, value, field="host"):
+        """Mirror V4 catalog host acceptance, including bracketed IPv6."""
+        host = cls._match_text(value, field, required=True, maximum=253)
+        if any(ch.isspace() for ch in host) or any(ch in host for ch in "@/\\"):
+            raise MetadataError("%s is invalid" % field)
+        literal = host[1:-1] if host.startswith("[") and host.endswith("]") else host
+        if (host.startswith("[") != host.endswith("]")):
+            raise MetadataError("%s is invalid" % field)
+        try:
+            return str(ipaddress.ip_address(literal))
+        except ValueError:
+            if not cls._MATCH_HOST_RE.fullmatch(host) or ".." in host:
+                raise MetadataError("%s is invalid" % field)
+        return host
+
+    @staticmethod
+    def _receipt_key(server_id, node, account):
+        return (
+            str(server_id or ""), str((node or {}).get("id") or ""),
+            str((account or {}).get("id") or ""),
+        )
+
+    @staticmethod
+    def _receipt_fingerprint(server_id, node, account, route, connection, gateway_connection):
+        """Stable fingerprint of non-secret values the adapter is about to save."""
+        def _safe(value):
+            if isinstance(value, dict):
+                return {str(key): _safe(item) for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))}
+            if isinstance(value, (list, tuple)):
+                return [_safe(item) for item in value]
+            return value
+        payload = {
+            "server_id": str(server_id or ""), "node": _safe(node or {}), "account": _safe(account or {}),
+            "route": _safe(route or {}), "connection": _safe(connection or {}),
+            "gateway": _safe(gateway_connection or {}),
+        }
+        return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                                         separators=(",", ":")).encode("utf-8")).hexdigest()
+
+    def _discard_expired_receipts(self):
+        now = time.monotonic()
+        self._matched_receipts = {
+            key: receipt for key, receipt in self._matched_receipts.items()
+            if now - float(receipt.get("created_monotonic") or 0) <= self._MATCH_RECEIPT_TTL_SECONDS
+        }
+        self._verified_candidates = {
+            key: receipt for key, receipt in self._verified_candidates.items()
+            if now - float(receipt.get("created_monotonic") or 0) <= self._MATCH_RECEIPT_TTL_SECONDS
+        }
+        self._saved_test_receipts = {
+            key: receipt for key, receipt in self._saved_test_receipts.items()
+            if now - float(receipt.get("created_monotonic") or 0) <= self._MATCH_RECEIPT_TTL_SECONDS
+        }
+
+    def _put_receipt(self, table: dict, key, receipt: dict) -> None:
+        """Store a short-lived receipt with deterministic bounded retention.
+
+        Callers hold ``_receipt_lock`` and have already discarded TTL-expired
+        entries.  A burst of successful probes must not grow an in-process
+        map without limit; dropping the oldest unconsumed receipt is safe
+        because Phase 2 then fails closed and requires a fresh probe.
+        """
+        if key not in table:
+            while len(table) >= self._MATCH_RECEIPT_MAX_PER_KIND:
+                def _age(item):
+                    value = item[1]
+                    try:
+                        created = float(value.get("created_monotonic") or 0)
+                    except Exception:
+                        created = 0.0
+                    return (created, repr(item[0]))
+                table.pop(min(table.items(), key=_age)[0], None)
+        table[key] = receipt
+
+    @staticmethod
+    def _catalog_changed_retry():
+        return {"ok": False, "stage": "validate", "code": "catalog_changed_retry",
+                "message": "连接配置已变化；请重新验证后再保存。"}
+
+    @staticmethod
+    def _frozen_fingerprint(value):
+        return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
+                                         separators=(",", ":")).encode("utf-8")).hexdigest()
+
+    def _remote_yaml_fingerprint(self, *profile_ids):
+        """Fingerprint only current remote execution state, never whole YAML.
+
+        ``config.yaml`` can hold unrelated provider credentials.  Phase-two
+        drift detection therefore hashes only ``remote.enabled`` plus the
+        effective named profiles that Phase one depended on (the rematched
+        profile and/or directly matched gateway).  Nothing from this payload
+        is logged, returned, or stored except its opaque digest.
+        """
+        try:
+            rc = _cluster_mod()
+            cfg = rc._load_remote_config(force=True)
+            table = rc._node_table(cfg)
+            selected = []
+            for raw_id in profile_ids:
+                profile_id = str(raw_id or "").strip()
+                if not profile_id:
+                    continue
+                profile = _cluster_server_by_id(profile_id)
+                if not profile:
+                    selected.append({"id": profile_id, "missing": True})
+                    continue
+                node_id = str(profile.get("node_id") or profile.get("id") or "")
+                effective = table.get(node_id) or {}
+                selected.append({
+                    "id": profile_id,
+                    "node_id": node_id,
+                    "host": str(effective.get("host") or ""),
+                    "user": str(effective.get("user") or ""),
+                    "port": int(effective.get("port") or 22),
+                    "key": str(effective.get("key") or ""),
+                    "workdir": str(effective.get("workdir") or ""),
+                    "job_dir": str(effective.get("job_dir") or ""),
+                    "timeout": int(effective.get("timeout") or 300),
+                    "scheduler": str(effective.get("scheduler") or ""),
+                    "partition": str(effective.get("partition") or ""),
+                    "queue": str(effective.get("queue") or ""),
+                    "local_root": str(effective.get("local_root") or ""),
+                    "remote_root": str(effective.get("remote_root") or ""),
+                    "extra_ssh_options": list(effective.get("extra_ssh_options") or []),
+                    "proxy_jump": str(effective.get("proxy_jump") or ""),
+                    # Private V4 route provenance is part of the effective
+                    # execution identity.  If it drifts between Phase 1 and
+                    # Phase 2, require a fresh probe rather than letting a
+                    # saved test/persist action reuse a weaker route policy.
+                    "catalog_v4_ssh_route": str(effective.get("catalog_v4_ssh_route") or ""),
+                    # Password-route provenance and both gateway endpoint
+                    # fields participate in the same Phase-1/Phase-2 drift
+                    # check.  They are opaque/non-secret; neither a password
+                    # nor a Credential Manager target is serialized here.
+                    "auth_mode": str(effective.get("auth_mode") or ""),
+                    "catalog_v5_ssh_route": str(effective.get("catalog_v5_ssh_route") or ""),
+                    "catalog_account_id": str(effective.get("catalog_account_id") or ""),
+                    "gateway_account_id": str(effective.get("gateway_account_id") or ""),
+                    "catalog_v5_target_alias": str(effective.get("catalog_v5_target_alias") or ""),
+                    "catalog_v5_gateway_alias": str(effective.get("catalog_v5_gateway_alias") or ""),
+                    "catalog_v5_gateway_host": str(effective.get("catalog_v5_gateway_host") or ""),
+                    "catalog_v5_gateway_user": str(effective.get("catalog_v5_gateway_user") or ""),
+                    "catalog_v5_gateway_port": str(effective.get("catalog_v5_gateway_port") or ""),
+                })
+            body = {"enabled": bool(cfg.get("enabled")), "profiles": selected}
+            return hashlib.sha256(json.dumps(body, ensure_ascii=True, sort_keys=True,
+                                             separators=(",", ":")).encode("utf-8")).hexdigest()
+        except Exception as exc:
+            raise MetadataError("cluster configuration is unavailable") from exc
+
+    @staticmethod
+    def _frozen_match_parts(frozen):
+        expected = {
+            "schema", "server_id", "server", "node", "account", "route", "connection",
+            "gateway_connection", "existing_profile_id", "profile_id",
+        }
+        if not isinstance(frozen, dict) or set(frozen) != expected:
+            raise MetadataError("verified connection request is invalid")
+        if frozen.get("schema") != "v4-match-frozen-1" or not isinstance(frozen.get("server"), dict):
+            raise MetadataError("verified connection request is invalid")
+        server_id = str(frozen.get("server_id") or "")
+        if str(frozen["server"].get("id") or "") != server_id:
+            raise MetadataError("verified connection request is invalid")
+        if not isinstance(frozen.get("node"), dict) or not isinstance(frozen.get("account"), dict):
+            raise MetadataError("verified connection request is invalid")
+        if not isinstance(frozen.get("route"), dict) or not isinstance(frozen.get("connection"), dict):
+            raise MetadataError("verified connection request is invalid")
+        gateway = frozen.get("gateway_connection")
+        if gateway is not None and not isinstance(gateway, dict):
+            raise MetadataError("verified connection request is invalid")
+        profile_id = _new_server_id(frozen.get("profile_id"))
+        existing_profile_id = str(frozen.get("existing_profile_id") or "")
+        return (server_id, frozen["node"], frozen["account"], frozen["route"],
+                frozen["connection"], gateway, existing_profile_id or None, profile_id)
+
+    @staticmethod
+    def _frozen_v5_match_parts(frozen):
+        """Validate the password-only frozen schema without accepting V4 data."""
+        expected = {
+            "schema", "server_id", "server", "node", "account", "route", "connection",
+            "gateway_connection", "existing_profile_id", "profile_id", "credential_revisions",
+        }
+        if not isinstance(frozen, dict) or set(frozen) != expected:
+            raise MetadataError("verified password connection request is invalid")
+        if frozen.get("schema") != "v5-password-match-frozen-1":
+            raise MetadataError("verified password connection request is invalid")
+        revisions = frozen.get("credential_revisions")
+        if not isinstance(revisions, dict) or not revisions:
+            raise MetadataError("verified password connection request is invalid")
+        normalized_revisions = {}
+        for account_id, revision in revisions.items():
+            account_id = str(account_id or "")
+            if (not account_id or isinstance(revision, bool) or not isinstance(revision, int)
+                    or not 1 <= revision <= 0x7FFFFFFFFFFFFFFF):
+                raise MetadataError("verified password connection request is invalid")
+            normalized_revisions[account_id] = revision
+        base = dict(frozen)
+        base.pop("credential_revisions", None)
+        base["schema"] = "v4-match-frozen-1"
+        return (*_ClusterCatalogAdapter._frozen_match_parts(base), normalized_revisions)
+
+    @staticmethod
+    def _frozen_v5_saved_test_parts(frozen):
+        expected = {"schema", "profile_id", "profile", "credential_revisions"}
+        if not isinstance(frozen, dict) or set(frozen) != expected:
+            raise MetadataError("saved password connection test request is invalid")
+        if frozen.get("schema") != "v5-password-test-frozen-1":
+            raise MetadataError("saved password connection test request is invalid")
+        profile_id = str(frozen.get("profile_id") or "")
+        profile = frozen.get("profile")
+        revisions = frozen.get("credential_revisions")
+        if not profile_id or not isinstance(profile, dict) or not isinstance(revisions, dict) or not revisions:
+            raise MetadataError("saved password connection test request is invalid")
+        normalized_revisions = {}
+        for account_id, revision in revisions.items():
+            account_id = str(account_id or "")
+            if (not account_id or isinstance(revision, bool) or not isinstance(revision, int)
+                    or not 1 <= revision <= 0x7FFFFFFFFFFFFFFF):
+                raise MetadataError("saved password connection test request is invalid")
+            normalized_revisions[account_id] = revision
+        return profile_id, profile, normalized_revisions
+
+    def _v5_credential_store_or_default(self):
+        if self._credential_store is not None:
+            return self._credential_store
+        try:
+            from memomics.cluster_credentials import CredentialManagerStore
+            return CredentialManagerStore(MEMOMICS_HOME_DIR)
+        except Exception as exc:
+            raise MetadataError("local password store is unavailable") from exc
+
+    @staticmethod
+    def _v5_candidate_account_ids(candidate):
+        ids = [str((candidate or {}).get("account_id") or "")]
+        gateway = (candidate or {}).get("gateway") or {}
+        if gateway:
+            ids.append(str(gateway.get("account_id") or ""))
+        if not all(ids):
+            raise MetadataError("password connection account metadata is invalid")
+        return list(dict.fromkeys(ids))
+
+    def _v5_current_credential_revisions(self, candidate):
+        """Read revisions only; never format or retain a password in a DTO."""
+        store = self._v5_credential_store_or_default()
+        revisions = {}
+        try:
+            for account_id in self._v5_candidate_account_ids(candidate):
+                record = store.get(account_id)
+                if record is None:
+                    raise MetadataError("saved login password is missing")
+                revision = getattr(record, "revision", None)
+                if isinstance(revision, bool) or not isinstance(revision, int) or revision < 1:
+                    raise MetadataError("local password store is unavailable")
+                revisions[account_id] = revision
+                # The native helper, not this adapter, reads the password at
+                # prompt time.  Discard the record as soon as its public
+                # revision has been checked.
+                del record
+        except MetadataError:
+            raise
+        except Exception as exc:
+            raise MetadataError("local password store is unavailable") from exc
+        return revisions
+
+    def _v5_revisions_match(self, candidate, expected):
+        if not isinstance(expected, dict):
+            return False
+        return self._v5_current_credential_revisions(candidate) == dict(expected)
+
+    def _compose_v5_match_candidate(self, server_id, node, account, route, connection,
+                                    gateway_connection=None, existing_profile_id=None):
+        """Build a password-only candidate from catalog-owned public records."""
+        if not isinstance(node, dict) or not isinstance(account, dict):
+            return None, None, self._match_failure("validate", "invalid_connection", "服务器节点或账号记录无效。")
+        if not isinstance(route, dict) or not isinstance(connection, dict):
+            return None, None, self._match_failure("validate", "invalid_connection", "连接参数格式无效。")
+        if set(route) - self._MATCH_ROUTE_FIELDS or set(connection) - self._V5_MATCH_CONNECTION_FIELDS:
+            return None, None, self._match_failure(
+                "validate", "unsupported_connection_field",
+                "密码连接仅支持受控偏好字段；不接受密钥、SSH 参数、代理命令或密码字段。",
+            )
+        try:
+            clear_fields = connection.get("clear_fields") or []
+            allowed_clear = {"workdir", "job_dir", "local_root", "remote_root", "timeout", "scheduler", "partition", "queue", "note"}
+            if (not isinstance(clear_fields, list) or len(clear_fields) != len(set(clear_fields))
+                    or not set(clear_fields).issubset(allowed_clear)
+                    or set(clear_fields).intersection(set(connection) - {"clear_fields"})):
+                raise MetadataError("clear_fields is invalid")
+            clear = set(clear_fields)
+            wanted_server = self._match_text(server_id, "server_id", required=True, maximum=128)
+            if self._match_text(node.get("server_id"), "node server_id", required=True, maximum=128) != wanted_server:
+                raise MetadataError("node belongs to another server")
+            if self._match_text(account.get("server_id"), "account server_id", required=True, maximum=128) != wanted_server:
+                raise MetadataError("account belongs to another server")
+            host = self._match_host(node.get("host"), "host")
+            user = self._match_text(account.get("user"), "user", required=True, maximum=64)
+            account_id = self._match_text(account.get("id"), "account id", required=True, maximum=128)
+            if not self._MATCH_USER_RE.fullmatch(user):
+                raise MetadataError("host or user is invalid")
+            port = self._match_port(node.get("port", 22))
+            mode = self._match_text(route.get("mode"), "route mode", required=True, maximum=32).lower()
+            if mode not in {"direct", "via_login"}:
+                raise MetadataError("route mode is invalid")
+
+            existing = {}
+            existing_profile = None
+            if existing_profile_id:
+                existing_profile = _cluster_server_by_id(str(existing_profile_id))
+                if not existing_profile:
+                    raise MetadataError("existing profile is unavailable")
+                existing = self._effective_profile_config(existing_profile_id)
+
+            def inherited(field, default, maximum, *, lower=False):
+                if field in clear:
+                    value = default
+                elif field in connection:
+                    value = connection.get(field)
+                else:
+                    value = existing.get(field, default)
+                value = self._match_text(value, field, maximum=maximum)
+                return value.lower() if lower else value
+
+            try:
+                timeout_value = 300 if "timeout" in clear else (
+                    connection.get("timeout") if "timeout" in connection else existing.get("timeout", 300)
+                )
+                timeout = int(str(timeout_value).strip())
+            except Exception as exc:
+                raise MetadataError("timeout must be a number") from exc
+            if not 1 <= timeout <= 7200:
+                raise MetadataError("timeout must be between 1 and 7200")
+            candidate = {
+                "host": host, "user": user, "port": port, "account_id": account_id,
+                "workdir": inherited("workdir", "~", 1024) or "~",
+                "job_dir": inherited("job_dir", "", 1024),
+                "local_root": inherited("local_root", "", 2048),
+                "remote_root": inherited("remote_root", "", 2048),
+                "timeout": timeout,
+                "scheduler": inherited("scheduler", str(node.get("scheduler") or "auto"), 32, lower=True) or "auto",
+                "partition": inherited("partition", str(node.get("partition") or ""), 128),
+                "queue": inherited("queue", str(node.get("queue") or ""), 128),
+            }
+            display_name = self._match_text(
+                connection.get("name") or (existing_profile or {}).get("name")
+                or account.get("name") or account.get("user"),
+                "connection name", required=True, maximum=80,
+            )
+            # `_node_table` keeps the human note under `_note`; retain the
+            # catalog-facing descriptor's value when a V5 rematch/conversion
+            # omits an explicit note preference.
+            note = inherited("note", str((existing_profile or {}).get("note") or ""), 1000)
+            if mode == "direct":
+                if route.get("gateway_profile_id") not in (None, "") or gateway_connection is not None:
+                    raise MetadataError("direct route cannot include a gateway")
+            else:
+                if not isinstance(gateway_connection, dict):
+                    raise MetadataError("gateway connection is required")
+                gateway_profile_id = self._match_text(route.get("gateway_profile_id"), "gateway_profile_id", required=True, maximum=128)
+                if self._match_text(gateway_connection.get("profile_id"), "gateway profile id", required=True, maximum=128) != gateway_profile_id:
+                    raise MetadataError("gateway profile does not match the requested route")
+                if self._match_text(gateway_connection.get("server_id"), "gateway server_id", required=True, maximum=128) != wanted_server:
+                    raise MetadataError("gateway belongs to another server")
+                gateway_route = gateway_connection.get("route") or {}
+                gateway_node = gateway_connection.get("node")
+                gateway_account = gateway_connection.get("account")
+                if (not isinstance(gateway_route, dict) or str(gateway_route.get("mode") or "").lower() != "direct"
+                        or not isinstance(gateway_node, dict) or not isinstance(gateway_account, dict)
+                        or not gateway_node.get("is_login")):
+                    raise MetadataError("gateway must be a matched login node")
+                if self._match_text(gateway_node.get("server_id"), "gateway node server_id", required=True, maximum=128) != wanted_server:
+                    raise MetadataError("gateway node belongs to another server")
+                if self._match_text(gateway_account.get("server_id"), "gateway account server_id", required=True, maximum=128) != wanted_server:
+                    raise MetadataError("gateway account belongs to another server")
+                g_host = self._match_host(gateway_node.get("host"), "gateway host")
+                g_user = self._match_text(gateway_account.get("user"), "gateway user", required=True, maximum=64)
+                g_port = self._match_port(gateway_node.get("port", 22), "gateway port")
+                g_account_id = self._match_text(gateway_account.get("id"), "gateway account id", required=True, maximum=128)
+                if not self._MATCH_USER_RE.fullmatch(g_user):
+                    raise MetadataError("gateway endpoint is invalid")
+                saved_gateway = self._effective_profile_config(gateway_profile_id)
+                if (self._match_host(saved_gateway.get("host"), "saved gateway host") != g_host
+                        or str(saved_gateway.get("user") or "").strip() != g_user
+                        or int(saved_gateway.get("port") or 22) != g_port):
+                    raise MetadataError("saved gateway profile no longer matches its catalog connection")
+                candidate["gateway"] = {
+                    "host": g_host, "user": g_user, "port": g_port, "account_id": g_account_id,
+                }
+            return candidate, {"display_name": display_name, "note": note}, None
+        except Exception:
+            return None, None, self._match_failure(
+                "validate", "invalid_connection",
+                "密码连接配置或已匹配跳板记录无效；请检查节点、账号和路由后重试。",
+            )
+
+    def _persist_v5_candidate(self, profile_id, candidate, metadata):
+        """Persist a verified V5 candidate without retaining a legacy key route."""
+        try:
+            rc = _cluster_mod()
+            normalized = rc._catalog_v5_candidate(dict(candidate or {}))
+            options = rc.catalog_v5_ssh_policy_options(normalized)
+            target_alias, gateway_alias = rc._catalog_v5_aliases(normalized)
+            gateway = normalized.get("gateway") or {}
+            route_metadata = {
+                "auth_mode": rc.CATALOG_V5_PASSWORD_AUTH_MODE,
+                "catalog_v5_ssh_route": rc.CATALOG_V5_SSH_ROUTE_MARKER,
+                "catalog_account_id": normalized["account_id"],
+                "catalog_v5_target_alias": target_alias,
+                "catalog_v5_gateway_alias": gateway_alias,
+                "gateway_account_id": str(gateway.get("account_id") or ""),
+                "catalog_v5_gateway_host": str(gateway.get("host") or ""),
+                "catalog_v5_gateway_user": str(gateway.get("user") or ""),
+                "catalog_v5_gateway_port": int(gateway.get("port") or 0),
+                "extra_ssh_options": list(options),
+            }
+            payload = {
+                "id": _new_server_id(profile_id),
+                "name": self._match_text(metadata.get("display_name"), "connection name", required=True, maximum=80),
+                "host": normalized["host"], "user": normalized["user"], "port": normalized["port"],
+                "key_path": "", "workdir": normalized["workdir"], "job_dir": normalized["job_dir"],
+                "local_root": normalized["local_root"], "remote_root": normalized["remote_root"],
+                "timeout": normalized["timeout"], "scheduler": normalized["scheduler"],
+                "partition": normalized["partition"], "queue": normalized["queue"],
+                "note": self._match_text(metadata.get("note") or "", "note", maximum=1000),
+                "proxy_jump": "", "extra_ssh_options": list(options),
+            }
+            if _cluster_server_by_id(payload["id"]):
+                return _update_cluster_server_profile(
+                    payload["id"], payload, account_only=False, catalog_v5_route=True,
+                    catalog_v5_metadata=route_metadata,
+                )
+            return _create_cluster_server_profile(
+                payload, catalog_v5_route=True, catalog_v5_metadata=route_metadata,
+            )
+        except MetadataError:
+            raise
+        except Exception as exc:
+            raise MetadataError("password connection persistence is unavailable") from exc
+
+    def _effective_profile_config(self, profile_id):
+        """Read a saved profile internally without exposing its key path."""
+        profile = _cluster_server_by_id(str(profile_id or ""))
+        if not profile:
+            raise MetadataError("matched gateway profile is unavailable")
+        rc = _cluster_mod()
+        cfg = rc._load_remote_config(force=True)
+        node_id = str(profile.get("node_id") or profile.get("id") or "")
+        effective = (rc._node_table(cfg).get(node_id) or {})
+        if not effective:
+            raise MetadataError("matched gateway profile is unavailable")
+        return dict(effective)
+
+    def _compose_match_candidate(self, server_id, node, account, route, connection,
+                                 gateway_connection=None):
+        """Build a private, transient remote-cluster config from trusted rows."""
+        if not isinstance(node, dict) or not isinstance(account, dict):
+            return None, self._match_failure("validate", "invalid_connection", "服务器节点或账号记录无效。")
+        if not isinstance(route, dict) or not isinstance(connection, dict):
+            return None, self._match_failure("validate", "invalid_connection", "连接参数格式无效。")
+        if set(route) - self._MATCH_ROUTE_FIELDS or set(connection) - self._MATCH_CONNECTION_FIELDS:
+            return None, self._match_failure(
+                "validate", "unsupported_connection_field",
+                "连接仅支持受控字段；不接受自定义 SSH 参数、代理命令或密码字段。",
+            )
+        try:
+            wanted_server = self._match_text(server_id, "server_id", required=True, maximum=128)
+            if self._match_text(node.get("server_id"), "node server_id", required=True, maximum=128) != wanted_server:
+                raise MetadataError("node belongs to another server")
+            account_server = self._match_text(account.get("server_id"), "account server_id", required=True, maximum=128)
+            if account_server != wanted_server:
+                raise MetadataError("account belongs to another server")
+            host = self._match_host(node.get("host"), "host")
+            user = self._match_text(account.get("user"), "user", required=True, maximum=64)
+            if not self._MATCH_USER_RE.fullmatch(user):
+                raise MetadataError("host or user is invalid")
+            port = self._match_port(node.get("port", 22))
+            mode = self._match_text(route.get("mode"), "route mode", required=True, maximum=32).lower()
+            if mode not in {"direct", "via_login"}:
+                raise MetadataError("route mode is invalid")
+            try:
+                timeout = int(str(connection.get("timeout", 300)).strip())
+            except Exception as exc:
+                raise MetadataError("timeout must be a number") from exc
+            if not 1 <= timeout <= 7200:
+                raise MetadataError("timeout must be between 1 and 7200")
+            candidate = {
+                "host": host,
+                "user": user,
+                "port": port,
+                "key_path": self._match_text(connection.get("key_path"), "key_path", required=True, maximum=2048),
+                "workdir": self._match_text(connection.get("workdir") or "~", "workdir", maximum=1024) or "~",
+                "job_dir": self._match_text(connection.get("job_dir") or "", "job_dir", maximum=1024),
+                "local_root": self._match_text(connection.get("local_root") or "", "local_root", maximum=2048),
+                "remote_root": self._match_text(connection.get("remote_root") or "", "remote_root", maximum=2048),
+                "timeout": timeout,
+                "scheduler": self._match_text(connection.get("scheduler") or node.get("scheduler") or "auto", "scheduler", maximum=32).lower() or "auto",
+                "partition": self._match_text(connection.get("partition") or node.get("partition") or "", "partition", maximum=128),
+                "queue": self._match_text(connection.get("queue") or node.get("queue") or "", "queue", maximum=128),
+            }
+            if mode == "direct":
+                if route.get("gateway_profile_id") not in (None, "") or gateway_connection is not None:
+                    raise MetadataError("direct route cannot include a gateway")
+                return candidate, None
+
+            if not isinstance(gateway_connection, dict):
+                raise MetadataError("gateway connection is required")
+            gateway_profile_id = self._match_text(route.get("gateway_profile_id"), "gateway_profile_id", required=True, maximum=128)
+            if self._match_text(gateway_connection.get("profile_id"), "gateway profile_id", required=True, maximum=128) != gateway_profile_id:
+                raise MetadataError("gateway profile does not match the requested route")
+            if self._match_text(gateway_connection.get("server_id"), "gateway server_id", required=True, maximum=128) != wanted_server:
+                raise MetadataError("gateway belongs to another server")
+            gateway_route = gateway_connection.get("route") or {}
+            if not isinstance(gateway_route, dict) or str(gateway_route.get("mode") or "").lower() != "direct":
+                raise MetadataError("gateway must be a directly matched login connection")
+            gateway_node = gateway_connection.get("node")
+            gateway_account = gateway_connection.get("account")
+            if not isinstance(gateway_node, dict) or not isinstance(gateway_account, dict) or not gateway_node.get("is_login"):
+                raise MetadataError("gateway must be a matched login node")
+            if self._match_text(gateway_node.get("server_id"), "gateway node server_id", required=True, maximum=128) != wanted_server:
+                raise MetadataError("gateway node belongs to another server")
+            if self._match_text(gateway_account.get("server_id"), "gateway account server_id", required=True, maximum=128) != wanted_server:
+                raise MetadataError("gateway account belongs to another server")
+            g_host = self._match_host(gateway_node.get("host"), "gateway host")
+            g_user = self._match_text(gateway_account.get("user"), "gateway user", required=True, maximum=64)
+            g_port = self._match_port(gateway_node.get("port", 22), "gateway port")
+            if not self._MATCH_USER_RE.fullmatch(g_user):
+                raise MetadataError("gateway endpoint is invalid")
+            saved_gateway = self._effective_profile_config(gateway_profile_id)
+            # A catalog connection is only a structured route to the already
+            # matched login profile.  Refuse stale/tampered YAML rather than
+            # silently using a different gateway identity.
+            if (str(saved_gateway.get("host") or "").strip().lower() != g_host.lower()
+                    or str(saved_gateway.get("user") or "").strip() != g_user
+                    or int(saved_gateway.get("port") or 22) != g_port):
+                raise MetadataError("saved gateway profile no longer matches its catalog connection")
+            gateway_key = str(saved_gateway.get("key") or "").strip()
+            if not gateway_key:
+                raise MetadataError("saved gateway application key is unavailable")
+            candidate["gateway"] = {"host": g_host, "user": g_user, "port": g_port, "key_path": gateway_key}
+            return candidate, None
+        except Exception:
+            return None, self._match_failure(
+                "validate", "invalid_connection",
+                "连接配置或已匹配跳板记录无效；请检查节点、账号和路由后重试。",
+            )
+
+    def _compose_prepared_match_candidate(self, server_id, node, account, route, connection,
+                                          gateway_connection=None, existing_profile_id=None,
+                                          target_password=None):
+        """Merge sparse V4 input once, then resolve its app-managed identity.
+
+        This is intentionally separate from the historical V3-shaped helper
+        above.  A V4 rematch inherits saved advanced fields unless a finite
+        ``clear_fields`` entry explicitly resets one to its safe default.
+        """
+        if not isinstance(node, dict) or not isinstance(account, dict):
+            return None, None, self._match_failure("validate", "invalid_connection", "服务器节点或账号记录无效。")
+        if not isinstance(route, dict) or not isinstance(connection, dict):
+            return None, None, self._match_failure("validate", "invalid_connection", "连接参数格式无效。")
+        if set(route) - self._MATCH_ROUTE_FIELDS or set(connection) - self._MATCH_CONNECTION_FIELDS:
+            return None, None, self._match_failure(
+                "validate", "unsupported_connection_field",
+                "连接仅支持受控字段；不接受自定义 SSH 参数、代理命令或密码字段。",
+            )
+        try:
+            clear_fields = connection.get("clear_fields") or []
+            if (not isinstance(clear_fields, list) or len(clear_fields) != len(set(clear_fields))
+                    or not set(clear_fields).issubset(self._MATCH_CLEAR_FIELDS)):
+                raise MetadataError("clear_fields is invalid")
+            clear = set(clear_fields)
+            if clear.intersection(set(connection) - {"clear_fields"}):
+                raise MetadataError("clear_fields overlaps supplied connection values")
+            wanted_server = self._match_text(server_id, "server_id", required=True, maximum=128)
+            if self._match_text(node.get("server_id"), "node server_id", required=True, maximum=128) != wanted_server:
+                raise MetadataError("node belongs to another server")
+            if self._match_text(account.get("server_id"), "account server_id", required=True, maximum=128) != wanted_server:
+                raise MetadataError("account belongs to another server")
+            host = self._match_host(node.get("host"), "host")
+            user = self._match_text(account.get("user"), "user", required=True, maximum=64)
+            if not self._MATCH_USER_RE.fullmatch(user):
+                raise MetadataError("host or user is invalid")
+            port = self._match_port(node.get("port", 22))
+            mode = self._match_text(route.get("mode"), "route mode", required=True, maximum=32).lower()
+            if mode not in {"direct", "via_login"}:
+                raise MetadataError("route mode is invalid")
+
+            existing = {}
+            existing_profile = None
+            if existing_profile_id:
+                existing_profile = _cluster_server_by_id(str(existing_profile_id))
+                if not existing_profile:
+                    raise MetadataError("existing profile is unavailable")
+                existing = self._effective_profile_config(existing_profile_id)
+
+            def inherited(incoming, stored, default, maximum, *, lower=False):
+                if incoming in clear:
+                    value = default
+                elif incoming in connection:
+                    value = connection.get(incoming)
+                else:
+                    value = existing.get(stored, default)
+                text = self._match_text(value, incoming, maximum=maximum)
+                return text.lower() if lower else text
+
+            try:
+                timeout_value = 300 if "timeout" in clear else (
+                    connection.get("timeout") if "timeout" in connection else existing.get("timeout", 300)
+                )
+                timeout = int(str(timeout_value).strip())
+            except Exception as exc:
+                raise MetadataError("timeout must be a number") from exc
+            if not 1 <= timeout <= 7200:
+                raise MetadataError("timeout must be between 1 and 7200")
+            candidate = {
+                "host": host, "user": user, "port": port,
+                "key_path": inherited("key_path", "key", "", 2048),
+                "workdir": inherited("workdir", "workdir", "~", 1024) or "~",
+                "job_dir": inherited("job_dir", "job_dir", "", 1024),
+                "local_root": inherited("local_root", "local_root", "", 2048),
+                "remote_root": inherited("remote_root", "remote_root", "", 2048),
+                "timeout": timeout,
+                "scheduler": inherited("scheduler", "scheduler", str(node.get("scheduler") or "auto"), 32, lower=True) or "auto",
+                "partition": inherited("partition", "partition", str(node.get("partition") or ""), 128),
+                "queue": inherited("queue", "queue", str(node.get("queue") or ""), 128),
+            }
+            display_name = self._match_text(
+                connection.get("name") or (existing_profile or {}).get("name")
+                or account.get("name") or account.get("user"),
+                "connection name", required=True, maximum=80,
+            )
+            note = inherited("note", "note", "", 1000)
+            if mode == "direct":
+                if route.get("gateway_profile_id") not in (None, "") or gateway_connection is not None:
+                    raise MetadataError("direct route cannot include a gateway")
+            else:
+                if not isinstance(gateway_connection, dict):
+                    raise MetadataError("gateway connection is required")
+                gateway_profile_id = self._match_text(route.get("gateway_profile_id"), "gateway_profile_id", required=True, maximum=128)
+                if self._match_text(gateway_connection.get("profile_id"), "gateway profile id", required=True, maximum=128) != gateway_profile_id:
+                    raise MetadataError("gateway profile does not match the requested route")
+                if self._match_text(gateway_connection.get("server_id"), "gateway server_id", required=True, maximum=128) != wanted_server:
+                    raise MetadataError("gateway belongs to another server")
+                gateway_route = gateway_connection.get("route") or {}
+                if not isinstance(gateway_route, dict) or str(gateway_route.get("mode") or "").lower() != "direct":
+                    raise MetadataError("gateway must be a directly matched login connection")
+                gateway_node = gateway_connection.get("node")
+                gateway_account = gateway_connection.get("account")
+                if not isinstance(gateway_node, dict) or not isinstance(gateway_account, dict) or not gateway_node.get("is_login"):
+                    raise MetadataError("gateway must be a matched login node")
+                if self._match_text(gateway_node.get("server_id"), "gateway node server_id", required=True, maximum=128) != wanted_server:
+                    raise MetadataError("gateway node belongs to another server")
+                if self._match_text(gateway_account.get("server_id"), "gateway account server_id", required=True, maximum=128) != wanted_server:
+                    raise MetadataError("gateway account belongs to another server")
+                g_host = self._match_host(gateway_node.get("host"), "gateway host")
+                g_user = self._match_text(gateway_account.get("user"), "gateway user", required=True, maximum=64)
+                g_port = self._match_port(gateway_node.get("port", 22), "gateway port")
+                if not self._MATCH_USER_RE.fullmatch(g_user):
+                    raise MetadataError("gateway endpoint is invalid")
+                saved_gateway = self._effective_profile_config(gateway_profile_id)
+                if (self._match_host(saved_gateway.get("host"), "saved gateway host") != g_host
+                        or str(saved_gateway.get("user") or "").strip() != g_user
+                        or int(saved_gateway.get("port") or 22) != g_port):
+                    raise MetadataError("saved gateway profile no longer matches its catalog connection")
+                gateway_key = str(saved_gateway.get("key") or "").strip()
+                if not gateway_key:
+                    raise MetadataError("saved gateway application key is unavailable")
+                candidate["gateway"] = {"host": g_host, "user": g_user, "port": g_port, "key_path": gateway_key}
+
+            prepared, failure = _cluster_mod().prepare_catalog_connection(
+                candidate, target_password=target_password, require_public_key=False,
+            )
+            if failure:
+                return None, None, failure
+            return prepared, {"display_name": display_name, "note": note}, None
+        except Exception:
+            return None, None, self._match_failure(
+                "validate", "invalid_connection",
+                "连接配置或已匹配跳板记录无效；请检查节点、账号和路由后重试。",
+            )
+
+    def _persist_prepared_candidate(self, profile_id, candidate, metadata):
+        """Persist one already-probed V4 candidate without recomposition."""
+        candidate = dict(candidate or {})
+        metadata = dict(metadata or {})
+        if not candidate or not str(candidate.get("key") or ""):
+            raise MetadataError("connection validation receipt is invalid")
+        payload = {
+            "id": _new_server_id(profile_id),
+            "name": self._match_text(metadata.get("display_name"), "connection name", required=True, maximum=80),
+            "host": candidate["host"], "user": candidate["user"], "port": candidate["port"],
+            "key_path": candidate["key"], "workdir": candidate["workdir"],
+            "job_dir": candidate["job_dir"], "local_root": candidate["local_root"],
+            "remote_root": candidate["remote_root"], "timeout": candidate["timeout"],
+            "scheduler": candidate["scheduler"], "partition": candidate["partition"],
+            "queue": candidate["queue"],
+            "note": self._match_text(metadata.get("note") or "", "note", maximum=1000),
+            "extra_ssh_options": _cluster_mod().catalog_ssh_policy_options(candidate),
+            "proxy_jump": "",
+        }
+        if _cluster_server_by_id(payload["id"]):
+            return _update_cluster_server_profile(
+                payload["id"], payload, account_only=False, catalog_v4_route=True,
+            )
+        return _create_cluster_server_profile(payload, catalog_v4_route=True)
+
+    def _probe_verified_v5_candidate(self, frozen, credential_revisions=None):
+        """Probe one frozen password route using only the injected local store."""
+        try:
+            (server_id, node, account, route, connection, gateway_connection,
+             existing_profile_id, profile_id, expected_revisions) = self._frozen_v5_match_parts(frozen)
+            if credential_revisions is not None and dict(credential_revisions) != expected_revisions:
+                return self._catalog_changed_retry()
+            fingerprint = self._frozen_fingerprint(frozen)
+            yaml_fingerprint = self._remote_yaml_fingerprint(
+                existing_profile_id, (route or {}).get("gateway_profile_id"),
+            )
+            candidate, metadata, failure = self._compose_v5_match_candidate(
+                server_id, node, account, route, connection, gateway_connection,
+                existing_profile_id=existing_profile_id,
+            )
+            if failure:
+                return failure
+            if not self._v5_revisions_match(candidate, expected_revisions):
+                return self._catalog_changed_retry()
+            result = _cluster_mod().probe_catalog_v5_password_connection(
+                candidate, credential_store=self._v5_credential_store_or_default(),
+            )
+            if not isinstance(result, dict) or result.get("ok") is not True:
+                return result if isinstance(result, dict) else self._match_failure(
+                    "validate", "probe_unavailable", "密码连接验证组件暂不可用；连接尚未保存。",
+                )
+            # A password change/delete after the native SSH result but before
+            # receipt storage invalidates the result rather than persisting a
+            # route authenticated with a stale secret.
+            if not self._v5_revisions_match(candidate, expected_revisions):
+                return self._catalog_changed_retry()
+            import copy as _copy
+            receipt_key = (profile_id, fingerprint)
+            with self._receipt_lock:
+                self._discard_expired_receipts()
+                self._put_receipt(self._verified_candidates, receipt_key, {
+                    "created_monotonic": time.monotonic(), "yaml_fingerprint": yaml_fingerprint,
+                    "existing_profile_id": str(existing_profile_id or ""),
+                    "candidate": _copy.deepcopy(candidate), "metadata": dict(metadata or {}),
+                    "credential_revisions": dict(expected_revisions), "password_route": True,
+                })
+            return result
+        except MetadataError:
+            return self._catalog_changed_retry()
+        except Exception:
+            return self._match_failure("validate", "probe_unavailable", "密码连接验证组件暂不可用；连接尚未保存。")
+
+    def probe_verified_candidate(self, frozen, passwords=None, credential_revisions=None):
+        """Phase 1: slow SSH probe outside the catalog/adapter mutation lock.
+
+        Only the small public result leaves this method.  The private prepared
+        candidate is retained under an exact frozen-request fingerprint and is
+        intentionally independent of thread-local or global "last result"
+        state.
+        """
+        if isinstance(frozen, dict) and frozen.get("schema") == "v5-password-match-frozen-1":
+            # V5 deliberately ignores the retired V4 in-memory password shape.
+            return self._probe_verified_v5_candidate(frozen, credential_revisions=credential_revisions)
+        try:
+            (server_id, node, account, route, connection, gateway_connection,
+             existing_profile_id, profile_id) = self._frozen_match_parts(frozen)
+            password_values = passwords if isinstance(passwords, dict) else {}
+            target_password = password_values.get("target_password")
+            gateway_password = password_values.get("gateway_password")
+            fingerprint = self._frozen_fingerprint(frozen)
+            yaml_fingerprint = self._remote_yaml_fingerprint(
+                existing_profile_id, (route or {}).get("gateway_profile_id"),
+            )
+            candidate, metadata, failure = self._compose_prepared_match_candidate(
+                server_id, node, account, route, connection, gateway_connection,
+                existing_profile_id=existing_profile_id, target_password=target_password,
+            )
+            if failure:
+                return failure
+            result = _cluster_mod().probe_connection(
+                candidate, target_password=target_password, gateway_password=gateway_password,
+            )
+            if not isinstance(result, dict) or result.get("ok") is not True:
+                return result if isinstance(result, dict) else self._match_failure(
+                    "validate", "probe_unavailable", "连接验证组件暂不可用；连接尚未保存。",
+                )
+            import copy as _copy
+            prepared = _copy.deepcopy(candidate)
+            prepared.pop("public_key", None)
+            receipt_key = (profile_id, fingerprint)
+            with self._receipt_lock:
+                self._discard_expired_receipts()
+                self._put_receipt(self._verified_candidates, receipt_key, {
+                    "created_monotonic": time.monotonic(), "yaml_fingerprint": yaml_fingerprint,
+                    "existing_profile_id": str(existing_profile_id or ""),
+                    "candidate": prepared, "metadata": dict(metadata or {}),
+                })
+            return result
+        except MetadataError:
+            return self._match_failure("validate", "invalid_connection", "连接配置或已匹配跳板记录无效；请检查后重试。")
+        except Exception:
+            return self._match_failure("validate", "probe_unavailable", "连接验证组件暂不可用；连接尚未保存。")
+
+    def _persist_verified_v5_candidate(self, frozen):
+        try:
+            (server_id, node, account, route, connection, gateway_connection,
+             existing_profile_id, profile_id, expected_revisions) = self._frozen_v5_match_parts(frozen)
+            _ = (server_id, node, account, connection, gateway_connection)
+            fingerprint = self._frozen_fingerprint(frozen)
+            receipt_key = (profile_id, fingerprint)
+            with self._receipt_lock:
+                self._discard_expired_receipts()
+                receipt = self._verified_candidates.pop(receipt_key, None)
+            if not receipt or not receipt.get("password_route"):
+                return self._catalog_changed_retry()
+            if (str(receipt.get("existing_profile_id") or "") != str(existing_profile_id or "")
+                    or dict(receipt.get("credential_revisions") or {}) != expected_revisions):
+                return self._catalog_changed_retry()
+            if receipt.get("yaml_fingerprint") != self._remote_yaml_fingerprint(
+                    existing_profile_id, (route or {}).get("gateway_profile_id")):
+                return self._catalog_changed_retry()
+            candidate = receipt.get("candidate")
+            if not isinstance(candidate, dict) or not self._v5_revisions_match(candidate, expected_revisions):
+                return self._catalog_changed_retry()
+            return self._persist_v5_candidate(profile_id, candidate, receipt.get("metadata") or {})
+        except MetadataError:
+            return self._catalog_changed_retry()
+
+    def persist_verified_candidate(self, frozen):
+        """Phase 2: atomically consume an exact Phase-1 candidate receipt."""
+        if isinstance(frozen, dict) and frozen.get("schema") == "v5-password-match-frozen-1":
+            return self._persist_verified_v5_candidate(frozen)
+        try:
+            (server_id, node, account, route, connection, gateway_connection,
+             existing_profile_id, profile_id) = self._frozen_match_parts(frozen)
+            _ = (server_id, node, account, route, connection, gateway_connection)
+            fingerprint = self._frozen_fingerprint(frozen)
+            receipt_key = (profile_id, fingerprint)
+            with self._receipt_lock:
+                self._discard_expired_receipts()
+                receipt = self._verified_candidates.pop(receipt_key, None)
+            if not receipt:
+                return self._catalog_changed_retry()
+            if str(receipt.get("existing_profile_id") or "").lower() != str(existing_profile_id or "").lower():
+                return self._catalog_changed_retry()
+            if receipt.get("yaml_fingerprint") != self._remote_yaml_fingerprint(
+                    existing_profile_id, (route or {}).get("gateway_profile_id")):
+                return self._catalog_changed_retry()
+            return self._persist_prepared_candidate(profile_id, receipt.get("candidate"), receipt.get("metadata"))
+        except MetadataError:
+            return self._catalog_changed_retry()
+
+    @staticmethod
+    def _frozen_saved_test_parts(frozen):
+        if not isinstance(frozen, dict) or set(frozen) != {"schema", "profile_id", "profile"}:
+            raise MetadataError("saved connection test request is invalid")
+        if frozen.get("schema") != "v4-test-frozen-1":
+            raise MetadataError("saved connection test request is invalid")
+        profile_id = str(frozen.get("profile_id") or "")
+        profile = frozen.get("profile")
+        if not profile_id or not isinstance(profile, dict):
+            raise MetadataError("saved connection test request is invalid")
+        return profile_id, profile
+
+    def _saved_profile_matches_frozen(self, profile_id, frozen_profile):
+        current = self.get_profile(profile_id)
+        if not current:
+            return False
+        if "profile_id" in frozen_profile and frozen_profile.get("profile_id") != (current.get("profile_id") or current.get("id")):
+            return False
+        keys = ("id", "host", "user", "port", "configured", "has_key", "legacy")
+        for key in keys:
+            if key in frozen_profile and frozen_profile.get(key) != current.get(key):
+                return False
+        return True
+
+    def _v5_saved_profile_candidate(self, profile_id):
+        try:
+            return _cluster_mod().catalog_v5_candidate_from_profile(
+                self._effective_profile_config(profile_id)
+            )
+        except Exception as exc:
+            raise MetadataError("saved password connection provenance is invalid") from exc
+
+    def _probe_saved_v5_connection(self, frozen, credential_revisions=None):
+        try:
+            profile_id, frozen_profile, expected_revisions = self._frozen_v5_saved_test_parts(frozen)
+            if credential_revisions is not None and dict(credential_revisions) != expected_revisions:
+                return self._catalog_changed_retry()
+            if not self._saved_profile_matches_frozen(profile_id, frozen_profile):
+                return self._catalog_changed_retry()
+            candidate = self._v5_saved_profile_candidate(profile_id)
+            if not self._v5_revisions_match(candidate, expected_revisions):
+                return self._catalog_changed_retry()
+            yaml_fingerprint = self._remote_yaml_fingerprint(profile_id)
+            result = _cluster_mod().probe_catalog_v5_password_connection(
+                candidate, credential_store=self._v5_credential_store_or_default(),
+            )
+            if not isinstance(result, dict) or result.get("ok") is not True:
+                return result if isinstance(result, dict) else self._match_failure(
+                    "nodes_probe", "nodes_probe_failed", "密码连接的原始 SSH 节点探测未通过；未更新最近成功时间。",
+                )
+            if not self._v5_revisions_match(candidate, expected_revisions):
+                return self._catalog_changed_retry()
+            fingerprint = self._frozen_fingerprint(frozen)
+            with self._receipt_lock:
+                self._discard_expired_receipts()
+                self._put_receipt(self._saved_test_receipts, (profile_id, fingerprint), {
+                    "created_monotonic": time.monotonic(), "yaml_fingerprint": yaml_fingerprint,
+                    "credential_revisions": dict(expected_revisions), "password_route": True,
+                })
+            return result
+        except MetadataError:
+            return self._catalog_changed_retry()
+        except Exception:
+            return self._match_failure(
+                "nodes_probe", "nodes_probe_failed", "密码连接的原始 SSH 节点探测未通过；未更新最近成功时间。",
+            )
+
+    def probe_saved_connection(self, frozen, credential_revisions=None):
+        """Phase-1 saved-profile test; records no last-success timestamp."""
+        if isinstance(frozen, dict) and frozen.get("schema") == "v5-password-test-frozen-1":
+            return self._probe_saved_v5_connection(frozen, credential_revisions=credential_revisions)
+        try:
+            profile_id, frozen_profile = self._frozen_saved_test_parts(frozen)
+            if not self._saved_profile_matches_frozen(profile_id, frozen_profile):
+                return self._catalog_changed_retry()
+            yaml_fingerprint = self._remote_yaml_fingerprint(profile_id)
+            result = self.test_connection(profile_id)
+            if not isinstance(result, dict) or result.get("ok") is not True:
+                return result
+            fingerprint = self._frozen_fingerprint(frozen)
+            with self._receipt_lock:
+                self._discard_expired_receipts()
+                self._put_receipt(self._saved_test_receipts, (profile_id, fingerprint), {
+                    "created_monotonic": time.monotonic(), "yaml_fingerprint": yaml_fingerprint,
+                })
+            return result
+        except MetadataError:
+            return self._catalog_changed_retry()
+
+    def _confirm_tested_v5_connection(self, frozen, credential_revisions=None):
+        try:
+            profile_id, frozen_profile, expected_revisions = self._frozen_v5_saved_test_parts(frozen)
+            if credential_revisions is not None and dict(credential_revisions) != expected_revisions:
+                return self._catalog_changed_retry()
+            fingerprint = self._frozen_fingerprint(frozen)
+            with self._receipt_lock:
+                self._discard_expired_receipts()
+                receipt = self._saved_test_receipts.pop((profile_id, fingerprint), None)
+            if (not receipt or not receipt.get("password_route")
+                    or dict(receipt.get("credential_revisions") or {}) != expected_revisions
+                    or receipt.get("yaml_fingerprint") != self._remote_yaml_fingerprint(profile_id)
+                    or not self._saved_profile_matches_frozen(profile_id, frozen_profile)):
+                return self._catalog_changed_retry()
+            candidate = self._v5_saved_profile_candidate(profile_id)
+            if not self._v5_revisions_match(candidate, expected_revisions):
+                return self._catalog_changed_retry()
+            return {"ok": True, "stage": "nodes_probe", "code": "ok",
+                    "message": "密码连接和原始 SSH 节点探测已通过。"}
+        except MetadataError:
+            return self._catalog_changed_retry()
+
+    def confirm_tested_connection(self, frozen, credential_revisions=None):
+        """Phase 2 for a saved test; stale/failed probes never touch success."""
+        if isinstance(frozen, dict) and frozen.get("schema") == "v5-password-test-frozen-1":
+            return self._confirm_tested_v5_connection(frozen, credential_revisions=credential_revisions)
+        try:
+            profile_id, frozen_profile = self._frozen_saved_test_parts(frozen)
+            fingerprint = self._frozen_fingerprint(frozen)
+            with self._receipt_lock:
+                self._discard_expired_receipts()
+                receipt = self._saved_test_receipts.pop((profile_id, fingerprint), None)
+            if (not receipt or receipt.get("yaml_fingerprint") != self._remote_yaml_fingerprint(profile_id)
+                    or not self._saved_profile_matches_frozen(profile_id, frozen_profile)):
+                return self._catalog_changed_retry()
+            return {"ok": True, "stage": "nodes_probe", "code": "ok",
+                    "message": "原始 SSH 节点探测已通过。"}
+        except MetadataError:
+            return self._catalog_changed_retry()
+
+    def match_connection(self, server_id, node, account, route, connection,
+                         gateway_connection=None, target_password=None, gateway_password=None,
+                         existing_profile_id=None):
+        """Non-mutating V4 candidate probe; passwords stay in this call only."""
+        fingerprint = self._receipt_fingerprint(
+            server_id, node, account, route, connection, gateway_connection,
+        )
+        receipt_key = (self._receipt_key(server_id, node, account), fingerprint)
+        with self._receipt_lock:
+            self._discard_expired_receipts()
+            self._matched_receipts.pop(receipt_key, None)
+        candidate, metadata, failure = self._compose_prepared_match_candidate(
+            server_id, node, account, route, connection, gateway_connection,
+            existing_profile_id=existing_profile_id, target_password=target_password,
+        )
+        if failure:
+            return failure
+        try:
+            result = _cluster_mod().probe_connection(
+                candidate, target_password=target_password, gateway_password=gateway_password,
+            )
+            if not isinstance(result, dict) or result.get("ok") is not True:
+                return result if isinstance(result, dict) else self._match_failure(
+                    "validate", "probe_unavailable", "连接验证组件暂不可用；连接尚未保存。",
+                )
+            import copy as _copy
+            prepared = _copy.deepcopy(candidate)
+            # The paired public line is not needed for persistence and is
+            # deliberately excluded even from this short-lived local receipt.
+            prepared.pop("public_key", None)
+            with self._receipt_lock:
+                self._discard_expired_receipts()
+                self._put_receipt(self._matched_receipts, receipt_key, {
+                    "created_monotonic": time.monotonic(), "fingerprint": fingerprint,
+                    "existing_profile_id": str(existing_profile_id or ""),
+                    "candidate": prepared, "metadata": dict(metadata or {}),
+                })
+            return result
+        except Exception:
+            return self._match_failure(
+                "validate", "probe_unavailable",
+                "连接验证组件暂不可用；连接尚未保存。",
+            )
+
+    def persist_matched_connection(self, existing_profile_id, server_id, node, account, route,
+                                   connection, gateway_connection=None):
+        """Persist a successful V4 match using only trusted entity records.
+
+        The caller owns the surrounding profile/YAML rollback transaction and
+        SQLite connection upsert.  Persistence consumes only the short-lived
+        prepared receipt from the immediately preceding successful probe; it
+        never recomposes an identity from sparse browser fields.
+        """
+        fingerprint = self._receipt_fingerprint(
+            server_id, node, account, route, connection, gateway_connection,
+        )
+        receipt_key = (self._receipt_key(server_id, node, account), fingerprint)
+        with self._receipt_lock:
+            self._discard_expired_receipts()
+            # One-shot consumption prevents a duplicate HTTP retry from
+            # persisting the same verified candidate twice.
+            receipt = self._matched_receipts.pop(receipt_key, None)
+        if not receipt or receipt.get("fingerprint") != fingerprint:
+            raise MetadataError("connection validation receipt is unavailable; please validate again")
+        expected_existing = str(receipt.get("existing_profile_id") or "")
+        if expected_existing and expected_existing.lower() != str(existing_profile_id or "").lower():
+            raise MetadataError("connection validation receipt does not match the saved profile")
+        return self._persist_prepared_candidate(
+            _new_server_id(existing_profile_id), receipt.get("candidate"), receipt.get("metadata"),
+        )
+
+    def _v5_conversion_candidate(self, account_after, record):
+        """Rebuild one affected profile from catalog rows, never old key data."""
+        if not isinstance(account_after, dict) or not isinstance(record, dict):
+            raise MetadataError("password profile conversion metadata is invalid")
+        profile_id = self._match_text(record.get("profile_id"), "profile id", required=True, maximum=128)
+        server_id = self._match_text(record.get("server_id"), "server id", required=True, maximum=128)
+        node = record.get("node")
+        account = record.get("account")
+        route = record.get("route")
+        gateway = record.get("gateway_connection")
+        if not isinstance(node, dict) or not isinstance(account, dict) or not isinstance(route, dict):
+            raise MetadataError("password profile conversion metadata is invalid")
+        import copy as _copy
+        target_account = _copy.deepcopy(account_after) if str(account.get("id") or "") == str(account_after.get("id") or "") else _copy.deepcopy(account)
+        gateway_value = _copy.deepcopy(gateway) if isinstance(gateway, dict) else None
+        if gateway_value is not None:
+            gateway_account = gateway_value.get("account")
+            if not isinstance(gateway_account, dict):
+                raise MetadataError("password gateway metadata is invalid")
+            if str(gateway_account.get("id") or "") == str(account_after.get("id") or ""):
+                gateway_value["account"] = _copy.deepcopy(account_after)
+        candidate, metadata, failure = self._compose_v5_match_candidate(
+            server_id, _copy.deepcopy(node), target_account, _copy.deepcopy(route), {}, gateway_value,
+            existing_profile_id=profile_id,
+        )
+        if failure or not isinstance(candidate, dict) or not isinstance(metadata, dict):
+            raise MetadataError("password profile conversion metadata is invalid")
+        return profile_id, candidate, metadata
+
+    def convert_catalog_account_to_v5(self, account_after, connection_records):
+        """Convert every target/gateway-dependent profile after a password edit.
+
+        The caller has already placed the edited password in its injected
+        Credential Manager store and opened ``profile_transaction()``.  This
+        is intentionally local-only: editing a locally encrypted password
+        must remain available while the remote server is offline.  The next
+        connection or explicit "test connection" rebuilds a V5 runtime and
+        authenticates with the new revision; no old key route can survive the
+        local provenance conversion.
+        """
+        if int(getattr(_PROFILE_TRANSACTION_STATE, "depth", 0) or 0) <= 0:
+            raise MetadataError("password profile conversion requires a profile transaction")
+        if not isinstance(account_after, dict) or not isinstance(connection_records, list):
+            raise MetadataError("password profile conversion metadata is invalid")
+        account_id = self._match_text(account_after.get("id"), "account id", required=True, maximum=128)
+        prepared = []
+        seen = set()
+        for record in connection_records:
+            profile_id, candidate, metadata = self._v5_conversion_candidate(account_after, record)
+            if profile_id in seen:
+                raise MetadataError("password profile conversion contains a duplicate profile")
+            seen.add(profile_id)
+            revisions = self._v5_current_credential_revisions(candidate)
+            prepared.append((profile_id, candidate, metadata, revisions))
+        # The only mutable input to this local conversion is the credential
+        # revision.  Re-check immediately before writing each V5 route, so a
+        # concurrent password change/delete cannot commit stale provenance.
+        for _profile_id, candidate, _metadata, revisions in prepared:
+            if not self._v5_revisions_match(candidate, revisions):
+                raise MetadataError("password profile conversion credentials changed")
+        converted = []
+        for profile_id, candidate, metadata, _revisions in prepared:
+            saved = self._persist_v5_candidate(profile_id, candidate, metadata)
+            saved_id = str((saved or {}).get("id") or "")
+            if saved_id != profile_id:
+                raise MetadataError("password profile conversion saved an unexpected profile")
+            converted.append(profile_id)
+        # The account id is deliberately only used as an input validation and
+        # never returned with any credential material.
+        _ = account_id
+        return {"ok": True, "converted_profile_ids": converted}
+
+    def test_connection(self, profile_id):
+        """Retest a saved connection through the normal BatchMode nodes path."""
+        profile = _cluster_server_by_id(str(profile_id or ""))
+        if not profile:
+            return self._match_failure("validate", "profile_not_found", "找不到已保存连接。")
+        try:
+            effective = self._effective_profile_config(profile_id)
+            if _cluster_mod().catalog_v5_password_profile(effective):
+                candidate = _cluster_mod().catalog_v5_candidate_from_profile(effective)
+                return _cluster_mod().probe_catalog_v5_password_connection(
+                    candidate, credential_store=self._v5_credential_store_or_default(),
+                )
+        except Exception:
+            return self._match_failure(
+                "nodes_probe", "nodes_probe_failed", "密码连接的原始 SSH 节点探测未通过；未更新最近成功时间。",
+            )
+        node_id = str(profile.get("node_id") or profile.get("id") or "")
+        try:
+            raw = _cluster_mod().remote_cluster_handler({"action": "nodes", "node": node_id})
+            payload = json.loads(raw)
+            items = payload.get("nodes") if isinstance(payload, dict) else None
+            item = items[0] if isinstance(items, list) and items else {}
+            if isinstance(payload, dict) and bool(item.get("reachable")):
+                return {"ok": True, "stage": "nodes_probe", "code": "ok",
+                        "message": "原始 SSH 节点探测已通过。"}
+        except Exception:
+            pass
+        return self._match_failure(
+            "nodes_probe", "nodes_probe_failed",
+            "原始 SSH 节点探测未通过；未更新最近成功时间。",
+        )
+
+
+try:
+    try:
+        from webui.cluster_catalog_api import build_router as _build_cluster_catalog_router
+    except ImportError:
+        from cluster_catalog_api import build_router as _build_cluster_catalog_router
+    from memomics.cluster_credentials import CredentialManagerStore as _CredentialManagerStore
+    # One injected provider is shared by the router (account CRUD/revision
+    # checks) and its adapter (native probe/conversion).  Passing neither is
+    # the legacy V4/key-router compatibility mode and is never allowed for the
+    # real Windows WebUI registration below.
+    _CLUSTER_CATALOG_CREDENTIAL_STORE = _CredentialManagerStore(MEMOMICS_HOME_DIR)
+    _CLUSTER_CATALOG_ADAPTER = _ClusterCatalogAdapter(
+        credential_store=_CLUSTER_CATALOG_CREDENTIAL_STORE,
+    )
+    app.include_router(_build_cluster_catalog_router(
+        _CLUSTER_CATALOG_ADAPTER, lambda: str(Path(MEMOMICS_HOME_DIR) / "state.db"),
+        credential_provider=_CLUSTER_CATALOG_CREDENTIAL_STORE,
+    ))
+    _CLUSTER_CATALOG_ROUTER_READY = True
+except Exception as _catalog_router_exc:
+    # The existing remote console must remain usable even if an optional
+    # additive catalog module is damaged in an overlay update.  Its legacy
+    # mutation endpoints remain explicitly unavailable; they must not become
+    # a silent fallback that can write a different connection model.
+    _CLUSTER_CATALOG_ROUTER_READY = False
+    logger.warning("[cluster-catalog] router registration skipped: %s", _catalog_router_exc)
+
+
+def _session_binding_mutable(sid: str):
+    """Compatibility lookup for retired session/server preference endpoints."""
+    session = _known_session(sid)
+    if not session:
+        return None, JSONResponse({"ok": False, "error": "session not found"}, status_code=404)
+    return session, None
+
+
+@app.get("/api/sessions/{sid}/cluster-server")
+async def get_session_cluster_server(sid: str):
+    if not _known_session(sid):
+        return JSONResponse({"ok": False, "error": "session not found"}, status_code=404)
+    try:
+        meta = _session_metadata().get_session_metadata(sid)
+        server = _cluster_server_by_id(meta.get("cluster_server_id") or "") if meta.get("cluster_server_id") else None
+        return {"session_id": sid, "cluster_server_id": meta.get("cluster_server_id"), "server": server}
+    except Exception as exc:
+        return _metadata_error_response(exc, status=500)
+
+
+@app.put("/api/sessions/{sid}/cluster-server")
+async def set_session_cluster_server(sid: str, request: Request):
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise MetadataError("request body must be an object")
+        server_id = str(body.get("cluster_server_id") or "").strip()
+        if not server_id:
+            raise MetadataError("cluster_server_id is required (use DELETE to unbind)")
+        # Deprecated display preference only: it no longer participates in
+        # remote target selection and may be changed while a chat is running.
+        with _CLUSTER_SERVER_LOCK:
+            _session, blocked = _session_binding_mutable(sid)
+            if blocked:
+                return blocked
+            server = _cluster_server_by_id(server_id)
+            if server is None:
+                raise MetadataError("cluster server not found")
+            meta = _session_metadata().set_session_cluster_server(sid, server["id"])
+        return {"ok": True, "deprecated": True, "session_id": sid,
+                "cluster_server_id": meta.get("cluster_server_id"), "server": server}
+    except MetadataError as exc:
+        return _metadata_error_response(exc)
+    except Exception as exc:
+        logger.exception("[cluster] bind server failed")
+        return _metadata_error_response(exc, status=500)
+
+
+@app.delete("/api/sessions/{sid}/cluster-server")
+async def clear_session_cluster_server(sid: str):
+    try:
+        # Deprecated metadata cleanup; it has no effect on remote execution.
+        with _CLUSTER_SERVER_LOCK:
+            _session, blocked = _session_binding_mutable(sid)
+            if blocked:
+                return blocked
+            _session_metadata().set_session_cluster_server(sid, None)
+        return {"ok": True, "deprecated": True, "session_id": sid, "cluster_server_id": None}
+    except Exception as exc:
+        return _metadata_error_response(exc, status=500)
+
+
+def _cluster_config_mutation_guard(values: dict):
+    """Retired binding guard retained as a no-op for legacy callers.
+
+    Current remote operations resolve their profile at dispatch time and
+    historical jobs/R sessions use immutable snapshots, so stale chat metadata
+    must not block local configuration edits or profile deletion.
+    """
+    _ = values
+    return None
+
+
 @app.post("/api/cluster/config")
 async def api_cluster_config(request: Request):
+    _ = request
+    return _retired_cluster_catalog_mutation_response()
+
+
+@app.post("/api/cluster/clusters")
+async def api_cluster_clusters(request: Request):
+    """集群本身的增删与默认标记（2026-11-04 多集群）。
+
+    body: {op: create|delete|default|label, name, label?, from_legacy?}
+    - create：新建一个空集群（多集群的第一台会自动接管原来的单集群配置）
+    - delete：删除集群（禁止删最后一个；默认集群被删会自动改默认）
+    - default：设默认集群（模型/UI 不指定集群时用它）
+    - label：改人读标记（中文名/备注）
+    """
     try:
         body = await request.json()
     except Exception:
         return {"ok": False, "error": "请求体不是合法 JSON"}
     if not isinstance(body, dict):
         return {"ok": False, "error": "请求体必须是 JSON 对象"}
-    values = {k: v for k, v in body.items() if k in _CLUSTER_FIELDS or k == "nodes"}
-    if not values:
-        return {"ok": False, "error": "没有可写入的字段（可选：%s, nodes）" % ", ".join(_CLUSTER_FIELDS)}
+    op = str(body.get("op") or body.get("action") or "").strip().lower()
     try:
-        return {"ok": True, "config": _cluster_write_config(values)}
+        return {"ok": True, "config": _cluster_upsert_structure(op, body)}
     except Exception as exc:
         return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
 
@@ -23618,6 +27628,13 @@ async def api_cluster_exec(request: Request):
         return {"ok": False, "error": "未知 action: %r（可选：%s）" % (action, ", ".join(_CLUSTER_ACTIONS))}
     args = {k: v for k, v in body.items() if v is not None and v != ""}
     args["action"] = action
+    # A console command can be tied to the current chat for message/job
+    # ownership only.  It never selects or restricts the target profile.
+    chat_sid = str(body.get("chat_session_id") or "").strip()
+    if chat_sid:
+        if not _known_session(chat_sid):
+            return JSONResponse({"ok": False, "error": "chat session not found"}, status_code=404)
+        args["chat_session_id"] = chat_sid
     try:
         raw = _cluster_mod().remote_cluster_handler(args)
     except Exception as exc:
@@ -23630,31 +27647,13 @@ async def api_cluster_exec(request: Request):
 
 @app.post("/api/cluster/install_key")
 async def api_cluster_install_key(request: Request):
-    """WebUI「🔑 安装公钥」：用密码登录一次，把本机公钥写进远端 authorized_keys。
-
-    密码只在内存里用这一次：不落盘、不进日志、不进会话历史。装完全部走密钥免密。
-    逻辑在 memomics.bio_tools.remote_cluster.install_pubkey（含 proxy_jump 跳板链路）。
-    """
-    try:
-        body = await request.json()
-    except Exception:
-        return {"ok": False, "error": "请求体不是合法 JSON"}
-    if not isinstance(body, dict):
-        return {"ok": False, "error": "请求体必须是 JSON 对象"}
-    password = str(body.get("password") or "")
-    if not password:
-        return {"ok": False, "error": "密码不能为空（只用于这一次安装，不会保存）"}
-    node = str(body.get("node") or "").strip()
-    rc = _cluster_mod()
-    cfg = rc._load_remote_config(force=True)
-    try:
-        raw = rc.install_pubkey(cfg, node, password)
-    except Exception as exc:
-        return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
-    try:
-        return {"ok": True, "result": json.loads(raw)}
-    except Exception:
-        return {"ok": True, "result": {"note": "工具未返回 JSON", "raw": raw}}
+    """Retired: V5 stores a per-account password in Windows Credential Manager."""
+    _ = request
+    return JSONResponse({
+        "ok": False,
+        "code": "workflow_changed",
+        "error": "公钥安装已移除；请在集群目录新增或编辑用户并保存其本机加密登录密码。",
+    }, status_code=410)
 
 # === ☁️ DCS 云（华大 DCS Cloud / GenPilot 连接器，2026-10-07）===
 # 与 remote_cluster 同款薄路由：端点只做参数校验与转发；逻辑全在
@@ -24072,3 +28071,211 @@ if __name__ == "__main__":
             except Exception:
                 pass
             _time.sleep(3)
+
+
+# --- 合并补回（原属你的实现，冲突块取同事版本后被覆盖）---
+def _cluster_upsert_structure(op: str, body: dict) -> dict:
+    """集群本身的增删/默认/改名标记（不碰节点与连接字段）。"""
+    rc = _cluster_mod()
+    remote = _cluster_read_remote_dict()
+    clusters = _clusters_of_remote(remote)
+    name = str(body.get("name") or "").strip()
+    op = str(op or "").strip().lower()
+    notes = []
+
+    if op == "create":
+        if not rc._CLUSTER_NAME_RE.match(name):
+            raise ValueError("集群名 %r 不合法：只允许字母/数字/点/下划线/短横线，"
+                             "且以字母数字开头（中文名请写进 label）" % name)
+        if any(k.lower() == name.lower() for k in clusters):
+            raise ValueError("集群 %r 已经存在了（集群名用来分台账，不能重名）" % name)
+        spec = {}
+        # 2026-11-05（用户要求）：第一次从单集群升到多集群时，**先把现在的配置单独存成一个集群**
+        # （label 沿用 remote.label，所以下拉里显示的就是「深圳医学院」），再建这个**空**的新集群。
+        # 这样「＋集群」= 多一个新的、原来的原封不动；要回去点顶部下拉切换即可。
+        if not clusters and body.get("from_legacy", True):
+            legacy_name = str(body.get("legacy_name") or "").strip() or "default"
+            if not rc._CLUSTER_NAME_RE.match(legacy_name):
+                legacy_name = "default"
+            if legacy_name.lower() == name.lower():
+                raise ValueError("集群名 %r 已被现有的单集群占用：换个名字（现有的单集群会先被"
+                                 "单独存成一个集群，不能和它同名）" % name)
+            legacy_spec = {}
+            for k in ("host", "workdir", "job_dir", "nodes", "default_node",
+                      "scheduler", "partition", "queue", "label", "note"):
+                if remote.get(k) not in (None, "", {}, []):
+                    legacy_spec[k] = remote.pop(k)
+            legacy_spec.setdefault("enabled", True)
+            clusters[legacy_name] = legacy_spec
+            remote["clusters"] = clusters
+            remote["default_cluster"] = legacy_name
+            notes.append(
+                "已把现在的单集群配置单独存成集群 %r（%s，节点 %d 个）并设为默认；新集群 %r 是空的"
+                % (legacy_name, legacy_spec.get("label") or legacy_spec.get("host") or "-",
+                   len(legacy_spec.get("nodes") or {}), name))
+        for k in rc._CLUSTER_INHERIT_KEYS + rc._CLUSTER_OWN_KEYS:
+            if k in body and body.get(k) not in (None, "", {}, []):
+                if k in ("nodes",):
+                    continue
+                spec[k] = body[k]
+        if "nodes" in body:
+            spec["nodes"] = _nodes_payload_to_spec(body.get("nodes"), {})
+        spec.setdefault("enabled", True)
+        if "label" not in spec:
+            spec["label"] = str(body.get("label") or "").strip()
+        clusters[name] = spec
+        remote["clusters"] = clusters
+        if not str(remote.get("default_cluster") or "").strip():
+            # 没有默认集群（且不是从老配置升级来的）→ 把新集群设成默认
+            remote["default_cluster"] = name
+        _cluster_write_remote_dict(remote)
+        logger.info("[cluster] 新建集群 %s", name)
+        out = _cluster_view(name)
+        out["notes"] = notes
+        return out
+
+    if op == "label" and not clusters:
+        # 老配置（remote: 平铺、没有 clusters）：label 写在 remote.label，
+        # 只碰这一个键（不重写 host/nodes，避免一次改标记动到连接配置）
+        v = str(body.get("label") or "").strip()
+        if v:
+            remote["label"] = v
+        else:
+            remote.pop("label", None)
+        _cluster_write_remote_dict(remote)
+        out = _cluster_view("")
+        out["notes"] = ["已把标记写成 remote.label = %r" % v] if v else ["已清空 remote.label"]
+        return out
+
+    if op in ("delete", "default", "label"):
+        hit = next((k for k in clusters if k.lower() == name.lower()), "")
+        if not hit:
+            raise ValueError("没有这个集群：%r（已有：%s）" % (name, "、".join(clusters) or "无"))
+        if op == "delete":
+            if len(clusters) <= 1:
+                raise ValueError("这是最后一个集群，删了就没集群可用了；"
+                                 "想停用它请在配置里取消「启用」")
+            clusters.pop(hit)
+            remote["clusters"] = clusters
+            if str(remote.get("default_cluster") or "").strip().lower() == hit.lower():
+                remote["default_cluster"] = next(iter(clusters))
+                notes.append("被删的是默认集群，已把默认改成 %r" % remote["default_cluster"])
+            _cluster_write_remote_dict(remote)
+            logger.info("[cluster] 删除集群 %s", hit)
+            out = _cluster_view(remote["default_cluster"])
+            out["notes"] = notes
+            return out
+        if op == "default":
+            remote["default_cluster"] = hit
+            _cluster_write_remote_dict(remote)
+            logger.info("[cluster] 默认集群 → %s", hit)
+            out = _cluster_view(hit)
+            out["notes"] = notes
+            return out
+        # label / note
+        spec = dict(clusters[hit])
+        for k in ("label", "note"):
+            if k in body:
+                v = str(body.get(k) or "").strip()
+                if v:
+                    spec[k] = v
+                else:
+                    spec.pop(k, None)
+        clusters[hit] = spec
+        remote["clusters"] = clusters
+        _cluster_write_remote_dict(remote)
+        out = _cluster_view(hit)
+        out["notes"] = notes
+        return out
+
+    raise ValueError("未知操作 %r（可选：create / delete / default / label）" % op)
+
+
+# --- 合并补回（原属你的实现，冲突块取同事版本后被覆盖）---
+def _cluster_read_remote_dict() -> dict:
+    """读 config.yaml 的 remote: 段（原始结构，不做默认值合并）。"""
+    import yaml as _yaml
+    rc = _cluster_mod()
+    path = rc._get_config_path()
+    try:
+        data = _yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        data = {}
+    remote = data.get("remote") if isinstance(data, dict) else None
+    return dict(remote) if isinstance(remote, dict) else {}
+
+def _cluster_write_remote_dict(remote: dict) -> None:
+    """把整个 remote: 段写回 config.yaml（文本块替换 + 落盘前 YAML 校验）。"""
+    import yaml as _yaml
+    rc = _cluster_mod()
+    path = rc._get_config_path()
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        text = ""
+    dumped = _yaml.safe_dump(remote, allow_unicode=True, sort_keys=False,
+                             default_flow_style=False)
+    body = "".join(("  " + ln) if ln.strip() else ln for ln in dumped.splitlines(True))
+    block = "remote:\n" + body
+    if not block.endswith("\n"):
+        block += "\n"
+    pat = re.compile(r"(?m)^remote:[ \t]*\n(?:[ \t]+[^\n]*\n)*")
+    m = pat.search(text)
+    if m:
+        new_text = text[:m.start()] + block + text[m.end():]
+    else:
+        if text and not text.endswith("\n"):
+            text += "\n"
+        new_text = text + block
+    parsed = _yaml.safe_load(new_text) or {}
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("remote"), dict):
+        raise ValueError("生成的 remote 段无法被 YAML 解析，已放弃写入（config.yaml 未改动）")
+    tmp = str(path) + ".cluster.tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(new_text)
+    os.replace(tmp, path)
+    rc._load_remote_config(force=True)
+    try:
+        from tools.registry import invalidate_check_fn_cache
+        invalidate_check_fn_cache()
+    except Exception:
+        pass
+
+def _clusters_of_remote(remote: dict) -> dict:
+    raw = remote.get("clusters")
+    if not isinstance(raw, dict):
+        return {}
+    return {str(k): (dict(v) if isinstance(v, dict) else {}) for k, v in raw.items()}
+
+def _nodes_payload_to_spec(nodes_in, old_nodes: dict) -> dict:
+    """前端节点列表 → {名字: 覆盖字段}（未渲染的字段并回旧值，空串 = 清掉该覆盖）。"""
+    rc = _cluster_mod()
+    if isinstance(nodes_in, dict):
+        items = []
+        for name, spec in nodes_in.items():
+            item = dict(spec) if isinstance(spec, dict) else ({"host": spec} if spec else {})
+            item["name"] = name
+            items.append(item)
+    else:
+        items = [dict(x) for x in (nodes_in or []) if isinstance(x, dict)]
+    out = {}
+    for item in items:
+        name = str(item.get("name") or "").strip()
+        if not name:
+            continue
+        if not rc._NODE_NAME_RE.match(name):
+            raise ValueError("节点名 %r 不合法：只允许字母/数字/点/下划线/短横线（中文写备注）" % name)
+        old = old_nodes.get(name) if isinstance(old_nodes.get(name), dict) else {}
+        spec = {}
+        for k, v in item.items():
+            if k == "name":
+                continue
+            if k not in rc._NODE_OVERRIDE_KEYS:
+                continue
+            if v is None or (isinstance(v, str) and not v.strip()):
+                continue
+            spec[k] = v
+        for k, v in (old or {}).items():          # UI 没渲染的字段保留
+            spec.setdefault(k, v)
+        out[name] = spec
+    return out

@@ -355,7 +355,7 @@ def _parse_check_resources(output: str) -> dict:
     return out
 
 
-def record_cluster_node(node_name: str, payload: dict) -> dict:
+def record_cluster_node(node_name: str, payload: dict, cluster_name: str = "") -> dict:
     """把一次成功的 remote_cluster check 沉淀进 environment.json 的 cluster.nodes.<名>.probed。
 
     合并规则（用户 2026-10-08 定：自己触发、自己整理保存）：
@@ -368,6 +368,11 @@ def record_cluster_node(node_name: str, payload: dict) -> dict:
         name = str(node_name or "").strip()
         if not name or not isinstance(payload, dict) or payload.get("status") == "error":
             return {"ok": False, "error": "无有效自检结果"}
+        # 2026-11-05：多集群下同名节点会撞在一起（两个集群都有 login1）——
+        # nodes 的键统一成 "集群/节点"；老配置（没有集群）保持裸节点名不变。
+        scope = str(cluster_name or "").strip()
+        if scope:
+            name = "%s/%s" % (scope, name)
         env = _read_environment_json()
         if not env:
             return {"ok": False, "error": "读不到 environment.json"}
@@ -383,6 +388,8 @@ def record_cluster_node(node_name: str, payload: dict) -> dict:
         if not isinstance(entry, dict):
             entry = {}
             nodes[name] = entry
+        if scope:
+            entry["cluster"] = scope
         # 声明字段只补不覆盖
         for k, v in (("host", payload.get("host")), ("user", payload.get("user")),
                      ("workdir", payload.get("workdir"))):
@@ -1256,22 +1263,53 @@ def _config_path() -> str:
     return cand or path
 
 
+def _cluster_scopes(rc, cfg_all) -> list:
+    """[(集群名, 该集群合并配置)]；老配置返回 [("", cfg)]（没有集群概念）。"""
+    if not (cfg_all or {}).get("multi_cluster"):
+        return [("", cfg_all or {})]
+    out = []
+    for name in (cfg_all.get("cluster_names") or []):
+        try:
+            _n, c, err = rc.resolve_cluster(cfg_all, name)
+            if err or not c:
+                continue
+            out.append((name, c))
+        except Exception:
+            continue
+    return out or [("", cfg_all or {})]
+
+
 def cluster_configured() -> dict:
-    """只看配置，不连网。"""
+    """只看配置，不连网。多集群时把每个集群的节点都列出来（名字为「集群/节点」）。"""
     try:
         rc = _cluster_module()
         cfg = rc._load_remote_config()
-        table = rc._node_table(cfg) or {}
+        scopes = _cluster_scopes(rc, cfg)
         enabled = bool(rc.remote_cluster_enabled())
     except Exception as exc:
         return {"configured": False, "enabled": False, "nodes": [],
                 "error": "%s: %s" % (type(exc).__name__, exc)}
+    names, clusters = [], []
+    for cname, c in scopes:
+        table = rc._node_table(c) or {}
+        for n in table:
+            names.append(("%s/%s" % (cname, n)) if cname else n)
+        clusters.append({
+            "name": cname or "", "label": str(c.get("label") or ""),
+            "host": str(c.get("host") or ""), "user": str(c.get("user") or ""),
+            "workdir": str(c.get("workdir") or ""),
+            "scheduler": str(c.get("scheduler") or ""),
+            "nodes": sorted(table),
+            "is_default": (cname == (cfg.get("default_cluster") or "")),
+        })
+    first = scopes[0][1]
     config_path = _config_path()
-    return {"configured": bool(table) and enabled, "enabled": enabled,
-            "nodes": sorted(table), "scheduler": (cfg or {}).get("scheduler", ""),
-            "workdir": (cfg or {}).get("workdir", ""),
-            "default_node": (cfg or {}).get("default_node", ""),
-            "node_policy": (cfg or {}).get("node_policy", ""),
+    return {"configured": bool(names) and enabled, "enabled": enabled,
+            "nodes": sorted(names), "scheduler": (first or {}).get("scheduler", ""),
+            "workdir": (first or {}).get("workdir", ""),
+            "default_node": (first or {}).get("default_node", ""),
+            "node_policy": (first or {}).get("node_policy", ""),
+            "clusters": clusters,
             "memomics_home": _memomics_home(), "config_path": config_path}
 
 
@@ -1321,6 +1359,8 @@ def scan_cluster(force: bool = False, node: str = "") -> dict:
         "enabled": state.get("enabled", False), "config_path": state.get("config_path", ""),
         "scheduler": state.get("scheduler", ""), "node_policy": state.get("node_policy", ""),
         "default_node": state.get("default_node", ""), "nodes_configured": state.get("nodes", []),
+        # 2026-11-05：多集群 —— 每个集群的 label/节点一起带上（UI 用它在集群卡上列出各集群）
+        "clusters": state.get("clusters") or [],
         "nodes": [], "per_node": {}, "resources": {}, "warnings": [],
     }
     if not state.get("configured"):
@@ -1329,20 +1369,48 @@ def scan_cluster(force: bool = False, node: str = "") -> dict:
         if not node and not state.get("error"):
             _write_cache(cluster=base, cluster_at=_now(), cluster_force=False)
         return base
+    rc = _cluster_module()
     try:
-        rc = _cluster_module()
-        raw_nodes = rc.remote_cluster_handler({"action": "nodes", "node": node} if node
-                                             else {"action": "nodes"})
-        nodes_payload = json.loads(raw_nodes)
-    except Exception as exc:
-        base["error"] = "%s: %s" % (type(exc).__name__, exc)
-        base["hint"] = "集群探测失败（配置或网络问题），可到「🖧 远端集群」面板跑一次自检"
+        cfg_all = rc._load_remote_config(force=True)
+        scopes = _cluster_scopes(rc, cfg_all)
+    except Exception:
+        scopes = [("", {})]
+    nodes, reach_total, idle_all, summaries, errors = [], 0, [], [], []
+    for cname, _cc in scopes:
+        req = {"action": "nodes"}
+        if cname:
+            req["cluster"] = cname
+        if node:
+            req["node"] = node
+        try:
+            nodes_payload = json.loads(rc.remote_cluster_handler(req))
+        except Exception as exc:
+            errors.append("%s%s: %s" % (cname and (cname + ": ") or "", type(exc).__name__, exc))
+            continue
+        if not isinstance(nodes_payload, dict) or nodes_payload.get("status") == "error":
+            errors.append("%s%s" % (cname and (cname + ": ") or "",
+                                    str((nodes_payload or {}).get("error") or "nodes 探测没有返回结果")))
+            continue
+        for it in (nodes_payload.get("nodes") or []):
+            if not isinstance(it, dict):
+                continue
+            item = dict(it)
+            item["cluster"] = cname or ""
+            nodes.append(item)
+        reach_total += int(nodes_payload.get("reachable") or 0)
+        idle_all.extend(nodes_payload.get("idle_now") or [])
+        if nodes_payload.get("summary"):
+            summaries.append(("%s: %s" % (cname, nodes_payload["summary"])) if cname
+                             else str(nodes_payload["summary"]))
+    if not nodes and errors:
+        base["error"] = "；".join(errors[:3])
+        base["hint"] = "在「🖧 远端集群」面板点「🚀 保存并检测连接」，看具体是密钥、网络还是目录问题"
         return base
-    if not isinstance(nodes_payload, dict) or nodes_payload.get("status") == "error":
-        base["error"] = str((nodes_payload or {}).get("error") or "nodes 探测没有返回结果")
-        base["hint"] = "在「🖧 远端集群」面板跑一次自检，看具体是密钥、网络还是目录问题"
-        return base
-    nodes = nodes_payload.get("nodes") or []
+    base["errors"] = errors
+    nodes_payload = {"reachable": reach_total, "idle_now": idle_all,
+                     "summary": "；".join(summaries)}
+    if not nodes:
+        base["hint"] = "配置里还没有节点"
     base["nodes"] = nodes
     base["reachable"] = nodes_payload.get("reachable")
     base["idle_now"] = nodes_payload.get("idle_now") or []
@@ -1351,23 +1419,29 @@ def scan_cluster(force: bool = False, node: str = "") -> dict:
     checks = 0
     for item in nodes:
         name = str(item.get("name") or "")
+        cname = str(item.get("cluster") or "")
+        full = ("%s/%s" % (cname, name)) if cname else name
         if not item.get("reachable") or not name:
             continue
         if checks >= _MAX_CLUSTER_NODE_CHECKS:
-            per_node[name] = {"skipped": "节点较多，只详查前 %d 个（可在「🖧 远端集群」面板单独查）"
+            per_node[full] = {"skipped": "节点较多，只详查前 %d 个（可在「🖧 远端集群」面板单独查）"
                                          % _MAX_CLUSTER_NODE_CHECKS}
             continue
         checks += 1
         try:
-            payload = json.loads(rc.remote_cluster_handler({"action": "check", "node": name}))
+            _req = {"action": "check", "node": name}
+            if cname:
+                _req["cluster"] = cname
+            payload = json.loads(rc.remote_cluster_handler(_req))
         except Exception as exc:
-            per_node[name] = {"error": "%s: %s" % (type(exc).__name__, exc)}
+            per_node[full] = {"error": "%s: %s" % (type(exc).__name__, exc)}
             continue
         if not isinstance(payload, dict) or payload.get("status") == "error":
-            per_node[name] = {"error": str((payload or {}).get("error") or "check 失败")}
+            per_node[full] = {"error": str((payload or {}).get("error") or "check 失败")}
             continue
         output = payload.get("output") or ""
-        per_node[name] = {
+        per_node[full] = {
+            "cluster": cname,
             "scheduler": payload.get("scheduler", ""),
             "workdir": payload.get("workdir", ""),
             "remote_home": payload.get("remote_home", ""),
@@ -1386,12 +1460,14 @@ def scan_cluster(force: bool = False, node: str = "") -> dict:
                               if i.get("scheduler") and i.get("scheduler") != "none"}),
     }
     for item in nodes:
+        _cn = str(item.get("cluster") or "")
+        _disp = ("%s/%s" % (_cn, item.get("name"))) if _cn else str(item.get("name"))
         if not item.get("reachable"):
             base["warnings"].append("节点 %s 连不上：%s"
-                                    % (item.get("name"), str(item.get("error") or "")[:160]))
+                                    % (_disp, str(item.get("error") or "")[:160]))
         elif item.get("workdir_ok") is False:
             base["warnings"].append("节点 %s 的工作目录不存在（%s）"
-                                    % (item.get("name"), item.get("workdir")))
+                                    % (_disp, item.get("workdir")))
     if not base.get("idle_now") and base.get("reachable"):
         base["warnings"].append("所有节点负载都不低（load/核数 ≥ 0.6），投作业前先看队列")
     base["cached"] = False

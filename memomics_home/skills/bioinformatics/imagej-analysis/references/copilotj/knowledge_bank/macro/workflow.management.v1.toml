@@ -1,0 +1,25 @@
+type = "macro"
+signature = "workflow.management.v1"
+name = "Workflow Management"
+topic = [
+  "workflow management",
+  "system tools",
+  "error handling",
+]
+
+description = """A system tool to save the conversation history from a specific dialog as a named and tagged workflow."""
+
+
+[content]
+plugin_name = "save_workflow"
+
+plugin_description = """This is a system tool, not an ImageJ plugin. It is used to persist a conversation history as a workflow."""
+
+correct_syntax = """save_workflow(workflow_name="YourWorkflowName", tags="tag1, tag2", dialog_id=1)"""
+
+tips = [
+  """Error prevention: This tool fails with a 'gbk' codec error if the source dialog contains special Unicode characters (like subscript '₀' in ΔF/F₀) on systems with 'gbk' default encoding. The error is in the dialog's content, not the workflow name.""",
+  """Workaround: If an encoding error occurs, you cannot save the dialog directly. A potential workaround is to manually recreate the workflow, ensuring all special scientific characters are replaced with ASCII-compatible alternatives (e.g., F0 instead of F₀).""",
+  """Common usage pitfalls to avoid: Repeatedly trying to save the same dialog after an encoding error will not work. The underlying content must be changed, which is not possible via the tool.""",
+]
+

@@ -1,0 +1,26 @@
+type = "macro"
+signature = "motion.correction.v1"
+name = "Motion Correction"
+topic = [
+  "motion correction",
+  "image registration",
+]
+
+description = """Performs rigid or affine motion correction on a time-series stack using the StackReg plugin."""
+
+
+[content]
+plugin_name = "StackReg"
+
+plugin_description = """A classic ImageJ plugin for image registration that can correct for translation, rotation, scaling, and affine transformations. It is not a core part of Fiji and typically requires enabling the 'pbi-ImageJ' update site."""
+
+correct_syntax = """run("StackReg", "transformation=[Translation]");"""
+
+tips = [
+  """Prevent 'Unrecognized command' errors by ensuring the 'StackReg' plugin is installed via its update site.""",
+  """StackReg operates on the currently active image; ensure the correct image is selected before running the command.""",
+  """'Translation' is the most common transformation for simple motion correction, but 'Rigid Body' can correct for rotation as well.""",
+]
+
+site = "https://imagej.net/plugins/stackreg"
+

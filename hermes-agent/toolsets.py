@@ -43,6 +43,8 @@ _HERMES_CORE_TOOLS = [
     "vision_analyze", "image_generate",
     # Skills
     "skills_list", "skill_view", "skill_manage",
+    # 技能检索（MemOmics 索引存在时才暴露，见 tools/skills_search_tool.py 的 check_fn）
+    "skill_search", "skill_list_by_domain",
     # Browser automation
     "browser_navigate", "browser_snapshot", "browser_click",
     "browser_type", "browser_scroll", "browser_back",
@@ -166,7 +168,7 @@ TOOLSETS = {
     
     "skills": {
         "description": "Access, create, edit, and manage skill documents with specialized instructions and knowledge",
-        "tools": ["skills_list", "skill_view", "skill_manage"],
+        "tools": ["skills_list", "skill_view", "skill_manage", "skill_search", "skill_list_by_domain"],
         "includes": []
     },
     
@@ -205,6 +207,7 @@ TOOLSETS = {
             "env_inventory",
             "rail_review",
             "debate_analysis",
+            "evidence_ledger",
             "memomics_pipeline",
             "skill_evolution",
             "save_knowledge",

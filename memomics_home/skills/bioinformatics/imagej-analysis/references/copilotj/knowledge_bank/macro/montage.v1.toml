@@ -1,0 +1,31 @@
+type = "macro"
+signature = "montage.v1"
+name = "Montage"
+topic = [
+  "montage",
+  "image comparison",
+  "image stacking",
+]
+
+description = """Combines multiple open images into a single stack and then creates a montage image."""
+
+
+[content]
+plugin_name = "Make Montage..."
+
+plugin_description = """Creates a montage from a stack of images, arranging them in a grid. It requires all images to be open and converted to a stack first using 'Images to Stack'."""
+
+correct_syntax = """open("image1.tif");
+open("image2.tif");
+open("image3.tif");
+run("Images to Stack", "name=MyStack title=");
+run("Make Montage...", "columns=3 rows=1 scale=0.5 font=24 label");"""
+
+tips = [
+  """Error prevention: The primary cause of failure was a 'File not found' error. Before running the macro, confirm that all required image files exist at the specified paths. Use a tool like `folder_summary` to verify filenames if the script fails.""",
+  """The `run("Images to Stack", ...)` command must be executed only after all individual `open(...)` commands have successfully completed.""",
+  """Be aware of how different tools (e.g., Python scripts vs. ImageJ) name their output files. In the dialog, the Cellpose Python script produced an incorrectly named file, which had to be re-generated with a specific name (`human_motis_cellpose_mask.tif`) to ensure the montage macro could find it.""",
+]
+
+site = "https://imagej.net/plugins/montage-tools"
+

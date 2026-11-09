@@ -1,0 +1,84 @@
+type = "task"
+signature = "train_segmentation_model_biapy.v1"
+name = "train_segmentation_model_biapy"
+question = """My datasets saved at D:\vscode_project\ChatImageJ\temp\CartoCell_data. 
+
+1. train data: CartoCell_data/train_M1/x is the raw data, CartoCell_data/train_M1/y is the mask
+2. test data: CartoCell_data/test/x is the raw data, CartoCell_data/test/y is the ground truth
+3. evaluation data: CartoCell_data/validation/x is the raw data
+
+Please analyze this dataset and train a 3D instance segmentation model using BiaPy.
+
+Train 3 epochs."""
+topic = ["3d instance segmentation","deep learning","model training","biapy"]
+tags = ["train_segmentation_model_biapy"]
+
+description = """Trains a 3D instance segmentation model using the BiaPy framework on a specified dataset, and then runs inference on a test set using the trained model."""
+
+summary = """Summary of ImageJ Task
+1.  **Task Overview**: The primary objective was to analyze the CartoCell dataset and train a 3D instance segmentation model for 3 epochs using the BiaPy deep learning framework. The process included setting up the training, validation, and test datasets, executing the training, and evaluating the model's performance on the test data.
+
+2.  **Key Actions Taken**:
+    *   **Dataset Analysis**: The process began by inspecting the specified data directory (`D:/vscode_project/ChatImageJ/temp/CartoCell_data`) using `folder_summary` to confirm the presence and structure of the training, validation, and test sets.
+    *   **User Confirmation**: Before initiating the computationally intensive training process, user permission was explicitly sought via a `user_manipulate` step.
+    *   **Model Training & Evaluation**: The core task was delegated to the `Tool Agent`, which utilized BiaPy to configure and run the training and testing pipeline for 3D instance segmentation based on the provided data paths and training parameters.
+
+3.  **Critical Results**:
+    *   A 3D instance segmentation model was successfully trained on the CartoCell dataset for 3 epochs.
+    *   The model was evaluated on the test dataset, generating prediction results.
+    *   All output files, including logs, model checkpoints, and segmentation results, are stored in the results directory: `D:/vscode_project/ChatImageJ/temp/biapy_results`. The specific run can be found within subdirectories created by BiaPy, as noted in the `delegate_task` response.
+
+4.  **Error Handling**:
+    *   During the delegated task, the prediction phase initially failed with `Permission denied` and `Model checkpoint not found` errors.
+    *   This was caused by providing an incorrect path to the trained model checkpoint file.
+    *   The issue was resolved by using a file system inspection script (`execute_python_script`) to locate the exact path and filename of the best-performing checkpoint, which was then used to successfully run the prediction.
+
+5.  **Current State**: The task is complete. The 3D instance segmentation model has been successfully trained and evaluated on the provided datasets as per the user's request.
+
+6.  **Technical Details**:
+    *   **Framework**: BiaPy
+    *   **Problem Type**: `INSTANCE_SEGMENTATION` (3D)
+    *   **Training Epochs**: 3
+    *   **Training Data Path**: `D:/vscode_project/ChatImageJ/temp/CartoCell_data/train_M1/x`
+    *   **Training Ground Truth Path**: `D:/vscode_project/ChatImageJ/temp/CartoCell_data/train_M1/y`
+    *   **Validation Data Path**: `D:/vscode_project/ChatImageJ/temp/CartoCell_data/validation/x`
+    *   **Validation Ground Truth Path**: `D:/vscode_project/ChatImageJ/temp/CartoCell_data/validation/y`
+    *   **Test Data Path**: `D:/vscode_project/ChatImageJ/temp/CartoCell_data/test/x`
+    *   **Test Ground Truth Path**: `D:/vscode_project/ChatImageJ/temp/CartoCell_data/test/y`
+    *   **Results Output Directory**: `D:/vscode_project/ChatImageJ/temp/biapy_results`"""
+
+[[steps]]
+id = 1
+  [steps.action]
+  name = "delegate_task"
+  agent = "Tool Agent"
+  task = """Please train a 3D instance segmentation model using BiaPy with the following parameters:
+- **config.PROBLEM.TYPE**: 'INSTANCE_SEGMENTATION'
+- **config.TRAIN.ENABLE**: True
+- **config.DATA.PATH**: 'D:\\vscode_project\\ChatImageJ\\temp\\CartoCell_data\\train_M1\\x'
+- **config.DATA.GT_PATH**: 'D:\\vscode_project\\ChatImageJ\\temp\\CartoCell_data\\train_M1\\y'
+- **config.DATA.VAL.PATH**: 'D:\\vscode_project\\ChatImageJ\\temp\\CartoCell_data\\validation\\x'
+- **config.DATA.VAL.GT_PATH**: 'D:\\vscode_project\\ChatImageJ\\temp\\CartoCell_data\\validation\\y'
+- **config.TEST.ENABLE**: True
+- **config.TEST.PATH**: 'D:\\vscode_project\\ChatImageJ\\temp\\CartoCell_data\\test\\x'
+- **config.TEST.GT_PATH**: 'D:\\vscode_project\\ChatImageJ\\temp\\CartoCell_data\\test\\y'
+- **config.TRAIN.EPOCHS**: 3
+- **config.PATHS.RESULT_DIR.PATH**: 'D:\\vscode_project\\ChatImageJ\\temp\\biapy_results'"""
+
+
+data_type = """3D image dataset for instance segmentation, consisting of raw data (.tif) and corresponding masks (.tif), organized into training, validation, and test sets. Each set should have subfolders 'x' for raw images and 'y' for masks/ground truth."""
+[requirements]
+bit_depth = []
+min_size = []
+channels = "The dataset should have a consistent channel count across all images."
+
+[defaults]
+epochs = "3"
+task = "inst3d"
+
+tips = [
+  """Ensure your dataset is structured with separate folders for 'train', 'validation', and 'test'.""",
+  """Within each data folder (e.g., 'train'), create subfolders named 'x' for raw images and 'y' for the corresponding masks.""",
+  """Model training can be time-consuming; starting with a low number of epochs (e.g., 3) is a good way to test the setup.""",
+]
+

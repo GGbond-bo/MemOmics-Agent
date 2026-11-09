@@ -8,6 +8,19 @@ import os, json, re, time
 from datetime import datetime
 from pathlib import Path
 
+
+def _log(msg: str, level: str = "info") -> None:
+    """本模块没有 logging 配置（历史上一直用 print）；统一收口，别在 except 里再抛 NameError。
+
+    2026-11-02：`_ingest_debate_plan` 的 except 分支引用了不存在的 `logger`，
+    一旦真的出异常会二次抛 NameError，把原始错误吞掉 —— 顺手修掉。
+    """
+    try:
+        print(f"[Enforcement][{level}] {msg}")
+    except Exception:
+        pass
+
+
 # === 分析级别判定 ===
 ANALYSIS_KEYWORDS = {
     "analysis": [
@@ -299,18 +312,25 @@ _KIND_DESIGN_RE = re.compile(
     r"方案|脚本|代码|设计|流程|架构|重构|依赖|环境配置|参数(选型|选择|决策)|口径|"
     r"命名规范|目录结构|重构|模板|写作|润色|排版|schedule|design|refactor", re.I)
 _KIND_STATS_RE = re.compile(
-    r"统计|检验|显著性|fdr|p\s*[-_ ]?值|p-?value|效应量|功效|样本量|多重比较|混杂|"
-    r"模型(选择|假设|拟合)|自由度|置信区间|贝叶斯|permutation|null 分布", re.I)
+    r"统计|检验|显著性|fdr|p\s*[-_ ]?值|p[_ -]?val(ue)?|p-?value|效应量|功效|样本量|多重比较|混杂|"
+    r"模型(选择|假设|拟合)|自由度|置信区间|贝叶斯|permutation|null 分布|"
+    # 2026-11-02：实验设计/配对/对照 属于统计问题（否则会被 design 的裸"设计"吞掉）
+    r"实验设计|配对|对照设计|非参数|方差分析|anova|卡方|回归|缺失值", re.I)
 _KIND_BIOINFO_RE = re.compile(
     r"生信|测序|snrna|scrna|单细胞|atac|deg|差异表达|差异基因|比对|比对率|注释|富集|"
     r"聚类|降维|拟时序|变异|甲基化|grn|细胞类型|marker|表达矩阵|counts?|归一化|批次校正|"
     r"h5ad|seurat|scanpy|star|cellranger|featurecounts|deseq|edger|limma", re.I)
 # 2026-10-25（用户反馈）：文献阅读类不辩（"读一篇文献找结论"不是分析，更不是要对抗的结论）。
 # 放在 design/bioinfo 之前判定：论文正文里常出现"方案/统计/测序"等词，先判文献类避免误入生信/统计线。
+# 2026-11-02 真数据实测修正：旧正则把裸「文献/论文/paper」都算文献类，于是"先查知识库和文献证据
+# 再判断这个亚群"这种**分析题**被误判成"读文献"→ 永不辩（E2E r1_deg 实测）。
+# 新口径：只有"对象是一篇文献（读/总结/解读/这篇）"才算文献类；"文献证据/查文献"是取证手段。
 _KIND_LITERATURE_RE = re.compile(
-    r"文献|论文|paper|文献库|综述|精读|阅读|读全文|全文对照|摘要|abstract|preprint|"
-    r"bibliograph|literature|reference|citation|引文|读完|读一下|帮我读|读这|解读|"
-    r"总结这篇|提炼这篇|paper_reading|nature-reader|paper-summary|paper_download", re.I)
+    r"(读|精读|解读|通读|总结|提炼|综述|梳理|讲讲|看一下|帮我读|读完|读一下|读这)"
+    r".{0,14}(文献|论文|paper|文章|全文|摘要)"
+    r"|(文献|论文|paper|文章).{0,6}(阅读|精读|解读|总结|提炼|综述)"
+    r"|这篇(文献|论文|文章)|全文对照|文献库|文献阅读|"
+    r"bibliograph|paper[-_ ]?(reading|summary|download)|nature-reader", re.I)
 
 
 def classify_topic_kind(text: str) -> str:
@@ -328,6 +348,12 @@ def classify_topic_kind(text: str) -> str:
     if _KIND_LITERATURE_RE.search(t):
         return _DEBATE_KIND_LITERATURE
     if _KIND_DESIGN_RE.search(t):
+        # 2026-11-02 修正：design 正则里的裸「设计」会把「统计设计 / 实验设计」误吞成
+        # "方案/脚本类" → 永不辩。这类问题问的是统计，命中是指标/检验/样本量等统计词，
+        # 且没有代码/脚本/重构语境时，按统计线走（最多 L1，符合用户口径）。
+        if (_KIND_STATS_RE.search(t)
+                and not re.search(r"脚本|代码|重构|架构|模板|排版|写作|润色|命名|目录|依赖", t)):
+            return _DEBATE_KIND_STATS
         return _DEBATE_KIND_DESIGN
     if _KIND_STATS_RE.search(t):
         return _DEBATE_KIND_STATS
@@ -337,10 +363,14 @@ def classify_topic_kind(text: str) -> str:
 
 
 # "结果离谱"信号：统计线的唯一辩论入口；生信线也要它才算"结论对不上"
+# 2026-11-02 实测补充：用户口语很少说"与预期不符"，多写"跟预期不符""p 值分布很奇怪"，
+# 旧正则漏掉这两种 → 统计分析被判"未见离谱"直接跳过（E2E S4 实测）。
 _ABSURD_RESULT_RE = re.compile(
-    r"与预期(不符|相反|不一致)|不符合预期|预期之外|远超预期|超出预期|"
-    r"差异(极|很|非常|特别|巨)大|结果(太|极其|非常|有点)?离谱|离谱|荒唐|"
+    r"(?:与|和|跟)?预期(?:不符|相反|不一致)|不符合预期|预期之外|远超预期|超出预期|"
+    r"跟预期(?:差|不)|和预期(?:差|不)|"
+    r"差异(极|很|非常|特别|巨|太)大|结果(太|极其|非常|有点)?离谱|离谱|荒唐|"
     r"(异常|意外)(偏高|偏低|升高|降低|增高|变大|变小)|假阳性|假阴性|"
+    r"(结果|分布|数值|p\s*[-_]?\s*值|效应量|差异).{0,10}(很奇怪|奇怪|反常|不对劲|不太对|有问题)|"
     r"自相矛盾|互相矛盾|矛盾|不可能(出现|发生)|反直觉|说不通|"
     r"unexpected|contradict\w*|discrepan\w*|absurd|outlier|inconsistent|too good to be true",
     re.I)
@@ -349,6 +379,21 @@ _ABSURD_RESULT_RE = re.compile(
 def looks_absurd(text: str) -> str:
     """"结果离谱/与预期不符"的具体措辞（空串 = 没这信号）。"""
     m = _ABSURD_RESULT_RE.search(str(text or ""))
+    return m.group(0) if m else ""
+
+
+# 2026-11-02 真数据实测：决策型分歧（"删还是留 / 0.6 还是 0.8 / 要不要改"）是两条活路径二选一，
+# 属于该辩的场景，但它没有"结果离谱"信号，旧门控会直接跳过。这里给门控一个 fork 信号。
+_DECISION_FORK_RE = re.compile(
+    r"要不要|该不该|是否(?:要|该|应)?(?:删|改|保留|去掉|换|选)|还是|或\s*者|选哪个|哪个更|"
+    r"二选一|取舍|删.{0,6}(?:还是|或).{0,6}留|保留.{0,6}(?:还是|或).{0,6}删|"
+    r"保留和删除|删除和保留|(?:\d+\.\d+)\s*(?:vs\.?|对比|还是)\s*(?:\d+\.\d+)|裁决",
+    re.I)
+
+
+def looks_like_decision(text: str) -> str:
+    """是不是"两条路二选一"的决策题（返回命中措辞，空串=不是）。"""
+    m = _DECISION_FORK_RE.search(str(text or ""))
     return m.group(0) if m else ""
 
 
@@ -414,7 +459,7 @@ def _debate_worthiness(signals: dict):
 
 
 def debate_gate(es: "EnforcementState", stage: str = "conclusion",
-                signals: dict = None) -> tuple:
+                signals: dict = None, ignore_risk_tier: bool = False) -> tuple:
     """三级门控判定 — 什么时候该辩论。
 
     P1(2026-09-22) 分情况矩阵（用户要求"不要为了辩论而辩论"）：
@@ -445,13 +490,16 @@ def debate_gate(es: "EnforcementState", stage: str = "conclusion",
     # 2026-10-18（风险分级降时延）：小规模/低风险任务直接 L0，不辩论。
     # 实测背景：一场自动辩论曾吃掉 550s（judge 反复 ReadTimeout + 回退链），
     # 而真正的分析只用了 0.45s —— 这正是用户感知的"卡住/繁琐"。
+    # 2026-11-02 真数据实测：**产出前**（报告/入库/结论）不适用这条降级 —— 数据小 ≠ 结论安全；
+    # 小数据表（160KB DEG）照样能写出错结论。所以 artifact 传 ignore_risk_tier=True。
     try:
-        from webui.runtime import risk_tier as _rt
-        _tier = _rt.current_tier(es)
-        if _rt.max_debate_level(_tier) == 0:
-            return DEBATE_L0, [
-                f"风险分级={_tier}（{_rt.describe(_tier)}）：本任务不触发辩论。"
-                "需要对抗审查时显式调用 debate_analysis 即可。"], False
+        if not ignore_risk_tier:
+            from webui.runtime import risk_tier as _rt
+            _tier = _rt.current_tier(es)
+            if _rt.max_debate_level(_tier) == 0:
+                return DEBATE_L0, [
+                    f"风险分级={_tier}（{_rt.describe(_tier)}）：本任务不触发辩论。"
+                    "需要对抗审查时显式调用 debate_analysis 即可。"], False
     except Exception:
         pass
 
@@ -502,8 +550,10 @@ def debate_gate(es: "EnforcementState", stage: str = "conclusion",
             reasons.append("高影响工具（入库/报告）：统计线仍只用 L1 限时辩，不做 8 角色")
     elif kind == _DEBATE_KIND_BIOINFO:
         # ⑤ 生信线（用户指定的"重要辩论"）：重要参数 + 结论与预期/实际不符（数据差异大）→ L2 证据链辩论
+        # 2026-11-02 真数据实测补充：**决策型分歧**（"这个亚群删还是留 / 分辨率 0.6 还是 0.8"）
+        # 没有"结果离谱"信号，但确实是两条活路径二选一 → 至少 L1，不能直接跳过。
         _params = bool(signals.get("important_params")) or bool(signals.get("param_checklist"))
-        if not _params:
+        if not _params and not _fork:
             return DEBATE_L0, ["生信分析但无重要参数分歧：不辩论"], force
         if has_dev or conflict or failures >= 2:
             level = DEBATE_L2
@@ -549,7 +599,578 @@ def debate_gate(es: "EnforcementState", stage: str = "conclusion",
     return level, reasons, force
 
 
-# 自动标题总结钩子：由 server.py 在 import 本模块后注入（rail_review(post) 完成时回调）
+# ==================== 辩论识别拦截器（2026-11-02） ====================
+# 用户口径（2026-11-02）：「执行代码之前 / 执行任务之前拦截，判断要不要辩论、什么时候辩、哪个位置辩」。
+# 三条设计约束（为什么这么拆）：
+#   ① **位置由代码枚举**，不问模型：安全点只有「执行前 exec」「产出前 artifact」两类，
+#      读类/审查类/辩论自身永不进入判定 —— 否则一定死锁；
+#   ② **要不要辩 = 规则前置 → 确定性信号 →（可选）LLM 分类器**：前两层零成本，
+#      LLM 只在"信号模糊"时花一次小调用，且超时/失败一律放行；
+#   ③ **拦截只在 artifact 上硬拦**（报告/入库/结论/交付），exec 只软提示 —— 硬拦执行前
+#      最容易把回合卡死（2026-08 那次"强制辩论"就是这么翻的车）。
+# 三档开关（env 覆盖 config）：off 全关 / shadow 只记录不拦（默认，用来量误拦率）/ on 真拦。
+INTERCEPT_OFF = "off"
+INTERCEPT_SHADOW = "shadow"
+INTERCEPT_ON = "on"
+_INTERCEPT_MODES = (INTERCEPT_OFF, INTERCEPT_SHADOW, INTERCEPT_ON)
+
+# 安全点：只有"会改变结论/产出物"的边界进入判定
+_EXEC_SAFE_TOOLS = set(_DEBATE_EXEC_TOOLS)              # execute_r/python/code/run_script/terminal
+_ARTIFACT_SAFE_TOOLS = set(_DEBATE_HIGH_IMPACT_TOOLS)   # 报告/入库/结论/交付/图
+# 永不进入判定：读类/审查类/辩论自身（拦了必死锁）+ 会自己触发辩论的工具
+_DEBATE_NEVER_TOOLS = {
+    "rail_review", "skill_view", "skill_evolution", "debate_analysis", "search_knowledge",
+    "ask_user", "todo", "read_file", "search_files", "scan_data",
+    "vision_describe", "session_search", "process", "memory", "web_search", "kb_search",
+    # 2026-11-03：账本是门禁自己的工具，拦它 = 死锁
+    "evidence_ledger",
+    # 注意：write_file 不在这里 —— 写进 reports/conclusions 的等价于产出，要拦；
+    # 写脚本/笔记的普通 write_file 由 debate_safe_point 判掉。
+}
+
+_USER_SKIP_DEBATE_RE = re.compile(
+    r"跳过辩论|不用辩|不用辩论|别辩|不需要辩论|无需辩论|不要辩论|别辩了|免辩|"
+    r"skip\s*(the\s*)?debate|no\s*debate|without\s*(a\s*)?debate", re.I)
+
+# debate_gate 返回 L0 的这些理由 = "信号不够明确" → 可交给 LLM 分类器复核
+_AMBIGUOUS_L0_HINTS = (
+    "未识别到需要证据链对抗的信号", "生信分析但无重要参数分歧",
+    "生信分析：参数与结果一致、无异常信号", "统计分析未见离谱",
+)
+
+_INTERCEPT_DEFAULTS = {
+    "mode": INTERCEPT_SHADOW,      # off | shadow | on
+    "classifier": False,           # 模糊边界是否调用 LLM 分类器
+    "timeout_s": 3.0,              # 分类器超时（秒）——超时即放行
+    "cooldown_s": 120.0,           # 两次分类器调用最小间隔（防刷）
+    "max_blocks": 3,               # 同一判定连续硬拦上限，超过放行+告警（防死锁）
+    "classifier_model": "",        # 留空 = 跟 judge 路由
+    # 产出前不因"风险分级 low"跳过（数据小 ≠ 结论安全）；要旧行为设 false
+    "artifact_ignores_tier": True,
+    # 2026-11-03（A/B 结论）：产出前先跑单遍证据账（evidence_ledger，1~2 分钟），
+    # 账本足够就不辩；unresolved / 锚点冲突 / 不可逆动作才升级 L1/L2。
+    "ledger_first": True,
+}
+
+
+def user_wants_skip_debate(text: str) -> bool:
+    """用户是否明确说「别辩了」（豁免通道之一，另一条是 API 显式置位）。"""
+    return bool(_USER_SKIP_DEBATE_RE.search(str(text or "")))
+
+
+def debate_safe_point(tool_name: str, args=None) -> str:
+    """一次工具调用属于哪个安全点 → "exec" | "artifact" | ""（空 = 不进入判定）。"""
+    name = str(tool_name or "")
+    if not name or name in _DEBATE_NEVER_TOOLS:
+        return ""
+    if name in _ARTIFACT_SAFE_TOOLS:
+        return "artifact"
+    # 2026-11-02 真数据实测：模型会用 write_file 直接往 results/<sid>/reports/ 写报告，
+    # 绕过 generate_report 的硬拦。写进报告/结论目录的 write_file 等价于产出，纳入 artifact。
+    # 2026-11-03 第二次绕过：路径换成 results/<sid>/results/rss_adjudication_report.md
+    # （既没有 reports/ 目录，也没有「报告」二字在路径里）→ 现在按「文件名+开头内容」判。
+    if name == "write_file":
+        _wd = _args_as_dict(args)
+        _p = str(_wd.get("path") or _wd.get("file") or "").lower()
+        _head = str(_wd.get("content") or "")[:300]
+        if any(k in _p for k in ("/reports/", "\\reports\\", "conclusion", "final_report",
+                                 "报告", "/report", "report.md", "report.html")):
+            return "artifact"
+        _doc_ext = _p.endswith((".md", ".html", ".htm", ".docx", ".pdf", ".tex"))
+        if _doc_ext and re.search(r"报告|结论|裁决|小结|总结|report|conclusion", _p + " " + _head, re.I):
+            return "artifact"
+        return ""
+    if name == _REMOTE_CLUSTER_TOOL:
+        action = str(_args_as_dict(args).get("action") or "").strip().lower()
+        return "exec" if action in _REMOTE_CLUSTER_EXEC_ACTIONS else ""
+    if name in _EXEC_SAFE_TOOLS:
+        if name == "terminal" and _is_readonly_terminal(str(_args_as_dict(args).get("command") or "")):
+            return ""
+        return "exec"
+    return ""
+
+
+def _intercept_cfg(es=None) -> dict:
+    """拦截器配置：默认 → es.intercept_cfg（config.yaml）→ env 覆盖。"""
+    cfg = dict(_INTERCEPT_DEFAULTS)
+    raw = getattr(es, "intercept_cfg", None) or {}
+    if isinstance(raw, dict):
+        for k, v in raw.items():
+            if k in cfg and v is not None:
+                cfg[k] = v
+    env = os.environ.get("MEMOMICS_DEBATE_INTERCEPT", "").strip().lower()
+    if env in _INTERCEPT_MODES:
+        cfg["mode"] = env
+    mode = str(cfg.get("mode") or "").strip().lower()
+    cfg["mode"] = mode if mode in _INTERCEPT_MODES else INTERCEPT_SHADOW
+    try:
+        cfg["timeout_s"] = float(cfg.get("timeout_s") or 3.0)
+    except Exception:
+        cfg["timeout_s"] = 3.0
+    return cfg
+
+
+def _intercept_topic_key(text: str) -> str:
+    """同题去重指纹（不依赖模型，只做归一化 md5）。"""
+    import hashlib
+    base = re.sub(r"\s+", "", str(text or "")[:240]).lower()
+    return hashlib.md5(base.encode("utf-8", "ignore")).hexdigest()[:12]
+
+
+def _intercept_state(es) -> dict:
+    """惰性初始化拦截器状态（老会话对象没有这些字段也不炸）。"""
+    if not hasattr(es, "debate_required"):
+        es.debate_required = {}
+    if not hasattr(es, "debate_exempt"):
+        es.debate_exempt = False
+    if not hasattr(es, "debate_exempt_reason"):
+        es.debate_exempt_reason = ""
+    if not hasattr(es, "debate_judgements"):
+        es.debate_judgements = []
+    if not hasattr(es, "debate_done_keys"):
+        es.debate_done_keys = set()
+    if not hasattr(es, "_intercept_block_hits"):
+        es._intercept_block_hits = 0
+    if not hasattr(es, "_intercept_llm_ts"):
+        es._intercept_llm_ts = 0.0
+    if not hasattr(es, "intercept_cfg"):
+        es.intercept_cfg = {}
+    if not hasattr(es, "_last_exec_code"):
+        es._last_exec_code = ""
+    # 2026-11-03：单遍证据账（A2）状态——产出前的第一道关，按账本状态决定是否升级辩论
+    if not hasattr(es, "ledger_result"):
+        es.ledger_result = {}
+    if not hasattr(es, "ledger_done"):
+        es.ledger_done = False
+    if not hasattr(es, "ledger_satisfied"):
+        es.ledger_satisfied = False
+    if not hasattr(es, "ledger_escalated"):
+        es.ledger_escalated = False
+    return es
+
+
+def _intercept_classifier_prompt(sp: str, topic: str, action_text: str, kind: str,
+                                 checks: list, deviation: str, retries: int) -> str:
+    """边界判定用的一次性小提示词（要求严格 JSON，输出 ≤200 token）。"""
+    _scene = "准备执行一段分析代码（参数/方法还没定稿）" if sp == "exec" else "准备产出高影响结果（报告/入库/结论/交付）"
+    _checks = "；".join(str(c) for c in (checks or [])[:4]) or "无"
+    return (
+        "你是科研助手的「是否值得开证据链辩论」判定器。判据：**只有在存在≥2 条真实可选路径、"
+        "且选错会改变结论/参数/产物时才判需要辩论**；只是执行既定步骤、或答案唯一，就不需要。\n"
+        f"场景：{_scene}\n"
+        f"规则初判的问题类型：{kind}\n"
+        f"用户诉求：{str(topic or '')[:300]}\n"
+        f"本次动作摘要：{str(action_text or '')[:800]}\n"
+        f"已知信号：参数清单={_checks}；结果偏离={deviation or '无'}；重试次数={retries}\n"
+        "只输出 JSON（不要解释、不要代码块）：\n"
+        '{"should_debate": true 或 false, "level": "L1" 或 "L2", '
+        '"reason": "≤40字的判断依据", "confidence": "high|medium|low"}'
+    )
+
+
+def _llm_debate_classifier(es, cfg: dict, sp: str, topic: str, action_text: str,
+                            kind: str, checks: list, deviation: str, retries: int):
+    """模糊边界复核：一次小调用（超时/失败/冷却期内一律返回 None = 不改变结论）。"""
+    try:
+        now = time.time()
+        if now - float(getattr(es, "_intercept_llm_ts", 0) or 0) < float(cfg.get("cooldown_s") or 120):
+            return None
+        es._intercept_llm_ts = now
+        from memomics.bio_tools import debate_analysis as _da
+        rc = _da._resolve_role_llm("judge", _da._load_debate_config() or {})
+        if not (rc.get("api_key") and rc.get("base_url")):
+            return None
+        model = str(cfg.get("classifier_model") or rc.get("model") or "")
+        import httpx
+        prompt = _intercept_classifier_prompt(sp, topic, action_text, kind, checks, deviation, retries)
+        with httpx.Client(timeout=float(cfg.get("timeout_s") or 3.0)) as client:
+            resp = client.post(
+                str(rc["base_url"]).rstrip("/") + "/chat/completions",
+                headers={"Authorization": "Bearer " + str(rc["api_key"]),
+                         "Content-Type": "application/json"},
+                json={"model": model, "messages": [{"role": "user", "content": prompt}],
+                      "max_tokens": 220, "temperature": 0.1})
+        if resp.status_code >= 400:
+            return None
+        txt = (((resp.json() or {}).get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+        m = re.search(r"\{.*\}", txt, re.S)
+        if not m:
+            return None
+        obj = json.loads(m.group(0))
+        if not isinstance(obj, dict):
+            return None
+        return {
+            "should_debate": bool(obj.get("should_debate")),
+            "level": str(obj.get("level") or "L1").upper(),
+            "reason": str(obj.get("reason") or "")[:120],
+            "confidence": str(obj.get("confidence") or "low"),
+        }
+    except Exception:
+        return None
+
+
+def debate_intercept_decision(es, tool_name: str, args=None) -> dict:
+    """判断「这次工具调用要不要先辩论」——纯函数：不发事件、不拦、不改会话内容。
+
+    返回 dict：
+      sp        安全点 exec|artifact|""
+      mode      off|shadow|on
+      level     DEBATE_L0/L1/L2
+      decision  skip | soft（执行前软提示）| block（产出前硬拦）
+      reasons   判定理由（给人看的）
+      source    rule | signal | llm
+      required  是否判定"需要辩论"
+      shadow    当前是否影子模式
+    """
+    _intercept_state(es)
+    cfg = _intercept_cfg(es)
+    mode = cfg["mode"]
+    out = {"sp": "", "mode": mode, "level": DEBATE_L0, "decision": "skip", "reasons": [],
+           "source": "rule", "topic_key": "", "topic": "", "required": False,
+           "shadow": (mode == INTERCEPT_SHADOW), "force": False, "cfg": cfg,
+           "exempt": bool(getattr(es, "debate_exempt", False))}
+
+    def _done(reason, source="rule"):
+        out["reasons"] = [reason] if isinstance(reason, str) else list(reason)
+        out["source"] = source
+        return out
+
+    sp = debate_safe_point(tool_name, args)
+    out["sp"] = sp
+    if not sp:
+        return _done("不是安全点：只读/查询/审查/辩论类工具不进入判定")
+    if mode == INTERCEPT_OFF:
+        return _done("拦截器关闭（off）")
+
+    # ---------- ① 规则前置（零成本） ----------
+    if out["exempt"]:
+        return _done("用户已豁免本会话辩论（debate_exempt）")
+    if user_wants_skip_debate(getattr(es, "topic_hint", "")):
+        es.debate_exempt = True
+        es.debate_exempt_reason = "用户在消息里明确要求跳过辩论"
+        out["exempt"] = True
+        return _done("用户明确要求跳过辩论 → 置豁免位，本会话不再拦")
+    if getattr(es, "analysis_level", "chat") in ("chat", "lightweight"):
+        return _done("chat/lightweight 级：没有分析对象")
+    if not getattr(es, "results_dir", ""):
+        return _done("会话没有结果目录（不是分析任务）")
+    # 2026-11-03：本轮辩论已完成 → 产出直接放行（账本/辩论的判定只约束到"辩过为止"）
+    if getattr(es, "debate_satisfied", False):
+        return _done("本轮已完成辩论/证据账（debate_satisfied）→ 产出放行")
+
+    # ---------- ② 同一段代码重复执行：首次执行时已判定过，不重复喊（旧行为，防刷屏） ----------
+    # 注意：重复执行也照样拦产出（artifact 走的是"待履行"分支），这里只是不重复刷软提示。
+    if sp == "exec":
+        _d0 = _args_as_dict(args)
+        _code0 = str(_d0.get("command") or _d0.get("code") or _d0.get("script") or "")
+        _retries = getattr(es, "_exec_retries", {}) or {}
+        _try = max(int(_retries.get(_code0.strip()[:120], 0) or 0),
+                   int(_retries.get(_code0.strip()[:100], 0) or 0))
+        if _try > 1:
+            return _done("同一段代码的重复执行（首次执行时已判定，不重复要求辩论）")
+
+    # ---------- ③ 已判定待履行 → 直接按状态处理（不重复判定） ----------
+    req = getattr(es, "debate_required", None) or {}
+    if req and not getattr(es, "debate_satisfied", False):
+        out.update({"level": int(req.get("level_int") or DEBATE_L1), "required": True,
+                    # kind 要一起恢复：统计线的硬拦提示必须说"先 ask_user 澄清"，
+                    # 否则会把统计问题当普通题直接推去做 8 角色辩论（E2E S4 实测）。
+                    "kind": str(req.get("kind") or _DEBATE_KIND_OTHER),
+                    "topic": str(req.get("topic") or ""), "topic_key": str(req.get("topic_key") or ""),
+                    "stage": str(req.get("stage") or "debate"),
+                    "source": str(req.get("source") or "signal")})
+        out["reasons"] = ["本会话已判定需要辩论但尚未完成：%s" % str(req.get("reason") or "")[:120]]
+        out["decision"] = "block" if sp == "artifact" else "soft"
+        return out
+
+    # ---------- ④ 确定性信号 → debate_gate 出级别 ----------
+    args_d = _args_as_dict(args)
+    code = str(args_d.get("command") or args_d.get("code") or args_d.get("script") or "")
+    last_result = str(getattr(es, "_last_terminal_result", "") or "")
+    last_code = str(getattr(es, "_last_exec_code", "") or "")
+    topic_hint = str(getattr(es, "topic_hint", "") or "")
+    if sp == "exec" and code.strip():
+        try:
+            es._last_exec_code = code[:4000]
+        except Exception:
+            pass
+        # 执行前判类以**用户诉求**为准（代码只做兜底）。2026-11-02 实测：DESeq2/limma 的
+        # 代码里常有 `design = ~ condition`，扫代码会把"统计设计"误判成"方案/脚本类"→ 永不辩。
+        # 题型是"用户问的是什么"，不是"代码里出现了什么词"。
+        scan_text = topic_hint.strip() or code
+    else:
+        # 产出前的判定看「这次分析本身」，不看报告正文（报告里常出现"方案/图/统计"导致误分类）
+        # 2026-11-03 修正：优先用用户诉求（topic_hint），只有它为空才退回上一条结果。
+        # 真机事故：模型先画图再写报告，last_result 里全是 figures/*.png → 报告被判成
+        # "图/绘图类不辩论" → 产出前的证据账/辩论整条链路被跳过。
+        scan_text = topic_hint.strip() or last_result[:600] or code
+    kind = classify_topic_kind(scan_text)
+    out["kind"] = kind
+    # 重要参数：执行前扫代码；产出前扫**上一次执行的代码**（修 2026-11 的 bug：原先扫的是输出文本）
+    checks = _param_checklist(code if (sp == "exec" and code) else (last_code or scan_text))
+    deviation = looks_absurd(last_result + " " + topic_hint + " " + code)
+    retries = 0
+    try:
+        retries = max(list(getattr(es, "_exec_retries", {}).values()) or [0])
+    except Exception:
+        retries = 0
+    od = dict(args_d)
+    topic = (str(od.get("topic") or "") or topic_hint or code)[:200]
+    key = _intercept_topic_key(topic)
+    out["topic"], out["topic_key"] = topic, key
+    if key and key in (getattr(es, "debate_done_keys", set()) or set()):
+        return _done("同题已辩过（指纹 %s），不重复要求" % key)
+
+    _fork_hit = looks_like_decision(topic_hint or topic)
+    signals = {
+        "topic": topic, "topic_kind": kind,
+        "important_params": bool(checks), "param_checklist": checks,
+        "deviation": deviation,
+        # 决策型分歧（删还是留 / 0.6 还是 0.8）：没有"结果离谱"信号时也能进 L1
+        "has_fork": bool(_fork_hit), "fork_options": (["A", "B"] if _fork_hit else []),
+        "high_impact": sp == "artifact",
+        "failed_retries": retries,
+        "last_error": bool(getattr(es, "_last_exec_error", False)),
+        "conflict": False, "uncertainty": False,
+    }
+    stage = "conclusion" if sp == "artifact" else "before_script"
+    # 产出前不因"数据小/风险分级低"跳过判定（小数据也能写错结论）
+    level, reasons, force = debate_gate(
+        es, stage=stage, signals=signals,
+        ignore_risk_tier=(sp == "artifact" and bool(cfg.get("artifact_ignores_tier", True))))
+    source = "signal"
+
+    # ---------- ④ 模糊边界 → 可选 LLM 分类器 ----------
+    _why = " ".join(str(r) for r in reasons)
+    if (level < DEBATE_L1 and cfg.get("classifier")
+            and any(h in _why for h in _AMBIGUOUS_L0_HINTS)):
+        llm = _llm_debate_classifier(es, cfg, sp, topic,
+                                     (code if sp == "exec" else (last_result or topic_hint)),
+                                     kind, checks, deviation, retries)
+        if llm:
+            source = "llm"
+            reasons = list(reasons) + [
+                "LLM 分类器：%s（置信 %s）" % (llm.get("reason") or "—", llm.get("confidence") or "low")]
+            if llm.get("should_debate"):
+                level = DEBATE_L2 if llm.get("level") == "L2" else DEBATE_L1
+
+    out.update({"level": level, "reasons": list(reasons), "source": source, "force": bool(force)})
+
+    # ---------- ⑤ 2026-11-03 账本优先（A2 落地）：产出前先跑单遍证据账 ----------
+    # A/B 实测：7 席 L2 相对「单遍+账本」只多 1/15 检查项、贵 7.7 倍。所以产出前
+    # 先要一份账本（1~2 分钟）；由**账本状态**（unresolved / 锚点冲突 / 不可逆动作）
+    # 决定要不要升级对抗辩论，而不是按题型硬判。
+    # 触发范围：分析类产出（统计/生信）即使旧门控没报警也要账本；图/方案/文献类仍按旧门控。
+    _kind_l = str(out.get("kind") or kind)
+    _ledger_scope = _kind_l in (_DEBATE_KIND_STATS, _DEBATE_KIND_BIOINFO)
+    if (bool(cfg.get("ledger_first", True)) and sp == "artifact"
+            and not getattr(es, "debate_satisfied", False)
+            and (level >= DEBATE_L1 or _ledger_scope)):
+        if not getattr(es, "ledger_done", False):
+            out.update({"level": level, "source": "ledger", "stage": "ledger",
+                        "reasons": list(reasons) + [
+                            "产出前先跑单遍证据账 evidence_ledger（约 1~2 分钟），由账本状态决定是否升级辩论"],
+                        "required": True, "decision": "block"})
+            return out
+        _esc = (getattr(es, "ledger_result", {}) or {}).get("escalate") or {}
+        if not _esc.get("needed"):
+            try:
+                es.ledger_satisfied = True
+            except Exception:
+                pass
+            out.update({"level": DEBATE_L0, "source": "ledger", "stage": "ledger",
+                        "reasons": ["证据账已足够（verdict=%s）→ 不必升级对抗辩论"
+                                    % str((getattr(es, "ledger_result", {}) or {}).get("verdict") or "?")],
+                        "required": False, "decision": "skip"})
+            return out
+        _lvl = DEBATE_L2 if str(_esc.get("recommended_level") or "").upper() == "L2" else DEBATE_L1
+        out.update({"level": _lvl, "source": "ledger", "stage": "debate",
+                    "reasons": list(reasons) + ["证据账要求升级辩论：" + "；".join(
+                        str(x) for x in (_esc.get("reasons") or []))[:200]],
+                    "required": True, "decision": "block"})
+        return out
+
+    if level < DEBATE_L1:
+        out["decision"] = "skip"
+        return out
+    out["required"] = True
+    # 产出前硬拦；执行前只软提示（防死锁）
+    out["decision"] = "block" if sp == "artifact" else "soft"
+    return out
+
+
+def debate_intercept_block_message(decision: dict, tool_name: str) -> str:
+    """硬拦提示：写清"被什么拦、怎么解除、别重试"。"""
+    d = decision or {}
+    _reasons = "；".join(str(r) for r in (d.get("reasons") or [])[:2])
+    # 2026-11-03：账本优先档 —— 先要一份证据账，不要一上来就 8 角色辩论
+    if str(d.get("stage") or "") == "ledger":
+        return (
+            "⛔ 生产前拦截（证据账优先）：%s 被拦下。\n"
+            "判定：%s（来源：ledger）\n"
+            "先调 evidence_ledger(topic=\"%s\", context=\"<数据/方法/结果摘要>\") —— "
+            "一次调用约 1~2 分钟，返回里 escalate.needed=true 时再调 debate_analysis(level='L1|L2')。\n"
+            "账本判定足够（escalate.needed=false）时，本工具会自动放行，不需要辩论。\n"
+            "不要反复重试同一个工具：先跑账本。"
+        ) % (tool_name, _reasons or "产出前需要证据账",
+             str(d.get("topic") or "<本轮结论>")[:80])
+    return (
+        "⛔ 辩论拦截：本会话已判定「先辩证据链、再出高影响结果」，%s 被拦下。\n"
+        "判定：%s（来源：%s）—— %s\n"
+        "解除方式（三选一）：\n"
+        "  ① 先调 debate_analysis(topic=\"%s\", context=\"<数据/方法/结果摘要>\", level=\"%s\")，"
+        "成功后再重试 %s；\n"
+        "  ② 用户明确说「跳过辩论」→ 本会话豁免（界面也会记录）；\n"
+        "  ③ 同一主题再辩一次，用新裁决覆盖旧判定。\n"
+        "不要反复重试同一个工具：先辩论，或请用户拍板。"
+    ) % (tool_name, DEBATE_LEVEL_NAMES.get(int(d.get("level") or 0), "L1"),
+         d.get("source") or "signal", _reasons or "存在需要证据链对抗的分歧",
+         str(d.get("topic") or "<本轮的决策/结论>")[:80],
+         "L1" if int(d.get("level") or 1) <= DEBATE_L1 else "L2", tool_name)
+
+
+def debate_interceptor(es, tool_name: str, args=None):
+    """tool_start_cb 调用入口 → (block, events)。
+
+    block  ：None = 放行；dict = 交给 tool_executor 的拦截载荷
+    events ：要 emit 的 enforcement 消息（判定审计 / 软提示 / 拦截）
+    """
+    try:
+        if str(os.environ.get("MEMOMICS_INTERCEPT_DEBUG", "") or "").strip().lower() in ("1", "true", "yes"):
+            import sys as _sys
+            _sys.stderr.write("[dbg-intercept] tool=%s sp=%r\n"
+                              % (tool_name, debate_safe_point(tool_name, args)))
+    except Exception:
+        pass
+    _intercept_state(es)
+    d = debate_intercept_decision(es, tool_name, args)
+    events = []
+    block = None
+    mode = d["mode"]
+    if mode == INTERCEPT_OFF:
+        # off = 完全回滚：不判定、不记录、不发事件（出问题时的逃生开关）
+        return None, events
+    if not d["sp"]:
+        return None, events
+
+    # 判定审计（每个安全点都留痕；上限 50 条）
+    try:
+        es.debate_judgements.append({
+            "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "tool": tool_name, "sp": d["sp"], "mode": mode,
+            "level": DEBATE_LEVEL_NAMES.get(int(d["level"] or 0), ""),
+            "decision": d["decision"], "source": d["source"],
+            "required": bool(d["required"]), "shadow": bool(d["shadow"]),
+            "reasons": [str(r)[:160] for r in (d["reasons"] or [])[:4]],
+        })
+        if len(es.debate_judgements) > 50:
+            del es.debate_judgements[:-50]
+    except Exception:
+        pass
+
+    # 记下"待履行的辩论要求"（shadow 也记，方便看误拦率）
+    if d["required"]:
+        try:
+            es.debate_required = {
+                "level": DEBATE_LEVEL_NAMES.get(int(d["level"] or 0), "L1"),
+                "level_int": int(d["level"] or 0),
+                "topic": d["topic"], "topic_key": d["topic_key"],
+                "reason": "；".join(str(r) for r in (d["reasons"] or [])[:2])[:240],
+                "source": d["source"], "sp": d["sp"],
+                "kind": str(d.get("kind") or _DEBATE_KIND_OTHER),
+                "stage": str(d.get("stage") or "debate"),
+                "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        except Exception:
+            pass
+
+    _base_ev = {"action": "debate_decision", "level": DEBATE_LEVEL_NAMES.get(int(d["level"] or 0), "L0"),
+                "source": d["source"], "reasons": [str(r)[:200] for r in (d["reasons"] or [])[:3]],
+                "required": bool(d["required"]), "decision": d["decision"],
+                "shadow": bool(d["shadow"]), "exempt": bool(d.get("exempt")),
+                "sp": d["sp"], "topic": str(d.get("topic") or "")[:120]}
+
+    if d["decision"] == "skip":
+        events.append(dict(_base_ev, blocked=False, message="⚖️ 辩论判定：不辩 · %s"
+                           % (str((d["reasons"] or [""])[0])[:80])))
+        return None, events
+
+    if d["shadow"] or mode != INTERCEPT_ON:
+        # 影子/关闭：**只报告"本来会怎样"，绝不硬拦**。
+        # 注意：软提示（require）在 shadow 下照发 —— 那是本次改造之前就有的行为，
+        # shadow 的定义是"关掉新增的硬拦"，不是"把原有提醒也关掉"（否则默认配置下
+        # 模型再也收不到辩论提示，等于行为回退）。
+        _would_block = (d["decision"] == "block")
+        events.append(dict(_base_ev, blocked=False, would_block=_would_block,
+                           message="🧪 辩论判定（影子模式，不拦）：%s · 本该%s · %s"
+                                   % (_base_ev["level"],
+                                      "硬拦" if _would_block else "软提示",
+                                      _base_ev["reasons"][0] if _base_ev["reasons"] else "")))
+        if d["decision"] in ("soft", "block"):
+            _req_tools, _req_text = [], ""
+            try:
+                _req_tools, _req_text = _debate_require_payload(
+                    d.get("kind") or _DEBATE_KIND_OTHER, int(d["level"] or DEBATE_L1), d.get("reasons") or [])
+            except Exception:
+                pass
+            events.append({"action": "require", "level": _base_ev["level"],
+                           "reasons": _base_ev["reasons"],
+                           "require": (_req_tools or ["debate_analysis"]),
+                           "message": ("💬 辩论建议（%s，影子模式不拦）：%s。%s"
+                                       % (_base_ev["level"],
+                                          _base_ev["reasons"][0] if _base_ev["reasons"] else "",
+                                          _req_text or ""))})
+        return None, events
+
+    if d["decision"] == "soft":
+        # 执行前：按题型给"怎么辩"的定向指令（统计线先 ask_user；生信线要证据链），这里不拦。
+        _req_tools, _req_text = [], ""
+        try:
+            _req_tools, _req_text = _debate_require_payload(
+                d.get("kind") or _DEBATE_KIND_OTHER, int(d["level"] or DEBATE_L1), d.get("reasons") or [])
+        except Exception:
+            pass
+        msg = ("💬 执行前辩论判定（%s）：%s。建议先 debate_analysis(level='%s')；"
+               "不辩也可以继续，但产出报告/入库前会被硬拦。%s"
+               % (_base_ev["level"], _base_ev["reasons"][0] if _base_ev["reasons"] else "",
+                  "L1" if int(d["level"] or 1) <= DEBATE_L1 else "L2", _req_text or ""))
+        events.append(dict(_base_ev, blocked=False, message=msg))
+        events.append({"action": "require", "level": _base_ev["level"],
+                       "reasons": _base_ev["reasons"],
+                       "require": (_req_tools or ["debate_analysis"]),
+                       "message": msg})
+        return None, events
+
+    # ---------- 硬拦（产出前） ----------
+    # 防死锁自救：同一判定连续硬拦超过 max_blocks 次 → 放行并告警（绝不把回合焊死）
+    _hits = int(getattr(es, "_intercept_block_hits", 0) or 0) + 1
+    try:
+        es._intercept_block_hits = _hits
+    except Exception:
+        pass
+    _cap = int(d["cfg"].get("max_blocks") or 3)
+    if _hits > _cap:
+        events.append(dict(_base_ev, blocked=False, message=(
+            "⚠️ 辩论判定已连续拦截 %d 次仍未解除，为避免死锁本次放行（请用户拍板是否跳过辩论）。" % (_hits - 1))))
+        return None, events
+    msg = debate_intercept_block_message(d, tool_name)
+    # 统计线：按用户口径先 grill 用户（ask_user），别让模型直接开 8 角色辩论。
+    _req_tools, _req_text = [], ""
+    try:
+        _req_tools, _req_text = _debate_require_payload(
+            d.get("kind") or _DEBATE_KIND_OTHER, int(d["level"] or DEBATE_L1), d.get("reasons") or [])
+    except Exception:
+        pass
+    if _req_text:
+        msg = msg + _req_text
+    block = {"blocked": True, "message": msg,
+             "require": (_req_tools or ["debate_analysis"]),
+             "debate_required": True, "debate_decision": _base_ev}
+    events.append(dict(_base_ev, blocked=True, message=msg))
+    return block, events
+
+
+
 _title_summary_hook = None
 
 
@@ -561,6 +1182,7 @@ class EnforcementState:
         self.results_dir = results_dir
         self.skills_loaded: set = set()
         self.knowledge_searched: bool = False
+        self.knowledge_gate_hits: int = 0
         self.rail_pre_done: bool = False
         self.rail_post_done: bool = False
         # 2026-10-09 用户要求：审查要区分「在哪审的」（本机/集群/云）
@@ -576,6 +1198,19 @@ class EnforcementState:
         self.debate_todos: list = []         # next_actions(owner=ai) → 会话待办
         self.debate_enforce_blocks: bool = True  # config debate.enforce_blocks（默认开）
         self._debate_block_hits: int = 0
+        # ==== 2026-11-02 辩论识别拦截器 ====
+        self.debate_required: dict = {}      # {level,level_int,topic,topic_key,reason,source,sp,at}
+        self.debate_satisfied: bool = False  # 已有一场成功辩论满足当前要求
+        self.debate_exempt: bool = False     # 用户/API 显式豁免（本会话不再拦）
+        self.debate_exempt_reason: str = ""
+        self.debate_judgements: list = []    # 判定审计（每个安全点一条，上限 50）
+        self.debate_done_keys: set = set()   # 已辩过的主题指纹（去重）
+        self.debate_degraded: bool = False   # 最近一次辩论是降级裁决（有席位没输出）
+        self.debate_degraded_note: str = ""
+        self.intercept_cfg: dict = {}        # config.yaml debate.intercept
+        self._intercept_block_hits: int = 0  # 同一判定连续硬拦次数（防死锁）
+        self._intercept_llm_ts: float = 0.0  # 上次分类器调用时间（冷却）
+        self._last_exec_code: str = ""       # 最近一次执行的代码（产出前判参用）
         # P3(2026-09-22): 意图确认弹窗未答复前，不许执行（用户要求"先问清楚再动手"）
         self.awaiting_form_id: str = ""       # 正在等用户答复的表单 id
         self.awaiting_form_question: str = ""  # 表单问题（用于拦截提示）
@@ -639,6 +1274,7 @@ class EnforcementState:
         return {
             "skills_loaded": list(self.skills_loaded),
             "knowledge_searched": self.knowledge_searched,
+            "knowledge_gate_hits": self.knowledge_gate_hits,
             "rail_pre_done": self.rail_pre_done,
             "rail_post_done": self.rail_post_done,
             "rail_pre_location": self.rail_pre_location,
@@ -652,6 +1288,20 @@ class EnforcementState:
                               "blocks": t.get("blocks")} for t in (self.debate_todos or [])],  # P2
             "debate_blocks_pending": len(pending_debate_blocks(self)),  # P2
             "debate_block_hits": self._debate_block_hits,  # P2
+            # 2026-11-02 辩论识别拦截器：判定/要求/豁免/审计（界面与排障都靠这三块）
+            "debate_required": dict(getattr(self, "debate_required", {}) or {}),
+            "debate_satisfied": bool(getattr(self, "debate_satisfied", False)),
+            "ledger_done": bool(getattr(self, "ledger_done", False)),
+            "ledger_satisfied": bool(getattr(self, "ledger_satisfied", False)),
+            "ledger_escalated": bool(getattr(self, "ledger_escalated", False)),
+            "ledger_verdict": str((getattr(self, "ledger_result", {}) or {}).get("verdict") or ""),
+            "debate_degraded": bool(getattr(self, "debate_degraded", False)),
+            "debate_degraded_note": getattr(self, "debate_degraded_note", ""),
+            "debate_exempt": bool(getattr(self, "debate_exempt", False)),
+            "debate_exempt_reason": getattr(self, "debate_exempt_reason", ""),
+            "debate_intercept_mode": _intercept_cfg(self).get("mode", INTERCEPT_SHADOW),
+            "debate_intercept_hits": int(getattr(self, "_intercept_block_hits", 0) or 0),
+            "debate_judgements": list(getattr(self, "debate_judgements", []) or [])[-10:],
             "awaiting_form_id": self.awaiting_form_id,  # P3
             "awaiting_form_question": self.awaiting_form_question,  # P3
             "intent_confirm": self.intent_confirm,  # P3（预置门禁）
@@ -720,6 +1370,21 @@ def clear_hard_block(session_id: str) -> bool:
     es._blocked_attempts = 0
     es._pending_record = False  # record_run 门禁同样只约束当轮
     es._pending_record_warned = False  # 2026-08-22: 软拦截计数随回合重置
+    # 2026-11-02：辩论拦截的"待履行要求"也只约束本轮。
+    # 否则用户改口问别的事（"先别管 DEG，帮我改图"）时，上一轮的 required 会把
+    # add_figure 也拦掉 —— 变成陈旧要求导致误拦。新一轮工具调用会重新判定，
+    # 同一分析如果仍然"结果对不上"，判定会再次成立（不会漏拦）。
+    try:
+        _intercept_state(es)
+        es.debate_required = {}
+        es._intercept_block_hits = 0
+        # 2026-11-03：证据账状态也只约束本轮（新问题 = 新证据状态）
+        es.ledger_result = {}
+        es.ledger_done = False
+        es.ledger_satisfied = False
+        es.ledger_escalated = False
+    except Exception:
+        pass
     return was
 
 
@@ -855,6 +1520,11 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
             _eb = ((_d.get("debate") or {}).get("enforce_blocks"))
             if isinstance(_eb, bool):
                 es.debate_enforce_blocks = _eb
+            # 2026-11-02 辩论识别拦截器：debate.intercept 段（env MEMOMICS_DEBATE_INTERCEPT 可覆盖）
+            _ic = ((_d.get("debate") or {}).get("intercept"))
+            if isinstance(_ic, dict):
+                _intercept_state(es)
+                es.intercept_cfg = dict(_ic)
     except Exception:
         pass
 
@@ -993,6 +1663,13 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
             _emit("enforcement", action="blocked", message=_ce["message"], code_edit=True)
             return _ce
 
+        # 2026-11-01: KB 工具门禁 —— 分析/辩论前必须显式查 KB（不靠提示词自觉）
+        _kg = knowledge_gate(es, tool_name, args)
+        if _kg:
+            _emit("enforcement", action="blocked", message=_kg["message"],
+                  knowledge_gate=True, require=_kg.get("require"))
+            return _kg
+
         if tool_name == "skill_view":
             skill = _detect_tool_name(str(args))
             if skill:
@@ -1046,33 +1723,18 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                       message=("🔄 这段代码此前已连续多次相同报错（已标记）。"
                                "请勿原样重试——先排查根因（环境/依赖/数据/编码），"
                                "修改代码或换方案后再执行。"))
-            # P2-7(2026-08-10): 钩子① — 执行前辩论门控（P3 2026-10-12 按用户口径重写）。
-            # 用户口径：**方案/脚本/设计类不辩**；生信类要"重要参数 + 已经出现离谱结果/冲突/
-            # 连续失败"才在动手前先辩（证据链）；统计类先 grill 用户，最多 L1 且限时。
-            if (es.analysis_level in ("analysis", "statistical") and es._exec_retries[_key] == 1
-                    and not es.debated_topics):
-                _checks = _param_checklist(_cmd)
-                _b_kind = classify_topic_kind(_cmd)
-                _b_sig = {"cmd": _cmd, "topic_kind": _b_kind,
-                          "important_params": bool(_checks), "param_checklist": _checks}
-                if _is_readonly_terminal(_cmd):
-                    _b_sig["readonly"] = True
-                _b_level, _b_reasons, _b_force = debate_gate(es, stage="before_script", signals=_b_sig)
-                if _b_level < DEBATE_L1 and _b_reasons:
-                    # 不辩也要说清楚为什么不辩（用户要求"分清楚情况"，不是静默跳过）
-                    _emit("enforcement", action="info",
-                          message=f"💬 执行前不辩论（{_DEBATE_KIND_LABELS.get(_b_kind, '')}）：{_b_reasons[0]}")
-                if _b_level >= DEBATE_L1:
-                    _req_tools, _req_text = _debate_require_payload(_b_kind, _b_level, _b_reasons)
-                    _check_txt = ""
-                    if _checks:
-                        _check_txt = ("\n🔍 参数核查清单（找证据链时必逐项核查，用工具实查，不许猜）：\n"
-                                      + "\n".join(f"  • {c}" for c in _checks))
-                    _emit("enforcement", action="require",
-                          level=DEBATE_LEVEL_NAMES[_b_level],
-                          reasons=_b_reasons,
-                          message=(f"💬 执行前辩论门控 → {DEBATE_LEVEL_NAMES[_b_level]}：{'；'.join(_b_reasons[:2])}。{_check_txt}{_req_text}"),
-                          require=_req_tools or ["debate_analysis"])
+            # 2026-11-02：执行前 = 安全点 exec（**软判定**：判定+留痕+定向指令，但不拦执行）
+            # 旧实现（2026-10-12 版）内联在这里判定；现在统一走 debate_interceptor，
+            # 好处：判定结果可审计（debate_judgements）、产出前能复用同一份"待履行要求"。
+            try:
+                _dblk, _devs = debate_interceptor(es, tool_name, args)
+                for _dev in _devs:
+                    if _dev:
+                        _emit("enforcement", **_dev)
+                if _dblk:
+                    return _dblk
+            except Exception as _e_dint:
+                _log(f"[debate-intercept] 执行前判定异常（不阻塞执行）: {_e_dint}", "warn")
             # 🔧 2026-08-22: 自进化门禁扩展 — execute_r/execute_python 完成后未 record_run
             # 时，下一次执行调用注入软提醒（不阻断执行，避免持久内核迭代被卡死）：
             # 提醒模型自检目标产物 → 已完成则 record_run 沉淀；未完成则【继续完成目标】。
@@ -1090,6 +1752,17 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                 # 不阻断：目标未完成时模型继续执行以完成目标；完成后 record_run 解除。
 
         elif tool_name in _DEBATE_HIGH_IMPACT_TOOLS:
+            # 2026-11-02：产出前 = 安全点 artifact（**硬拦**）——"该辩没辩"就出报告/入库/交付的场景。
+            # 放在裁决 blocks 之前：没辩过的时候由拦截器拦；辩过的才进入下面的 blocks 硬约束。
+            try:
+                _ablk, _aevs = debate_interceptor(es, tool_name, args)
+                for _aev in _aevs:
+                    if _aev:
+                        _emit("enforcement", **_aev)
+                if _ablk:
+                    return _ablk
+            except Exception as _e_aint:
+                _log(f"[debate-intercept] 产出前判定异常（不阻塞，交回旧门禁）: {_e_aint}", "warn")
             # P2(2026-09-22): 裁决硬约束优先 —— "不做 X 不许出 Y" 的 Y 就是这里
             _blk = _debate_block_gate(es, tool_name)
             if _blk:
@@ -1126,6 +1799,17 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                     return {"blocked": True, "message": f"⛔ 拦截：{_msg}"}
 
             es.terminal_count += 1
+            # 2026-11-02：terminal（非只读）= 安全点 exec，同样走拦截器的软判定（不拦执行）
+            if not _ro:
+                try:
+                    _tblk, _tevs = debate_interceptor(es, tool_name, args)
+                    for _tev in _tevs:
+                        if _tev:
+                            _emit("enforcement", **_tev)
+                    if _tblk:
+                        return _tblk
+                except Exception as _e_tint:
+                    _log(f"[debate-intercept] terminal 判定异常（不阻塞执行）: {_e_tint}", "warn")
             # 🔧 自进化门禁：上一个 terminal 完成后还没 record_run → 硬阻断（P0-1 接线）
             if es._pending_record and es.analysis_level != "chat" and not _ro:
                 es.warnings.append(f"terminal#{es.terminal_count}: 上一步未完成 record_run")
@@ -1421,6 +2105,77 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                     _emit("enforcement", action="info",
                           message=f"💬 不辩论（{_DEBATE_KIND_LABELS.get(_g_kind, '')}）：{_g_reasons[0]}")
 
+        elif tool_name == "write_file":
+            # 2026-11-03 兜底：write_file 在 MemOmics 的执行路径上**不走 tool_start 拦截**
+            # （真机实测：写报告文件时 debate_interceptor 根本没被调用，文件直接落盘）。
+            # 这里在完成回调里补一道：写的是报告/结论文档且还没账本 → 立刻要求补账本，
+            # 模型下一步会收到 require，必须先跑 evidence_ledger 再给最终答复。
+            if (sp_write := debate_safe_point("write_file", args)) == "artifact":
+                if _intercept_cfg(es).get("mode") != INTERCEPT_OFF and not getattr(es, "ledger_done", False):
+                    _topic_w = str(getattr(es, "topic_hint", "") or "")[:200]
+                    es.debate_required = {
+                        "level": "L1", "level_int": DEBATE_L1, "topic": _topic_w,
+                        "topic_key": _intercept_topic_key(_topic_w),
+                        "reason": "刚写了报告/结论文档，但本回合还没有证据账",
+                        "source": "ledger", "sp": "artifact", "kind": _DEBATE_KIND_OTHER,
+                        "stage": "ledger",
+                        "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    }
+                    es.ledger_escalated = False
+                    _emit("enforcement", action="require", level="L1",
+                          require=["evidence_ledger"],
+                          message=("📒 你刚写了报告/结论文档，但本回合还没有证据账。"
+                                   "请先调 evidence_ledger(topic=..., context=...)（约 1~2 分钟）；"
+                                   "返回 escalate.needed=true 时再调 debate_analysis。"))
+
+        elif tool_name == "evidence_ledger":
+            # 2026-11-03（A2 落地）：账本完成 → 存状态；由 escalate 决定"放过"还是"升级辩论"。
+            if _intercept_cfg(es).get("mode") != INTERCEPT_OFF:
+                try:
+                    _lr = json.loads(result) if isinstance(result, str) else (result or {})
+                except Exception:
+                    _lr = {}
+                if isinstance(_lr, dict) and not _lr.get("error"):
+                    es.ledger_result = _lr
+                    es.ledger_done = True
+                    _esc = _lr.get("escalate") or {}
+                    _esc_reasons = [str(x) for x in (_esc.get("reasons") or [])]
+                    if _esc.get("needed"):
+                        _lvl_s = "L2" if str(_esc.get("recommended_level") or "").upper() == "L2" else "L1"
+                        es.ledger_escalated = True
+                        es.ledger_satisfied = False
+                        _topic_l = str(_lr.get("topic") or getattr(es, "topic_hint", ""))[:200]
+                        es.debate_required = {
+                            "level": _lvl_s,
+                            "level_int": DEBATE_L2 if _lvl_s == "L2" else DEBATE_L1,
+                            "topic": _topic_l,
+                            "topic_key": _intercept_topic_key(_topic_l),
+                            "reason": ("证据账要求升级：" + "；".join(_esc_reasons))[:240],
+                            "source": "ledger", "sp": "artifact",
+                            "kind": str(_lr.get("kind") or _DEBATE_KIND_OTHER),
+                            "stage": "debate",
+                            "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        }
+                        es._intercept_block_hits = 0
+                        _emit("enforcement", action="ledger_escalated", level=_lvl_s,
+                              reasons=_esc_reasons[:4],
+                              message=("📒 证据账要求升级辩论（%s）：%s"
+                                       % (_lvl_s, "；".join(_esc_reasons)[:200])))
+                    else:
+                        es.ledger_escalated = False
+                        es.ledger_satisfied = True
+                        es.debate_required = {}
+                        es._intercept_block_hits = 0
+                        _emit("enforcement", action="ledger_accepted",
+                              verdict=str(_lr.get("verdict") or ""),
+                              message=("📒 证据账已足够（verdict=%s），不必升级对抗辩论"
+                                       % str(_lr.get("verdict") or "?")))
+                else:
+                    es.ledger_done = False
+                    _emit("enforcement", action="ledger_failed",
+                          message=("⚠️ 证据账失败：%s"
+                                   % str(_lr.get("note") or _lr.get("error_detail") or "")[:200]))
+
         elif tool_name == "debate_analysis":
             es.debate_done = True
             # 保存辩论结论
@@ -1442,7 +2197,62 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                 _u = (_r.get("usage") or {}).get("total", 0) if isinstance(_r, dict) else 0
                 es.token_used += int(_u or 0)
             except Exception:
-                pass
+                _r = {}
+            # 2026-11-02 辩论识别拦截器：**只有成功的辩论**才解除"待履行要求"
+            # （失败/占位符/预算耗尽不算 —— 否则模型可以拿一次失败辩论绕过拦截）
+            # off 档完全不介入（不记录、不发 debate_cleared/debate_failed），保证"零事件"。
+            if _intercept_cfg(es).get("mode") != INTERCEPT_OFF:
+                try:
+                    # 成功的判定要严一点：必须是 dict、没有 error/failed_roles、不是 fallback 降级、
+                    # 且至少带裁决字段（verdict/assessment/judge_verdict 之一）。
+                    # 否则"辩论失败/退化成 prompt"会变成绕过拦截的后门。
+                    _fmt = str((_r or {}).get("debate_format") or "").lower() if isinstance(_r, dict) else ""
+                    _ok = bool(
+                        isinstance(_r, dict) and not _r.get("error") and not _r.get("failed_roles")
+                        and "fallback" not in _fmt
+                        and (_r.get("verdict") or _r.get("assessment") or _r.get("judge_verdict"))
+                    )
+                    if _ok:
+                        _intercept_state(es)
+                        es.debate_satisfied = True
+                        es.debate_required = {}
+                        es._intercept_block_hits = 0
+                        es.ledger_escalated = False
+                        # 2026-11-02：降级裁决（有席位没输出）也算"辩过了"，但要显式告警，
+                        # 避免把"少席位的结论"当成满席结论用。
+                        if isinstance(_r, dict) and _r.get("degraded"):
+                            es.debate_degraded = True
+                            es.debate_degraded_note = str(_r.get("degraded_note") or "")[:300]
+                            _emit("enforcement", action="debate_degraded",
+                                  seat_success=_r.get("seat_success", ""),
+                                  degraded_seats=_r.get("degraded_seats") or [],
+                                  message="⚠️ 降级裁决：" + str(_r.get("degraded_note") or
+                                                               "本场有席位没有输出，裁决只基于剩余席位。")[:240])
+                        else:
+                            es.debate_degraded = False
+                            es.debate_degraded_note = ""
+                        _topic = ""
+                        if isinstance(args, dict):
+                            _topic = str(args.get("topic") or "")
+                        elif isinstance(args, str):
+                            try:
+                                _topic = str((json.loads(args) or {}).get("topic") or "")
+                            except Exception:
+                                _topic = ""
+                        if _topic:
+                            es.debate_done_keys.add(_intercept_topic_key(_topic))
+                        _emit("enforcement", action="debate_cleared",
+                              topic=_topic[:120],
+                              message="⚖️ 辩论已成功完成 → 解除本会话的产出拦截，可以继续出报告/入库。")
+                        _log("[debate-intercept] 辩论成功，解除 debate_required（topic=%r）" % (_topic[:60],))
+                    else:
+                        _err = str((_r or {}).get("error"))[:120]
+                        _log("[debate-intercept] 辩论失败（%s）→ 保持拦截" % (_err,), "warn")
+                        _emit("enforcement", action="debate_failed",
+                              message=("⚠️ 辩论没有成功（%s），拦截继续有效。"
+                                       "请修好辩论配置/减少席位后重试，或请用户明确说「跳过辩论」。" % _err))
+                except Exception as _e_clr:
+                    _log(f"[debate-intercept] 解除判定异常: {_e_clr}", "warn")
 
         elif tool_name == "skill_evolution":
             # P0-1(2026-08-13): agent 手动调 skill_evolution(record_run) → 解除 pending_record 门禁
@@ -1522,7 +2332,7 @@ def _ingest_debate_plan(es: EnforcementState, result) -> dict:
         es.debate_todos = [t for t in todos if t["title"]]
         return plan
     except Exception as e:
-        logger.warning(f"_ingest_debate_plan failed: {e}")
+        _log(f"_ingest_debate_plan failed: {e}", "warn")
         return {}
 
 
@@ -1767,6 +2577,42 @@ def code_edit_gate(es: EnforcementState, tool_name: str, args=None):
     return {"blocked": True, "message": chr(10).join(_lines), "code_edit": True}
 
 
+def knowledge_gate(es: EnforcementState, tool_name: str, args=None):
+    """Hard KB gate: analysis/debate cannot start before an explicit KB query.
+
+    Prompt-only reminders are bypassed by the model; this gate forces the model
+    to call ``search_knowledge`` (tool call, auditable) before the first execution
+    or debate in an analysis session. Read-only terminal commands are exempt.
+    """
+    if os.environ.get("MEMOMICS_KB_GATE", "1").strip().lower() in ("0", "false", "off"):
+        return None
+    if getattr(es, "knowledge_searched", False):
+        return None
+    if getattr(es, "analysis_level", "chat") not in ("analysis", "statistical"):
+        return None
+    if not getattr(es, "results_dir", ""):
+        return None
+    _d = _args_as_dict(args)
+    if tool_name == "terminal":
+        if _is_readonly_terminal(str(_d.get("command") or "")):
+            return None
+    elif tool_name not in _DEBATE_EXEC_TOOLS and tool_name != "debate_analysis":
+        return None
+    es.knowledge_gate_hits = int(getattr(es, "knowledge_gate_hits", 0)) + 1
+    _topic = str(getattr(es, "topic_hint", "") or _d.get("query") or "")[:120]
+    _msg = (
+        "⛔ 分析/辩论开始前未查询知识库。本轮必须先调用 `search_knowledge`，"
+        "把参数、结论和证据链查出来，再执行或辩论。\n"
+        "调用示例：search_knowledge(query=\"%s\", species=\"...\", tissue=\"...\", "
+        "direction=\"...\", kind=\"all\")\n"
+        "为什么要强制：KB 里的 claim 带 L0-L3、DOI/quote、实验对象/队列/背景；"
+        "直接凭预训练知识选参数或下结论不可审计。\n"
+        "只读 terminal 命令不受此门禁影响。"
+    ) % (_topic or "当前分析主题",)
+    return {"blocked": True, "message": _msg, "knowledge_gate": True,
+            "require": ["search_knowledge"]}
+
+
 def _debate_block_gate(es: EnforcementState, tool_name: str):
     """P2: 裁决 blocks 硬约束 —— 拦住高影响产物，返回 block dict（None=放行）。
 
@@ -1856,6 +2702,20 @@ def get_enforcement_report(session_id: str) -> dict:
                           "status": t.get("status"), "blocks": t.get("blocks")}
                          for t in (getattr(es, "debate_todos", []) or [])],
         "debate_blocks_pending": len(pending_debate_blocks(es)),
+        # 2026-11-02 辩论识别拦截器：判定/要求/豁免（给界面和排障看）
+        "debate_required": dict(getattr(es, "debate_required", {}) or {}),
+        "debate_satisfied": bool(getattr(es, "debate_satisfied", False)),
+        "ledger_done": bool(getattr(es, "ledger_done", False)),
+        "ledger_satisfied": bool(getattr(es, "ledger_satisfied", False)),
+        "ledger_escalated": bool(getattr(es, "ledger_escalated", False)),
+        "ledger_verdict": str((getattr(es, "ledger_result", {}) or {}).get("verdict") or ""),
+        "debate_degraded": bool(getattr(es, "debate_degraded", False)),
+        "debate_degraded_note": getattr(es, "debate_degraded_note", ""),
+        "debate_exempt": bool(getattr(es, "debate_exempt", False)),
+        "debate_exempt_reason": getattr(es, "debate_exempt_reason", ""),
+        "debate_intercept_mode": _intercept_cfg(es).get("mode", INTERCEPT_SHADOW),
+        "debate_intercept_hits": int(getattr(es, "_intercept_block_hits", 0) or 0),
+        "debate_judgements": list(getattr(es, "debate_judgements", []) or [])[-10:],
         "terminal_count": es.terminal_count,
         "warnings": es.warnings,
         "conclusions_dir": es.conclusions_dir,
