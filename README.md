@@ -132,6 +132,13 @@ MemOmics-Agent/
 - [LoopX](https://github.com/loopx-project/loopx) 控制平面（MIT，vendor 于 `memomics/vendor/loopx`；对应上游 [`v0.4.1`](https://github.com/loopx-project/loopx/tree/v0.4.1)，含少量本地补丁，补丁清单见 [`VENDOR.md`](memomics/vendor/loopx/VENDOR.md)）
 - Seurat / Scanpy / ArchR / data.table 等社区生信生态
 
+## 贡献者
+
+| 贡献者 | 负责的部分 |
+|---|---|
+| [@GGbond-bo](https://github.com/GGbond-bo) | 整体架构、WebUI 与运行逻辑、ImageJ 接入、知识库证据链、辩论与交付闸、打包发布 |
+| [@C814](https://github.com/C814)（XYC） | 项目多会话、多服务器密码 SSH 管理、集群目录与凭据管理，及配套界面与回归测试 —— 自 v2026-11-10 起的「多集群」「密码登录集群」能力 |
+
 ## License
 
 本仓库整体以 MIT 发布（见 [LICENSE](LICENSE)，© GGbond-bo）；`hermes-agent/` 与 `memomics/vendor/loopx` 等 vendor 组件分别遵循其原始许可，版权归各自作者所有。
