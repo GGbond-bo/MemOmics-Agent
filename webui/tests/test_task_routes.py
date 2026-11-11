@@ -1207,7 +1207,7 @@ def test_n5_live_session_detail_exposes_params_env_and_artifacts(client, tr, tas
          "args": "{'name': 'scrna-qc'}", "result_preview": "ok"},
         {"ts": "2026-09-24T16:20:01", "tool": "execute_r",
          "args": "{'code': 'obj <- readRDS(\"DEMO_DATA/data/示例数据.rds\")'}",
-         "result_preview": "51227 x 2132"},
+         "result_preview": "50000 x 2000"},
     ]
     with open(os.path.join(d, "log", "system_log.jsonl"), "w", encoding="utf-8") as f:
         for r0 in rows:

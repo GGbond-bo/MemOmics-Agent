@@ -85,7 +85,7 @@ rail_review(phase="pre", module_id="deg", method_name="...", skill_name="...",
 
 ```r
 md$type <- factor(as.character(md$type),
-                  levels = c("Y_Pre","Y_Post","O_Pre","O_Post","OD_Pre","OD_Post"))
+                  levels = c("GrpA_Pre","GrpA_Post","GrpB_Pre","GrpB_Post","GrpC_Pre","GrpC_Post"))
 ```
 
 而 rds 里 `type` 的真实取值是另一套命名：
@@ -107,7 +107,7 @@ Old_diabete / Old_diabete_Post
    **不产生 NA** —— 所以 `if (anyNA(x)) stop()` **抓不到漏映射**。守卫必须写成集合判定：
 
    ```r
-   short_codes <- c("Y_Pre","Y_Post","O_Pre","O_Post","OD_Pre","OD_Post")
+   short_codes <- c("GrpA_Pre","GrpA_Post","GrpB_Pre","GrpB_Post","GrpC_Pre","GrpC_Post")
    if (!all(md$type %in% short_codes))
      stop("type 映射失败：出现未映射取值 -> ",
           paste(setdiff(unique(md$type), short_codes), collapse = ", "))

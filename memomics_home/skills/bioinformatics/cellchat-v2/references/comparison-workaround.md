@@ -51,4 +51,4 @@ cat(sprintf("Old: %d pathways, %.0f interactions\n", length(cc_o@netP$pathways),
 - `netAnalysis_signalingRole_heatmap(cc, pattern="outgoing")` — 信号角色热图
 
 ## 验证日期
-2026-07-17，human/skeletal_muscle/aging，CellChat v1.6.2
+2026-07-17，human/example_tissue/aging，CellChat v1.6.2

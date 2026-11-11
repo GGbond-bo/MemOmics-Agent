@@ -779,13 +779,13 @@ suppressMessages(library(Seurat))
    echo "---- dirs ----"; ls -la <DIR>/<子目录>/ 2>&1 | head -60
    ```
 2. **估选**（算，不是猜）：`nnz ≈ 细胞数 × 2000~3000`、~16 B/nnz、rds 再压 2–3×
-   → **60 万细胞 ≈ 7–12 GB**（实测 604,244 细胞 = 7.07 GB）；20–25 GB 对应 150–200 万。
+   → **60 万细胞 ≈ 7–12 GB**（实测 ≈60 万 细胞 = 实测内存）；20–25 GB 对应 150–200 万。
    文件名只作参考（`Muscle_All`/`MF`/`seRNA` 都可能指"全量"）。
 3. **读一次、一直用**：`session_start(input="<最可能的 rds>", object=…, env="R4.4.1_zb",
    rscript="/cluster/share/user/envs/R4.4.1_zb/bin/Rscript")` → 回报里的
-   `维度/类型: 51227 x 604244  Seurat` 就是细胞数（实测 7.07 GB / **225.2 秒**，会话 RSS 37 GB）；
+   `维度/类型: 50000 x 600000  Seurat` 就是细胞数（实测 实测内存 / **实测耗时**，会话 RSS 37 GB）；
    随后 `session_exec` 跑 **`scripts/probe_rds_meta.R`** 打全元数据列基数 → 注释列与类目数一眼可见。
-4. **用户描述的元数据可能对不上 —— 如实报差异，别硬套**。实测：细胞数对上（604,244）但注释只有
+4. **用户描述的元数据可能对不上 —— 如实报差异，别硬套**。实测：细胞数对上（≈60 万）但注释只有
    `Annotation` 10 类 / `celltype` 11 / `Annotation_Level1` 6 / `leiden_1` 18 簇，**没有任何一列是 23 类**。
    正确交付 = 「匹配了什么 / 缺了什么 / 未读候选表（文件+大小+日期）/ 问用户点哪个」，
    **不要**自己接着把剩余 40 GB 全读一遍。
@@ -877,7 +877,7 @@ if (requireNamespace("Seurat", quietly = TRUE)) {
 - `references/observability-from-cluster-side.md` — **用户在 MobaXterm 里能核对到什么**（铁规 11 的实测底稿）：账号 `user`、工作盘共享 vs `/home` 不共享、`ps`/`qstat`/账本三层可见性、`qstat` 失败 → 退化为 setsid 的因果链、以及回答这类问题的固定骨架。
 - `references/rail-gate-and-meta-preflight.md` — **铁规 3.1 的实测底稿**：`rail_review(pre)` 本地口径拦截集群 `submit` 的死锁，**首选解 `location="cluster"`+`node`+`env`（实测零本地安装）**、旧的三步补包解绑、以及两者的对照回执；分组列 levels 不一致导致「整批静默跳过、退出码 0」的前置核查；`dplyr::recode` 未命中值**原样保留不产生 NA** 所以 `anyNA()` 守卫抓不到漏映射（守卫要写 `%in%` 集合判定）；**第 4 节：`rail_review(post)` 在集群产物上的两连误判（`Output directory not found` / `figure_count=0`）与「先 pull 再复审」的正确顺序**；以及可复用的集群投递命令骨架。
 - `references/big-input-inventory.md` — **大输入清单 + `large_cache` 的真实边界**（铁规 10 的底稿）：`scan` 只认本机路径（无 `--remote`，喂集群路径返回 `exists:false` 不报错）、`mark --remote` 的必要性、`Muscle_96_38/Umap/` 实测 6 个 0.48–1.76 GB RDS 清单、以及复查用的三条只读命令。
-- `references/rds-object-identity-triage.md` — **铁规 12 的实测底稿**：集群目录里一堆多 GB Seurat rds，如何按用户口述（细胞数/注释数）定位是哪个文件 —— `find -printf` 盘点、`nnz` 体积估算口径与实测锚点（604,244 细胞 = 7.07 GB / 225 秒）、`session_start`+`scripts/probe_rds_meta.R` 核对元数据列基数、**描述对不上时如何如实交付**（匹配/缺失/未读候选表）、以及连接瞬断的重试纪律。
+- `references/rds-object-identity-triage.md` — **铁规 12 的实测底稿**：集群目录里一堆多 GB Seurat rds，如何按用户口述（细胞数/注释数）定位是哪个文件 —— `find -printf` 盘点、`nnz` 体积估算口径与实测锚点（≈60 万 细胞 = 实测内存 / 225 秒）、`session_start`+`scripts/probe_rds_meta.R` 核对元数据列基数、**描述对不上时如何如实交付**（匹配/缺失/未读候选表）、以及连接瞬断的重试纪律。
 - `references/rds-directory-census.md` — **铁规 12.1 / 12.2 的实测底稿**：几十个候选 rds 的目录普查（`scripts/census_rds_meta.R` + 提交/回收骨架 + 本机解析步骤）、手写文件清单静默漏掉 23.5 GB 候选的实录、`unable to find required package 'Seurat'` 的 v4/v5 差异式失败与修法、20 个文件的普查结论表与体积估算锚点。
 - `references/persistent-r-session.md` — **常驻 R 会话的协议与实测**（2026-10-09 落地）：文件队列（`staging`→`queue` 原子 mv）为什么必须有、`state.txt`/`done/*.res.txt`/`ckpt/` 格式、`setsid -f` 不可用与 busybox `ps` 的兼容处理、MuSC 验收全过程（16.3s 读入 → 38.9s UMAP → 6 分钟后 FindMarkers 仍 `readrds_calls=1`）、4 个实测踩坑，以及**第二批的抓图/Notebook 总端**（`plots/` + `---PLOTS---` 分段 + 逐表达式 `dev.off()` 的原因 + `session_cells`/`session_plot` 读侧 + bounded_capture 截断陷阱）。
 - `references/r-session-seurat-load-order.md` — **铁规 6.5 / 6.6 的实测底稿**（2026-11-05）：常驻会话内 `library(Seurat)` 报 RcppAnnoy `AnnoyAngular: attempt to apply non-function` 的完整回执、四步定因表（干净 Rscript OK / 换 env 同报错 / 单独加载 RcppAnnoy OK / 先 RcppAnnoy 后 Seurat OK）、`loadedNamespaces()` 里暴露的预加载根因、`session_start` 自动探测找不到 zhangxiao6 env 的 `NO_RSCRIPT` 与显式 `rscript=` 修法，以及可复用的「结构探针」模板与 `print(Idents())` 造成 44,095 字符截断的反面教材。
@@ -915,7 +915,7 @@ if (requireNamespace("Seurat", quietly = TRUE)) {
 | - | - | - | 2026-10-08 | pytest_env_subset | - | - |  |
 | - | - | - | 2026-10-08 | pytest_full_offline | - | - |  |
 | - | - | - | 2026-10-08 | environment.json#env_usage | - | - |  |
-| human | skeletal_muscle | exercise | 2026-10-08 | ssh23_probe_Muscle_96_38_Umap.sh | - | - |  |
+| human | example_tissue | exercise | 2026-10-08 | ssh23_probe_Muscle_96_38_Umap.sh | - | - |  |
 | - | - | - | 2026-10-08 | test_large_cache.py | - | - |  |
 | - | - | - | 2026-10-08 | test_large_cache.py | - | - |  |
 | - | - | - | 2026-10-08 | test_large_cache.py | - | - |  |
@@ -935,25 +935,25 @@ if (requireNamespace("Seurat", quietly = TRUE)) {
 | - | - | - | 2026-10-08 | ssh23_visibility_probe.sh | - | - |  |
 | - | - | - | 2026-10-08 | ssh23_visibility_probe.sh | - | - |  |
 | - | - | - | 2026-10-08 | ssh23_htop_visibility_live_demo.sh | - | - |  |
-| human | skeletal_muscle | exercise | 2026-10-08 | musc_umap_prop_node1.R | - | - |  |
-| human | skeletal_muscle | exercise | 2026-10-09 | r_session_daemon.R（常驻会话：MuSC 读一次 → RunUMAP 38.9s → 6 分钟后 FindMarkers，readrds_calls=1） | - | - |  |
+| human | example_tissue | exercise | 2026-10-08 | musc_umap_prop_node1.R | - | - |  |
+| human | example_tissue | exercise | 2026-10-09 | r_session_daemon.R（常驻会话：MuSC 读一次 → RunUMAP 38.9s → 6 分钟后 FindMarkers，readrds_calls=1） | - | - |  |
 | - | - | - | 2026-10-09 | test_cluster_session.py（19 用例） | - | - |  |
-| human | skeletal_muscle | exercise+aging | 2026-10-09 | large_cache list + node4 env probe | - | - |  |
-| human | skeletal_muscle | exercise+aging | 2026-10-09 | probe_musc_meta.R | - | - |  |
-| human | skeletal_muscle | exercise+aging | 2026-10-09 | large_cache list（开工前查大输入标记） | - | - |  |
-| human | skeletal_muscle | exercise+aging | 2026-10-09 | muscle_RUV_MAST_MuSC.R | - | - |  |
-| human | skeletal_muscle | exercise | 2026-10-18 | large_cache_scan_L2_mapback_inputs | - | - |  |
-| human | skeletal_muscle | exercise | 2026-10-18 | merge_L2_annotation.R (push+pre-review) | - | - |  |
-| human | skeletal_muscle | exercise | 2026-10-18 | node1_env_precheck_L2_mapback | - | - |  |
-| human | skeletal_muscle | exercise | 2026-10-18 | submit_L2_mapback_node1 | - | - |  |
-| human | skeletal_muscle | exercise+aging | 2026-10-18 | L2_mapback_status_check | - | - |  |
-| human | skeletal_muscle | exercise+aging | 2026-10-18 | L2_mapback_status_check | - | - |  |
-| human | skeletal_muscle | aging | 2026-10-18 | merge_L2_annotation.R | - | - |  |
-| human | skeletal_muscle | exercise+aging | 2026-10-18 | merge_L2_annotation.R | - | - |  |
-| human | skeletal_muscle | exercise+aging | 2026-10-18 | merge_L2_annotation.R | - | - |  |
+| human | example_tissue | exercise+aging | 2026-10-09 | large_cache list + node4 env probe | - | - |  |
+| human | example_tissue | exercise+aging | 2026-10-09 | probe_musc_meta.R | - | - |  |
+| human | example_tissue | exercise+aging | 2026-10-09 | large_cache list（开工前查大输入标记） | - | - |  |
+| human | example_tissue | exercise+aging | 2026-10-09 | muscle_RUV_MAST_MuSC.R | - | - |  |
+| human | example_tissue | exercise | 2026-10-18 | large_cache_scan_L2_mapback_inputs | - | - |  |
+| human | example_tissue | exercise | 2026-10-18 | merge_L2_annotation.R (push+pre-review) | - | - |  |
+| human | example_tissue | exercise | 2026-10-18 | node1_env_precheck_L2_mapback | - | - |  |
+| human | example_tissue | exercise | 2026-10-18 | submit_L2_mapback_node1 | - | - |  |
+| human | example_tissue | exercise+aging | 2026-10-18 | L2_mapback_status_check | - | - |  |
+| human | example_tissue | exercise+aging | 2026-10-18 | L2_mapback_status_check | - | - |  |
+| human | example_tissue | aging | 2026-10-18 | merge_L2_annotation.R | - | - |  |
+| human | example_tissue | exercise+aging | 2026-10-18 | merge_L2_annotation.R | - | - |  |
+| human | example_tissue | exercise+aging | 2026-10-18 | merge_L2_annotation.R | - | - |  |
 | - | - | - | 2026-10-18 | ls_L2_mapback_dir.sh | - | - |  |
 | - | - | - | 2026-10-18 | submit_L2_umap_node1.sh | - | - |  |
-| human | skeletal_muscle | exercise+aging | 2026-11-01 | stat_musc_cells.R | - | - |  |
-| human | skeletal_muscle | aging+exercise | 2026-11-02 | large_cache list | - | - |  |
-| human | skeletal_muscle | aging+exercise | 2026-11-02 | remote_cluster_nodes_check | - | - |  |
-| human | skeletal_muscle | exercise | 2026-11-05 | probe_seurat_envs.sh | - | - |  |
+| human | example_tissue | exercise+aging | 2026-11-01 | stat_musc_cells.R | - | - |  |
+| human | example_tissue | aging+exercise | 2026-11-02 | large_cache list | - | - |  |
+| human | example_tissue | aging+exercise | 2026-11-02 | remote_cluster_nodes_check | - | - |  |
+| human | example_tissue | exercise | 2026-11-05 | probe_seurat_envs.sh | - | - |  |

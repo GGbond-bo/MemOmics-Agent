@@ -985,8 +985,8 @@ print(f"✅ 报告验证通过 ({len(checks)}/{len(checks)})")
 
 | Species | Tissue | Condition | Date | Score | Notes |
 |---------|--------|-----------|------|-------|-------|
-| human | skeletal_muscle | aging_diabetes_exercise | 2026-07-07 | 9.0 | 3-config comparison (balanced/encoder/ODE), counts from layer, CPU mode |
-| human | skeletal_muscle | aging (SMF subclusters dual-route) | 2026-07-09 | 9.0 | Dual-route scTour: Route A (Zone1/2/NMJ/5/6: denervation→reinnervation) + Route B (Zone3/4/5: stress→maturation). **All 3 configs completed for Route A** (run1_balanced won), **both configs completed for Route B** (run1_balanced won; run2_encoder failed due to Zone3≈Zone5 collapse). 200 epochs, CPU mode. Age gradient anchoring: ρ=-0.943 (p=0.017) for Route A. Condition anchoring: Old_diabete_Post Zone1 ptime=0.163 (lowest). Zone1 internal gradient validated: MYH7(bottom)→RUNX1(middle)→COL19A1(top). Zone5 dual-role discovery (healthy endpoint in both routes). Checkpoint resume strategy verified effective. Complete HTML report with 10 figures + 5 debates + 6 self-evolution logs. |
+| human | example_tissue | aging_diabetes_exercise | 2026-07-07 | 9.0 | 3-config comparison (balanced/encoder/ODE), counts from layer, CPU mode |
+| human | example_tissue | aging (SMF subclusters dual-route) | 2026-07-09 | 9.0 | Dual-route scTour: Route A (Zone1/2/NMJ/5/6: denervation→reinnervation) + Route B (Zone3/4/5: stress→maturation). **All 3 configs completed for Route A** (run1_balanced won), **both configs completed for Route B** (run1_balanced won; run2_encoder failed due to Zone3≈Zone5 collapse). 200 epochs, CPU mode. Age gradient anchoring: ρ=-0.943 (p=0.017) for Route A. Condition anchoring: Old_diabete_Post Zone1 ptime=0.163 (lowest). Zone1 internal gradient validated: MYH7(bottom)→RUNX1(middle)→COL19A1(top). Zone5 dual-role discovery (healthy endpoint in both routes). Checkpoint resume strategy verified effective. Complete HTML report with 10 figures + 5 debates + 6 self-evolution logs. |
 
 ---
 

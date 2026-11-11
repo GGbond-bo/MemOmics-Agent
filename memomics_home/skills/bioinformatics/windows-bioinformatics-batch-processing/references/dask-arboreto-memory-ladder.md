@@ -9,8 +9,8 @@
 ## 1. 症状长什么样
 
 ```
-'WARNING: infer_data failed for target ZFX'      Retry (3/10). Failure caused by MemoryError((2132, 1619), dtype('float32'))
-'WARNING: infer_data failed for target ZNF559'   Retry (4/10). Failure caused by MemoryError((2132, 1619), dtype('float32'))
+'WARNING: infer_data failed for target ZFX'      Retry (3/10). Failure caused by MemoryError((2000, 1619), dtype('float32'))
+'WARNING: infer_data failed for target ZNF559'   Retry (4/10). Failure caused by MemoryError((2000, 1619), dtype('float32'))
 ... 每个 target 重试到 10/10 → 整批失败
 ```
 

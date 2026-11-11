@@ -1,13 +1,13 @@
 # 长任务内存调优与 spawn 失败分诊（dask / multiprocessing 实战）
 
-> 来源：2026-09-24 在 Windows 上跑 pySCENIC（2132 nuclei）连吃 6 次失败后的实测定位。
+> 来源：2026-09-24 在 Windows 上跑 pySCENIC（2000 nuclei）连吃 6 次失败后的实测定位。
 > 通用性：任何**基于 dask / multiprocessing 的批量长任务**（SCENIC、arboreto、sklearn 并行、bigWig 批处理）都适用。
 
 ---
 
 ## 1. 内存不是「物理 RAM 够不够」，而是 **commit 余量**
 
-**症状**：`MemoryError((2132, 1619), dtype('float32'))` —— 才 13.8 MB 的数组分配失败，
+**症状**：`MemoryError((2000, 1619), dtype('float32'))` —— 才 13.8 MB 的数组分配失败，
 而 `psutil.virtual_memory()` 显示还有 13 GB 可用。
 
 **根因**：Windows 可提交内存 = 物理 RAM + pagefile。实测该机 `CommitTotal 76.6 / CommitLimit 86.5 GB`（88.5%）、

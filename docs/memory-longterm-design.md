@@ -93,8 +93,8 @@ protect_last_n                       # 保留尾部最近 N 条
 - 返回格式：
   ```
   📌 会话资产清单（持续有效，直接引用路径）：
-  1. E:\data\human_skeletal_muscle\scripts\01_qc.R — 单细胞 QC（用户 08-11 提供）
-  2. E:\data\human_skeletal_muscle\data\counts.rds — 表达矩阵
+  1. <数据目录>\scripts\01_qc.R — 单细胞 QC（用户 08-11 提供）
+  2. <数据目录>\data\counts.rds — 表达矩阵
   ```
 - 上限 ≤10 条/会话（超出按 last_used 截断，防上下文膨胀）
 - **变化时主动 `agent._invalidate_system_prompt()`**（资产增删频率低，前缀缓存损失可接受）

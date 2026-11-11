@@ -99,4 +99,4 @@ usable = 0.90                    # 其余 90% 按权重分配
 
 | 物种 | 组织 | 方向 | 日期 | 脚本 |
 |------|------|------|------|------|
-| human | skeletal_muscle | aging | 2026-10-01 | 43_sankey_3group_common_deg.py |
+| human | example_tissue | aging | 2026-10-01 | 43_sankey_3group_common_deg.py |

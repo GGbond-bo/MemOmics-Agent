@@ -166,7 +166,7 @@ with rb.section("network", "2. Network Construction", "共表达网络构建",
         title_en="Figure 3: Metacell UMAP",
         title_zh="Metacell UMAP 可视化",
         method_zh="将 k=25 个最近邻细胞聚合为一个 metacell (min_cells=25)。对 metacell 对象进行标准化、FindVariableFeatures (2000 个高变基因)、PCA，再用 Harmony 对 samplename 进行批次校正，最后 UMAP 降维可视化。",
-        result_zh="共构建 <strong>1,296 个 metacell</strong>，来自 6 种细胞亚群 (zone1–zone6) × 48 个样本。Harmony 批次校正后，不同样本的 metacell 混合良好，细胞亚群分离清晰。",
+        result_zh="共构建 <strong>1,296 个 metacell</strong>，来自 6 种细胞亚群 (zone1–zone6) × 多个样本。Harmony 批次校正后，不同样本的 metacell 混合良好，细胞亚群分离清晰。",
         bio_zh="Metacell UMAP 验证了数据质量：细胞亚群分离良好，说明不同区域的肌纤维具有不同的基因表达特征；Harmony 批次校正有效消除了样本间批次效应。",
     )
 

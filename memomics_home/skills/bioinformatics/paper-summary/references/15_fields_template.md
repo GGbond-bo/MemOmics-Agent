@@ -46,4 +46,4 @@
 
 | 日期 | 论文 | 物种 | 组织 | 评分 |
 |------|------|------|------|------|
-| 2026-07-18 | Rubenstein 2025 Muscle Multiome | human | skeletal_muscle | 9/10 |
+| 2026-07-18 | Rubenstein 2025 Muscle Multiome | human | example_tissue | 9/10 |

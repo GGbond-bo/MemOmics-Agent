@@ -179,7 +179,7 @@ class TestIntentEnhancedPrefetch:
         )
         q = _enhance_query("专利结论表", sid="sess-i-1", store=provider._store)
         assert q == "专利结论表"  # 不拼 peak
-        q2 = _enhance_query("帮我下载张潇那篇猴脑文章", sid="sess-i-1", store=provider._store)
+        q2 = _enhance_query("帮我下载那篇公开数据集论文", sid="sess-i-1", store=provider._store)
         assert "peak" not in q2
 
     def test_enhance_query_no_entity_unchanged(self, provider):

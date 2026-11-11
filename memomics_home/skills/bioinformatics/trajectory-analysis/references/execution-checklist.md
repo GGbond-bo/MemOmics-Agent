@@ -22,7 +22,7 @@
 # 必须调用，搜索物种+组织+方向+scTour 的相关参数
 search_knowledge(
     species="human",  # 或用户指定的物种
-    tissue="skeletal_muscle",  # 或用户指定的组织
+    tissue="example_tissue",  # 或用户指定的组织
     direction="aging",  # 或用户指定的方向
     query="scTour trajectory parameters"
 )
@@ -115,7 +115,7 @@ skill_evolution(
     skill_name="sctour-trajectory-inference",
     script_name="sctour_analysis.py",
     species="human",
-    tissue="skeletal_muscle",
+    tissue="example_tissue",
     direction="aging",
     params_used="loss_mode=nb, n_top_genes=1000, 3 configs: balanced/encoder/ODE",
     result_summary="11,630 cells, scTour 3-config comparison completed",
@@ -132,7 +132,7 @@ skill_evolution(
     skill_name="sctour-trajectory-inference",
     script_name="sctour_analysis.py",
     species="human",
-    tissue="skeletal_muscle",
+    tissue="example_tissue",
     direction="aging",
     error_message="...",
     root_cause="...",

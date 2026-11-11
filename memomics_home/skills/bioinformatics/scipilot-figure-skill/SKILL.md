@@ -338,35 +338,35 @@ python_packages 声明：pandas, numpy, matplotlib, matplotlib.pyplot, matplotli
 | - | - | - | 2026-08-14 | aucell_cns_figures.R | - | - |  |
 
 
-| human | skeletal_muscle | aging | 2026-08-14 | fig1b_five_effects_heatmap.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-08-14 | Fig1_five_effects_matrix.py | - | - |  |
+| human | example_tissue | aging | 2026-08-14 | fig1b_five_effects_heatmap.py | - | - |  |
+| human | example_tissue | aging | 2026-08-14 | Fig1_five_effects_matrix.py | - | - |  |
 | - | - | - | 2026-08-14 | update_denervation_gene_set.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-08-15 | fig_v4_final.py | - | - |  |
+| human | example_tissue | aging | 2026-08-15 | fig_v4_final.py | - | - |  |
 | - | - | - | 2026-08-15 | fig_v5_final.py | - | - |  |
 | - | - | - | 2026-08-15 | fig_v5_final.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-08-16 | fig_split_v10.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-08-16 | fig_split_v10.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-08-17 | plot_umap_annotation_v2.R | - | - |  |
-| Homo sapiens | skeletal_muscle | aging | 2026-08-20 | subcluster_top_scores.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-08-20 | verify_top1_by_agg.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-08-20 | verify_top1_celllevel.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-08-20 | fig_split_v10.py | - | - |  |
-| Homo sapiens | skeletal_muscle | aging | 2026-08-20 | subcluster_top_scores_5sub.py | - | - |  |
-| Homo sapiens | skeletal_muscle | aging | 2026-08-20 | fig_C1_5sub_rawp_effsize.py | - | - |  |
+| human | example_tissue | aging | 2026-08-16 | fig_split_v10.py | - | - |  |
+| human | example_tissue | aging | 2026-08-16 | fig_split_v10.py | - | - |  |
+| human | example_tissue | aging | 2026-08-17 | plot_umap_annotation_v2.R | - | - |  |
+| Homo sapiens | example_tissue | aging | 2026-08-20 | subcluster_top_scores.py | - | - |  |
+| human | example_tissue | aging | 2026-08-20 | verify_top1_by_agg.py | - | - |  |
+| human | example_tissue | aging | 2026-08-20 | verify_top1_celllevel.py | - | - |  |
+| human | example_tissue | aging | 2026-08-20 | fig_split_v10.py | - | - |  |
+| Homo sapiens | example_tissue | aging | 2026-08-20 | subcluster_top_scores_5sub.py | - | - |  |
+| Homo sapiens | example_tissue | aging | 2026-08-20 | fig_C1_5sub_rawp_effsize.py | - | - |  |
 | - | - | - | 2026-08-20 | subcluster_violin_fig | - | - |  |
 | human, macaca fascicularis | hippocampus | aging | 2026-08-29 | celltype_stack_boxplot_v2.py | - | - |  |
 | human, macaca fascicularis | hippocampus | aging | 2026-08-29 | celltype_stack_boxplot_v2.py | - | - |  |
 | human | hippocampus | aging | 2026-08-29 | concordance_astro_opc.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-15 | fig_split_v10.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-15 | fig_A3_transposed_v2.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-15 | fig_A3_transposed_v2.R | - | - |  |
-| human | skeletal_muscle | - | 2026-09-21 | featureplot_nature_palettes.R | - | - |  |
-| human | skeletal_muscle | - | 2026-09-21 | palette_accessibility_check.R | - | - |  |
-| human | skeletal_muscle | - | 2026-09-21 | inspect_FeaturePlot_source.R | - | - |  |
-| human | skeletal_muscle | - | 2026-09-21 | inspect_FeaturePlot_args.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-28 | fig_A2_5effects_v5_rawp.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-29 | 24_updown_8sub_combined_bigfig.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-10-15 | fig_A2_5effects_drop2_dz.R | - | - |  |
+| human | example_tissue | aging | 2026-09-15 | fig_split_v10.R | - | - |  |
+| human | example_tissue | aging | 2026-09-15 | fig_A3_transposed_v2.R | - | - |  |
+| human | example_tissue | aging | 2026-09-15 | fig_A3_transposed_v2.R | - | - |  |
+| human | example_tissue | - | 2026-09-21 | featureplot_nature_palettes.R | - | - |  |
+| human | example_tissue | - | 2026-09-21 | palette_accessibility_check.R | - | - |  |
+| human | example_tissue | - | 2026-09-21 | inspect_FeaturePlot_source.R | - | - |  |
+| human | example_tissue | - | 2026-09-21 | inspect_FeaturePlot_args.R | - | - |  |
+| human | example_tissue | aging | 2026-09-28 | fig_A2_5effects_v5_rawp.R | - | - |  |
+| human | example_tissue | aging | 2026-09-29 | 24_updown_8sub_combined_bigfig.py | - | - |  |
+| human | example_tissue | aging | 2026-10-15 | fig_A2_5effects_drop2_dz.R | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

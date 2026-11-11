@@ -153,7 +153,7 @@ AI 提取 schema 与生物不同：只收 `problem / method / architecture / con
 - `source.doi`、`source.locator`、`source.quote`、`source.type`（primary/secondary）。
 - `assay`：直接相关的测序/实验技术；不适用写“不适用”。
 - `species`：专业物种名列表（Homo_sapiens/Mus_musculus/Rattus_norvegicus…）。
-- `tissue`：受控组织名（skeletal_muscle/liver/brain…）。
+- `tissue`：受控组织名（example_tissue/liver/brain…）。
 - `experimental_object`：物种、组织、细胞/模型。
 - `cohort`：n、分组、条件、独立队列；未报告写“原文未报告”。
 - `background`：该结论回答的具体问题，不写套话。
@@ -184,9 +184,9 @@ AI 提取 schema 与生物不同：只收 `problem / method / architecture / con
 
 ### 组织与模型类型（受控词表）
 
-- 组织：`skeletal_muscle` / `cardiac_muscle` / `smooth_muscle` / `liver` / `brain` / `lung` / `kidney` / `heart` / `blood` / `pbmc` / `bone_marrow` / `spleen` / `intestine` / `colon` / `skin` / `adipose` / `pancreas` / `retina` / `eye` / `bladder` / `uterus` / `prostate` / `ovary` / `testis` / `thymus` / `tumor` / `other`。
+- 组织：`example_tissue` / `cardiac_muscle` / `smooth_muscle` / `liver` / `brain` / `lung` / `kidney` / `heart` / `blood` / `pbmc` / `bone_marrow` / `spleen` / `intestine` / `colon` / `skin` / `adipose` / `pancreas` / `retina` / `eye` / `bladder` / `uterus` / `prostate` / `ovary` / `testis` / `thymus` / `tumor` / `other`。
 - 模型类型：`in_vivo` / `ex_vivo` / `organoid` / `cell_line` / `primary_cells` / `human_sample` / `other`。
-- 中文/英文别名（如 肌肉→skeletal_muscle、肝→liver、大鼠→Rattus_norvegicus）由后端 canonical 化；不要新造目录名。
+- 中文/英文别名（如 肌肉→example_tissue、肝→liver、大鼠→Rattus_norvegicus）由后端 canonical 化；不要新造目录名。
 
 ### 物种统一
 
@@ -215,7 +215,7 @@ YAML 顶层同时保留：
 ```python
 search_knowledge(
     query="NMJ 去神经 结构 重塑",
-    species="mouse", tissue="skeletal_muscle", direction="aging",
+    species="mouse", tissue="example_tissue", direction="aging",
     kind="all",          # all | claims | parameters
     level="",            # 可选 L0-L3 过滤
     max_claims=8, max_parameters=10,

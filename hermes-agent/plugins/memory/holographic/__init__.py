@@ -150,7 +150,7 @@ def _enhance_query(query: str, sid: str = "", store=None) -> str:
     2026-08-31 极端评测修复（实体污染排序）：只有当净化后的 query 退化回原文
     （即消息本身没有实质内容词，如"继续跑"）时才把 entity 并入；
     否则只返回净化后的内容词——避免旧任务实体（trust 高的旧事实）把新话题
-    （"专利结论表"/"下载张潇文章"）的真正相关事实挤出 Top5。
+    （"专利结论表"/"下载某篇合作者论文"）的真正相关事实挤出 Top5。
     """
     raw = (query or "").strip()
     base = _extract_query_keywords(raw)

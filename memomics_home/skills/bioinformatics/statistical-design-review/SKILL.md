@@ -317,5 +317,5 @@ C 功效缺口（power vs n 三条线 + n=6 标注）/ D 比例-表型散点（�
 
 | 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
 |------|------|------|------|------|------|------|----|
-| mouse | skeletal_muscle | statistical_review | 2026-09-25 | stats_review_demo_pseudoreplication.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-10-18 | expr_outlier_stats.py | - | - |  |
+| mouse | example_tissue | statistical_review | 2026-09-25 | stats_review_demo_pseudoreplication.R | - | - |  |
+| human | example_tissue | aging | 2026-10-18 | expr_outlier_stats.py | - | - |  |

@@ -10,12 +10,12 @@
 做法：
   1) 读两份 PDF 的文本层 → 字号直方图、字体名分布（对照打印 + 写 JSON）；
   2) 内容区自动取联合边界（文字 bbox ∪ 矢量 drawings）→ 原图/成品各渲一张同比例整图；
-  3) 按关键字（默认自动：最大字号词 / O_Pre / FDR）各给一组放大对照；
+  3) 按关键字（默认自动：最大字号词 / GrpB_Pre / FDR）各给一组放大对照；
   4) 成品全页渲 300dpi 预览。
 
 用法：
   python font_compare.py --orig <原图.pdf> --final <成品.pdf> --out <目录>
-  python font_compare.py --orig ... --final ... --out ... --keys "Aged,O_Pre,FDR" --zoom 12
+  python font_compare.py --orig ... --final ... --out ... --keys "Aged,GrpB_Pre,FDR" --zoom 12
 
 输出（--out 目录）：
   * 字号对照_原图vs成品.png     —— 上下两整图 + 按关键字的放大对
@@ -111,7 +111,7 @@ def main() -> int:
     ap.add_argument("--orig", required=True, help="原图 PDF")
     ap.add_argument("--final", required=True, help="成品 PDF")
     ap.add_argument("--out", required=True, help="输出目录")
-    ap.add_argument("--keys", default="", help="放大对照关键字（逗号分隔；默认自动：最大字号词/O_Pre/FDR）")
+    ap.add_argument("--keys", default="", help="放大对照关键字（逗号分隔；默认自动：最大字号词/GrpB_Pre/FDR）")
     ap.add_argument("--zoom", type=float, default=12.0, help="放大对渲染倍率（默认 12 ≈ 864dpi）")
     ap.add_argument("--width", type=int, default=1900, help="对照图宽度（默认 1900）")
     a = ap.parse_args()
@@ -141,8 +141,8 @@ def main() -> int:
         if osp:
             top = max(osp, key=lambda s: float(s["size"]))
             keys.append(top["text"].split()[0])
-        if any("O_Pre" in s["text"] for s in osp):
-            keys.append("O_Pre")
+        if any("GrpB_Pre" in s["text"] for s in osp):
+            keys.append("GrpB_Pre")
         if any("FDR" in s["text"] for s in osp):
             keys.append("FDR")
     log["keys"] = keys

@@ -423,10 +423,10 @@ class TestKnowledgeDomains:
         r = json.loads(save_knowledge(
             name="test_bio", content="结论", source="literature", evidence="DOI z",
             verified="partially_verified", species="human",
-            tissue="skeletal_muscle", direction="aging",
+            tissue="example_tissue", direction="aging",
             kb_category="01_生物学知识", assay_type="RNA"))
         assert r["status"] == "success"
-        assert "/Homo_sapiens/skeletal_muscle/aging/" in r["path"].replace("\\", "/")
+        assert "/Homo_sapiens/example_tissue/aging/" in r["path"].replace("\\", "/")
         assert "/human/" not in r["path"]
 
 
@@ -518,7 +518,7 @@ class TestGetSummaryFix:
             "doi": "10.1038/demo.2025.1", "volume": "3", "issue": "4", "pages": "10-20",
             "summary_done": True,
             "summary": {"idea": "切入点", "background": "背景", "species": "human",
-                        "tissue": "skeletal_muscle", "problem": "问题", "solution": "方案",
+                        "tissue": "example_tissue", "problem": "问题", "solution": "方案",
                         "methods": "方法", "conclusion": "结论", "validation": "验证"},
         }
         with open(papers / ".pdf_index.json", "w", encoding="utf-8") as f:
@@ -939,14 +939,14 @@ class TestImportSpeedup:
 
         class _F:
             def result(self):
-                return {"__0": {"species": ["mouse"], "tissue": ["skeletal_muscle"],
+                return {"__0": {"species": ["mouse"], "tissue": ["example_tissue"],
                                 "direction": ["aging"], "assay": "RNA",
                                 "kb_category": "01_生物学知识"}}
 
         LL._apply_classification_bg(str(idx), {"a.pdf": "__0"}, _F())
         after = json.loads(idx.read_text(encoding="utf-8"))
         assert after[0]["tags"]["species"] == ["mouse"]
-        assert after[0]["tags"]["tissue"] == ["skeletal_muscle"]
+        assert after[0]["tags"]["tissue"] == ["example_tissue"]
 
 
 # ---------------------------------------------------------------- 无头兜底硬超时（2026-09-25 实跑事故）

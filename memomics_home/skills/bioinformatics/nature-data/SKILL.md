@@ -63,4 +63,4 @@ developed central code.
 
 | 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
 |------|------|------|------|------|------|------|----|
-| human | skeletal_muscle | aging | 2026-09-25 | data_availability_statement_human_skeletal_muscle_scRNA | - | - |  |
+| human | example_tissue | aging | 2026-09-25 | data_availability_statement_human_example_tissue_scRNA | - | - |  |

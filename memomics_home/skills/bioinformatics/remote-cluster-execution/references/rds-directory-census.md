@@ -49,7 +49,7 @@ all_files <- c(list.files(base, pattern="\\.rds$", full.names=TRUE),
 EC.rds / Immune.rds / 0326·FAP_process.rds / 0326·Immune.rds / Merge·Merge_MuSC.rds
 → ERROR: unable to find required package 'Seurat'
 ```
-而 **604,244 细胞的 v5 对象同期读取成功** —— 典型"一半成一半败"，极易误判成文件损坏/权限问题。
+而 **≈60 万 细胞的 v5 对象同期读取成功** —— 典型"一半成一半败"，极易误判成文件损坏/权限问题。
 
 根因是**版本差**：`Seurat` 类在 v5 由 **SeuratObject** 定义（不加载 Seurat 也能 readRDS），
 在 v4 由 **Seurat** 包定义（不加载就报这句）。
@@ -60,7 +60,7 @@ EC.rds / Immune.rds / 0326·FAP_process.rds / 0326·Immune.rds / Merge·Merge_Mu
 
 | 文件 | 细胞数 | 最大生物学注释列 |
 |---|---|---|
-| **Muscle_All.rds**（7.07 GB） | **604,244** | `Annotation_Level1` 6 / `Annotation` 10 / `celltype` 11 / `leiden_1` 18（纯簇号） |
+| **Muscle_All.rds**（实测内存） | **≈60 万** | `Annotation_Level1` 6 / `Annotation` 10 / `celltype` 11 / `leiden_1` 18（纯簇号） |
 | Merge/Exer_MF.rds | 114,049 | — |
 | Merge/FSHD_MF.rds | 80,672 | — |
 | integrated_harmony_FAP.rds | 66,265 | `SCT_snn_res.1.5` 26（纯簇号） |
@@ -74,11 +74,11 @@ EC.rds / Immune.rds / 0326·FAP_process.rds / 0326·Immune.rds / Merge·Merge_Mu
 | MuSC.rds | 15,810 | — |
 | 5 个 v4 对象 | 读取失败 | 见 3.2（补 `library(Seurat)` 后复查） |
 
-→ **细胞数吻合（604,244 ≈ 60 万），但注释对不上：最多 11 类，没有任何一列是 23 类**；
+→ **细胞数吻合（≈60 万 ≈ 60 万），但注释对不上：最多 11 类，没有任何一列是 23 类**；
 唯一"几十个小群"的是免疫子集的 21 类注释，但只有 3.5 万细胞。
 交付按铁规 12 第 4 条：匹配了什么 / 缺了什么 / 未读候选表 / 问用户点哪个。
 
-**体积估算锚点（复用）**：60 万细胞 ≈ 7–12 GB（实测 604,244 → 7.07 GB）；20–25 GB 对应 150–200 万细胞。
+**体积估算锚点（复用）**：60 万细胞 ≈ 7–12 GB（实测 ≈60 万 → 实测内存）；20–25 GB 对应 150–200 万细胞。
 
 ## 5. 边界
 

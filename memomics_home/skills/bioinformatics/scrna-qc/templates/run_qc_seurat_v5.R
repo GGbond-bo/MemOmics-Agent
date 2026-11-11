@@ -246,7 +246,7 @@ if ("sample_id" %in% colnames(meta_filtered)) {
   write.csv(per_sample, file.path(res_dir, "qc_per_sample.csv"), row.names = FALSE)
 }
 
-params <- list(data_path = input_path, species = SPECIES, tissue = "skeletal_muscle",
+params <- list(data_path = input_path, species = SPECIES, tissue = "example_tissue",
                direction = "aging", data_state = ifelse(is_normalized, "NORMALIZED", "RAW"),
                is_normalized = is_normalized,
                filters = list(min_genes = MIN_GENES, max_genes = MAX_GENES,

@@ -96,7 +96,7 @@ results/<project>/<topic-slug>_<YYYYMMDD-HHMMSS>_<hash8>/
     "parent_session_id": null,
     "topic": "UMAP 分辨率参数选择",
     "topic_hash": "f24156ad",
-    "project": "human_skeletal_muscle_aging",
+    "project": "example_project",
     "model": "opencode-go/deepseek-v4-pro",
     "started_at": "2026-08-11T02:30:00+08:00",
     "git_repo_root": "<安装目录>",

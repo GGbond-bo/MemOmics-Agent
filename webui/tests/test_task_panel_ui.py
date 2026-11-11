@@ -999,7 +999,7 @@ LIVE_DETAIL = {
     "todos": [{"title": "读数据", "status": "completed"}, {"title": "算 QC 指标", "status": "in_progress"}],
     "tools": [{"ts": "2026-09-24T16:20:01", "tool": "execute_r",
                "args": 'obj <- readRDS("<发布目录>")',
-               "result": '{"status": "success", "output": "51227 x 2132"}'}],
+               "result": '{"status": "success", "output": "50000 x 2000"}'}],
     "stats": {"tool_calls": 7, "tools": {"execute_r": 2}, "skills": ["scrna-qc"],
               "rail_pre": 1, "rail_post": 0, "debate_calls": 0, "files_written": 1},
     "debates": [{"file": "debate_x.json", "topic": "MT 阈值 15% 是否为空操作", "verdict": "need_more_info",

@@ -34,7 +34,7 @@ def _messages():
         ("assistant", "数据加载完成：382MB，22 个打分列，10 个亚群，6 组样本。先做个体级聚合统计。"),
         ("user", "记住：数据文件固定是 <数据目录>，以后出图必须带 P 值标注。"),
         ("assistant", "已记住。开始按五效应轴（Aging/T2D/ExYoung/ExOld/ExT2D）做效应矩阵统计。"),
-        ("user", "跑 DESeq2 差异分析，比较 O_Pre vs Y_Pre。"),
+        ("user", "跑 DESeq2 差异分析，比较 GrpB_Pre vs GrpA_Pre。"),
         ("assistant", "DEG 完成：共 220 个基因，其中 117 个显著（padj<0.05），上调 61、下调 56。"),
         ("user", "把效应矩阵画成热图，CNS 风格。"),
         ("assistant", "FigA1_effect_matrix 已生成：22×5 效应热图，红蓝 Cohen's d + 星号，逆转率条形图在右侧。"),

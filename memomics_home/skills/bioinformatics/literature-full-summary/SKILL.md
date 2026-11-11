@@ -13,7 +13,7 @@ trigger:
     - 普通聊天不涉及文献
   rules:
     - "9 项摘要必须逐项给出，缺项写'未提及'，禁止编造"
-    - "物种/组织必须与原文一致（human/mouse/rat...；skeletal_muscle/liver...）"
+    - "物种/组织必须与原文一致（human/mouse/rat...；example_tissue/liver...）"
     - "摘要写入 memomics_home/papers/summaries/<文件名>.md 并标记 summary_done"
     - "执行时直接调用 summarize_paper 工具（工具内已实现本 9 项模板与落盘）；禁止反复 skill_view 后手动复述模板"
     - "skill_view 本 skill 最多一次；看到模板后立刻调用 summarize_paper"
@@ -28,7 +28,7 @@ trigger:
 1. **思路 (idea)**：作者的核心想法/研究切入点是什么？一句话 + 展开
 2. **背景 (background)**：研究领域现状与空白，为什么要做这个研究
 3. **物种 (species)**：研究对象物种（human/mouse/rat/...），多物种分别列出
-4. **组织 (tissue)**：研究组织/细胞类型（skeletal_muscle/liver/...）
+4. **组织 (tissue)**：研究组织/细胞类型（example_tissue/liver/...）
 5. **问题 (problem)**：本文要回答的具体科学问题
 6. **怎么解决 (solution)**：作者如何设计实验/分析来回答（分组/干预/队列设计）
 7. **方法 (methods)**：关键技术/算法/统计方法（高通量测序类型、软件、阈值）

@@ -7,7 +7,7 @@
 | Field | Value |
 |-------|-------|
 | Species | human (Homo sapiens) |
-| Tissue | skeletal_muscle |
+| Tissue | example_tissue |
 | Direction | aging + diabetes + exercise |
 | Cells | 11,630 |
 | Genes | 51,227 (HVG subset: 1,000) |
@@ -95,6 +95,6 @@ Generated via `generate_report` tool with custom HTML containing:
 - KS test results (21 pair comparisons)
 - Debate verdict and biological interpretation
 
-**Path**: `results/human_skeletal_muscle_aging_diabetes_exercise_20260708/03_advanced/scTour/scTour_Trajectory_Report.html`
+**Path**: `results/human_example_tissue_aging_diabetes_exercise_20260708/03_advanced/scTour/scTour_Trajectory_Report.html`
 
 **Size**: ~4MB (9 embedded base64 figures + HTML structure)

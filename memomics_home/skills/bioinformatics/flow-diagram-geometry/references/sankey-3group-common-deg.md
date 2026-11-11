@@ -1,6 +1,6 @@
 # 实战案例：三组运动共同 DEG「亚群 → 基因」桑基图
 
-> 2026-10-01 · human / skeletal_muscle / exercise+aging · 脚本 `43_sankey_3group_common_deg.py`（v4）
+> 2026-10-01 · human / example_tissue / exercise+aging · 脚本 `43_sankey_3group_common_deg.py`（v4）
 > 产物：`figures/43_sankey_3group_common_{UP,DOWN}.{png,svg,pdf,tiff}` + `results/43_sankey_links_3group_common.csv`
 
 ## 需求原话与解读
@@ -16,11 +16,11 @@
 
 | sheet | 对比 | 基因数 | Up | Down |
 |---|---|---|---|---|
-| Aging | Y_Pre_vs_O_Pre | — | — | — |
-| DM | O_Pre_vs_OD_Pre | — | — | — |
-| **Y_EX** | Y_Pre_vs_Y_Post | 47 | 28 | **19** |
-| **O_EX** | O_Pre_vs_O_Post | 985 | 68 | **918** |
-| **DM_EX** | OD_Pre_vs_OD_Post | 120 | 60 | 60 |
+| Aging | GrpA_Pre_vs_GrpB_Pre | — | — | — |
+| DM | GrpB_Pre_vs_GrpC_Pre | — | — | — |
+| **Y_EX** | GrpA_Pre_vs_GrpA_Post | 47 | 28 | **19** |
+| **O_EX** | GrpB_Pre_vs_GrpB_Post | 985 | 68 | **918** |
+| **DM_EX** | GrpC_Pre_vs_GrpC_Post | 120 | 60 | 60 |
 
 阈值：FDR < 0.05 且 |coef| ≥ 0.25（bayesglm / glmer）。10 个亚群。
 
@@ -72,7 +72,7 @@
 
 - `rail_review(post)`：**passed=true / issues=[]**，figure_count=17
   （warning 项：无注释行、无 try 捕获、matplotlib 子模块未在 skill 声明 —— 均非阻断）
-- `record_run` → `cns-visualization`（human / skeletal_muscle / exercise+aging，quality 8）
+- `record_run` → `cns-visualization`（human / example_tissue / exercise+aging，quality 8）
 - v2 备份：`figures/_backup_sankey_v2/`（8 文件）
 
 ## 汇报要点（用户最在意的三条）

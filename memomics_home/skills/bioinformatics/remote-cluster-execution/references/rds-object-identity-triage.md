@@ -32,7 +32,7 @@ Merge/{Merge_MF 11.1G, Exer_MF 1.5G, FSHD_MF 1.1G, Merge_MuSC 2.1G, ...}
 
 | 文件大小 | 大致对应细胞数 | 实测锚点 |
 |---|---|---|
-| 7–12 GB | 50–70 万 | **604,244 细胞 → 7.07 GB**（本次） |
+| 7–12 GB | 50–70 万 | **≈60 万 细胞 → 实测内存**（本次） |
 | 20–25 GB | 150–200 万 | `MF.rds` 23.5 GB（未读） |
 
 ⚠️ **文件名只作参考**：`Muscle_All` / `MF` / `seRNA` 都可能是"全量"，也可能一个是子集。
@@ -49,11 +49,11 @@ remote_cluster(action="session_start",
 ```
 实测回报（关键行）：
 ```
-load: seconds 225.2 | 已读入 … -> muscle_all（225.2 秒）
-      维度/类型: 51227 x 604244  Seurat        <-- 细胞数就在这里
+load: seconds 225.2 | 已读入 … -> muscle_all（实测耗时）
+      维度/类型: 50000 x 600000  Seurat        <-- 细胞数就在这里
 mem_note: 节点内存：总 3023GB / 可用 875GB；输入 7.07GB
 ```
-- **7.07 GB / 225 秒**（R 4.4.1，node1）；会话 RSS 约 37 GB（3 TB 节点无压力，但仍应问用户要不要收）。
+- **实测内存 / 225 秒**（R 4.4.1，node1）；会话 RSS 约 37 GB（3 TB 节点无压力，但仍应问用户要不要收）。
 - 之后同会话 `session_exec` 复用内存对象，**不再回读文件**（`readrds_calls` 审计恒为 1）。
 
 随后 `session_exec` 跑 `scripts/probe_rds_meta.R`：打维度 / assay / reductions / **每列元数据基数与取值**，
@@ -63,7 +63,7 @@ mem_note: 节点内存：总 3023GB / 可用 875GB；输入 7.07GB
 用户说：「整个 RNA 是 60 万细胞，但是有 23 个注释，不是 ATAC。」
 
 `Muscle_All.rds`：
-- `51227 基因 × 604244 细胞`、assay = `RNA`（✅ 不是 ATAC）、reductions `Xpca_ / Xpcaharmony_ / Xumap_`、meta 27 列
+- `50000 基因 × 600000 细胞`、assay = `RNA`（✅ 不是 ATAC）、reductions `Xpca_ / Xpcaharmony_ / Xumap_`、meta 27 列
 - `Annotation` = **10**（Adipocyte/RSS/MuSC/FAP/EC/TypeI/Myeloid/TypeII/Pericyte/Lymphocyte）
 - `celltype` = **11**（+MastCell）；`Annotation_Level1` = **6**；`leiden_1` = **18** 簇（0–17）
 - `samplename` = 48（24 人 × Pre/Post）、`library` = 96、`age` = 15、`type` = 6 组

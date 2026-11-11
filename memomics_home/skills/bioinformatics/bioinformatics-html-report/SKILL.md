@@ -457,13 +457,13 @@ parameter sources, use `"标准分析方法"` or `"standard workflow"`.
 
 | 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
 |------|------|------|------|------|------|------|----|
-| human | skeletal_muscle | general | 2026-09-16 | MemOmics_showcase.html | - | - |  |
+| human | example_tissue | general | 2026-09-16 | MemOmics_showcase.html | - | - |  |
 
 
 | - | - | general | 2026-09-16 | MemOmics_Showcase.html | - | - |  |
-| human | skeletal_muscle | general | 2026-09-16 | MemOmics_Showcase.html | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | build_MF120_html_report.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | build_MF120_html_report.py | - | - |  |
+| human | example_tissue | general | 2026-09-16 | MemOmics_Showcase.html | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | build_MF120_html_report.py | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | build_MF120_html_report.py | - | - |  |
 | human | general | general | 2026-10-02 | build_report_html.py | - | - |  |
 | - | - | - | 2026-10-05 | build_agent_paradigms_ppt.py | - | - |  |
 | - | - | - | 2026-10-05 | build_agent_paradigms_ppt.py | - | - |  |

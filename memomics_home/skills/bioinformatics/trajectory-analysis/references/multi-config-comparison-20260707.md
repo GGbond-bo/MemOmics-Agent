@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | Species | human (Homo sapiens) |
-| Tissue | skeletal_muscle |
+| Tissue | example_tissue |
 | Direction | aging + diabetes + exercise |
 | Cells | 11,630 |
 | Genes | 51,227 (HVG subset: 1,000) |
@@ -87,7 +87,7 @@ pip install torch torchdiffeq
 
 Comprehensive HTML report generated via `bioinformatics-html-report` skill's `html_report_builder.py`.
 Contains: 15 figures (3 runs × 5 each), parameter comparison table, KS test results, debate records.
-Saved to: `results/human_skeletal_muscle_aging_diabetes_exercise_20260708/03_advanced/scTour/scTour_Trajectory_Report.html`
+Saved to: `results/human_example_tissue_aging_diabetes_exercise_20260708/03_advanced/scTour/scTour_Trajectory_Report.html`
 
 ---
 

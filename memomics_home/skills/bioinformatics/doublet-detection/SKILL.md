@@ -30,7 +30,7 @@ prerequisites:
 | counts 是否还在（整数、未归一化） | scDblFinder / DoubletFinder / scrublet **全部要求 raw counts** | `all(m@x == round(m@x))` + `range(Matrix::colSums(m))` |
 | 流程走到哪一步（已注释？已去过双胞？） | 已去过双胞的数据重跑会二次剔除 | metadata 列 + 是否存在 `doublet` / `predicted_doublet` 列 |
 
-**实测案例**：某 Seurat 对象 2132 cells × 51227 genes、**48 个样本**、6 组 → **≈44 细胞/样本**。
+**实测案例**：某 Seurat 对象 2000 cells × 50000 genes、**多个样本**、6 组 → **少量细胞/样本**。
 这个数字直接判死「按样本单独检测」（见下）。
 
 ## Step 1：策略决策表（按每样本细胞数选）

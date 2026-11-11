@@ -173,7 +173,7 @@ artboard-set --w 595.28 --h 841.89             # ③ A4 纵向（保原点，画
 #    dy = −(288 − 210.47 − cy)   cy = (bounds_screen[1]+bounds_screen[3])/2   （288=原画板高）
 move --target all --dx <dx> --dy <dy>          # 只平移顶层项（实测 moved=63, nested_skipped=691）
 text-set --from-size 6 --size 5                # ⑤ FDR= 注释 → 5pt（touched 10）
-text-set --from-size 7 --size 6                # ⑥ 列头 O_Pre/O_Post → 6pt（touched 2）
+text-set --from-size 7 --size 6                # ⑥ 列头 GrpB_Pre/GrpB_Post → 6pt（touched 2）
 text-set --from-size 8 --size 6                # ⑦ 类别+刻度（7.998≈8）→ 6pt（touched 14）
 text-set --from-size 9 --size 6                # ⑧ 轴名 → 6pt（touched 1）
 text-set --pattern "Aged Exercise" --size 7 --align center   # ⑨ 标题 7pt+居中

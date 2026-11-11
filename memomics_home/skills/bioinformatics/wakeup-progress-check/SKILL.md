@@ -611,12 +611,12 @@ mid-run 唤醒发现**进程已死**（heartbeat `rscript=` 为空 / tasklist �
 
 | 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
 |------|------|------|------|------|------|------|----|
-| human | skeletal_muscle | aging | 2026-08-21 | result_check_inventory.sh | - | - |  |
-| human | skeletal_muscle | aging | 2026-08-21 | wakeup_check_memomics-5a18228d | - | - |  |
-| human | skeletal_muscle | aging | 2026-08-21 | wakeup_check_memomics-5a18228d_proc | - | - |  |
-| human | skeletal_muscle | aging | 2026-08-21 | wakeup_check_memomics-6f93c92c | - | - |  |
-| human | skeletal_muscle | aging | 2026-08-21 | wakeup_check_memomics-1b0e5b39 | - | - |  |
-| human | skeletal_muscle | aging | 2026-08-21 | fig_C1_5sub_vs_pure_v2.py | - | - |  |
+| human | example_tissue | aging | 2026-08-21 | result_check_inventory.sh | - | - |  |
+| human | example_tissue | aging | 2026-08-21 | wakeup_check_memomics-5a18228d | - | - |  |
+| human | example_tissue | aging | 2026-08-21 | wakeup_check_memomics-5a18228d_proc | - | - |  |
+| human | example_tissue | aging | 2026-08-21 | wakeup_check_memomics-6f93c92c | - | - |  |
+| human | example_tissue | aging | 2026-08-21 | wakeup_check_memomics-1b0e5b39 | - | - |  |
+| human | example_tissue | aging | 2026-08-21 | fig_C1_5sub_vs_pure_v2.py | - | - |  |
 | - | - | - | 2026-08-27 | wakeup_check_memomics-cd677556 | - | - |  |
 | - | - | - | 2026-08-27 | wakeup_check_memomics-cd677556 | - | - |  |
 | - | - | - | 2026-09-11 | wakeup_check_memomics-7839e23a | - | - |  |
@@ -640,10 +640,10 @@ mid-run 唤醒发现**进程已死**（heartbeat `rscript=` 为空 / tasklist �
 | human | general | engineering | 2026-10-01 | wakeup_readonly_three_source_check.ps1 | - | - |  |
 | - | - | - | 2026-10-01 | wakeup_check_memomics-afd2d418_v4 | - | - |  |
 | - | general | engineering | 2026-10-01 | wakeup_check_memomics-afd2d418_v5 | - | - |  |
-| human | skeletal_muscle | aging | 2026-10-01 | wakeup_check_memomics-afd2d418 | - | - |  |
-| human | skeletal_muscle | aging | 2026-10-01 | wakeup_probe.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-10-01 | wakeup_probe.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-10-01 | wakeup_probe_3source | - | - |  |
+| human | example_tissue | aging | 2026-10-01 | wakeup_check_memomics-afd2d418 | - | - |  |
+| human | example_tissue | aging | 2026-10-01 | wakeup_probe.py | - | - |  |
+| human | example_tissue | aging | 2026-10-01 | wakeup_probe.py | - | - |  |
+| human | example_tissue | aging | 2026-10-01 | wakeup_probe_3source | - | - |  |
 | - | - | - | 2026-10-01 | wakeup_check_memomics-afd2d418 | - | - |  |
 | - | - | - | 2026-10-01 | smoke_engine_after_restart.py | - | - |  |
 | - | - | - | 2026-10-01 | readonly_preflight_deploycheck | - | - |  |
@@ -659,26 +659,26 @@ mid-run 唤醒发现**进程已死**（heartbeat `rscript=` 为空 / tasklist �
 | human | general | engineering | 2026-10-01 | deploy_smoke_probe.py | - | - |  |
 | human | general | engineering | 2026-10-01 | kb15_rank_probe.py | - | - |  |
 | human | general | engineering | 2026-10-01 | kb15_rank_probe.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-10-01 | deploy_smoke_probe.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-10-01 | deploy_smoke_probe.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-10-01 | deploy_smoke_probe.py | - | - |  |
+| human | example_tissue | aging | 2026-10-01 | deploy_smoke_probe.py | - | - |  |
+| human | example_tissue | aging | 2026-10-01 | deploy_smoke_probe.py | - | - |  |
+| human | example_tissue | aging | 2026-10-01 | deploy_smoke_probe.py | - | - |  |
 
 
-| human | skeletal_muscle | aging | 2026-10-01 | kb15_rank_probe.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-10-01 | kb15_rank_probe.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-10-01 | kb15_rank_probe.py | - | - |  |
-| human | skeletal_muscle | tooling | 2026-10-01 | smoke_engine_after_restart.py | - | - |  |
+| human | example_tissue | aging | 2026-10-01 | kb15_rank_probe.py | - | - |  |
+| human | example_tissue | aging | 2026-10-01 | kb15_rank_probe.py | - | - |  |
+| human | example_tissue | aging | 2026-10-01 | kb15_rank_probe.py | - | - |  |
+| human | example_tissue | tooling | 2026-10-01 | smoke_engine_after_restart.py | - | - |  |
 | human | general | engineering | 2026-10-01 | wakeup_probe.py | - | - |  |
 | human | general | engineering | 2026-10-01 | wakeup_probe.py | - | - |  |
 | human | general | engineering | 2026-10-01 | wakeup_probe.py | - | - |  |
 | - | - | - | 2026-10-01 | wakeup_check_memomics-afd2d418_v7 | - | - |  |
-| human | skeletal_muscle | aging | 2026-10-01 | wakeup_19_three_source_check | - | - |  |
-| human | skeletal_muscle | aging | 2026-10-01 | wakeup_three_source_check.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-10-01 | wakeup_check_memomics-afd2d418_v8 | - | - |  |
-| human | skeletal_muscle | aging | 2026-10-01 | wakeup_three_source_check_v8.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-10-01 | wakeup_check_memomics-afd2d418_v8 | - | - |  |
+| human | example_tissue | aging | 2026-10-01 | wakeup_19_three_source_check | - | - |  |
+| human | example_tissue | aging | 2026-10-01 | wakeup_three_source_check.py | - | - |  |
+| human | example_tissue | aging | 2026-10-01 | wakeup_check_memomics-afd2d418_v8 | - | - |  |
+| human | example_tissue | aging | 2026-10-01 | wakeup_three_source_check_v8.py | - | - |  |
+| human | example_tissue | aging | 2026-10-01 | wakeup_check_memomics-afd2d418_v8 | - | - |  |
 | - | - | - | 2026-10-13 | wakeup_check_memomics-be17649b_replay15 | - | - |  |
-| human | skeletal_muscle | exercise+aging | 2026-10-19 | wakeup_check_memomics-490515fc | - | - |  |
+| human | example_tissue | exercise+aging | 2026-10-19 | wakeup_check_memomics-490515fc | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

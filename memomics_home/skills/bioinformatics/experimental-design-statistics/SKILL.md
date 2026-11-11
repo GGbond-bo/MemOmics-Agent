@@ -591,8 +591,8 @@ export_complete_design(batch_design, design_params, output_dir = "design_results
 
 | 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
 |------|------|------|------|------|------|------|----|
-| mouse | skeletal_muscle | statistics_review | 2026-09-25 | stats_review_demo_pseudoreplication.R | - | - |  |
-| mouse | skeletal_muscle | statistics_review | 2026-09-25 | stats_review_figures.R | - | - |  |
+| mouse | example_tissue | statistics_review | 2026-09-25 | stats_review_demo_pseudoreplication.R | - | - |  |
+| mouse | example_tissue | statistics_review | 2026-09-25 | stats_review_figures.R | - | - |  |
 | human | synthetic_expression | aging | 2026-10-18 | aging_vs_t2d_two_group_stats.py | - | - |  |
 | human | synthetic_expression | aging | 2026-10-18 | aging_vs_t2d_two_group_stats.py | - | - |  |
 | human | synthetic_expression | aging | 2026-10-18 | input_integrity_audit_expr_flawed.py | - | - |  |

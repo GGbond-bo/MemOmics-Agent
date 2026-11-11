@@ -145,12 +145,12 @@ When you need create harmony embeddings scRNA analysis
 |---------|--------|-----------|------|-------|
 | *(none yet)* | | | | |
 
-| human | skeletal_muscle | aging | 2026-09-24 | inspect_MF2000_structure.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | inspect_MF2000_env_api.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | inspect_MF2000_structure.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | harmony_samplename_integration.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | harmony_samplename_integration.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | harmony_samplename_integration.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | inspect_SampleA_structure.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | inspect_SampleA_env_api.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | inspect_SampleA_structure.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | harmony_samplename_integration.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | harmony_samplename_integration.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | harmony_samplename_integration.R | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

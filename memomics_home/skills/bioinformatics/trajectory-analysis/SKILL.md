@@ -361,43 +361,43 @@ results/trajectory_monocle3_{date}/
 
 | 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
 |------|------|------|------|------|------|------|----|
-| human | skeletal_muscle | aging | 2026-09-24 | inspect_示例数据_traj.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | inspect_示例数据_traj.R | - | - |  |
 
 
-| human | skeletal_muscle | aging | 2026-09-24 | monocle3_trajectory.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | probe_R_libs.sh | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | probe_R_libs.sh | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | probe_r442_monocle3.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | export_MF2000_for_monocle3.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | probe_R_libs.sh | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | check_RSS_identity.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | traj_01_export.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | traj_02_monocle3.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | traj_02_monocle3.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | traj_02_monocle3.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | traj_02_monocle3.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | traj_03_stats_figures.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | traj_04_diagnostics_figures.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | step1_monocle3_grid_graph_root.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | debate_L2_trajectory_conclusion | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | traj_05_root_sensitivity.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | traj_05_root_sensitivity.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | traj_06_sensitivity_covariate.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | traj_07_independent_umap.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | traj_07_independent_umap.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | debate_L2_round2_final_wording | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | step2a_robustness_RSS_identity.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | step2b_slingshot_crossvalidation.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | step2b_slingshot_crossvalidation.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | step2c_confounding_fix.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | traj_09_ci_and_anchoring.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | step2c_confounding_fix.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | step3_summary_tables_figures.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | step4_final_checks.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | trajectory_conclusions.md | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | step5_final_sensitivity.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | step5_final_sensitivity.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | step5b_independent_embedding.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | monocle3_trajectory.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | probe_R_libs.sh | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | probe_R_libs.sh | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | probe_r442_monocle3.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | export_SampleA_for_monocle3.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | probe_R_libs.sh | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | check_RSS_identity.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | traj_01_export.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | traj_02_monocle3.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | traj_02_monocle3.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | traj_02_monocle3.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | traj_02_monocle3.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | traj_03_stats_figures.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | traj_04_diagnostics_figures.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | step1_monocle3_grid_graph_root.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | debate_L2_trajectory_conclusion | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | traj_05_root_sensitivity.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | traj_05_root_sensitivity.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | traj_06_sensitivity_covariate.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | traj_07_independent_umap.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | traj_07_independent_umap.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | debate_L2_round2_final_wording | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | step2a_robustness_RSS_identity.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | step2b_slingshot_crossvalidation.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | step2b_slingshot_crossvalidation.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | step2c_confounding_fix.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | traj_09_ci_and_anchoring.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | step2c_confounding_fix.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | step3_summary_tables_figures.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | step4_final_checks.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | trajectory_conclusions.md | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | step5_final_sensitivity.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | step5_final_sensitivity.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | step5b_independent_embedding.R | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

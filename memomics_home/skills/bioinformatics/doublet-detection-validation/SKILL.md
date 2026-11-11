@@ -181,5 +181,5 @@ is_syn = np.r_[np.zeros(n_obs, bool), np.ones(X_syn.shape[0], bool)]   # ← 真
 - **版本漂移与语言互操作细节**（DoubletFinder 2.0.6 API 改名、skimage ABI → monkey-patch、
   Python bool 落 CSV 在 R 端报错、R 合成矩阵列名重复、pooled vs 分样本的样本量判据）
   → `references/doublet-toolchain-pitfalls.md`
-- **完整实测案例与逐档数字**（人示例组织 2132 细胞 / 48 样本 / 弱信号，四档 F1 全 ≤0.344）
+- **完整实测案例与逐档数字**：见团队内部案例库（未随公开仓库分发）
   → `references/worked-example-weak-signal-muscle.md`

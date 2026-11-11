@@ -131,5 +131,5 @@ prerequisites:
 
 | 物种 | 组织 | 方向 | 日期 | 脚本 | 评分 |
 |------|------|------|------|------|------|
-| human | skeletal_muscle | aging | 2026-07-17 | subsample_10k.py | 9/10 |
-| human | skeletal_muscle | aging | 2026-07-17 | subsample_10k_random.py | 9/10 | 纯随机, MastCells仅11个 |
+| human | example_tissue | aging | 2026-07-17 | subsample_10k.py | 9/10 |
+| human | example_tissue | aging | 2026-07-17 | subsample_10k_random.py | 9/10 | 纯随机, MastCells仅11个 |

@@ -805,4 +805,4 @@ After completing core scRNA-seq analysis:
 
 | 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
 |------|------|------|------|------|------|------|----|
-| human | skeletal_muscle | aging | 2026-09-24 |  06_final_robustness.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 |  06_final_robustness.R | - | - |  |

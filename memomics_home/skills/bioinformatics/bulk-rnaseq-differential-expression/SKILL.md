@@ -183,12 +183,12 @@ sig_genes <- subset(res, padj <= 0.05 & abs(log2FoldChange) >= 0.5)
 
 | 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
 |------|------|------|------|------|------|------|----|
-| human | skeletal_muscle | aging | 2026-10-01 | gencode_v32_gtf_decompress | - | - |  |
+| human | example_tissue | aging | 2026-10-01 | gencode_v32_gtf_decompress | - | - |  |
 
 
-| human | skeletal_muscle | aging | 2026-10-01 | 44_mef2c_locus_from_gtf.py | - | - |  |
-| human | skeletal_muscle | aging+exercise | 2026-10-01 | 44_mef2c_locus_exon_overlap.py | - | - |  |
-| human | skeletal_muscle | aging+exercise | 2026-10-01 | 44b_mef2c_as1_overlap_decomposition.py | - | - |  |
+| human | example_tissue | aging | 2026-10-01 | 44_mef2c_locus_from_gtf.py | - | - |  |
+| human | example_tissue | aging+exercise | 2026-10-01 | 44_mef2c_locus_exon_overlap.py | - | - |  |
+| human | example_tissue | aging+exercise | 2026-10-01 | 44b_mef2c_as1_overlap_decomposition.py | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

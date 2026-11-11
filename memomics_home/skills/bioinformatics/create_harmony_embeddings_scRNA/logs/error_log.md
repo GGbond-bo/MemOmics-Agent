@@ -5,7 +5,7 @@
 
 | Date | Error | Type | Cause | Fix | Species | Tissue | Severity |
 |------|-------|------|-------|-----|---------|--------|----------|
-| 2026-07-04 04:09 | RunHarmony with sample_id (16,003 unique) → 1 iteration convergence (pseudo-conv | logic_error | sample_id had 16,003 unique values (individual cell barcodes | Switch batch variable from sample_id to donor_id (19 donors) | human | skeletal_muscle | high |
+| 2026-07-04 04:09 | RunHarmony with sample_id (16,003 unique) → 1 iteration convergence (pseudo-conv | logic_error | sample_id had 16,003 unique values (individual cell barcodes | Switch batch variable from sample_id to donor_id (19 donors) | human | example_tissue | high |
 | 2026-09-24 17:24 | execute_r 内用 exec(open(...).read()) 报 <text>:1:116: unexpected symbol | syntax_error | 把 execute_python 的脚本加载写法套用到 execute_r：R 没有 exec()/open() 内建， | R 内核里运行脚本文件必须用 source(path, encoding="UTF-8")；exec(open().re |  |  | low |
 | 2026-09-24 17:25 | NA/NaN/Inf in foreign function call (arg 1) — 脚本 harmony_samplename_integration. | runtime_error | 距离矩阵就地修改（diag<-Inf）污染了后续 silhouette 调用；silhouette 的 dmatrix  | kNN 检索把 diag(D)<-Inf 后，同一矩阵又被传给了 cluster::silhouette(dmatrix |  |  | medium |
 | 2026-09-24 17:26 | 'dmatrix' is not a dissimilarity matrix compatible to 'x' (cluster::silhouette) | runtime_error | 混用 silhouette 的两种距离入参形式：dmatrix 要 matrix、dist 要 dist 对象；传 di | cluster::silhouette(dmatrix=) 必须传 n×n 对称距离矩阵（对角 0），不能传 as.di |  |  | low |

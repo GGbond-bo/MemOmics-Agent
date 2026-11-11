@@ -338,7 +338,7 @@ cellbender remove-background \
 
 | Species | Tissue | Condition | Date | Score |
 |---------|--------|-----------|------|-------|
-| Macaca mulatta | skeletal_muscle | aging | 2025-06-15 | 9.0 |
+| Macaca mulatta | example_tissue | aging | 2025-06-15 | 9.0 |
 | Macaca mulatta | brain | aging | 2026-07-04 | 8.0 |
 
 ### Script Reference

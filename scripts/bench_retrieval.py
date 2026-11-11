@@ -20,7 +20,7 @@ QUERIES = [
     ("q6", "C25 C26 这几个亚群是噪声吗", "memomics-cd677556"),
     ("q7", "猴脑海马8大群的注释", "memomics-cd677556"),
     ("q8", "human_hf_peaks.csv 在哪", "memomics-cd677556"),
-    ("q9", "帮我下载张潇那篇猴脑文章", "memomics-cd677556"),
+    ("q9", "帮我下载那篇公开数据集论文", "memomics-cd677556"),
     ("q10", "细胞注释的marker基因", "memomics-cd677556"),
     ("q11", "marker gene annotation cross-species", "memomics-cd677556"),
     ("q12", "猴孬海马怎么注释", "memomics-cd677556"),  # 错别字鲁棒性

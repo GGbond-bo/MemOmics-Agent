@@ -72,7 +72,7 @@ The files under `references/` (and `scripts/`) are deep references, not defaults
 | - | - | - | 2026-09-25 | lit_bridge.py search --sources pubmed,crossref (skeletal muscle aging scRNA) | - | - |  |
 | - | - | - | 2026-09-25 | lit_bridge.py search --sources pubmed,crossref + json parse pipe | - | - |  |
 | - | - | - | 2026-09-25 | lit_bridge.py --help (CLI contract probe) | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-25 | lit_bridge.py search --sources pubmed,crossref --limit 3 --no-dedup | - | - |  |
+| human | example_tissue | aging | 2026-09-25 | lit_bridge.py search --sources pubmed,crossref --limit 3 --no-dedup | - | - |  |
 | human | general | general | 2026-10-02 | lit_bridge.py + agent_corpus_harvest | - | - |  |
 | human | general | general | 2026-10-02 | assemble_full_doc.py | - | - |  |
 | human | general | methodology | 2026-10-02 | g2_systematic_search.py | - | - |  |

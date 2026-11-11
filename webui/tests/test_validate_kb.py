@@ -236,7 +236,7 @@ def test_param_spec_and_index_files_need_no_evidence(tmp_path):
     _write(tmp_path, "LINK.yaml", L.join([
         "type: kb_entry", "name: LINK", "source: derived", "auto_trigger:", "  - LINK",
         "verified: unverified", "quality: medium", "updated: '2026-01-01'",
-        "linked_to: human/skeletal_muscle/aging/", ""]))
+        "linked_to: human/example_tissue/aging/", ""]))
     rules = [f["rule"] for f in vk.scan(str(tmp_path))["findings"]]
     assert "missing_evidence" not in rules, rules
 

@@ -126,7 +126,7 @@ prerequisites:
 | human | bone_marrow | multiple_myeloma | 2026-09-14 | europepmc_fullTextXML_figure_locate.sh | - | - |  |
 | human | bone_marrow | multiple_myeloma | 2026-09-14 | springernature_figure_download.sh | - | - |  |
 | human | bone_marrow | multiple_myeloma | 2026-09-14 | figure_png_to_pdf_300dpi.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-25 | nature_oa_pdf_curl.sh | - | - |  |
+| human | example_tissue | aging | 2026-09-25 | nature_oa_pdf_curl.sh | - | - |  |
 | - | - | - | 2026-10-20 | - | - | - |  |
 | - | - | - | 2026-10-20 | - | - | - |  |
 ## References

@@ -121,4 +121,4 @@ A config template is provided in `templates/literature-push-template.md`.
 
 | 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
 |------|------|------|------|------|------|------|----|
-| human | skeletal_muscle | aging | 2026-09-25 | lit_track.py | - | - |  |
+| human | example_tissue | aging | 2026-09-25 | lit_track.py | - | - |  |

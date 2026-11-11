@@ -91,10 +91,10 @@ WGCNA/hdWGCNA共表达网络分析。模块鉴定/hub基因/模块-性状关联
 |---------|--------|-----------|------|-------|
 | *(none yet)* | | | | |
 
-| human | skeletal_muscle | aging | 2026-08-01 | run_step4.R + run_step5.R + run_step6.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-08-01 | run_hdwgcna_official_full.R + resume.R + resume2.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-08-01 | build_hdwgcna_figure.R + run_hdwgcna_official_*.R + go_kegg_official.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-08-01 | - | - | - |  |
+| human | example_tissue | aging | 2026-08-01 | run_step4.R + run_step5.R + run_step6.R | - | - |  |
+| human | example_tissue | aging | 2026-08-01 | run_hdwgcna_official_full.R + resume.R + resume2.R | - | - |  |
+| human | example_tissue | aging | 2026-08-01 | build_hdwgcna_figure.R + run_hdwgcna_official_*.R + go_kegg_official.R | - | - |  |
+| human | example_tissue | aging | 2026-08-01 | - | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

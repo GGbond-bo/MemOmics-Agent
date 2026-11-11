@@ -156,13 +156,13 @@ When you need annotate celltype scRNA analysis
 | monkey | hippocampus | aging | 2026-08-27 | monkey_annotation_full.R | - | - |  |
 | human | hippocampus | aging | 2026-08-27 | extract_8classes_genes.py | - | - |  |
 | - | - | - | 2026-08-27 | annotate_human_30clusters.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | annotate_mf2000_dotplot.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | annotate_samplea_dotplot.R | - | - |  |
 | human | skeletal muscle | aging | 2026-11-02 | - | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| source('scripts/annotate_mf2000_dotplot.R') 报 inva | ① 普通 pdf()/svg() 设备不认识 windowsFonts 注册的中 | 两处修复：① 中文图在 Windows 下 base pdf()/svg() 设备不支持自定义字体名 |
+| source('scripts/annotate_samplea_dotplot.R') 报 inva | ① 普通 pdf()/svg() 设备不认识 windowsFonts 注册的中 | 两处修复：① 中文图在 Windows 下 base pdf()/svg() 设备不支持自定义字体名 |
 | map8[cc$predictedAnno] 命名向量索引 factor 按整数索引而非名字匹配，导 | R 中命名向量用 factor 索引时按整数位置取值，必须 as.charact | map8[as.character(cc$predictedAnno)] 显式转字符再按名字匹配 |
 | *(accumulated from runs)* | | |
 

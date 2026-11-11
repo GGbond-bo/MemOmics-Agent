@@ -184,46 +184,46 @@ results/<模块>/<方法>/
 |---------|--------|-----------|------|-------|
 | *(none yet)* | | | | |
 
-| human | skeletal_muscle | aging | 2026-08-14 | phase3_5_dimred_cluster_annotation.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-08-14 | qc_validation.R + phase3_5_dimred_cluster_annotation.R | - | - |  |
+| human | example_tissue | aging | 2026-08-14 | phase3_5_dimred_cluster_annotation.R | - | - |  |
+| human | example_tissue | aging | 2026-08-14 | qc_validation.R + phase3_5_dimred_cluster_annotation.R | - | - |  |
 | - | - | - | 2026-08-14 | env_check | - | - |  |
 | - | - | - | 2026-08-14 | dimred_cluster_check.R | - | - |  |
 | - | - | - | 2026-08-14 | step5_marker_annotation.R | - | - |  |
 | - | - | - | 2026-08-14 | step5b_marker_stats_validation.R | - | - |  |
 | - | - | - | 2026-08-14 | verify_outputs.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | MF2000_load_inspect.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | recon_mf2000.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | step1_clustering_multires.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | step2_umap_cluster_labels.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | cluster_resolution_compare_MF2000.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | cluster_resolution_compare_MF2000_final.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | step3_validation_scan.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | step3_validation_scan.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | step4_validation_figure.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | mf2000_resolution_0.5_vs_1.2.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | mf2000_scan_marker_qc.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | annotate_mf2000_dotplot.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | mf2000_part3_fix_and_figures.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | mf2000_recluster_independent.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | mf2000_recluster_independent.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | mf2000_consistency_analysis.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | 01_export_for_scvi.R | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | env_diagnosis_python_kernel.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | locate_scvi_install_target.sh | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | install_scvi_tools.sh | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | diag_torch_torchvision_pair.sh | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | trace_import_chain_torchvision.sh | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | fix_torchvision_pair.sh | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | fix_torchvision_pair.sh | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | 02_scvi_train.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | 03_compare_eval.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | 03_compare_eval.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | 03_compare_eval.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | 05_robustness.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-24 | 06_final_verdict.py | - | - |  |
-| human | skeletal_muscle | exercise+aging | 2026-10-18 | check_annotation_levels.R | - | - |  |
-| human | skeletal_muscle | exercise+aging | 2026-10-18 | check_annotation_levels.R | - | - |  |
-| human | skeletal_muscle | exercise+aging | 2026-10-18 | meta_main_frequency_audit.sh | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | SampleA_load_inspect.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | recon_samplea.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | step1_clustering_multires.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | step2_umap_cluster_labels.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | cluster_resolution_compare_SampleA.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | cluster_resolution_compare_SampleA_final.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | step3_validation_scan.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | step3_validation_scan.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | step4_validation_figure.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | samplea_resolution_0.5_vs_1.2.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | samplea_scan_marker_qc.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | annotate_samplea_dotplot.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | samplea_part3_fix_and_figures.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | samplea_recluster_independent.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | samplea_recluster_independent.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | samplea_consistency_analysis.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | 01_export_for_scvi.R | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | env_diagnosis_python_kernel.py | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | locate_scvi_install_target.sh | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | install_scvi_tools.sh | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | diag_torch_torchvision_pair.sh | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | trace_import_chain_torchvision.sh | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | fix_torchvision_pair.sh | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | fix_torchvision_pair.sh | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | 02_scvi_train.py | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | 03_compare_eval.py | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | 03_compare_eval.py | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | 03_compare_eval.py | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | 05_robustness.py | - | - |  |
+| human | example_tissue | aging | 2026-09-24 | 06_final_verdict.py | - | - |  |
+| human | example_tissue | exercise+aging | 2026-10-18 | check_annotation_levels.R | - | - |  |
+| human | example_tissue | exercise+aging | 2026-10-18 | check_annotation_levels.R | - | - |  |
+| human | example_tissue | exercise+aging | 2026-10-18 | meta_main_frequency_audit.sh | - | - |  |
 ## Common Issues
 
 | Error | Cause | Solution |

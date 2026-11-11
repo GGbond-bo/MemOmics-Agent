@@ -346,6 +346,6 @@ flowchart LR — snRNA/snATAC各自链路 + 跨组学虚线桥接 + 整合节点
 
 | 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
 |------|------|------|------|------|------|------|----|
-| human | skeletal_muscle | aging | 2026-09-29 | DEG_research_plan_v1.md + plan_md_to_docx.py | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-29 | probe_python_docx_interpreters | - | - |  |
-| human | skeletal_muscle | aging | 2026-09-29 | plan_md_to_docx.py | - | - |  |
+| human | example_tissue | aging | 2026-09-29 | DEG_research_plan_v1.md + plan_md_to_docx.py | - | - |  |
+| human | example_tissue | aging | 2026-09-29 | probe_python_docx_interpreters | - | - |  |
+| human | example_tissue | aging | 2026-09-29 | plan_md_to_docx.py | - | - |  |

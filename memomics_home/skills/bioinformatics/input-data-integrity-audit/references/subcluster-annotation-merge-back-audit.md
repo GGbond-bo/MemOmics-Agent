@@ -1,6 +1,6 @@
 # 分层亚群注释打回主对象（L2 → L1）—— 打回前核查协议
 
-来源：2026-10-18 人示例组织 snRNA（主对象 604,244 细胞 + 6 个亚群对象），集群 node1 / R4.4.1_zb。
+来源：2026-10-18 人示例组织 snRNA（主对象 ≈60 万 细胞 + 6 个亚群对象），集群 node1 / R4.4.1_zb。
 本地产物：`results/<sid>/task2/L2_annotation_check_report.md`、`scripts/check_annotation_levels_v2.R`。
 
 ## 场景
@@ -60,7 +60,7 @@ l2_col <- list(MF="annotation_L2", MuSC="annotation_L2", EC="annotation",
 
 `Σ 各亚群细胞数 == 主对象总数 − 无 L2 来源的群`
 
-本次 603,817 = 604,244 − 427（Adipocyte）✅ 闭合。不闭合 → 有对象漏算，或用了不同版本子集。
+本次 603,817 = ≈60 万 − 427（Adipocyte）✅ 闭合。不闭合 → 有对象漏算，或用了不同版本子集。
 
 ## 关键坑
 
