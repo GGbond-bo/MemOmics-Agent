@@ -10166,14 +10166,6 @@ async def rename_results_dir(sid: str, body: dict = None):
     new_name = "_".join(parts) + "_" + short_id
     old_dir = _sessions[sid]["results_dir"]
     new_dir = os.path.join(RESULTS_DIR, new_name)
-    # Persist results_dir to state.db
-    try:
-        db = _get_session_db()
-        if db and hasattr(db, '_conn'):
-            db._conn.execute("UPDATE sessions SET cwd = ? WHERE id = ?", (new_dir, sid))
-            db._conn.commit()
-    except Exception:
-        pass
     
     # 问题3: 用户可指定 output_root（桌面等），同时 results/ 下保留备份
     output_root = body.get("output_root", "")  # 用户指定路径
@@ -10211,19 +10203,22 @@ async def rename_results_dir(sid: str, body: dict = None):
         except Exception:
             pass  # 备份失败不阻断主流程
     
-    # 同步更新会话标题 + 持久化 results_dir 到 state.db 的 cwd 字段
+    # results_dir 是会话可恢复的关键状态，独立于标题自动命名。即使用户
+    # 已经手动命名会话，仍必须写 cwd，不能因保留标题而丢失结果目录。
+    db = _get_session_db()
+    if db:
+        try:
+            db.update_session_cwd(sid, new_dir.replace("\\", "/"))
+        except Exception:
+            pass
+
+    # 自动生成的分析标题只在用户未手动命名时写入；由统一的事务助手保证
+    # title 和 title_source 同步，并向前端发送带 source 的事件。
     title_parts = [body.get(k, "") for k in ["species", "tissue", "direction"] if body.get(k)]
     if title_parts:
-        new_title = " ".join(title_parts)
-        _sessions[sid]["title"] = new_title
-        db = _get_session_db()
-        if db:
-            try:
-                db.set_session_title(sid, new_title)
-                # 把 results_dir 存到 cwd 字段，重启后可恢复
-                db.update_session_cwd(sid, new_dir.replace("\\", "/"))
-            except Exception:
-                pass
+        _set_session_title_with_source(
+            sid, " ".join(title_parts), "auto", allow_memory_fallback=True
+        )
     
     # 创建完整子目录结构（需求1d：分析log+辩证记录+运行记录强制保留）
     for sub in ["figures", "results", "scripts", "data", "log"]:
@@ -10287,17 +10282,224 @@ def _append_rename_event(sid, old_title, new_title, source="manual"):
 # 正在运行的自动标题总结线程（防重入：同一会话同时只跑一个）
 _title_summary_locks = set()
 
+# 标题同时被 WebSocket 首条消息、自动总结、结果目录命名和手动改名触发。
+# SessionDB 的事务可保护 SQLite，但内存中的 _sessions 还需要同一把按会话锁，
+# 否则慢速 LLM 返回可能在用户手动改名之后，把旧结果重新写回。
+# A fixed stripe pool avoids retaining a lock forever for every historical
+# session while still serializing all competing title writes for one sid.
+_TITLE_WRITE_LOCKS = tuple(_threading.RLock() for _ in range(64))
+
+
+def _title_write_lock(sid):
+    """返回 sid 对应的固定分片可重入锁；标题写入必须先取得它。"""
+    return _TITLE_WRITE_LOCKS[hash(str(sid)) % len(_TITLE_WRITE_LOCKS)]
+
+
+def _title_source_from_conn(conn, sid):
+    """在已有 DB 事务里读取标题来源，缺省为 auto。"""
+    row = conn.execute(
+        "SELECT value FROM kv WHERE key = ?", (f"title_source:{sid}",)
+    ).fetchone()
+    return row[0] if row and row[0] in ("auto", "manual") else "auto"
+
+
+def _manual_title_source_in_lineage(conn, db, sid):
+    """在已有 DB 上下文中检查 sid 及所有压缩续写祖先的手动命名。
+
+    不能只检查 root：用户可能在已压缩的中间 tip 手动改名，随后又继续压缩。
+    复用 SessionDB 的 compression-ancestor CTE 定义，避免把普通子代理或分支
+    错当作同一会话谱系。
+    """
+    # Keep this one recursive query aligned with SessionDB's
+    # _COMPRESSION_CHILD_SQL: only a child whose parent ended by compression
+    # participates in the continuation chain.  It includes sid itself, so an
+    # explicit manual marker on the current tip is caught too.
+    row = conn.execute(
+        """
+        WITH RECURSIVE ancestors(id) AS (
+            SELECT ?
+            UNION
+            SELECT parent.id
+            FROM ancestors a
+            JOIN sessions child ON child.id = a.id
+            JOIN sessions parent ON parent.id = child.parent_session_id
+            WHERE parent.end_reason = 'compression'
+        )
+        SELECT 1
+        FROM ancestors a
+        JOIN kv ON kv.key = ('title_source:' || a.id) AND kv.value = 'manual'
+        LIMIT 1
+        """,
+        (sid,),
+    ).fetchone()
+    return row is not None
+
+
+def _lineage_has_manual_title_source(sid):
+    """线程安全地查询完整压缩谱系是否已有手动标题来源。"""
+    db = _get_session_db()
+    if not db or not hasattr(db, "_conn"):
+        return _load_title_source(sid) == "manual"
+    try:
+        db_lock = getattr(db, "_lock", None)
+        if db_lock is None:
+            return _manual_title_source_in_lineage(db._conn, db, sid)
+        with db_lock:
+            return _manual_title_source_in_lineage(db._conn, db, sid)
+    except Exception:
+        return _load_title_source(sid) == "manual"
+
+
+def _set_session_title_with_source(sid, raw_title, source, *, allow_memory_fallback=False):
+    """原子写入会话标题和来源标记。
+
+    返回 ``{ok, title, source, blocked, error}``。手动改名必须成功落到
+    ``sessions`` 和 ``kv`` 同一事务后才更新内存；自动命名在数据库不可用时
+    可以静默保留旧的内存兼容行为，但绝不能越过已存在的 manual 标记。
+    """
+    if source not in ("auto", "manual"):
+        return {"ok": False, "title": None, "source": source, "blocked": False,
+                "error": "invalid title source"}
+
+    lock = _title_write_lock(sid)
+    with lock:
+        session = _sessions.get(sid)
+        if not session:
+            return {"ok": False, "title": None, "source": source, "blocked": False,
+                    "error": "session not found"}
+
+        db = _get_session_db()
+        try:
+            new_title = db.sanitize_title(raw_title) if db else str(raw_title or "").strip()
+        except ValueError as exc:
+            return {"ok": False, "title": None, "source": source, "blocked": False,
+                    "error": str(exc)}
+        if not new_title:
+            return {"ok": False, "title": None, "source": source, "blocked": False,
+                    "error": "名称无效（含非法字符）"}
+
+        # A manual name in memory is enough to stop automatic writers even
+        # before a legacy installation has a usable state.db.
+        if source == "auto" and session.get("title_source") == "manual":
+            return {"ok": False, "title": session.get("title"), "source": "manual",
+                    "blocked": True, "error": None}
+
+        if db and hasattr(db, "_execute_write") and hasattr(db, "_conn"):
+            try:
+                def _write(conn):
+                    if source == "auto":
+                        if _manual_title_source_in_lineage(conn, db, sid):
+                            # Persist the inherited guard on the current tip so
+                            # later checks remain O(1) after this first lookup.
+                            conn.execute(
+                                "INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)",
+                                (f"title_source:{sid}", "manual"),
+                            )
+                            return {"ok": False, "title": session.get("title"),
+                                    "source": "manual", "blocked": True, "error": None}
+
+                    # Preserve SessionDB's title uniqueness and compression-tip
+                    # transfer semantics while keeping this title + source write
+                    # within the same BEGIN IMMEDIATE transaction.
+                    conflict = conn.execute(
+                        "SELECT id FROM sessions WHERE title = ? AND id != ?",
+                        (new_title, sid),
+                    ).fetchone()
+                    final_title = new_title
+                    if conflict:
+                        conflict_id = conflict["id"]
+                        if db._is_compression_ancestor(
+                            conn, ancestor_id=conflict_id, descendant_id=sid
+                        ):
+                            conn.execute("UPDATE sessions SET title = NULL WHERE id = ?", (conflict_id,))
+                        elif source == "auto":
+                            # Auto titles should never interrupt a conversation
+                            # because an unrelated session has the same summary.
+                            base = re.sub(r" #\d+$", "", new_title)
+                            rows = conn.execute(
+                                "SELECT title FROM sessions WHERE title IS NOT NULL",
+                            ).fetchall()
+                            # Deliberately filter in Python rather than building
+                            # a SQL LIKE/GLOB pattern: session titles can contain
+                            # [, %, _, ?, or * and must be treated literally.
+                            used = {
+                                str(row[0]) for row in rows if row and row[0]
+                                and (str(row[0]) == base or str(row[0]).startswith(base + " #"))
+                            }
+                            n = 2
+                            final_title = f"{base} #{n}"
+                            while final_title in used:
+                                n += 1
+                                final_title = f"{base} #{n}"
+                        else:
+                            raise ValueError(
+                                f"Title '{new_title}' is already in use by session {conflict_id}"
+                            )
+
+                    cursor = conn.execute(
+                        "UPDATE sessions SET title = ? WHERE id = ?", (final_title, sid)
+                    )
+                    if not cursor.rowcount:
+                        return {"ok": False, "title": None, "source": source,
+                                "blocked": False, "error": "session not found"}
+                    conn.execute(
+                        "INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)",
+                        (f"title_source:{sid}", source),
+                    )
+                    return {"ok": True, "title": final_title, "source": source,
+                            "blocked": False, "error": None}
+
+                result = db._execute_write(_write)
+            except ValueError:
+                return {"ok": False, "title": None, "source": source, "blocked": False,
+                        "error": "该名称已被其他会话使用，请换一个"}
+            except Exception as exc:
+                return {"ok": False, "title": None, "source": source, "blocked": False,
+                        "error": f"写入失败: {exc}"}
+        elif source == "manual" or not allow_memory_fallback:
+            # A manual rename reported to the UI must survive restart.  Do not
+            # mutate the in-memory projection when its canonical write failed.
+            return {"ok": False, "title": None, "source": source, "blocked": False,
+                    "error": "会话数据库不可用，未修改名称"}
+        else:
+            # Older recovery paths can temporarily run without SessionDB. Keep
+            # auto naming non-fatal, but still make its source explicit.
+            if source == "auto" and _lineage_has_manual_title_source(sid):
+                return {"ok": False, "title": session.get("title"), "source": "manual",
+                        "blocked": True, "error": None}
+            result = {"ok": True, "title": new_title, "source": source,
+                      "blocked": False, "error": None}
+
+        if not result.get("ok"):
+            if result.get("blocked"):
+                session["title_source"] = "manual"
+            return result
+
+        old_title = session.get("title")
+        session["title"] = result["title"]
+        session["title_source"] = result["source"]
+        _sync_meta_display_name(session, result["title"])
+        _append_rename_event(sid, old_title, result["title"], source=result["source"])
+        _session_emit(session, {
+            "type": "session_title",
+            "title": result["title"],
+            "session_id": sid,
+            "source": result["source"],
+        })
+        return result
+
 
 def _persist_title_source(sid, source):
     """持久化标题来源标记（auto/manual）到 state.db kv 表。"""
     try:
         db = _get_session_db()
-        if db and hasattr(db, "_conn"):
-            db._conn.execute(
-                "INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)",
-                (f"title_source:{sid}", source),
-            )
-            db._conn.commit()
+        if db and hasattr(db, "_execute_write"):
+            def _write(conn):
+                conn.execute(
+                    "INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)",
+                    (f"title_source:{sid}", source),
+                )
+            db._execute_write(_write)
     except Exception:
         pass
 
@@ -10307,9 +10509,16 @@ def _load_title_source(sid):
     try:
         db = _get_session_db()
         if db and hasattr(db, "_conn"):
-            row = db._conn.execute(
-                "SELECT value FROM kv WHERE key = ?", (f"title_source:{sid}",)
-            ).fetchone()
+            db_lock = getattr(db, "_lock", None)
+            if db_lock is None:
+                row = db._conn.execute(
+                    "SELECT value FROM kv WHERE key = ?", (f"title_source:{sid}",)
+                ).fetchone()
+            else:
+                with db_lock:
+                    row = db._conn.execute(
+                        "SELECT value FROM kv WHERE key = ?", (f"title_source:{sid}",)
+                    ).fetchone()
             if row and row[0] in ("auto", "manual"):
                 return row[0]
     except Exception:
@@ -10328,7 +10537,7 @@ def _resolve_title_source(sid, lineage_root_id=""):
     if src == "manual":
         return src
     try:
-        if lineage_root_id and lineage_root_id != sid and _load_title_source(lineage_root_id) == "manual":
+        if _lineage_has_manual_title_source(sid):
             _persist_title_source(sid, "manual")  # 继承并落库，防后续自动覆盖
             return "manual"
     except Exception:
@@ -10343,24 +10552,25 @@ def _schedule_title_summary(sid):
     实际总结在后台线程执行，不阻塞消息响应。
     """
     try:
-        s = _sessions.get(sid)
-        if not s:
-            return
-        if s.get("title_source") == "manual":
-            return  # 用户手动改过名 → 尊重用户，永不自动覆盖
-        # 2026-10-27：压缩链上的手动改名同样生效（标记可能只落在根会话上）
-        _root_tid = s.get("_lineage_root_id")
-        if _root_tid and _root_tid != sid and _load_title_source(_root_tid) == "manual":
-            s["title_source"] = "manual"
-            _persist_title_source(sid, "manual")
-            return
-        if sid in _title_summary_locks:
-            return  # 已有总结线程在跑
-        # 防抖：距上次总结至少新增 4 条用户消息
-        user_msgs = [m for m in s.get("messages", []) if m.get("role") in ("user", "human")]
-        if len(user_msgs) - int(s.get("_title_summary_at_msg", 0)) < 4:
-            return
-        _title_summary_locks.add(sid)
+        with _title_write_lock(sid):
+            s = _sessions.get(sid)
+            if not s:
+                return
+            if s.get("title_source") == "manual" or _load_title_source(sid) == "manual":
+                s["title_source"] = "manual"
+                return  # 用户手动改过名 → 尊重用户，永不自动覆盖
+            # 中间压缩 tip 也可能是用户手动改名的位置，不能只看 root。
+            if _lineage_has_manual_title_source(sid):
+                s["title_source"] = "manual"
+                _persist_title_source(sid, "manual")
+                return
+            if sid in _title_summary_locks:
+                return  # 已有总结线程在跑
+            # 防抖：距上次总结至少新增 4 条用户消息
+            user_msgs = [m for m in s.get("messages", []) if m.get("role") in ("user", "human")]
+            if len(user_msgs) - int(s.get("_title_summary_at_msg", 0)) < 4:
+                return
+            _title_summary_locks.add(sid)
         _threading.Thread(target=_auto_summarize_title, args=(sid,), daemon=True).start()
     except Exception:
         pass
@@ -10375,19 +10585,23 @@ def _auto_summarize_title(sid):
     """
     try:
         import httpx
-        s = _sessions.get(sid)
-        if not s or s.get("title_source") == "manual":
-            return
-        # 收集用户消息（最多 20 条，每条截 120 字）
-        msgs = [
-            (m.get("content") or m.get("text") or "").replace("\n", " ").strip()
-            for m in s.get("messages", [])
-            if m.get("role") in ("user", "human") and (m.get("content") or m.get("text") or "").strip()
-        ][-20:]
+        # Snapshot only the inputs for the slow network call.  Do not keep the
+        # title lock while waiting for an LLM response.
+        with _title_write_lock(sid):
+            s = _sessions.get(sid)
+            if not s or s.get("title_source") == "manual" or _load_title_source(sid) == "manual":
+                return
+            if _lineage_has_manual_title_source(sid):
+                s["title_source"] = "manual"
+                return
+            msgs = [
+                (m.get("content") or m.get("text") or "").replace("\n", " ").strip()
+                for m in s.get("messages", [])
+                if m.get("role") in ("user", "human") and (m.get("content") or m.get("text") or "").strip()
+            ][-20:]
+            cfg = dict(s.get("model_config") or _current_model or {})
         if len(msgs) < 4:
             return  # 消息太少，总结没有意义
-        # 模型配置：会话级优先，全局兜底
-        cfg = s.get("model_config") or _current_model
         base_url = str(cfg.get("base_url", "")).rstrip("/")
         if not base_url or not cfg.get("api_key") or not cfg.get("model"):
             return
@@ -10421,42 +10635,28 @@ def _auto_summarize_title(sid):
         title = (title or "")[:30].strip()
         if len(title) < 2:
             return  # 输出无效，静默放弃
-        if title == s.get("title"):
-            return  # 与现名相同，不写
-        # 2026-10-27：LLM 总结期间用户可能刚改过名（或链上手改过，标记在根上）→ 放弃写回
-        if s.get("title_source") == "manual" or _load_title_source(sid) == "manual":
-            return
-        _root_tid2 = s.get("_lineage_root_id")
-        if _root_tid2 and _root_tid2 != sid and _load_title_source(_root_tid2) == "manual":
-            return
-        # 写回 state.db（title 唯一约束：撞名 → 自动续号 "xxx #2"）
-        new_title = title
-        db = _get_session_db()
-        if db:
-            try:
-                db.set_session_title(sid, title)
-            except ValueError:
-                try:
-                    new_title = db.get_next_title_in_lineage(title)
-                    db.set_session_title(sid, new_title)
-                except Exception:
-                    return
-            except Exception:
+
+        # Reacquire after the LLM call.  The sid may have been deleted/reused;
+        # only the exact session object that supplied the prompt may be updated.
+        with _title_write_lock(sid):
+            if _sessions.get(sid) is not s:
                 return
-        old_title = s.get("title")
-        s["title"] = new_title
-        s["title_source"] = "auto"
-        s["_title_summary_at_msg"] = len(
-            [m for m in s.get("messages", []) if m.get("role") in ("user", "human")]
-        )
-        _sync_meta_display_name(s, new_title)
-        _append_rename_event(sid, old_title, new_title, source="auto")
-        _session_emit(s, {"type": "session_title", "title": new_title, "session_id": sid})
-        logger.info(f"Session {sid}: auto title '{old_title}' -> '{new_title}'")
+            if title == s.get("title"):
+                return
+            result = _set_session_title_with_source(
+                sid, title, "auto", allow_memory_fallback=True
+            )
+            if not result.get("ok"):
+                return
+            s["_title_summary_at_msg"] = len(
+                [m for m in s.get("messages", []) if m.get("role") in ("user", "human")]
+            )
+            logger.info("Session %s: automatic title -> '%s'", sid, result["title"])
     except Exception as e:
         logger.debug(f"Session {sid}: auto title summary skipped: {e}")
     finally:
-        _title_summary_locks.discard(sid)
+        with _title_write_lock(sid):
+            _title_summary_locks.discard(sid)
 
 
 @app.post("/api/sessions/{sid}/rename")
@@ -10473,25 +10673,16 @@ async def rename_session(sid: str, body: dict = None):
     raw = (body.get("title") or "").strip()
     if not raw:
         return {"ok": False, "error": "名称不能为空"}
-    db = _get_session_db()
-    try:
-        new_title = db.sanitize_title(raw) if db else raw
-        if not new_title:
-            return {"ok": False, "error": "名称无效（含非法字符）"}
-        if db:
-            # title 在 sessions 表有唯一约束，同名抛 ValueError
-            db.set_session_title(sid, new_title)
-    except ValueError:
-        return {"ok": False, "error": "该名称已被其他会话使用，请换一个"}
-    except Exception as e:
-        return {"ok": False, "error": f"写入失败: {e}"}
-    old_title = _sessions[sid].get("title")
-    _sessions[sid]["title"] = new_title
-    _sessions[sid]["title_source"] = "manual"  # 用户手动改名 → 自动总结永不覆盖
-    _persist_title_source(sid, "manual")
-    _sync_meta_display_name(_sessions[sid], new_title)
-    _append_rename_event(sid, old_title, new_title, source="manual")
-    return {"ok": True, "title": new_title, "session_id": sid}
+    result = _set_session_title_with_source(sid, raw, "manual")
+    if not result.get("ok"):
+        return {"ok": False, "error": result.get("error") or "写入失败"}
+    return {
+        "ok": True,
+        "title": result["title"],
+        "session_id": sid,
+        "title_source": "manual",
+        "source": "manual",
+    }
 
 
 def _session_display_stats(sid, start_ua=0):
@@ -16843,13 +17034,12 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
     phone_icon = "\U0001f4f1"
     if session.get("title", "").startswith(phone_icon) and len(session["messages"]) <= 2:
         short_text = text[:30].replace("\n", " ").strip()
-        session["title"] = f"{phone_icon} {datetime.now().strftime('%m-%d')} {sender_name}: {short_text}"
-        try:
-            db = _get_session_db()
-            if db and hasattr(db, "set_session_title"):
-                db.set_session_title(sid, session["title"])
-        except Exception:
-            pass
+        _set_session_title_with_source(
+            sid,
+            f"{phone_icon} {datetime.now().strftime('%m-%d')} {sender_name}: {short_text}",
+            "auto",
+            allow_memory_fallback=True,
+        )
 
     # 标记会话为运行状态
     session["running_agent"] = True
@@ -22483,19 +22673,12 @@ async def ws_endpoint(ws: WebSocket):
                 await ws.send_text(json.dumps({"type": "progress", "step": _pt(session, "thinking"), "status": "pending", "detail": _pt(session, "understanding"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False))
 
                 # 如果是第一条消息, 更新标题（自动命名：同名自动续号 "xxx #2"，
-                # 避免 set_session_title 唯一约束抛 ValueError 被吞导致仍叫"新会话"）
+                # 统一走来源感知的写入：用户若已经手动改名，不能被这里覆盖。）
                 if len(session["messages"]) == 1:
                     base_title = user_text[:30]
-                    db = _get_session_db()
-                    if db:
-                        try:
-                            next_title = db.get_next_title_in_lineage(base_title)
-                            db.set_session_title(session["id"], next_title)
-                            session["title"] = next_title
-                        except Exception:
-                            pass
-                    else:
-                        session["title"] = base_title
+                    _set_session_title_with_source(
+                        session["id"], base_title, "auto", allow_memory_fallback=True
+                    )
                 
                 # 自动标题总结：每 5 条用户消息触发一次（内容感知，后台异步，不阻塞）
                 _user_msg_count = sum(1 for m in session["messages"] if m.get("role") in ("user", "human"))

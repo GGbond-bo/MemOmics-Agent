@@ -768,8 +768,9 @@ table.dcb-table td.seat { background:var(--tool-bg); font-weight:600; width:98px
 /* === 会话问题导航：左侧刻度只对应用户提问，消息区仍是唯一滚动容器 === */
 /* 视觉刻度故意不显示编号；原生 title/ARIA 保留编号和摘要，便于鼠标和读屏器使用。 */
 #turn-nav { flex:0 0 30px; min-height:0; overflow:visible; padding:14px 3px; box-sizing:border-box; display:flex; align-items:center; justify-content:center; }
-#turn-nav-list { display:flex; flex-direction:column; align-items:center; gap:8px; min-height:0; max-height:100%; flex-shrink:0; overflow-y:auto; overflow-x:visible; overscroll-behavior:contain; margin:auto 0; padding:4px 0; }
-.turn-nav-tick, .turn-nav-more { position:relative; box-sizing:border-box; cursor:pointer; text-align:center; }
+#turn-nav-rail { position:relative; display:flex; flex:0 1 auto; flex-direction:column; align-items:center; min-height:0; max-height:100%; margin:auto 0; padding-top:26px; }
+#turn-nav-list { display:flex; flex:0 1 auto; flex-direction:column; align-items:center; gap:8px; min-height:0; max-height:calc(100% - 26px); overflow-y:auto; overflow-x:visible; overscroll-behavior:contain; margin:0; padding:4px 0; }
+.turn-nav-tick, .turn-nav-menu-toggle { position:relative; box-sizing:border-box; cursor:pointer; text-align:center; }
 .turn-nav-tick { width:10px; height:3px; min-height:3px; padding:0; border:0; border-radius:999px; background:color-mix(in srgb,var(--text-light) 56%,transparent); color:transparent; font-size:0; line-height:0; transition:width 180ms ease,background 180ms ease,box-shadow 180ms ease,transform 180ms ease; }
 .turn-nav-tick:hover, .turn-nav-tick:focus-visible, .turn-nav-tick.active { width:22px; background:var(--primary); box-shadow:0 0 9px color-mix(in srgb,var(--primary) 52%,transparent); transform:translateX(1px); }
 .turn-nav-tick:focus-visible { outline:2px solid color-mix(in srgb,var(--primary) 70%,white); outline-offset:3px; }
@@ -778,8 +779,21 @@ table.dcb-table td.seat { background:var(--tool-bg); font-weight:600; width:98px
 /* Custom hover text is best-effort: long rails scroll inside their own list,
    so the browser-native title remains the non-clipped fallback. */
 .turn-nav-tick:hover::after, .turn-nav-tick:focus-visible::after { content:attr(data-summary); position:absolute; z-index:80; left:27px; top:50%; transform:translateY(-50%); width:min(280px,34vw); padding:6px 8px; border:1px solid var(--border); border-radius:7px; background:var(--panel); color:var(--text); box-shadow:0 5px 18px rgba(0,0,0,.22); font:12px/1.4 system-ui,sans-serif; text-align:left; white-space:normal; overflow-wrap:anywhere; pointer-events:none; }
-.turn-nav-more { width:16px; height:16px; padding:0; border:1px solid var(--border); border-radius:5px; background:var(--panel); color:var(--text-light); line-height:12px; font-size:13px; }
-.turn-nav-more:hover { color:var(--primary); border-color:var(--primary); }
+#turn-nav-menu-toggle { position:absolute; z-index:2; top:0; width:18px; height:18px; padding:0; border:1px solid var(--border); border-radius:5px; background:var(--panel); color:var(--text-light); line-height:13px; font-size:14px; }
+#turn-nav-menu-toggle:hover, #turn-nav-menu-toggle[aria-expanded="true"] { color:var(--primary); border-color:var(--primary); background:color-mix(in srgb,var(--primary) 8%,var(--panel)); }
+#turn-nav-menu-toggle:focus-visible { outline:2px solid color-mix(in srgb,var(--primary) 70%,white); outline-offset:2px; }
+#turn-nav-popover { position:absolute; z-index:160; top:0; left:calc(100% + 7px); width:min(360px,calc(100vw - 72px)); max-height:min(480px,calc(100vh - 28px)); box-sizing:border-box; display:flex; flex-direction:column; border:1px solid var(--border); border-radius:10px; background:var(--panel); color:var(--text); box-shadow:0 12px 30px rgba(0,0,0,.28); overflow:hidden; }
+#turn-nav-popover[hidden] { display:none; }
+.turn-nav-popover-head { display:flex; align-items:center; gap:8px; padding:9px 10px 7px; border-bottom:1px solid var(--border); font-size:12px; }
+.turn-nav-popover-head strong { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.turn-nav-popover-close { margin-left:auto; width:22px; height:22px; padding:0; border:0; border-radius:5px; background:transparent; color:var(--text-light); cursor:pointer; font-size:17px; line-height:20px; }
+.turn-nav-popover-close:hover, .turn-nav-popover-close:focus-visible { color:var(--primary); background:color-mix(in srgb,var(--primary) 9%,transparent); }
+#turn-nav-popover-list { min-height:0; overflow:auto; overscroll-behavior:contain; padding:5px; }
+.turn-nav-popover-item { display:block; width:100%; padding:7px 8px; border:0; border-radius:6px; background:transparent; color:var(--text); cursor:pointer; font:12px/1.45 system-ui,sans-serif; text-align:left; overflow-wrap:anywhere; }
+.turn-nav-popover-item:hover, .turn-nav-popover-item:focus-visible, .turn-nav-popover-item.active { background:color-mix(in srgb,var(--primary) 12%,transparent); color:var(--text); }
+.turn-nav-popover-item.active { border-left:2px solid var(--primary); padding-left:6px; }
+.turn-nav-popover-status { padding:11px 8px; color:var(--text-light); font-size:12px; line-height:1.45; }
+.turn-nav-popover-status button { margin-top:7px; border:1px solid var(--border); border-radius:5px; background:var(--panel); color:var(--primary); cursor:pointer; font:12px system-ui,sans-serif; padding:4px 7px; }
 @keyframes turnTickPulse { 0% { box-shadow:0 0 0 0 color-mix(in srgb,var(--primary) 55%,transparent); } 100% { box-shadow:0 0 0 7px transparent; } }
 @keyframes turnTickStream { 0%,100% { opacity:1; box-shadow:0 0 6px color-mix(in srgb,var(--primary) 38%,transparent); } 50% { opacity:.82; box-shadow:0 0 11px color-mix(in srgb,var(--primary) 58%,transparent); } }
 @media (prefers-reduced-motion:reduce) { .turn-nav-tick { transition:none; } .turn-nav-tick.active,.turn-nav-tick.active.streaming,.message.turn-flash .bubble { animation:none; } }
@@ -3677,7 +3691,14 @@ document.addEventListener('DOMContentLoaded', applyUILang);
     </div>
     <div class="chat-history-shell">
       <nav id="turn-nav" aria-label="Question navigation" title="问题导航：每个刻度对应一条用户提问">
-        <div id="turn-nav-list"></div>
+        <div id="turn-nav-rail">
+          <button id="turn-nav-menu-toggle" type="button" aria-label="查看提问记录" title="查看提问记录" aria-controls="turn-nav-popover" aria-expanded="false">…</button>
+          <div id="turn-nav-list"></div>
+          <section id="turn-nav-popover" role="dialog" aria-modal="false" aria-label="提问记录" hidden>
+            <div class="turn-nav-popover-head"><strong id="turn-nav-popover-title">提问记录</strong><button id="turn-nav-popover-close" class="turn-nav-popover-close" type="button" aria-label="关闭">×</button></div>
+            <div id="turn-nav-popover-list" role="listbox" aria-label="按顺序的提问记录"></div>
+          </section>
+        </div>
       </nav>
       <div class="chat-messages" id="messages">
         <!-- 欢迎画面由 newSession() 动态生成；导航刻度在 #messages 外，因此不会进入会话快照 -->
@@ -4472,6 +4493,20 @@ let _resultsRefreshTimer = null; // 任务结束后的补刷定时器
 let _newSessionPromise = null;   // 同一浏览器只允许一个建会话请求在途
 let _newSessionPromiseProjectId = null;
 let _sessionTransitioning = false;
+// A successful local rename must survive an automatic-title websocket event
+// that was already in flight.  This is an in-tab UI guard; state.db remains
+// the canonical source after the next list refresh.
+var _manualSessionTitleIds = Object.create(null);
+function _acceptIncomingSessionTitle(sid, source, title) {
+  var id = String(sid || '');
+  var normalizedSource = String(source || '').toLowerCase();
+  var hasManualTitle = Object.prototype.hasOwnProperty.call(_manualSessionTitleIds, id);
+  // Older servers did not send `source`; while this tab has a confirmed
+  // manual rename, treat an unmarked title event as automatic too.
+  if (hasManualTitle && normalizedSource !== 'manual') return false;
+  if (normalizedSource === 'manual' && title) _manualSessionTitleIds[id] = title;
+  return true;
+}
 const _sessionScopedEventTypes = new Set([
   'thinking', 'progress', 'progress_replay', 'reasoning', 'delta',
   'agent_running', 'complete', 'cancelled', 'tool_start', 'tool_complete',
@@ -4566,9 +4601,15 @@ function handleMessage(msg) {
   // in the list/cache and refresh the badge/list only.
   if (msg.type === 'session_update' && msg.session_id) {
     var updated = false;
+    var updateTitleSource = String(msg.title_source || msg.source || '').toLowerCase();
+    var acceptUpdateTitle = _acceptIncomingSessionTitle(msg.session_id, updateTitleSource, msg.title);
     for (var ui = 0; ui < _allSessions.length; ui++) {
       if (_allSessions[ui].id !== msg.session_id) continue;
       ['is_running', 'bg_running', 'last_active', 'title', 'msg_count'].forEach(function(field) {
+        // A delayed automatic projection from before the user renamed this
+        // chat must not repaint the manual title while the authoritative
+        // request is settling.  A manual event is allowed through.
+        if (field === 'title' && !acceptUpdateTitle) return;
         if (Object.prototype.hasOwnProperty.call(msg, field)) _allSessions[ui][field] = msg[field];
       });
       if (msg.error || msg.last_error) _allSessions[ui].last_error = msg.error || msg.last_error;
@@ -4581,6 +4622,9 @@ function handleMessage(msg) {
   }
   // 自动总结出的会话标题（后台线程完成，异步刷新列表 + 当前标题）
   if (msg.type === 'session_title' && msg.session_id) {
+    var titleSid = String(msg.session_id);
+    var titleSource = String(msg.source || msg.title_source || '').toLowerCase();
+    if (!_acceptIncomingSessionTitle(titleSid, titleSource, msg.title)) return;
     var found = false;
     for (var i = 0; i < _allSessions.length; i++) {
       if (_allSessions[i].id === msg.session_id) {
@@ -4589,6 +4633,7 @@ function handleMessage(msg) {
         break;
       }
     }
+    if (found) { _lastSessionFingerprint = ''; renderSessionList(_allSessions); }
     if (!window._sessionTitleTimer) {
       updateSessionList();
       window._sessionTitleTimer = setTimeout(function() { window._sessionTitleTimer = null; }, 3000);
@@ -9898,6 +9943,7 @@ function renameSession(sid) {
       for (var i = 0; i < _allSessions.length; i++) {
         if (_allSessions[i].id === sid) { _allSessions[i].title = res.d.title; break; }
       }
+      _manualSessionTitleIds[String(sid)] = res.d.title;
       if (typeof window._mmSessionListMutated === 'function') window._mmSessionListMutated();
       _lastSessionFingerprint = '';
       renderSessionList(_allSessions);
@@ -10031,22 +10077,43 @@ function _renderHistoryFlow(msgs) {
 }
 
 function loadAllMessages(sid) {
-  fetch('/api/sessions/' + sid + '/messages?limit=0').then(r => r.json()).then(d => {
-    if (currentSid !== sid) return;  // 加载期间用户已切走，丢弃
+  // Keep the view generation as well as the sid.  A → B → A while this
+  // request is in flight must not let the first A response replace the newer
+  // A view.  The receipt is also consumed by the question-record popover.
+  var targetSid = String(sid || '');
+  if (!targetSid) return Promise.resolve({ ok: false, applied: false, error: 'missing session id' });
+  var viewEpoch = (typeof _outlineViewEpoch === 'number') ? _outlineViewEpoch : null;
+  return fetch('/api/sessions/' + encodeURIComponent(targetSid) + '/messages?limit=0').then(function(response) {
+    if (!response || !response.ok) throw new Error('HTTP ' + ((response && response.status) || 'error'));
+    return response.json();
+  }).then(function(d) {
+    if (String(currentSid || '') !== targetSid || (viewEpoch !== null && viewEpoch !== _outlineViewEpoch)) {
+      return { ok: false, applied: false, stale: true, session_id: targetSid };
+    }
+    // The request may have started while idle and completed after a new live
+    // answer began.  Replacing #messages at that point would discard the
+    // in-progress client bubble, so leave the visible stream untouched.
+    if (typeof _turnPopoverIsStreaming === 'function' && _turnPopoverIsStreaming(targetSid)) {
+      try { if (typeof addStatusNotice === 'function') addStatusNotice('当前回答仍在生成；结束后可加载完整历史。'); } catch (ignored) {}
+      return { ok: false, applied: false, streaming: true, session_id: targetSid };
+    }
     document.getElementById('messages').innerHTML = '';
-    _debateKeys[sid] = {};   // 全部消息加载后，卡片重新按真实位置插入
+    _debateKeys[targetSid] = {};   // 全部消息加载后，卡片重新按真实位置插入
     // 2026-10-07: 历史回放也走「同轮合并」渲染（与实时流一致，不再一轮拆成多气泡）
     var msgEls = _renderHistoryFlow(d.messages || []);
     renderSessionStats(d.stats);
     if (typeof _outlineDirty === 'function') _outlineDirty();
     // 2026-09-18: 「加载全部消息」→ 每场辩论插回它发生的位置（全部加载时 offset=0）
     _lastDebateSig = '';
-    loadDebateTimeline(sid, msgEls, (typeof d.shown_offset === 'number' ? d.shown_offset : 0), true).then(function () {
+    Promise.resolve(loadDebateTimeline(targetSid, msgEls, (typeof d.shown_offset === 'number' ? d.shown_offset : 0), true)).then(function () {
       if (!_dcbFocusKey) return;
       var el = document.querySelector('.dcb-wrap[data-key="' + _dcbFocusKey + '"]');
       _dcbFocusKey = null;
       if (el) el.scrollIntoView({ block: 'center' });
-    });
+    }).catch(function () {});
+    return { ok: true, applied: true, session_id: targetSid, messages: d.messages || [] };
+  }).catch(function(error) {
+    return { ok: false, applied: false, session_id: targetSid, error: String((error && error.message) || error || 'load failed') };
   });
 }
 
@@ -19079,6 +19146,11 @@ var _outlineTimer = null;
 var _outlineScrollFrame = 0;
 var _outlineViewEpoch = 0;
 var _turnRailStreaming = false;
+// The question-record popover is deliberately outside #messages, so it is
+// never included in a session snapshot.  `epoch` is required in addition to
+// `sid`: a user can leave a session and return before an older HTTP response
+// has finished.
+var _turnPopover = { open: false, sid: '', epoch: -1, turns: null, complete: false, requestId: 0 };
 
 function _turnOf(el) {
   var t = el && el.getAttribute ? parseInt(el.getAttribute('data-turn'), 10) : NaN;
@@ -19118,6 +19190,7 @@ function _outlineDirty() {
 }
 
 function _resetConversationRail(sid) {
+  _closeTurnPopover(false, true);
   _outlineViewEpoch++;
   if (_outlineTimer) { clearTimeout(_outlineTimer); _outlineTimer = null; }
   _turnSeq = 0;
@@ -19160,6 +19233,255 @@ function _turnRailTitle(turn, summary) {
   return (english ? ('Question ' + turn + ': ') : ('第' + turn + '问：')) + summary;
 }
 
+function _turnPopoverEnglish() {
+  return document.documentElement && String(document.documentElement.lang || '').toLowerCase().indexOf('en') === 0;
+}
+
+function _turnPopoverEls() {
+  return {
+    toggle: document.getElementById('turn-nav-menu-toggle'),
+    panel: document.getElementById('turn-nav-popover'),
+    title: document.getElementById('turn-nav-popover-title'),
+    list: document.getElementById('turn-nav-popover-list')
+  };
+}
+
+function _positionTurnPopover() {
+  var els = _turnPopoverEls();
+  var nav = document.getElementById('turn-nav');
+  if (!els.panel || !els.toggle || !nav || !els.panel.style || !nav.getBoundingClientRect || !els.toggle.getBoundingClientRect) return;
+  var navRect = nav.getBoundingClientRect();
+  var toggleRect = els.toggle.getBoundingClientRect();
+  var available = Math.floor(Number(navRect.bottom) - Number(toggleRect.top) - 6);
+  // The rail itself is inside the chat-history shell.  Constrain the popup to
+  // its remaining visible height instead of allowing a long record to spill
+  // past the chat area.
+  if (isFinite(available) && available > 0) els.panel.style.maxHeight = Math.max(110, Math.min(480, available)) + 'px';
+}
+
+function _turnPopoverIsCurrent(sid, epoch) {
+  return _turnPopover.open && _turnPopover.sid === String(sid || '') &&
+    _turnPopover.epoch === epoch && String(currentSid || '') === String(sid || '') &&
+    _outlineViewEpoch === epoch;
+}
+
+function _turnPopoverNodeContains(root, node) {
+  while (node) {
+    if (node === root) return true;
+    node = node.parentNode;
+  }
+  return false;
+}
+
+function _turnPopoverLocalTurns() {
+  return _outlineTurns().map(function(item) {
+    var summary = _bubbleText(item.el) || (_turnPopoverEnglish() ? '(no text)' : '（无文字）');
+    if (summary.length > 180) summary = summary.slice(0, 180) + '…';
+    return { turn: item.turn, summary: summary };
+  });
+}
+
+function _turnPopoverMessageTurns(messages) {
+  var byTurn = {}, turns = [];
+  (messages || []).forEach(function(message) {
+    if (!message || String(message.role || '') !== 'user') return;
+    if (typeof _isInjectMsg === 'function' && _isInjectMsg(message)) return;
+    var turn = parseInt(message.turn, 10);
+    if (!turn || turn < 1 || byTurn[turn]) return;
+    var summary = String(message.content == null ? (message.text || '') : message.content).replace(/\s+/g, ' ').trim();
+    if (!summary) summary = _turnPopoverEnglish() ? '(no text)' : '（无文字）';
+    if (summary.length > 180) summary = summary.slice(0, 180) + '…';
+    byTurn[turn] = { turn: turn, summary: summary };
+    turns.push(byTurn[turn]);
+  });
+  turns.sort(function(a, b) { return a.turn - b.turn; });
+  return turns;
+}
+
+function _turnPopoverMergeTurns(remoteTurns, localTurns) {
+  var byTurn = {}, turns = [];
+  function put(item) {
+    if (!item || !item.turn || item.turn < 1) return;
+    if (!byTurn[item.turn]) { byTurn[item.turn] = { turn: item.turn, summary: item.summary || '' }; turns.push(byTurn[item.turn]); }
+    else if (item.summary) byTurn[item.turn].summary = item.summary;
+  }
+  (remoteTurns || []).forEach(put);
+  // Only use this when both sources use the same absolute turn space.  A
+  // paged /messages reply starts its displayed turns at 1, so a complete
+  // history reply must never be merged with a paged DOM (see fetch below).
+  (localTurns || []).forEach(put);
+  turns.sort(function(a, b) { return a.turn - b.turn; });
+  return turns;
+}
+
+function _turnPopoverShowStatus(text, retry) {
+  var els = _turnPopoverEls();
+  if (!els.list) return;
+  els.list.innerHTML = '';
+  var status = document.createElement('div');
+  status.className = 'turn-nav-popover-status';
+  status.textContent = text;
+  if (typeof retry === 'function') {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = _turnPopoverEnglish() ? 'Retry' : '重试';
+    button.onclick = retry;
+    status.appendChild(button);
+  }
+  els.list.appendChild(status);
+}
+
+function _markActiveTurnPopover() {
+  if (!_turnPopover.open) return;
+  var els = _turnPopoverEls();
+  if (!els.list) return;
+  var rows = els.list.querySelectorAll('.turn-nav-popover-item');
+  // A paged DOM labels its visible questions 1..K even when the full record
+  // has hundreds of earlier turns.  Until that DOM is hydrated, no relative
+  // current marker is safer than highlighting the wrong absolute question.
+  var canMapCurrent = !(_turnPopover.complete && _turnPopoverHasEarlierMessages());
+  for (var i = 0; i < rows.length; i++) {
+    var on = canMapCurrent && parseInt(rows[i].getAttribute('data-turn'), 10) === _activeTurn;
+    rows[i].classList.toggle('active', on);
+    rows[i].setAttribute('aria-current', on ? 'true' : 'false');
+    if (on) {
+      var top = rows[i].offsetTop, h = els.list.clientHeight;
+      if (top < els.list.scrollTop || top > els.list.scrollTop + h - 28) els.list.scrollTop = Math.max(0, top - h / 2);
+    }
+  }
+}
+
+function _renderTurnPopover(sid, epoch, turns, focusCurrent) {
+  if (!_turnPopoverIsCurrent(sid, epoch)) return;
+  var els = _turnPopoverEls();
+  if (!els.list) return;
+  if (els.title) els.title.textContent = _turnPopoverEnglish() ? 'Question record' : '提问记录';
+  els.list.innerHTML = '';
+  if (!turns || !turns.length) {
+    _turnPopoverShowStatus(_turnPopoverEnglish() ? 'No questions in this session yet.' : '本会话还没有提问。');
+    return;
+  }
+  turns.forEach(function(item) {
+    var row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'turn-nav-popover-item';
+    row.setAttribute('data-turn', String(item.turn));
+    row.setAttribute('role', 'option');
+    row.textContent = String(item.turn) + '. ' + (item.summary || (_turnPopoverEnglish() ? '(no text)' : '（无文字）'));
+    row.title = _turnRailTitle(item.turn, item.summary || '');
+    row.onclick = function() { _jumpFromTurnPopover(item.turn, sid, epoch); };
+    els.list.appendChild(row);
+  });
+  _markActiveTurnPopover();
+  if (focusCurrent) {
+    var target = els.list.querySelector('.turn-nav-popover-item.active') || els.list.querySelector('.turn-nav-popover-item');
+    if (target && typeof target.focus === 'function') target.focus();
+  }
+}
+
+function _closeTurnPopover(restoreFocus, clear) {
+  _turnPopover.requestId++;
+  _turnPopover.open = false;
+  _turnPopover.sid = '';
+  _turnPopover.epoch = -1;
+  _turnPopover.turns = null;
+  _turnPopover.complete = false;
+  var els = _turnPopoverEls();
+  if (els.panel) els.panel.hidden = true;
+  if (els.toggle) els.toggle.setAttribute('aria-expanded', 'false');
+  if (clear && els.list) els.list.innerHTML = '';
+  if (restoreFocus && els.toggle && typeof els.toggle.focus === 'function') els.toggle.focus();
+}
+
+function _turnPopoverHasEarlierMessages() {
+  var box = document.getElementById('messages');
+  return !!(box && box.querySelector && box.querySelector('.more-msgs-hint'));
+}
+
+function _turnPopoverFetchAll(sid, epoch) {
+  var requestId = ++_turnPopover.requestId;
+  _turnPopoverShowStatus(_turnPopoverEnglish() ? 'Loading all questions…' : '正在读取全部提问…');
+  if (typeof fetch !== 'function') {
+    _turnPopoverShowStatus(_turnPopoverEnglish() ? 'Question history is unavailable.' : '暂时无法读取提问历史。');
+    return Promise.resolve(false);
+  }
+  return fetch('/api/sessions/' + encodeURIComponent(sid) + '/messages?limit=0').then(function(response) {
+    if (!response || !response.ok) throw new Error('HTTP ' + ((response && response.status) || 'error'));
+    return response.json();
+  }).then(function(data) {
+    if (!_turnPopoverIsCurrent(sid, epoch) || requestId !== _turnPopover.requestId) return false;
+    // limit=0 assigns turn numbers across the whole history.  Do not merge
+    // them with this page's recent-only DOM: that DOM uses 1..K relative to
+    // its window and would overwrite the summaries for the real early turns.
+    _turnPopover.turns = _turnPopoverMessageTurns(data && data.messages);
+    _turnPopover.complete = true;
+    _renderTurnPopover(sid, epoch, _turnPopover.turns, true);
+    return true;
+  }).catch(function() {
+    if (!_turnPopoverIsCurrent(sid, epoch) || requestId !== _turnPopover.requestId) return false;
+    _turnPopoverShowStatus(_turnPopoverEnglish() ? 'Could not load the full history.' : '完整历史读取失败。', function() {
+      if (_turnPopoverIsCurrent(sid, epoch)) _turnPopoverFetchAll(sid, epoch);
+    });
+    return false;
+  });
+}
+
+function _turnPopoverIsStreaming(sid) {
+  if (_turnRailStreaming) return true;
+  if (typeof agentRunning === 'undefined' || !agentRunning) return false;
+  return typeof _currentRunningSid === 'undefined' || !_currentRunningSid || String(_currentRunningSid) === String(sid);
+}
+
+function _jumpFromTurnPopover(turn, sid, epoch) {
+  if (!_turnPopoverIsCurrent(sid, epoch)) return;
+  // On a paged DOM, `data-turn=1` means the first question in the *window*,
+  // not question 1 in the complete record.  A full popover must hydrate the
+  // DOM before trusting a matching element.
+  var needsFullDom = !!_turnPopover.complete && _turnPopoverHasEarlierMessages();
+  if (!needsFullDom && jumpToTurn(turn)) { _closeTurnPopover(true, false); return; }
+  // The menu reads full history without replacing #messages.  Only an actual
+  // jump needs DOM history.  Do not replace a live streamed answer, because
+  // that could make the in-progress bubble disappear.
+  if (_turnPopoverIsStreaming(sid)) {
+    _turnPopoverShowStatus(_turnPopoverEnglish() ? 'This answer is still streaming. Finish it before jumping to an unloaded question.' : '当前回答仍在生成；结束后可跳转到尚未加载的提问。');
+    return;
+  }
+  _turnPopoverShowStatus(_turnPopoverEnglish() ? 'Opening this question…' : '正在定位该提问…');
+  Promise.resolve(typeof loadAllMessages === 'function' ? loadAllMessages(sid) : null).then(function(result) {
+    if (!_turnPopoverIsCurrent(sid, epoch)) return;
+    if (!result || !result.applied) {
+      _turnPopoverShowStatus(_turnPopoverEnglish() ? 'Could not open the full history.' : '无法打开完整历史。', function() {
+        if (_turnPopoverIsCurrent(sid, epoch)) _jumpFromTurnPopover(turn, sid, epoch);
+      });
+      return;
+    }
+    refreshOutline(sid, epoch);
+    if (jumpToTurn(turn)) _closeTurnPopover(true, false);
+    else _turnPopoverShowStatus(_turnPopoverEnglish() ? 'That question is no longer available.' : '该提问已不可用。');
+  }).catch(function() {
+    if (_turnPopoverIsCurrent(sid, epoch)) _turnPopoverShowStatus(_turnPopoverEnglish() ? 'Could not open the full history.' : '无法打开完整历史。');
+  });
+}
+
+function toggleTurnPopover() {
+  if (_turnPopover.open) { _closeTurnPopover(true, false); return; }
+  var sid = String(currentSid || '');
+  if (!sid) return;
+  var epoch = _outlineViewEpoch;
+  var els = _turnPopoverEls();
+  if (!els.panel || !els.list) return;
+  _turnPopover.open = true;
+  _turnPopover.sid = sid;
+  _turnPopover.epoch = epoch;
+  _turnPopover.turns = null;
+  _turnPopover.complete = false;
+  els.panel.hidden = false;
+  if (els.toggle) els.toggle.setAttribute('aria-expanded', 'true');
+  _positionTurnPopover();
+  if (_turnPopoverHasEarlierMessages()) _turnPopoverFetchAll(sid, epoch);
+  else _renderTurnPopover(sid, epoch, _turnPopoverLocalTurns(), true);
+}
+
 function refreshOutline(expectedSid, expectedEpoch) {
   var sid = currentSid || '';
   if (expectedSid !== undefined && String(expectedSid || '') !== sid) return;
@@ -19171,19 +19493,6 @@ function refreshOutline(expectedSid, expectedEpoch) {
   for (var ti = 0; ti < turns.length; ti++) if (turns[ti].turn > maxTurn) maxTurn = turns[ti].turn;
   if (maxTurn > _turnSeq) _turnSeq = maxTurn;
   list.innerHTML = '';
-  var box = document.getElementById('messages');
-  if (box && box.querySelector && box.querySelector('.more-msgs-hint')) {
-    var more = document.createElement('button');
-    more.type = 'button'; more.className = 'turn-nav-more'; more.textContent = '…';
-    more.title = document.documentElement && String(document.documentElement.lang || '').toLowerCase().indexOf('en') === 0 ?
-      'Load earlier messages (navigation currently reflects this rendered window)' : '加载更早消息（导航当前只对应已渲染窗口）';
-    more.setAttribute('aria-label', more.title);
-    more.onclick = function() {
-      if ((currentSid || '') !== sid || typeof loadAllMessages !== 'function') return;
-      loadAllMessages(sid);
-    };
-    list.appendChild(more);
-  }
   turns.forEach(function(item) {
     var summary = _bubbleText(item.el) || (document.documentElement && String(document.documentElement.lang || '').toLowerCase().indexOf('en') === 0 ? '(no text)' : '（无文字）');
     if (summary.length > 180) summary = summary.slice(0, 180) + '…';
@@ -19200,14 +19509,18 @@ function refreshOutline(expectedSid, expectedEpoch) {
   });
   if (turns.length && !turns.some(function(item) { return item.turn === _activeTurn; })) _activeTurn = turns[0].turn;
   _markActiveTurn();
+  if (_turnPopoverIsCurrent(sid, _outlineViewEpoch)) {
+    var popoverTurns = _turnPopover.complete ? _turnPopover.turns : _turnPopoverLocalTurns();
+    _renderTurnPopover(sid, _outlineViewEpoch, popoverTurns, false);
+  }
 }
 
 function jumpToTurn(turn) {
   turn = parseInt(turn, 10);
-  if (!turn) return;
+  if (!turn) return false;
   var box = document.getElementById('messages');
   var el = document.getElementById('msg-' + turn + '-user') || (box && box.querySelector ? box.querySelector('.message.user[data-turn="' + turn + '"]') : null);
-  if (!el) return;
+  if (!el) return false;
   _autoScroll = false;                   // 跳过去后别被流式输出拽回底部（和手动上滑同一套）
   if (typeof _refreshGotoBottom === 'function') _refreshGotoBottom();
   var reduceMotion = false;
@@ -19221,6 +19534,7 @@ function jumpToTurn(turn) {
   }
   _activeTurn = turn;
   _markActiveTurn();
+  return true;
 }
 
 function _markActiveTurn() {
@@ -19238,6 +19552,7 @@ function _markActiveTurn() {
       if (top < list.scrollTop || top > list.scrollTop + h - 24) list.scrollTop = Math.max(0, top - h / 2);
     }
   }
+  _markActiveTurnPopover();
 }
 
 // Stream state is intentionally a single class on the current tick.  It does
@@ -19287,6 +19602,41 @@ function _syncActiveTurnFromScroll(expectedSid, expectedEpoch) {
       if (sid !== (currentSid || '') || epoch !== _outlineViewEpoch) return;
       _syncActiveTurnFromScroll(sid, epoch);
     });
+  });
+})();
+
+// The popover remains a normal DOM element rather than a browser `popover`
+// attribute so this packaged WebView keeps the same behaviour on older
+// Windows installations.  Bind once after the static nav markup exists.
+(function() {
+  var els = _turnPopoverEls();
+  if (els.toggle && !els.toggle.getAttribute('data-turn-popover-bound')) {
+    els.toggle.setAttribute('data-turn-popover-bound', 'true');
+    els.toggle.addEventListener('click', function(event) {
+      if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+      toggleTurnPopover();
+    });
+  }
+  var close = document.getElementById('turn-nav-popover-close');
+  if (close && !close.getAttribute('data-turn-popover-bound')) {
+    close.setAttribute('data-turn-popover-bound', 'true');
+    close.addEventListener('click', function(event) {
+      if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+      _closeTurnPopover(true, false);
+    });
+  }
+  if (!document.addEventListener) return;
+  document.addEventListener('keydown', function(event) {
+    if (event && event.key === 'Escape' && _turnPopover.open) _closeTurnPopover(true, false);
+  });
+  document.addEventListener('pointerdown', function(event) {
+    if (!_turnPopover.open || !event || !event.target) return;
+    var current = _turnPopoverEls();
+    if (_turnPopoverNodeContains(current.panel, event.target) || _turnPopoverNodeContains(current.toggle, event.target)) return;
+    _closeTurnPopover(false, false);
+  });
+  if (window.addEventListener) window.addEventListener('resize', function() {
+    if (_turnPopover.open) _positionTurnPopover();
   });
 })();
 

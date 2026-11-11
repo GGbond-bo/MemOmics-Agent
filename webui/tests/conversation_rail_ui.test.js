@@ -16,9 +16,12 @@ assert.match(html, /class="chat-history-shell"[\s\S]*?<nav id="turn-nav"[\s\S]*?
 assert.doesNotMatch(html, /id="outline-list"|id="outline-count"/, 'the old right-side outline DOM is removed');
 assert.match(html, /@media \(max-width:760px\) \{ #turn-nav \{ display:none; \}/, 'narrow layouts hide the rail instead of covering message text');
 assert.match(html, /#turn-nav \{[^}]*align-items:center[^}]*justify-content:center/, 'a short rail stays vertically centered beside the message viewport');
-assert.match(html, /#turn-nav-list \{[^}]*max-height:100%[^}]*overflow-y:auto/, 'a long rail naturally overflows within its own scrollable list');
-assert.match(html, /#turn-nav-list \{[^}]*min-height:0[^}]*flex-shrink:0/, 'an oversized rail starts from a reachable top edge instead of negative centering');
+assert.match(html, /#turn-nav-rail \{[^}]*max-height:100%[^}]*margin:auto 0[^}]*padding-top:26px/, 'the ellipsis and tick group are centered together, with the ellipsis at its top');
+assert.match(html, /#turn-nav-list \{[^}]*min-height:0[^}]*max-height:calc\(100% - 26px\)[^}]*overflow-y:auto/, 'a long rail keeps the ellipsis visible while only its tick list scrolls');
 assert.match(html, /\.turn-nav-tick \{[^}]*font-size:0/, 'visual ticks do not permanently display outline numbers');
+assert.match(html, /id="turn-nav-menu-toggle"[^>]*>…<\/button>/, 'the rail always exposes an ellipsis control above the compact marks');
+assert.match(html, /id="turn-nav-popover"[\s\S]*?id="turn-nav-popover-list"/, 'the numbered question popover stays inside the rail, outside message snapshots');
+assert.match(html, /\.turn-nav-popover-item/, 'popover rows have their own scrollable interaction style');
 assert.match(html, /\.turn-nav-tick:hover, \.turn-nav-tick:focus-visible, \.turn-nav-tick\.active \{[^}]*width:22px/, 'hover, keyboard focus, and active ticks lengthen like short Codex-style marks');
 assert.match(html, /\.turn-nav-tick:focus-visible::after/, 'keyboard focus expands the same summary available on hover');
 assert.match(html, /\.turn-nav-tick\.active\.streaming/, 'only the current tick receives the restrained streaming feedback class');
@@ -62,7 +65,7 @@ class Element {
     this.classList = new ClassList(this); this.attributes = new Map(); this._listeners = {};
     this._innerHTML = ''; this.textContent = ''; this.title = ''; this.id = ''; this.type = '';
     this.style = {}; this.scrollTop = 0; this.clientHeight = 160; this.offsetTop = 0; this.offsetWidth = 1;
-    this._rect = { top: 0, bottom: 30 }; this.scrolled = 0;
+    this._rect = { top: 0, bottom: 30 }; this.scrolled = 0; this.hidden = false; this.focused = false;
   }
   get className() { return this.classList.toString(); }
   set className(value) { this.classList.values = new Set(String(value || '').split(/\s+/).filter(Boolean)); }
@@ -79,14 +82,22 @@ class Element {
   addEventListener(type, handler) { (this._listeners[type] || (this._listeners[type] = [])).push(handler); }
   getBoundingClientRect() { return this._rect; }
   scrollIntoView(options) { this.scrolled++; this.scrollOptions = options; }
+  focus() { this.focused = true; }
 }
 
 const body = new Element('body');
 const shell = new Element('div'); shell.className = 'chat-history-shell';
 const nav = new Element('nav'); nav.id = 'turn-nav';
+const railWrap = new Element('div'); railWrap.id = 'turn-nav-rail';
+const menuToggle = new Element('button'); menuToggle.id = 'turn-nav-menu-toggle'; menuToggle.setAttribute('aria-expanded', 'false');
 const rail = new Element('div'); rail.id = 'turn-nav-list';
+const popover = new Element('section'); popover.id = 'turn-nav-popover'; popover.hidden = true;
+const popoverTitle = new Element('strong'); popoverTitle.id = 'turn-nav-popover-title';
+const popoverClose = new Element('button'); popoverClose.id = 'turn-nav-popover-close';
+const popoverList = new Element('div'); popoverList.id = 'turn-nav-popover-list';
+popover.appendChild(popoverTitle); popover.appendChild(popoverClose); popover.appendChild(popoverList);
 const messages = new Element('div'); messages.id = 'messages'; messages.className = 'chat-messages';
-nav.appendChild(rail); shell.appendChild(nav); shell.appendChild(messages); body.appendChild(shell);
+railWrap.appendChild(menuToggle); railWrap.appendChild(rail); railWrap.appendChild(popover); nav.appendChild(railWrap); shell.appendChild(nav); shell.appendChild(messages); body.appendChild(shell);
 
 const timers = new Map(); let nextTimer = 1;
 const frames = []; let gotoBottomRefreshes = 0; const loadCalls = [];
@@ -95,9 +106,11 @@ const document = {
   createElement: (tag) => new Element(tag),
   getElementById: (id) => [body, ...descendants(body)].find((node) => node.id === id) || null,
   querySelector: (selector) => body.querySelector(selector),
+  _listeners: {},
+  addEventListener(type, handler) { (this._listeners[type] || (this._listeners[type] = [])).push(handler); },
 };
 const context = {
-  console, Math, String, Number, Array, Object, parseInt, isNaN,
+  console, Math, String, Number, Array, Object, Promise, parseInt, isNaN,
   document, currentSid: 'chat-a', _autoScroll: true,
   setTimeout(callback) { const id = nextTimer++; timers.set(id, callback); return id; },
   clearTimeout(id) { timers.delete(id); },
@@ -119,6 +132,9 @@ function message(role, turn, text) {
   row.appendChild(bubble); return row;
 }
 
+async function flushMicrotasks() { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); }
+
+async function run() {
 // Only user questions create ticks.  Assistant/tool-like rows sharing the turn
 // stay navigable as conversation content but never become false questions.
 const user1 = message('user', 1, '第一问：<script>不应执行</script>');
@@ -167,6 +183,29 @@ assert.equal(activeStreamingTick.getAttribute('aria-busy'), 'true', 'streaming s
 context._setConversationRailStreaming(false, 'chat-a');
 assert.equal(activeStreamingTick.classList.contains('streaming'), false, 'terminal stream state clears the current tick feedback');
 
+// The permanent ellipsis opens a small, numbered record beside the compact
+// rail.  It uses textContent (the literal <script> remains text) and shares
+// the existing jump function instead of maintaining a second scroll path.
+(menuToggle._listeners.click || [])[0]({ stopPropagation() {} });
+assert.equal(popover.hidden, false, 'ellipsis opens the nearby question record');
+assert.equal(menuToggle.getAttribute('aria-expanded'), 'true', 'ellipsis exposes its open state to assistive technology');
+let popoverRows = popoverList.querySelectorAll('.turn-nav-popover-item');
+assert.equal(popoverRows.length, 2, 'record lists every currently rendered user question in order');
+assert.equal(popoverRows[0].textContent, '1. 第一问：<script>不应执行</script>', 'record uses numbered text, never HTML interpolation');
+assert.equal(popoverRows[1].textContent, '2. 第二问：如何继续？', 'record retains the real question order');
+assert.equal(popoverRows[1].focused, true, 'opening focuses the current question when it is available');
+popoverRows[0].onclick();
+assert.equal(user1.scrolled > 0, true, 'record rows reuse the shared turn jump');
+assert.equal(popover.hidden, true, 'successful record jump closes the popover');
+
+// Escape, outside click, and the toggle all close the same transient UI.
+(menuToggle._listeners.click || [])[0]({ stopPropagation() {} });
+(document._listeners.keydown || []).at(-1)({ key: 'Escape' });
+assert.equal(popover.hidden, true, 'Escape closes the question record');
+(menuToggle._listeners.click || [])[0]({ stopPropagation() {} });
+(document._listeners.pointerdown || []).at(-1)({ target: messages });
+assert.equal(popover.hidden, true, 'a click outside the rail closes the question record');
+
 context._registerTurnEl(message('user', 3, 'late A'), 3, 'user');
 context.currentSid = 'chat-b';
 context._resetConversationRail('chat-b');
@@ -189,23 +228,79 @@ context._registerTurnEl(streamedAssistant, 10, 'assistant');
 flushTimers();
 assert.deepEqual(rail.querySelectorAll('.turn-nav-tick').map((tick) => tick.getAttribute('data-turn')), ['9', '10'], 'an assistant stream does not duplicate a user-question tick');
 
+// A paged /messages response numbers its visible window from one.  The full
+// popover must never merge those relative labels with a 300-turn history:
+// otherwise its first item would show the recent window's question and jump
+// to the wrong place.  Start from a deliberately relative two-turn window.
+messages.innerHTML = '';
+context._resetConversationRail('chat-b');
+const recent1 = message('user', 1, '最近窗口的第 201 问');
+const recent2 = message('user', 2, '最近窗口的第 202 问');
+messages.appendChild(recent1); messages.appendChild(recent2);
+context._registerTurnEl(recent1, 1, 'user'); context._registerTurnEl(recent2, 2, 'user');
 const moreHint = new Element('div'); moreHint.className = 'more-msgs-hint'; messages.insertBefore(moreHint, messages.children[0]);
-context.refreshOutline();
-const more = rail.querySelector('.turn-nav-more');
-assert.ok(more, 'a truncated history exposes a top load-earlier marker');
-more.onclick();
-assert.deepEqual(loadCalls, ['chat-b'], 'load-earlier marker requests all messages only for the visible sid');
-assert.equal(rail.querySelectorAll('.turn-nav-tick').length, 2, 'pagination marker never invents ticks for unrendered messages');
+flushTimers();
+const fullHistory = [];
+for (let turn = 1; turn <= 300; turn++) fullHistory.push({ role: 'user', turn, content: `完整历史第 ${turn} 问` });
+context.fetch = async (url) => {
+  assert.match(String(url), /\/api\/sessions\/chat-b\/messages\?limit=0/, 'ellipsis reads the complete record without replacing the live DOM');
+  return { ok: true, status: 200, json: async () => ({ messages: fullHistory }) };
+};
+(menuToggle._listeners.click || [])[0]({ stopPropagation() {} });
+await flushMicrotasks();
+popoverRows = popoverList.querySelectorAll('.turn-nav-popover-item');
+assert.equal(popoverRows.length, 300, 'ellipsis records every question from the complete history');
+assert.equal(popoverRows[0].textContent, '1. 完整历史第 1 问', 'complete turn 1 keeps its real earliest summary, not the paged window\'s relative turn 1');
+assert.equal(popoverRows[200].textContent, '201. 完整历史第 201 问', 'large record keeps absolute ordinal labels');
+assert.equal(popoverRows.some((row) => row.classList.contains('active')), false, 'relative current turn is not falsely highlighted against a complete record');
 
-// A long history stays a list of compact marks rather than turning into a
-// permanently numbered sidebar.  CSS owns its local scrolling/centering; the
-// DOM remains one accessible tick per question.
-for (let turn = 11; turn <= 72; turn++) {
-  const row = message('user', turn, `历史问题 ${turn}`);
-  messages.appendChild(row); context._registerTurnEl(row, turn, 'user');
+// Selecting full-history question 1 must hydrate the DOM first.  If it were
+// allowed to use the page's relative data-turn=1, it would land on question
+// 201.  The hydration stub supplies absolute DOM nodes and the assertion
+// proves the original earliest node received the jump.
+let fullLoadCalls = 0; let earliestFullNode = null;
+context.loadAllMessages = (sid) => {
+  fullLoadCalls++;
+  assert.equal(sid, 'chat-b', 'hydration keeps the visible session identity');
+  messages.innerHTML = '';
+  for (let turn = 1; turn <= 300; turn++) {
+    const row = message('user', turn, `完整历史第 ${turn} 问`);
+    row.id = `msg-${turn}-user`;
+    messages.appendChild(row);
+    if (turn === 1) earliestFullNode = row;
+  }
+  return Promise.resolve({ ok: true, applied: true, session_id: sid });
+};
+popoverRows[0].onclick();
+await flushMicrotasks();
+assert.equal(fullLoadCalls, 1, 'clicking an unloaded absolute question hydrates full DOM before jumping');
+assert.equal(earliestFullNode.scrolled, 1, 'absolute question 1—not the current page window—receives the jump');
+assert.equal(popover.hidden, true, 'hydrated jump closes the record');
+
+// A long complete rail stays compact; its popover scrolls the active numbered
+// row into view without moving the chat message viewport.
+context.refreshOutline();
+for (let turn = 1; turn <= 300; turn++) {
+  const row = messages.querySelector('.message.user[data-turn="' + turn + '"]');
+  if (row) row.offsetTop = turn * 4;
 }
 flushTimers();
-assert.equal(rail.querySelectorAll('.turn-nav-tick').length, 64, 'many questions retain compact one-per-question navigation marks');
+(menuToggle._listeners.click || [])[0]({ stopPropagation() {} });
+popoverRows = popoverList.querySelectorAll('.turn-nav-popover-item');
+popoverRows.forEach((row, index) => { row.offsetTop = index * 24; });
+popoverList.clientHeight = 48;
+context._activeTurn = 300;
+context._markActiveTurnPopover();
+assert.ok(popoverList.scrollTop > 0, 'the long numbered list scrolls its own active row into view');
 assert.equal(rail.querySelectorAll('.turn-nav-tick').at(-1).textContent, '', 'large rail entries continue to suppress permanent visual numbers');
+context._resetConversationRail('chat-b');
+assert.equal(popover.hidden, true, 'session reset closes and clears the transient record');
+assert.equal(popoverList.children.length, 0, 'session reset removes stale rows before another chat renders');
 
 console.log('conversation_rail_ui.test.js: PASS');
+}
+
+run().catch((error) => {
+  console.error(error.stack || error);
+  process.exitCode = 1;
+});
