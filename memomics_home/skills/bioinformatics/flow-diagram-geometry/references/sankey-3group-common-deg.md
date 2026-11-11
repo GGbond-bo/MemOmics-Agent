@@ -34,8 +34,8 @@
 支撑度最高：`ITIH4` 与 `MEF2C-AS1`、`PALLD` 均覆盖 **10/10 亚群**。
 
 三组都支持的 6 条链路（画出来最粗）：
-`OTUD1+(II)→ITIH4`、`OTUD1+(II)→PALLD`、`Pure Type IIX→AC015878.1`、
-`Pure Type IIX→MEF2C-AS1`、`Pure Type IIX→MYH2`、`RP_high(II)→ITIH4`。
+`OTUD1+(II)→ITIH4`、`OTUD1+(II)→PALLD`、`Subtype AX→AC015878.1`、
+`Subtype AX→MEF2C-AS1`、`Subtype AX→MYH2`、`RP_high(II)→ITIH4`。
 
 ## 最终版式参数（可直接复用）
 
