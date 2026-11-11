@@ -11,7 +11,7 @@
 
 ## 它是什么
 
-MemOmics-Agent 是一个以 [Hermes](https://github.com/NousResearch/hermes-agent) Agent 框架的工具层为底座、专为组学数据分析打造的自主科研 Agent（Hermes 官方页面：<https://hermes-agent.nousresearch.com/>，[官网](https://hermes-agent.nousresearch.com/) · [文档](https://hermes-agent.nousresearch.com/docs/)）。你只需要给出**数据路径 + 科学问题**，它会自主完成：
+MemOmics-Agent 是一个以 [Hermes] Agent 框架的工具层为底座、专为组学数据分析打造的自主科研 Agent。本地的PC端支持远程集群，长程完成任务，你只需要给出**数据路径 + 科学问题**，它会自主完成：
 
 ```
 加载技能 → 环境校验 → 执行前审查 →（必要时）多角色辩论
