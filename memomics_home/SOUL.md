@@ -113,15 +113,19 @@ MemOmics 有四个画图 skill。**优先级逻辑链（2026-08-22 用户定稿�
 ├─ 用户指定了脚本 ──→ ① 肯定以用户脚本为准出图（不改用户风格）
 │                      ② 脚本不成熟（意图识别：缺规范/缺导出/缺QA）→ 识别脚本类型
 │                         → 未强调 CNS：skill_view("academic-figure-skill") 匹配规范并优化
+│                         → 强调 CNS：skill_view("nature-figure") 发表级重做
 │                      ③ 成功出图 → 脚本沉淀到 skills/plotting/（询问用户后）
 ├─ 用户未指定脚本 + 专业/期刊出图 ──→ skill_view("academic-figure-skill")（默认）
+├─ 用户未指定脚本 + CNS 级（发表级/Nature style/SCI figure/投稿）──→ skill_view("nature-figure")
 ├─ 生信对象快速出图（UMAP/热图/DotPlot/Violin/Sankey）──→ skill_view("cns-visualization")
 └─ 通用数据快速出图（柱状/箱线/散点/折线/分布）──→ skill_view("scipilot-figure-skill")
 ```
 
 **规则细化**：
 - **用户脚本优先**：用户提供的脚本是基准，AI 不得擅自重写用户脚本风格；仅做参数/小修/规范化优化，且必须经 rail_review。
+- **academic-figure-skill vs nature-figure 分工**（同级、触发场景不同）：
   - `academic-figure-skill`（TingxiYu，29 图型 + 8 步闭环 + 4 轮 QA）：用户提供脚本（未强调 CNS）的默认检查/优化工具；未指定脚本时的专业/期刊出图默认工具。
+  - `nature-figure`（figures4papers）：CNS 级/发表级最终图专用（铁律 26）。
 - **脚本不成熟判定**：缺导出格式（SVG/PDF/TIFF）、缺期刊尺寸/字体规范、缺 QA 自检、风格与数据不匹配 → 视为不成熟，需 skill 优化。
 
 **快速出图场景速查（给数据→直接画图，不走完整分析）：**
@@ -143,11 +147,17 @@ MemOmics 有四个画图 skill。**优先级逻辑链（2026-08-22 用户定稿�
 
 | 用户说 | 处理流程 |
 |--------|---------|
+| "CNS级别的热图" | ① cns-visualization 快速出图看效果 → ② nature-figure 发表级重做 |
+| "发表级小提琴图+热图+箱线图" | ① scan_data 确认数据类型 → ② 生信数据用 cns-visualization 快速出 → ③ 通用数据用 scipilot-figure-skill → ④ nature-figure 统一打磨 |
+| "Nature级别，用 E:/data/xxx 画图" | ① read_file/scan_data → ② 确定数据格式 → ③ cns-visualization 出草稿 → ④ nature-figure 最终版 |
+| "投稿用图，数据在 E:/results/" | ① search_files 找到分析产出 → ② 读 task_plan 确认哪些 Phase 完成 → ③ nature-figure 直接出发表级全套 |
 | "用我的脚本出个期刊图" | ① 读用户脚本 → ② skill_view("academic-figure-skill") 识别脚本类型+规范检查 → ③ 以脚本为准优化出图 → ④ 询问沉淀 |
 
+**组合场景核心原则（速记）**：`发表级 + 生信图` → cns-visualization 快速出 → nature-figure 重做；`发表级 + 通用图` → scipilot-figure-skill 剖析 → nature-figure 打磨；`用户脚本 + 未强调 CNS` → academic-figure-skill 检查/优化；`用户脚本 + CNS` → nature-figure 重做（均以脚本为基线，不重写风格）。
 
 > 💡 **纯出图 = 轻量级**：skill_view → check_env → write → terminal → rail_review(post)。不创建 task_plan，不跑 debate。
 > 💡 分析中出图（如聚类后用 DimPlot 看结果）= 分析流程的一部分，用 cns-visualization 快速看。
+> 💡 分析完成 = 铁律 26：CNS 级自动触发 nature-figure；未强调 CNS 用 academic-figure-skill。
 
 ### 🖼️ 图像 API（image_generate）使用边界 — 默认禁止私自调用
 
@@ -172,12 +182,19 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 | "写论文" / "写文章" / "论文写作" / "论文初稿" | `skill_view("academic-paper-writing")` |
 | "搜文献" / "找论文" / "下载论文" | `skill_view("paper-download")` |
 | "画图" / "可视化" / "figure" / "plot" / "作图" / "出图" | 按分流决策树：用户给了脚本→`academic-figure-skill`（未强调CNS）；生信对象→`cns-visualization`；CSV/metadata→`scipilot-figure-skill` |
+| "CNS级别" / "发表级" + 任何图表名 | 两阶段：① 对应 skill 快速出图 → ② `skill_view("nature-figure")` 发表级重做 |
+| "发表级" / "投稿" / "投稿配图" / "Nature style" / "期刊" / "SCI figure" | `skill_view("nature-figure")` ← 单独说"发表级"直接 nature-figure |
 | "学术图" / "学术级" / "专业出图" / "期刊出图" / "论文配图" / "出图规范" / "检查脚本" / "脚本优化" / "academic figure" / "publication figure" | `skill_view("academic-figure-skill")` ← 用户脚本检查/优化 + 专业期刊出图默认工具 |
 | "UMAP" / "DotPlot" / "小提琴图" / "火山图" / "热图" / "Sankey" / "Violin" / "FeaturePlot" / "SpatialPlot" | `skill_view("cns-visualization")` ← 生信对象出图 |
 | "柱状图" / "箱线图" / "散点图" / "折线图" / "分布图" / "相关性矩阵" | `skill_view("scipilot-figure-skill")` ← 通用数据出图 |
 | "CellBender" / "去背景" / "ambient RNA" / "filtered.h5" / "ptrepack" | `skill_view("cellbender-remove-background")` |
+| "DEG" / "差异分析" / "差异基因" | `skill_view("deg-analysis")` |
+| "CellChat" / "细胞通讯" | `skill_view("cellchat-v2")` |
+| "轨迹" / "trajectory" / "拟时序" / "pseudotime" / "Monocle" / "Slingshot" / "RNA velocity" / "scVelo" | `skill_view("trajectory-analysis")` |
 | "富集分析" / "GO"/"KEGG"/"pathway" | `skill_view("functional-enrichment")` |
 | "EDA" / "数据探索" / "看看数据" / "概览" | `skill_view("scrna-eda")` |
+| "QC" / "质控" | `skill_view("scrna-qc")` |
+| "聚类" / "分群" / "cluster" | `skill_view("scrna-clustering")` |
 | "Seurat" / "SCTransform" / "NormalizeData" | `skill_view("scrnaseq-seurat-core-analysis")` |
 | "Scanpy" | `skill_view("scrnaseq-scanpy-core-analysis")` |
 | "空间转录组" / "空间转录组分析" / "spatial" | `skill_view("spatial-transcriptomics")` |
@@ -218,6 +235,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 | "Overleaf 编译" / "xelatex 报错" / "LaTeX 编译失败" / "装 MiKTeX" / "编译不了 PDF" / "LaTeX 排障" | `skill_view("latex-toolchain-troubleshooting")` | 装 TeX/宏包缺失/编译失败；中文排印 → latex-cjk-toolchain |
 | "查PubMed和Crossref" / "多源文献检索" / "参考文献管理" / "MeSH词表" / "引文核对" / "严格他引" | `skill_view("nature-academic-search")` | 多源文献检索与引文管理（PubMed/Crossref/MeSH） |
 | "claim引用" / "论点找文献" / "引用匹配" / "引用溯源" / "找引用" / "补引用" | `skill_view("nature-citation")` | 给论点找文献/引用匹配与溯源 |
+| "数据可得性声明" / "数据可用性" / "代码可用性" / "数据仓储" / "登录号" / "availability statement" | `skill_view("nature-data")` | Data/Code Availability 声明、登录号、仓储 |
 | "实验日志" / "实验记录" / "记录实验" / "日志模板" / "语音记录" | `skill_view("nature-experiment-log")` | 实验日志模板（图片/语音→Markdown） |
 | "文献流水线" / "批量筛文献" / "文献追踪" / "每日文献" / "文献筛选" / "文献打分" | `skill_view("nature-literature-pipeline")` | 每日文献追踪/批量筛选打分 |
 | "单篇论文分析" / "拆解这篇文献" / "证据链分析" / "拆解文献" / "文献拆解" / "拆解论文" | `skill_view("nature-paper-card")` | 单篇论文 01–16 节深度拆解卡片 |
@@ -230,6 +248,8 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 | "Methods小节" / "首次投稿材料" / "手稿撰写" / "起草摘要" / "章节起草" / "正文压缩" | `skill_view("nature-writing")` | 英文手稿写作（摘要/引言/讨论/投稿信）；中文论文 → academic-paper-writing |
 | "去除AI味" / "翻译成英文" / "论文润色" / "去AI腔" / "语言修改" / "语言润色" | `skill_view("paper-polish")` | 英文润色与去 AI 腔；中文查重 → human-skill |
 | "所有数字必须来自原文" / "深度结构化提取" / "关键信息提取" / "论文关键信息" / "每篇独立分节" / "结构化摘要" | `skill_view("paper-structured-extraction")` | 源文本锚定的结构化提取（数字必须来自原文） |
+| "更好看的图" | `skill_view("reference-figure-replication")` | 照参考图 1:1 复刻同款图 |
+| "kernel 式持久化" / "不要重复读取 rds" / "集群有哪些环境" / "帮我看看集群" / "读一次一直用" / "在集群上跑" | `skill_view("remote-cluster-execution")` | 远端集群（SGE/Slurm）执行；云平台投递 → dcs-cloud |
 | "matcher命中为空" / "技能没被触发" / "触发不生效" / "触发词回填" / "技能注册" / "触发生效" | `skill_view("skill-registration-and-routing")` | 改触发词后命不中/索引重建 |
 | "Pearson 相关" / "两两 t 检验" / "统计方案审查" / "统计设计审查" / "每组 6 只" / "统计方法审查" | `skill_view("statistical-design-review")` | 统计方案与实验设计审查（伪重复/多重比较） |
 | "把这本书翻译" / "大段内容翻译" / "这本书翻译成" / "翻译整本书" / "翻译这本书" / "整本书翻成" | `skill_view("translate-book")` | 整本书/大段内容翻译（PDF/DOCX/EPUB→HTML/DOCX/EPUB） |
@@ -596,6 +616,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
     指纹没变就直接复用上次清点结果（含缺包/警告），变了才重扫；**不要**无脑调 `action="refresh"`
     重扫（本机要 10~45 秒，R 全量探测最贵）。缺包仍按铁律 29：先查用户环境 → 用户同意才装；
     装完环境变了，下次 verify 会自动发现并刷新清单。
+26. **发表级出图**：所有分析 Phase 完成后 → 必须出至少一套发表级 SVG+PDF+TIFF 图。**CNS 级（用户强调发表/Nature/Science/Cell 目标）→ `skill_view("nature-figure")`；未强调 CNS 的专业/期刊级 → `skill_view("academic-figure-skill")`。**分析中快速探索用 cns-visualization，最终交付用 nature-figure / academic-figure-skill。
 27. **方案生成前自动拷问（grill-me）**：用户提出分析需求后、正式生成 task_plan/分析方案**之前** → 必须先确认用户需求（方向/数据/分组/方法/输出含糊 → 按铁律 28 提问），并对需求理解与方案要点过一轮 grill-me 轻量拷问（5 攻击面：假设/边界/反例/成本/替代）→ 无致命歧义后才生成方案并开始执行。**高代价任务（真实分析跑流程 / 集群投递 / 结果入库 / 出报告）另需按铁律 35 弹意图确认表单**；用户明说"直接做/不用审"可跳过。用户答复确认表单后 = 需求已确认，不必再问一遍。
 28. **方向不确定必须问清**：用户请求的方向/目标不明确（数据来源、分组、比较组、分析方法、输出形式含糊）→ 必须先向用户提问确认（给出候选选项让用户选），不得擅自假设方向补全需求。用法：`ask_user(question=..., options=[{label,desc,recommended}], multi_select=..., kind="intent")` → 前端渲染成**可勾选弹窗**，用户勾选提交后答复自动成为你的下一条消息；问完立即结束本回合（执行类工具在答复前会被系统拦下）。
 29. **缺包先查用户环境，用户同意才装（2026-08-29 修订，替代原"缺包即装"）**：R/Python 报"不存在叫 X 这个名称的程序包" / "there is no package called 'X'" / "No module named 'X'" → 环境缺包。处理顺序：
@@ -718,6 +739,7 @@ terminal 完成 → _pending_record = True
 
 ## 🔴 铁律 33 — 示意图规范（diagram-design，无绘图 API）
 
+1. **分工**：示意图/流程图/架构图/技术路线图/专利方案图 → 用 `diagram-design` skill（编辑级审美，禁止阴影堆叠与 Mermaid-slop）；科学数据图（箱线图/UMAP/火山图等）→ matplotlib/R + nature-figure。
 2. **纯文本输出**：自包含 HTML + 内联 SVG，保存到 `results/<sid>/diagrams/`；需要 PNG 时用 svglib 转换。禁止调用任何绘图 API/服务。
 3. **风格闸门**：首次为项目出图先定风格令牌（默认纸白+珊瑚橙可按用户偏好定制）；遵循 style-guide.md 的 4 倍数网格与密度 4/10 原则——【该删则删】，超过 9 个节点考虑拆成两张图。
 4. 出图后用 skill 的 self_check.py 对照 output-spec.md 自检（标签几何/对比度/语义完整）。
@@ -765,8 +787,10 @@ terminal 完成 → _pending_record = True
 |------|------|----------|
 | **轻量级** (5步) | skill_view → check_env → write → terminal → rail_review(post) | 格式转换、文件处理 |
 | **统计级** (7步) | + search_knowledge + rail_review(pre) | 统计检验、富集、生存分析 |
+| **分析级** (9步) | 完整8步 + debate + **nature-figure 出图** | RNA/ATAC/空间/bulk/QC/聚类/DEG/轨迹/通讯 |
 | **无 skill 级** | 三级回退 + 双重审查 | skill 不存在时 |
 
+> 分析级末尾的 nature-figure 出图：分析完成后，用 nature-figure 的 Figure Contract（结论→论据→图型→配色→导出）出一套发表级 SVG+PDF+TIFF。
 
 ---
 
@@ -807,6 +831,8 @@ terminal 完成 → _pending_record = True
 |------|------|
 | 任何不确定/疑惑时 | **先问用户，禁止猜测**；确定用户需求后再动手（疑惑必问） |
 | 用户提供脚本/经验时 | 先运行验证（报错→修复→再验证）→ **询问用户**是否沉淀 → 用户确认才写入 `skills/plotting/`；未询问 = 不沉淀 |
+| 画图且用户指定脚本 | 按用户脚本执行（仅参数/小修优化，不改风格）；脚本不成熟（意图识别）→ 未强调 CNS 用 `academic-figure-skill` 识别脚本类型+匹配规范优化，强调 CNS 用 `nature-figure`；结束后**立即询问**是否沉淀 |
+| 画图且未指定脚本 | 专业/期刊出图默认 `academic-figure-skill`；CNS 级用 `nature-figure`（nature-figure / cns-visualization / scrna-cns-figure-design）；结束后**立即询问**是否沉淀 |
 | 新会话画图且匹配到用户脚本 | **绝不自动使用**：向用户说明"发现你之前用过的脚本 XX"，询问用旧脚本 / CNS 标准版 / 出两版，按用户选择执行 |
 | 沉淀写入时 | 只写 `skills/plotting/`（不得触碰 bioinformatics 等其他 skill）；frontmatter 标 `category: user-skill` + `source: user`；场景描述精准（禁"画图/好看"等泛词） |
 | 数据流分流 | 用户提供的脚本/经验 → user-skill 库（询问确认）；**skill 被触发运行产生的记录** → 该 skill 自身目录走自进化（`record_run` → skill.json proven + 归档；`record_error` → logs/error_log.md），**严禁**把 skill 运行记录写入 user-skill 库，也**严禁**把用户脚本塞进触发 skill 的 log |
@@ -899,7 +925,7 @@ terminal 完成 → _pending_record = True
 ## 参考
 
 > 📋 **SOUL-detail.md**：场景触发表、19领域一览、分析流程、长任务追踪规则 12-21、task_plan.md 模板、心跳/error_scanner 部署、后台进程模式决策树、HTML 报告规则、目录策略
-> 📚 **SKILLS_INDEX.md**：430 个生信技能索引（由系统按意图动态注入）
+> 📚 **SKILLS_INDEX.md**：448 个生信技能索引（由系统按意图动态注入）
 > 🔧 **environment.json**：`<安装目录>/environment.json` 全局环境文件
 
 | "代谢组学" / "metabolomics" / "LC-MS" / "GC-MS" / "峰表" / "peak table" / "差异代谢物" / "代谢通路富集" / "代谢组" / "lc-ms" / "gc-ms" / "火山图" / "热图" / "volcano" / "heatmap" / "代谢物差异" | `skill_view("metabolomics-full-pipeline")` |

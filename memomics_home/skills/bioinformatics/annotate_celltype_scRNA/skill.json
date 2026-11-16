@@ -1,0 +1,38 @@
+{
+ "id": "annotate_celltype_scRNA",
+ "name": "Annotate Celltype Scrna",
+ "category": "genomics",
+ "language": "Python",
+ "source": "Biomni",
+ "description": "Annotate cell types based on gene markers and transferred labels using LLM. After leiden clustering, annotate clusters using differentially expressed genes and optionally incorporate transferred label",
+ "detailed_description": "Annotate cell types based on gene markers and transferred labels using LLM. After leiden clustering, annotate clusters using differentially expressed genes and optionally incorporate transferred labels from reference datasets.",
+ "when_to_use": "When you need annotate celltype scRNA analysis",
+ "parameters": {
+  "adata_filename": "[Required] Name of the AnnData file containing scRNA-seq data (str)",
+  "data_dir": "[Required] Directory containing the data files (str)",
+  "data_info": "[Required] Information about the scRNA-seq data (e.g., \"homo sapiens, brain tissue, normal\") (str)",
+  "data_lake_path": "[Required] Path to the data lake (str)",
+  "cluster": "[Optional] Clustering method to use for cell type annotation (default: leiden)",
+  "llm": "[Optional] Language model instance for cell type prediction (default: claude-3-5-sonnet-20241022)",
+  "composition": "[Optional] Transferred cell type composition for each cluster"
+ },
+ "official_docs": "https://celltypist.readthedocs.io/en/latest/annotation.html",
+ "doc_source": "official",
+ "debate_verdicts": [
+  {
+   "topic": "",
+   "verdict": "",
+   "recommended_params": "",
+   "confidence": 0.8,
+   "evidence": "L1辩论: 8大类注释方案整体合理，C25批次伪影判据获支持；建议 C26/C28/C29 保留重聚类(res=1.5)复查，通用QC minTSS≥8/maxDoubletScore<0.15/minFrags≥1000 作后续过滤标准",
+   "date": "2026-08-27 03:23:59"
+  }
+ ],
+ "trigger_keywords": [
+  "annotate_celltype_scRNA",
+  "annotate celltype scRNA",
+  "annotate",
+  "celltype"
+ ],
+ "trigger_level": "YEL"
+}

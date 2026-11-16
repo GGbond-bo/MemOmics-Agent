@@ -1,0 +1,20 @@
+{
+ "id": "create_harmony_embeddings_scRNA",
+ "name": "Create Harmony Embeddings Scrna",
+ "category": "genomics",
+ "language": "Python",
+ "source": "Biomni",
+ "description": "Performs batch integration on single-cell RNA-seq data using Harmony and saves the integrated embeddings.",
+ "detailed_description": "Performs batch integration on single-cell RNA-seq data using Harmony and saves the integrated embeddings.",
+ "when_to_use": "When you need create harmony embeddings scRNA analysis",
+ "parameters": {
+  "adata_filename": "[Required] Filename of the AnnData object to load (str)",
+  "batch_key": "[Required] Column name in adata.obs that defines the batch variable for integration (str)",
+  "data_dir": "[Required] Directory path where the input file is located and output will be saved (str)"
+ },
+ "trigger_keywords": [
+  "harmony",
+  "embeddings"
+ ],
+ "trigger_level": "YEL"
+}

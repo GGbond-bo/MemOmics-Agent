@@ -28,7 +28,6 @@ metadata:
 
 1. **细胞数**：<50 技术噪声小群，还是 >千 的真实群体？
 2. **QC**：nFeature/nCount/percent.mt 是否正常？双细胞 nFeature/nCount 偏高、死细胞 percent.mt 偏高、环境 RNA 低 UMI。QC 正常 = 真实细胞，不是该"删"的对象。
-3. **marker 交叉分类（关键一步）**：把该群**全部** DEG 基因，与组织内**所有**可能细胞类型的经典 marker 面板逐一交叉（不只查它被分配的那一类），统计每类命中数。命中最多的那一类 = 它的真实身份。常用面板见 `references/suspicious-cluster-adjudication.md`。
 4. **打分面板**：若有 AUCell/AddModuleScore（肌节/氧化磷酸化/应激/衰老等），看该群相对其他群的打分。被标"肌纤维"却 sarcomeric/OxPhos 全表最低 = 注释错配的硬证据。
 5. **生物学信号**：该群在某条件（衰老/疾病/运动）下是否差异显著 / 比例变化？有信号 = 真实生物学群体，删掉丢信息 + 扭曲比例。
 6. **分辨率伪影判定**：top marker 的 log2FC 若 >~4（几十倍差异），**不是**过度聚类的伪影（假群 marker 边界模糊、log2FC 低）。降分辨率解决不了它，反而把它藏进邻近群，掩盖真实异质性。
@@ -120,7 +119,6 @@ median(obj$nCount_RNA[obj$seurat_clusters == cl])        # ② 该簇 nCount 中
 
 完整流程、三个定量的实测数字、人示例组织血管参考面板（Lai 2024 Nature / Kedlian 2024 Nat Aging
 的 EC 与壁细胞亚型 marker 表）、以及全文获取链见
-`references/annotation-scheme-literature-audit.md`。
 
 ## 兄弟群对比裁决：两个亚群是否同类、谁更典型（2026-11-05 实测）
 
@@ -205,7 +203,6 @@ median(obj$nCount_RNA[obj$seurat_clusters == cl])        # ② 该簇 nCount 中
 可选：命名修订建议表。
 
 完整实测案例（全部数字、模块评分矩阵、组别分层、donor 级检验代码）见
-`references/sibling-cluster-pair-adjudication.md`。
 
 ## 修正版落盘：用户说「保存到原路径」时的固定动作（2026-11-05 实测）
 
@@ -235,7 +232,6 @@ median(obj$nCount_RNA[obj$seurat_clusters == cl])        # ② 该簇 nCount 中
    ```
    集群上还要先 `cp -p <原文件> <原文件>_L2orig_backup.rds`，写完用 `md5sum` 对照新旧两份，
    `file.size()` + 时间戳复核（实测 861,178,653 → 861,237,269 字节，165.9 秒，`readrds_calls` 仍为 1）。
-   完整脚本模式 → `references/l3-revision-and-writeback.md`；集群侧落盘规程 → skill `remote-cluster-execution` 铁规 6.7。
 
 ## 裁决框架
 
@@ -264,10 +260,6 @@ median(obj$nCount_RNA[obj$seurat_clusters == cl])        # ② 该簇 nCount 中
 
 ## 参考
 
-- `references/suspicious-cluster-adjudication.md` — RSS 神经核混入肌纤维的完整案例 + 七类 marker 面板 + 流式读大 meta 表技巧
-- `references/annotation-scheme-literature-audit.md` — **方案级审计**：判别力/检出下限/泛标记/污染排除四个定量检验、文献反查（命名基因全文命中数）、全文获取链（Crossref query.title → Unpaywall → Europe PMC fullTextXML）、**人示例组织血管 EC/壁细胞参考面板**（Lai 2024 Nature + Kedlian 2024 Nat Aging 原文 marker 表）、逐标签裁决表交付模板
-- `references/l3-revision-and-writeback.md` — **v1→v2 修订与回写原文件**：14 标签逐条判决表（含真实检出率）、v2 的 11 标签命名依据、`annotation_L3` 仍是 v1 而 v2 在 `annotation_L3_v2` 的列版本陷阱、提升主列+降级留痕+`file.rename` 原子覆盖的脚本模式、cp/md5/体积复核命令、四份文件的命名与代次说明
-- `references/sibling-cluster-pair-adjudication.md` — **兄弟群对比裁决**：两群「谁更像 X」的六步实测（严/宽分层评分矩阵、排除性评分倍数、ambient 方向检验、身份 vs 状态 donor 级检验、命名基因跨条件稳定性、样本覆盖），含两群全部检出率/评分数字、簇内条件分层表、可复用 R 骨架、以及两条静默坑（names 丢失致全 NaN、空 RNA 层致 wilcoxauc 报错）
 
 ## Common Issues
 

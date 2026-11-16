@@ -1,0 +1,43 @@
+{
+ "id": "remote-cluster-execution",
+ "name": "远端集群执行规程（SSH + 调度器）",
+ "category": "bioinformatics",
+ "language": "R+Python",
+ "description": "远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收；含常驻 R 会话（kernel 式持久化，大 rds 读一次一直用：session_start/exec/save/restore/status/stop）。触发:集群/node1/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub/常驻会话/读一次一直用/不要每次重新读取。",
+ "starting_prompt": "使用 远端集群执行规程（SSH + 调度器） 进行分析",
+ "source_dir": "skills/bioinformatics/remote-cluster-execution",
+ "memomics_module": "",
+ "chains_from": [],
+ "chains_to": [],
+ "tags": [
+  "remote-cluster",
+  "ssh",
+  "sge",
+  "slurm",
+  "conda-env",
+  "environment-inventory",
+  "persistent-session",
+  "kernel-persistence"
+ ],
+ "aliases": [],
+ "trigger_level": "RED",
+ "trigger_keywords": [
+  "集群",
+  "远端集群",
+  "集群环境",
+  "集群有哪些环境",
+  "帮我看看集群",
+  "node1",
+  "用集群跑",
+  "在集群上跑",
+  "投递任务",
+  "qsub",
+  "slurm",
+  "sge",
+  "常驻会话",
+  "读一次一直用",
+  "不要重复读取 rds",
+  "kernel 式持久化"
+ ],
+ "when_to_use": "远端 SSH 集群（SGE/Slurm/PBS）执行规程:环境清点、作业脚本、投递与产物回收；含常驻 R 会话（kernel 式持久化，大 rds 读一次一直用：session_start/exec/save/restore/status/stop）。触发:集群/node1/用集群跑/在集群上跑/帮我看看集群/集群有哪些环境/集群环境/投递任务/qsub/常驻会话/读一次一直用/不要每次重新读取。"
+}

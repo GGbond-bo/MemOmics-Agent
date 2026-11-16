@@ -1,0 +1,30 @@
+{
+  "id": "trajectory-conclusion-validation",
+  "name": "轨迹结论验证 — 跑完 Monocle3 之后、写下结论之前",
+  "category": "scRNA",
+  "language": "['windows', 'linux', 'macos']",
+  "description": "轨迹/拟时序类结论的定稿前验证（换根枚举、换嵌入独立性、供体级配对统计、固定多重检验族、结论分级措辞）。触发:Monocle3/Slingshot/scVelo 跑出伪时间后要下结论、运动或处理前后细胞在轨迹上的位置比较、判断伪时间轴是「分化轨迹」还是「细胞身份差异」、辩论/审稿要求补稳健性检验。",
+  "starting_prompt": "使用 轨迹结论验证 — 跑完 Monocle3 之后、写下结论之前 进行分析",
+  "source_dir": "skills/bioinformatics/trajectory-conclusion-validation",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "trajectory",
+    "pseudotime",
+    "monocle3",
+    "robustness",
+    "sensitivity",
+    "donor-level-stats",
+    "multiple-testing",
+    "03_高级分析"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "trajectory",
+    "conclusion",
+    "validation"
+  ],
+  "when_to_use": "轨迹/拟时序类结论的定稿前验证（换根枚举、换嵌入独立性、供体级配对统计、固定多重检验族、结论分级措辞）。触发:Monocle3/Slingshot/scVelo 跑出伪时间后要下结论、运动或处理前后细胞在轨迹上的位置比较、判断伪时间轴是「分化轨迹」还是「细胞身份差异」、辩论/审稿要求补稳健性检验。"
+}

@@ -1,0 +1,28 @@
+{
+  "id": "reference-figure-replication",
+  "name": "按参考图复刻出图（reference-figure replication）",
+  "category": "bioinformatics",
+  "language": "R+Python",
+  "description": "按用户给的参考图（PDF/PNG/AI 导出件）反推精确规格，用自己的数据 1:1 复刻同款图。触发:按照这张图来画/照着这个风格出图/参考图/图里这些基因照着重画/按图中的顺序和配色重出/和 Figure SX 一样。",
+  "starting_prompt": "使用 按参考图复刻出图（reference-figure replication） 进行分析",
+  "source_dir": "skills/bioinformatics/reference-figure-replication",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "figure",
+    "replication",
+    "reference-figure",
+    "dotplot",
+    "ggplot2",
+    "seurat",
+    "pymupdf",
+    "07_可视化"
+  ],
+  "aliases": [],
+  "trigger_level": "RED",
+  "trigger_keywords": [
+    "更好看的图"
+  ],
+  "when_to_use": "按用户给的参考图（PDF/PNG/AI 导出件）反推精确规格，用自己的数据 1:1 复刻同款图。触发:按照这张图来画/照着这个风格出图/参考图/图里这些基因照着重画/按图中的顺序和配色重出/和 Figure SX 一样。"
+}

@@ -1,0 +1,29 @@
+{
+  "id": "hierarchical-annotation-rollup",
+  "name": "层级注释回填（亚群 L2 → 大群）",
+  "category": "scRNA",
+  "language": "R",
+  "description": "层级注释回填与大群对账:把亚群（L2）注释按 barcode 打回大群（L1/Celltype）对象前，先用父对象频数表建基准做细胞数对账，并核实各亚群对象的 L2 列名与标签清单。触发:打回亚群/L2注释回填/level2打回大群/亚群细胞数对不对得上/小群注释合并/annotation_L2 合并/层级注释/大群细分亚群。",
+  "starting_prompt": "使用 层级注释回填（亚群 L2 → 大群） 进行分析",
+  "source_dir": "skills/bioinformatics/hierarchical-annotation-rollup",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "annotation",
+    "hierarchy",
+    "subcluster",
+    "rollup",
+    "barcode-merge",
+    "reconciliation",
+    "scRNA"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "hierarchical",
+    "annotation",
+    "rollup"
+  ],
+  "when_to_use": "层级注释回填与大群对账:把亚群（L2）注释按 barcode 打回大群（L1/Celltype）对象前，先用父对象频数表建基准做细胞数对账，并核实各亚群对象的 L2 列名与标签清单。触发:打回亚群/L2注释回填/level2打回大群/亚群细胞数对不对得上/小群注释合并/annotation_L2 合并/层级注释/大群细分亚群。"
+}

@@ -47,11 +47,8 @@ prerequisites:
 
 ---
 
-> 📚 **Monocle3 vs Slingshot 选型对比**（算法原理/拓扑假设/参数语义/适用场景/已核实 PMID+DOI 文献表/官方文档核实路径）：见 `references/monocle3-vs-slingshot.md`。做工具对比调研或写方法学部分时直接引用。
 
-> 📚 **Monocle 2 vs Monocle 3 代际差异 + RNA velocity 输入条件**（官方 updates 页逐字要点 / 两代函数序列 / 三模型假设 / 上游 unspliced 定量链 / PMID 台账 / 未核实项）：见 `references/monocle2-vs-monocle3-and-rna-velocity.md`。用户问"两代区别 / RNA 速率要什么输入"时直接引用。
 
-> 📚 **Monocle 2（DDRTree）官方流程跑通后的「结论验证门」+ 实测数值台账**（root_state 枚举表 / 核糖体混杂 ρ / DGT 信息回流 74% / 供体级 LMM / BLAS 超订 / 结论分档模板 / 交付双格式核对）：见 `references/monocle2-root-sensitivity-and-confound-gates.md`。**DDRTree 跑完准备写结论前必读**——不读就会写出被根节点选择左右的方向性结论。
 
 ## 🔴 Monocle2（DDRTree）四道结论门：跑通 ≠ 能写结论
 
@@ -96,7 +93,6 @@ prerequisites:
 | **先用 Seurat UMAP 建轨迹** | Monocle3 的 `reduce_dimension()` 只有简单 PCA→UMAP，没有 SCTransform/Harmony |
 | **>100K 细胞先 subset** | `learn_graph()` 复杂度 O(n²)，>60K 细胞会卡死 |
 | **有大分支才做分支分析** | 衰老数据通常线性（Young→Old），不一定有分叉；发育数据（干细胞→多种终末细胞）才有明显分叉 |
-| **多 R 版本共存时先定位包的真身** | `check_env`/`rail_review` 报"已装"≠ execute_r 内核的库里有（实测：monocle3/slingshot 只在用户级 R-4.4.2 自带库，内核用的 `E:/R-libs/R-4.5.3` 没有）。先枚举所有 R 安装的 library 确认真身 → 在**有 monocle3 的 R** 跑轨迹、用**有 Seurat 的 R** 导出 counts/meta/UMAP 中转 → `references/multi-r-package-location.md` |
 
 ### 🔬 为什么绝不能用 Monocle3 UMAP？
 
@@ -206,7 +202,6 @@ plot_cells(cds, genes = c("MYH7", "MYH1", "TNNT1"),
 | `as.cell_data_set()` deprecated 警告 | 正常，忽略 |
 | PCA 缺失但 UMAP 存在 | `preprocess_cds(num_dim=50)` 再覆盖 UMAP |
 | 知乎代码的手动替换 UMAP | 仅 Monocle3 < 1.3 需要；v1.3+ 自动带 UMAP |
-| **cluster 是多起源混合群体（如 Specialized MF 含快慢肌两条路线）** | ⛔ 不能强行做单根 Monocle3。先 sub-cluster 拆开，或改用 scVelo/CellRank/条件间矢量场。详见 `references/composite-population-trajectory-pitfalls.md` |
 | `pseudotime(cds)` 报 **"No pseudotime calculated for reduction_method = UMAP"** | `saveRDS(cds)` 落盘点放错：必须在 `order_cells()` **之后**保存（存图骨架不存伪时间槽）；读回后补跑 `order_cells(cds, root_pr_nodes=...)` 亦可。monocle3 另建议 `save_monocle_objects()`（保留 annoy/hnsw 索引） |
 | 换一个端点当 root 后"方向整个反过来" | **root 镜像伪影，不是矛盾证据**：伪时间方向由 root 定义，对侧端点定根必然反号。跨方法/跨子集（如剔除某群后重跑）比较"方向是否一致"之前，必须先把两侧 root 校准到**同一生物学端**，否则会把镜像误读成分歧 |
 | `lm(pt ~ age + celltype)` 报 **找不到对象'celltype'**；`meta$col[cells]` 取子集得全 NA / `-Inf` | data.frame 列没有行名 → 必须 `meta[cells, "col"]`；公式变量先落局部向量（`celltype_v <- as.character(meta$celltype)`），不能直接写列名 |
@@ -218,7 +213,6 @@ plot_cells(cds, genes = c("MYH7", "MYH1", "TNNT1"),
 | 单一发育/分化过程，有明确根节点 | Monocle3 + 手动指定根节点 |
 | 多起源混合群体，子群体可拆分 | sub-cluster → 分别 Monocle3 |
 | 多起源混合群体，子群体不可拆分 | scVelo RNA velocity 或 CellRank |
-| 关心"运动/药物/衰老把群推向哪个方向"，而不是伪时间 | 条件间矢量场（PCA 箭头图）——见 `references/composite-population-trajectory-pitfalls.md` |
 
 ---
 
@@ -245,7 +239,6 @@ asso_res <- associationTest(sce)
 ## 路径 C: scVelo RNA velocity (Python)
 
 > 🔴 **前置条件不满足就别跑，改用拟时**；三模型假设与失效场景、Monocle 2 vs 3 代际差异、逐字官方原文与 PMID 台账
-> → `references/monocle2-vs-monocle3-and-rna-velocity.md`
 
 ### 输入条件（硬要求，2026-11 官方文档核实）
 
@@ -309,18 +302,13 @@ g.plot_fate_probabilities(same_plot=False, basis="umap")
 | `learn_graph()` 轨迹乱线 | resolution 太大 | `cluster_cells(1e-5)` |
 | 伪时间方向反向 | 根节点选错 | 改 `group_val` |
 | `graph_test()` 全不显著 | 细胞太少 | 每分支 ≥200 cells |
-| 想用 BEAM 做分支分析 | ⚠️ BEAM 是 Monocle2 的函数（Qiu 2017, PMID 28825705），Monocle3 没有 | 用 `graph_test(neighbor_graph="principal_graph")` + `choose_graph_segments()`（详见 `references/monocle3-vs-slingshot.md`） |
 | scVelo `recover_dynamics` 慢 | 基因太多 | `n_top_genes=2000` |
 | 查 Monocle3 官方文档 URL 404 | 旧 `/monocle3/reference/*.html` 已失效 | 新站为 `/monocle3/docs/{trajectories,clustering,differential,getting_started}/`（从页面 nav 链接找路径）；**"Major updates" 页在 `/monocle3/docs/updates`**（猜 `major_updates` 会 404） |
 | 想把 Monocle2 的 `CellDataSet` 转成 Monocle3 的 `cell_data_set` | 两代对象**不兼容**，`as()` 转换不存在 | 从 counts + metadata + `gene_short_name` 用 `new_cell_data_set()` 重建；反向同理 |
 | 想引用 Monocle2 的确切参数（`expressionFamily=negbinomial.size()` 等） | Rd 渲染页正文由 JS 加载，静态 curl 只拿到骨架 | 本机装了包就 `Rscript -e 'print(args(monocle::newCellDataSet))'` 直读 formals；**没装就照实写"参数未逐字核实（只核实到函数存在）"**，⛔ 不用记忆补默认值 |
-| scVelo 报找不到 spliced/unspliced（`layers` 缺失） | 上游定量只做了 exon 计数 | 不是调参能修的：重跑 velocyto / STARsolo(Velocyto) / kallisto\|bustools 拿内含子读数，见 `references/monocle2-vs-monocle3-and-rna-velocity.md` §4 |
-| Windows 下 curl 抓 GitHub Pages 报 SSL error 35 | Schannel TLS 握手失败（`-k`/`--tlsv1.2` 无效，bioconductor.org 正常） | 改用 Python urllib + 关闭校验的 SSL context（OpenSSL 栈），见 `references/monocle3-vs-slingshot.md` |
-| 需核实论文方法细节/PMID | 凭记忆不可靠 | Europe PMC fullTextXML REST + NCBI efetch 摘要核实（命令见 `references/monocle3-vs-slingshot.md`） |
 
 ## 🔬 伪时间结论验证规程（必须做，否则结论不得升级）
 
-> 完整checklist + 实测数值范例：`references/pseudotime-validation-protocol.md`；多 R 版本下 monocle3/slingshot 装在哪、如何中转数据：`references/multi-r-package-location.md`
 
 | # | 检查 | 做法 | 判读 |
 |---|------|------|------|
