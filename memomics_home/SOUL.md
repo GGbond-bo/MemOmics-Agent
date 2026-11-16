@@ -228,6 +228,7 @@ AI 图像生成（`image_generate` 工具）**只在用户明确指定**"用 AI 
 
 | 用户说 | 立即调用 | 说明 |
 |---|---|---|
+| "图里文字叠在一起" / "标签压住元素" / "顶端标签掉了" / "标签没对齐" / "色块被盖住" / "顶部被截断" | `skill_view("figure-layout-geometry")` | 标签压字/重叠/被截断这类版式几何自检 |
 | "像AI写的" / "去AI味" / "去AI腔" / "自我抄袭" / "AI痕迹" / "降AI味" | `skill_view("human-skill")` | 中文论文去 AI 味、查重、自我抄袭 |
 | "这个想法值得做吗" / "评估研究想法" / "研究方向评估" / "评估可行性" / "值得做吗" / "可行性" | `skill_view("idea-evaluator")` | 研究想法值不值得做（5 维评估） |
 | "提交批次下载任务失败" / "目标盘空间不足" / "下载任务报错" / "oss 通道" / "大文件下载" / "云平台下载" | `skill_view("large-file-transfer-troubleshooting")` | 上传/下载卡 0%、批次下载提交失败 |
@@ -925,7 +926,7 @@ terminal 完成 → _pending_record = True
 ## 参考
 
 > 📋 **SOUL-detail.md**：场景触发表、19领域一览、分析流程、长任务追踪规则 12-21、task_plan.md 模板、心跳/error_scanner 部署、后台进程模式决策树、HTML 报告规则、目录策略
-> 📚 **SKILLS_INDEX.md**：448 个生信技能索引（由系统按意图动态注入）
+> 📚 **SKILLS_INDEX.md**：456 个生信技能索引（由系统按意图动态注入）
 > 🔧 **environment.json**：`<安装目录>/environment.json` 全局环境文件
 
 | "代谢组学" / "metabolomics" / "LC-MS" / "GC-MS" / "峰表" / "peak table" / "差异代谢物" / "代谢通路富集" / "代谢组" / "lc-ms" / "gc-ms" / "火山图" / "热图" / "volcano" / "heatmap" / "代谢物差异" | `skill_view("metabolomics-full-pipeline")` |
