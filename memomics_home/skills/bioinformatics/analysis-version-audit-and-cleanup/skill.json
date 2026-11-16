@@ -1,0 +1,27 @@
+{
+  "id": "analysis-version-audit-and-cleanup",
+  "name": "多版本分析结果：对撞审计 → 定版 → 清理",
+  "category": "bioinformatics",
+  "language": "R+Python",
+  "description": "同一份数据跑出多套分析结果（v2/v4/v5/v8…）后:可归因对比、一句话定版、按边界清理产物目录。触发:'两版有什么区别'、'还不如我之前的版本'、'删除其他版本只保留X'、'做个敏感性对照'、多轮参数迭代后的定版与清理。",
+  "starting_prompt": "使用 多版本分析结果：对撞审计 → 定版 → 清理 进行分析",
+  "source_dir": "skills/bioinformatics/analysis-version-audit-and-cleanup",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [
+    "version-audit",
+    "sensitivity-analysis",
+    "cleanup",
+    "deg",
+    "定版"
+  ],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "version",
+    "audit",
+    "cleanup"
+  ],
+  "when_to_use": "同一份数据跑出多套分析结果（v2/v4/v5/v8…）后:可归因对比、一句话定版、按边界清理产物目录。触发:'两版有什么区别'、'还不如我之前的版本'、'删除其他版本只保留X'、'做个敏感性对照'、多轮参数迭代后的定版与清理。"
+}

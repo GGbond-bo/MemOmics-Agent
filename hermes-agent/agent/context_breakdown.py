@@ -13,6 +13,10 @@ import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 _SKILLS_BLOCK_RE = re.compile(r"<available_skills>.*?</available_skills>", re.DOTALL)
+# 2026-11-11：CJK 文本 token 密度远高于英文。旧实现一律 len/4，对中文会话低估
+# 1.3–2 倍（实测 376k 字符的对话真实约 127k tokens，len/4 只算 94k）。
+# 显示层改用 CJK 感知估算：CJK 约 1 token/字，其余 4 字符/token。
+_CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]")
 
 _SUBAGENT_TOOL_NAMES = frozenset({"delegate_task"})
 
@@ -29,9 +33,44 @@ _CATEGORY_COLORS = {
 
 
 def _chars_to_tokens(text: str) -> int:
+    """CJK 感知的 token 估算（显示用）。
+
+    CJK 字符约 1 token/字（中日韩文字在主流分词器里普遍 1–1.5 字/token），
+    其余按 4 字符/token。旧实现统一 len/4，中文会话会低报 1.3–2 倍。
+    """
     if not text:
         return 0
-    return (len(text) + 3) // 4
+    cjk = len(_CJK_RE.findall(text))
+    return cjk + (len(text) - cjk + 3) // 4
+
+
+def estimate_text_tokens_display(text: str) -> int:
+    """公开给 server 侧（无 agent 时的历史估算）复用同一口径。"""
+    return _chars_to_tokens(text)
+
+
+def estimate_messages_tokens_display(messages: Sequence[dict]) -> int:
+    """消息列表的显示层 token 估算（CJK 感知；图片按 ~1500 tokens/张）。"""
+    total = 0
+    images = 0
+    for msg in messages or []:
+        if not isinstance(msg, dict):
+            total += _chars_to_tokens(str(msg))
+            continue
+        content = msg.get("content")
+        if isinstance(content, str):
+            total += _chars_to_tokens(content)
+        elif content is not None:
+            try:
+                total += _chars_to_tokens(json.dumps(content, ensure_ascii=False))
+            except Exception:
+                total += _chars_to_tokens(str(content))
+        if isinstance(content, list):
+            images += sum(
+                1 for part in content
+                if isinstance(part, dict) and part.get("type") in {"image", "image_url", "input_image"}
+            )
+    return total + images * 1500
 
 
 def _json_tokens(value: Any) -> int:
@@ -112,7 +151,9 @@ def compute_session_context_breakdown(
     tools = list(getattr(agent, "tools", None) or [])
     builtin_tools, mcp_tools, subagent_tools = _split_tools(tools)
 
-    conversation_tokens = estimate_messages_tokens_rough(messages or [])
+    # 2026-11-11：显示层估算与压缩阈值解耦。压缩仍用 estimate_messages_tokens_rough
+    # （/4 口径，阈值按它标定过）；这里展示给人看，中文会话要按 CJK 密度算，否则低报。
+    conversation_tokens = estimate_messages_tokens_display(messages or [])
 
     categories = [
         ("system_prompt", "System prompt", _chars_to_tokens(system_prompt_text)),
@@ -152,5 +193,7 @@ def compute_session_context_breakdown(
         "context_percent": context_percent,
         "context_used": context_used,
         "estimated_total": estimated_total,
+        "used_is_estimate": measured_used <= 0,
+        "history_messages": len(messages or []),
         "model": getattr(agent, "model", "") or "",
     }

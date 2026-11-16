@@ -5484,7 +5484,7 @@ class APIServerAdapter(BasePlatformAdapter):
                     # reconnect watcher in gateway.run treat it as retryable
                     # and loop forever at the backoff cap (observed: 1568+
                     # retries over 5 days across multi-profile setups all
-                    # defaulting to the same port, #52132), filling
+                    # defaulting to the same port, #52000), filling
                     # errors.log and leaking the adapter's ResponseStore
                     # fds each retry. Non-retryable drops it from the
                     # reconnect queue; the operator recovers with

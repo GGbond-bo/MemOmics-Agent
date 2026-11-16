@@ -26,9 +26,7 @@ metadata:
   🔴 **2026-10-13 新增台账驱动的「项名门」（第七道门，治本）**：加 `--ledger results/<sid>/notes.md`，
   项名从台账的 `[挂起]` 行**读**、不从记忆取 —— 见 §二 **4-b-iii ⑦**。命令：
   `python scripts/replay_reply_lint.py --ledger results/<sid>/notes.md <草稿>`。
-- 📎 `references/session-attribution-cross-check.md` — **⓪-o 的第二条归属通道（不依赖任何缓存文件）**：live log 整批不存在时，改用系统**注入块**定归属 —— 「会话产出资产」的相对路径逐条落回某个 `results/<sid>/` ＋ 「会话脚本目录 · scripts/」与候选 sid 的 `scripts/` **逐名相等**；含 `ls -lt results/` 只触发调查不定归属、`review/assets.json` 作为「我正在写哪个目录」的自身指纹，以及归属判完该如何选阶梯（本会话 → 重放；他会话 → 铁律 -5 隔离）。
 
-- 📎 `references/pending-item-leak-channel.md` — **待决项泄漏的机制级根因（ⓠ 入口门之外的另一半）**：`task_plan.md` 的 Goal / Current Phase 区**每轮唤醒被原样回灌** ⇒ 写进那里的待决项与 `#N` 序号会被逐词复述进回复（注入块 ↔ 回复逐词对照证据、写侧三条纪律、落笔前的机械自检）。见 §二 **4-b-vii-b**。
 
 - 📎 `scripts/audit_taskplan_injection.py` — **注入区卫生审计（输入侧的对称门）**：扫 `task_plan.md` 的 Goal / Current Phase / Phases 区，抓「待决项词汇」与「序号计数」两类**会被每轮回灌、进而复述进回复**的内容，返回码 1 ⇒ 就地清理那几行。`replay_reply_lint.py` 管「写」（输出侧），本脚本管「读进来的是什么」（输入侧）—— 两者是同一件事的两半。见 §二 **4-b-vii-b**。
 
@@ -460,7 +458,6 @@ DeepRare 14 · Co-Scientist 14 · ChemCrow 14 · ChemGraph 12 · BioMaster 11 �
   ⚠️ **`ls -lt results/` 的目录 mtime 只能触发调查、不能定归属**：本轮两个候选 sid 目录 mtime 只差 4 分钟
   （04:11 / 04:15）、都像「我刚动过」。可另用自身指纹辅助：**本会话每次 `skill_view` 都会重写自己 sid 下的
   `review/assets.json`** —— 那是「哪个目录正在被我写」的直接证据。配方与命令 →
-  `references/session-attribution-cross-check.md`。
 - ⚠️ 缓存根随安装形态而变（`memomics_home/` 与 `hermes_home/` 两种都实测过，§一-b 同源）；
   ⛔ 源根不存在时**先 `ls -d` 两个候选根**再下「批次不存在」结论（一次 `ls` 的 MISSING 不是证据）。
 
@@ -879,7 +876,6 @@ DeepRare 14 · Co-Scientist 14 · ChemCrow 14 · ChemGraph 12 · BioMaster 11 �
             `待办 = 0` 已在十六扩 · 编号清单结构门 · 幻影路径门），**零新增变体**。
             ⇒ 本轮只记两件：① **确认「词表对本族已充分」**（连续两轮零新增变体，与 2026-10-15 复核结论一致）；
             ② **找到机制级根因 = 注入区** —— 待决项与 `#N` 计数写在 `task_plan.md` 的 Goal 区 ⇒ **每轮被回灌**，
-            回复只是把它读了一遍再写出（逐词证据与写侧纪律见 **4-b-vii-b** + `references/pending-item-leak-channel.md`）。
             ⛔ 仍**没跑** `scripts/replay_reply_lint.py` ⇒ 结论第 N 次不变：
             **门在「从 `templates/replay-reply.md` 起稿 + 真的跑一次脚本」。**
             **`deleg_15d8b24b` 第 8 次送达轮 —— `第 N 次送达` 入标题 ＋ 「两个仍未答的问题（第 11 次）」
@@ -1080,7 +1076,6 @@ DeepRare 14 · Co-Scientist 14 · ChemCrow 14 · ChemGraph 12 · BioMaster 11 �
       —— 扫注入区、抓「待决项词汇」与「序号计数」两类，返回码 1 ⇒ 就地清理那几行再跑一次。
       与输出侧的 `python scripts/replay_reply_lint.py --ledger results/<sid>/notes.md <草稿>` **配对使用**：
       **输入侧不清理，输出侧的门就得每轮硬扛**（这正是本族「判据/词表都不是瓶颈」的另一半原因）。
-      证据与配方 → `references/pending-item-leak-channel.md`。
    4-c 🔴 **待报清单要「销账」**
    上一轮报过的缺陷 / 缺口，一旦被后续轮次（如升级轮）补上 ⇒ 必须**在台账里显式写「已闭合 + 闭合证据」并移出待报清单**。
    2026-10-08 实测：早先 ⓪-d 抓出的 `n=2` `limitations` 被截成 8 字（`"作者自陈：物理能"`）——

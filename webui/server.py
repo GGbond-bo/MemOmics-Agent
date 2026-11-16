@@ -1584,6 +1584,55 @@ _TOKEN_USAGE_FIELDS = ("input_tokens", "output_tokens", "cache_read_tokens",
                        "cache_write_tokens", "reasoning_tokens", "llm_ms", "api_calls")
 
 
+def _billed_total_tokens(stats) -> int:
+    """计费口径总量 = 未缓存输入 + 缓存读 + 缓存写 + 输出。
+
+    2026-11-11：上下文面板原来两套"累计"并存 —— 圆圈用 input+output（漏缓存读），
+    统计格用 billed+output，同一会话能差 27 倍（807K vs 21.8M）。现在统一走这里。
+    """
+    stats = stats or {}
+    billed = stats.get("billed_input_tokens")
+    if billed is None:
+        billed = ((stats.get("input_tokens") or 0) + (stats.get("cache_read_tokens") or 0)
+                  + (stats.get("cache_write_tokens") or 0))
+    return int(billed or 0) + int(stats.get("output_tokens") or 0)
+
+
+def _load_context_estimate_messages(sid, cap: int = 4000):
+    """供上下文占用估算用的原始消息（**含 tool 结果**）。
+
+    2026-11-11：`_load_session_messages` 会过滤掉 role=tool（UI 只需要问答），
+    但 tool 输出往往占上下文大头（实测 376k 字符里 350k 是 tool）。用它做估算
+    会把 273 条历史压成 76 条、占用从 ~150k 掉到 18k。
+    """
+    db = _get_session_db()
+    if not db or not getattr(db, "_conn", None):
+        return []
+    try:
+        rows = db._conn.execute(
+            "SELECT role, content FROM messages WHERE session_id = ? AND active = 1 ORDER BY rowid",
+            (sid,),
+        ).fetchall()
+        return [{"role": r[0], "content": r[1] or ""} for r in rows][-cap:]
+    except Exception:
+        return []
+
+
+def _estimate_context_tokens_from_messages(messages, cap: int = 2000) -> int:
+    """无 agent 时按历史消息估算"当前上下文占用"（CJK 感知，显示用）。
+
+    只统计对话历史，不含系统提示/工具定义，所以是下界；前端会标"估算"。
+    """
+    try:
+        from agent.context_breakdown import estimate_messages_tokens_display
+        return int(estimate_messages_tokens_display(list(messages or [])[-cap:]) or 0)
+    except Exception:
+        chars = 0
+        for m in list(messages or [])[-cap:]:
+            chars += len(str((m or {}).get("content") or "")) if isinstance(m, dict) else len(str(m))
+        return chars // 4
+
+
 def _persist_token_usage(session, turn_kind="user"):
     """回合级 token 消耗持久化：追加写入 <results_dir>/token_usage.jsonl（永不覆盖）。
 
@@ -2755,6 +2804,35 @@ def _detect_action_promise(result: str, tool_call_log: list) -> bool:
     return False
 
 
+# 2026-11-11 P0：本回合「真实执行」判定（产物终检 + 虚假完成检测共用）。
+# 旧实现把任意工具都算执行（`_real_exec_this_turn or bool(_turn_tool_call_log)`），
+# 于是只读复核轮（read_file / ls / cat）被误判「声称完成但结果目录无新产物」，
+# 凭空触发紧急唤醒并逼模型再解释一大段。只读观察不应算产出。
+_MEM_EXEC_WRITE_TOOLS = {"write_file", "patch", "edit_file", "str_replace",
+                         "apply_patch", "create_file", "update_results_dir"}
+_MEM_EXEC_PROD_TOOLS = {"scan_data", "execute_r", "execute_python", "execute_code",
+                        "add_figure", "generate_report", "debate_analysis"}
+_MEM_EXEC_SHELL_TOOLS = {"terminal", "run_command"}
+
+
+def _is_producing_call(tool_name, args):
+    """这次工具调用是否真的会产生/修改文件（只读观察不算）。"""
+    if not isinstance(args, dict):
+        return False
+    blob = str(args.get("command") or args.get("code") or "")
+    if "[⛔ 执行保护]" in blob:
+        return False
+    if tool_name in _MEM_EXEC_WRITE_TOOLS or tool_name in _MEM_EXEC_PROD_TOOLS:
+        return True
+    if tool_name in _MEM_EXEC_SHELL_TOOLS:
+        try:
+            from webui.enforcement import _is_readonly_terminal
+            return not _is_readonly_terminal(blob)
+        except Exception:
+            return True  # 判定失败按"有产出"处理：宁可多提示，不漏报
+    return False
+
+
 def _results_dir_changed_since(session, ts: float, extra_dirs: list = None) -> bool:
     """results_dir 下是否有真实产出文件在 ts 之后被修改（排除平台自写文件）。
 
@@ -3016,8 +3094,20 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
       fallback   — 兜底重排：唤醒前先做便宜检查（外部工作在跑且无新进展 →
                     跳过 LLM 唤醒，只重排兜底——轮询文件系统而非轮询 LLM）
     """
-    if not agent or not loop:
+    # agent 允许暂时为 None：恢复 pending 待办时由 _trigger_agent_turn 按需重建。
+    # 没有事件循环才真正失去调度能力。
+    if not loop:
         return
+    # 每会话最多保留一个待执行唤醒。新事件/新状态替换旧 timer，避免 turn_end、
+    # task_done、API 恢复各自排队后形成顺序重复执行。
+    _existing_wake = session.get("_self_check_future")
+    if _existing_wake is not None:
+        try:
+            if not _existing_wake.done():
+                _existing_wake.cancel()
+        except Exception:
+            pass
+    session["_self_check_future"] = None
     # 2026-08-14 P0 修复：紧急标记提前 pop——六闸门在 urgent 时不得吞掉"说而不做/心跳错误"的唤醒
     urgent = session.pop("_urgent_wakeup", False)
     force_tool = session.pop("_force_tool_check", False)
@@ -3062,7 +3152,9 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
                 if _m.get("role") == "assistant" and str(_m.get("content") or "").strip():
                     _last_text = str(_m.get("content"))[:6000]
                     break
-            if _NO_PENDING_WORK_RE.search(_last_text):
+            # 只有清单确实没有未完成项时才采信文本退役；仍有 pending/in_progress/
+            # waiting_review 时，模型的一句“无待办”不得覆盖结构化状态。
+            if _NO_PENDING_WORK_RE.search(_last_text) and not has_todos:
                 if results_dir:
                     try:
                         from webui.runtime.run_gate import mark_done, disarm, save_state
@@ -3110,7 +3202,10 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
         else:
             session["_artifact_stall"] = 0
         session["_artifact_sig_last"] = _asig
-        if int(session.get("_artifact_stall", 0) or 0) >= 3 and not urgent:
+        # 产出停滞本身不是完成证据。外部进程/集群仍在跑、或结构化待办仍未完成时，
+        # 绝不 mark_done/disarm；真正完成的会话已在上方事件驱动分支退出。
+        if int(session.get("_artifact_stall", 0) or 0) >= 3 and not urgent \
+                and not has_todos and not _session_has_active_work(session):
             try:
                 from webui.runtime.run_gate import mark_done, disarm
                 if results_dir:
@@ -3198,7 +3293,12 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
         try:
             with open(os.path.join(results_dir, "task_plan.md"), "r", encoding="utf-8") as f:
                 plan_text = f.read()
-            if "cancelled" in plan_text.lower() or "**Status:** paused" in plan_text or "**Status:** closed" in plan_text.lower() or "🔒 CLOSED" in plan_text or "已停止" in plan_text or "停止" in plan_text and "task_plan" in plan_text.lower():
+            _plan_stopped = ("cancelled" in plan_text.lower() or "**Status:** paused" in plan_text or "**Status:** closed" in plan_text.lower() or "🔒 CLOSED" in plan_text or "已停止" in plan_text or "停止" in plan_text and "task_plan" in plan_text.lower())
+            _pending_now = any(isinstance(t, dict) and str(t.get("status") or "pending") == "pending"
+                               for t in (session.get("todos", []) or []))
+            # 旧计划可能仍写 completed/cancelled；用户恢复 pending 或 Agent 新建 pending
+            # 是更新的执行事实，优先于旧文本。没有 pending 时才按停止文本退出。
+            if _plan_stopped and not _pending_now:
                 logger.info(f"[SelfCheck] session {session['id'][:12]}: task_plan is cancelled/paused/closed, skipping self-check")
                 return
         except Exception:
@@ -3220,7 +3320,22 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
             # 循环没有任何刹车。现在 should_run=False 一律尊重（urgent 除外，紧急事件照旧穿透）。
             # 桥接侧已经把关：waiting/skip 只有在产出窗口内确无真实写入时才返回 False；
             # LoopX 不可用时桥接给的是安全默认 True，所以 fail-open 语义没变。
-            if not _dec.get("should_run") and not urgent:
+            # pending / waiting_review 是明确的 Agent 可执行工作：尚未产生文件时
+            # LoopX 往往会回答 waiting，若照单全收就会让新清单永远不开工。
+            # in_progress 的外部长任务仍尊重 waiting/backoff，不额外烧 LLM 轮次。
+            _ready_for_agent = any(
+                str(t.get("status") or "pending") in ("pending", "waiting_review")
+                for t in (session.get("todos", []) or []) if isinstance(t, dict))
+            if not _ready_for_agent and any(
+                    isinstance(t, dict) and t.get("status") == "in_progress"
+                    for t in (session.get("todos", []) or [])):
+                # 已标 in_progress 但外部并无进程，说明 Agent 在步骤间停下或重启后恢复；
+                # 这也属于可立即执行，而不是需要继续等待的外部计算。
+                try:
+                    _ready_for_agent = not _session_has_external_work(session)
+                except Exception:
+                    _ready_for_agent = True
+            if not _dec.get("should_run") and not urgent and not _ready_for_agent:
                 _reason = str(_dec.get("reason") or "loopx quota 判定停止")[:80]
                 logger.info(f"[SelfCheck] session {session['id'][:12]}: LoopX {_state} 停止唤醒 ({_reason})")
                 return
@@ -3255,12 +3370,35 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
         # M1: 后台任务完成事件 → 尽快唤醒（DSH jobs 结算通知语义）
         delay = 3
         logger.info(f"[SelfCheck] session {sid[:12]}: task-done wakeup triggered")
+    elif trigger == "turn_end" and has_todos:
+        # 清单里还有 Agent 可执行工作。外部探测故障按“无需等待”处理，
+        # 保持原有 fail-open 契约，不能因 process_registry 异常饿死待办。
+        try:
+            _waiting_external = _session_has_external_work(session)
+        except Exception:
+            _waiting_external = False
+        if not _waiting_external:
+            # 同一待办状态没有变化时指数退避（3→6→12…≤300 秒）；状态有进展立即回 3 秒。
+            _todo_sig = json.dumps([
+                (str(t.get("id") or ""), str(t.get("status") or "pending"),
+                 str(t.get("title") or t.get("content") or ""))
+                for t in (session.get("todos", []) or []) if isinstance(t, dict)
+            ], ensure_ascii=False, sort_keys=True)
+            if _todo_sig == session.get("_todo_wake_sig"):
+                session["_todo_wake_stall"] = int(session.get("_todo_wake_stall", 0) or 0) + 1
+            else:
+                session["_todo_wake_stall"] = 0
+            session["_todo_wake_sig"] = _todo_sig
+            delay = min(300, 3 * (2 ** min(int(session.get("_todo_wake_stall", 0) or 0), 6)))
+            logger.info(f"[SelfCheck] session {sid[:12]}: ready todo wakeup in {delay}s")
     
     async def _wakeup():
         await asyncio.sleep(delay)
         try:
             if sid not in _sessions: return
             s = _sessions[sid]
+            # 当前 timer 已开始执行；后续重排/状态事件可安全登记下一枚。
+            s["_self_check_future"] = None
             if s.get("running_agent") or s.get("running_task") or s.get("_user_turn_active"):
                 # 2026-08-16: 冻结分支已直接武装诊断回合 → 本唤醒不重排（防双发）
                 # 2026-08-20: 用户回合进行中(_user_turn_active)同等视为忙——避免自检
@@ -3284,21 +3422,13 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
                 else:
                     s.pop("_wakeup_retry_n", None)
                 return
-            # ── 2026-10-18：唤醒真正记账（此前 rounds 一直是 0，256 轮预算形同虚设）──
-            try:
-                from webui.runtime.run_gate import admit_round
-                _rd_w = s.get("results_dir", "") or ""
-                if _rd_w and not admit_round(_rd_w):
-                    logger.info(f"[SelfCheck] session {sid[:12]}: 轮次预算/退役拦截 → 不注入唤醒")
-                    return
-                s["_self_check_total"] = int(s.get("_self_check_total", 0) or 0) + 1
-            except Exception as _e:
-                logger.warning(f"[SelfCheck] admit_round 失败(fail-open): {_e}")
-
             # ── M1 兜底闸门：外部工作在跑且无新进展 → 不唤醒 LLM，只重排兜底 ──
             # （省 token 的关键：轮询文件系统/进程表，而不是轮询 LLM；
             #   DSH"无产出就不唤醒"的落地）
-            if trigger in ("turn_end", "fallback") and not urgent and not force_tool:
+            _ready_now = any(
+                isinstance(t, dict) and str(t.get("status") or "pending") in ("pending", "waiting_review")
+                for t in (s.get("todos", []) or []))
+            if trigger in ("turn_end", "fallback") and not urgent and not force_tool and not _ready_now:
                 try:
                     _sig_now = _session_progress_signature(s)
                     # 注意：签名是 hash%2^31 的不透明值，非单调——"有变化"必须用 != 判定
@@ -3311,19 +3441,7 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
                         return
                 except Exception:
                     pass
-            # ── M3 硬轮数预算：真正注入唤醒才 +1（DSH roundsStarted 语义）──
-            try:
-                from webui.runtime.run_gate import admit_round
-                _rd_b = s.get("results_dir", "") or ""
-                # 无任务目录或预算耗尽/任务退役 → 一律不注入
-                # （极端测试修复：原 `if _rd_b and not admit_round(...)` 在
-                #   results_dir 为空时整个跳过检查 → 无任务会话也会唤醒 LLM）
-                if not _rd_b or not admit_round(_rd_b):
-                    logger.info(f"[SelfCheck] session {sid[:12]}: 轮数预算耗尽/无任务目录/任务退役，停止注入唤醒")
-                    return
-            except Exception:
-                pass
-            # 判断唤醒类型
+            # 判断唤醒类型（先组装，所有“无需注入”的退出都发生在预算记账之前）
             todos = s.get("todos", [])
             in_progress = [t for t in todos if t.get("status") == "in_progress"]
             waiting_review = [t for t in todos if t.get("status") == "waiting_review"]
@@ -3366,13 +3484,29 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
                     "6. 需要审查→标记 waiting_review"
                 )
             else:
-                # 2026-08-26: 无进行中/待审任务时，仅当 task_plan.md 真实存在才唤醒
-                # 检查进度——否则任务已完成（plan 归档为 task_plan.done.md）的会话会被
-                # 无限「检查主线任务进度」唤醒空转（实测：memomics-cd677556 任务完成后
-                # 唤醒 #5/#6 继续注入 → 模型反复读不存在的 plan → 5 分钟无输出被看门狗
-                # 中断；LoopX goal:active 为残留状态误导）
+                # 没有 in_progress/待审项时，pending 本身也是可调度工作。
+                # 旧逻辑在没有 task_plan 且没有外部进程时直接 return，导致全 pending
+                # 清单只能上屏、永远进不了 Agent。现在把第一条就绪待办显式交给 Agent。
+                pending = [t for t in todos if str(t.get("status") or "pending") == "pending"]
                 _plan_p = os.path.join(s.get("results_dir", ""), "task_plan.md") if s.get("results_dir") else ""
-                if not (_plan_p and os.path.isfile(_plan_p)):
+                if pending:
+                    _first = pending[0]
+                    _pending_titles = "\n".join(
+                        f"  - id={t.get('id','')} | {str(t.get('title') or t.get('content') or '')[:160]}"
+                        for t in pending[:8])
+                    wake_msg = (
+                        _loopx_ctx +
+                        f"⏰ [系统唤醒 #{_sc}] 有 {len(pending)} 条待办等待执行\n" +
+                        _pending_titles + "\n\n"
+                        f"当前先执行 id={_first.get('id','')}：{str(_first.get('title') or _first.get('content') or '')[:200]}\n"
+                        "请立即完成真实执行闭环：\n"
+                        "1. 用 todo(merge=true) 把该条标记 in_progress；\n"
+                        "2. 根据任务内容调用 terminal/write_file/execute_python/execute_r 等实际工具，禁止只复述计划；\n"
+                        "3. 检查真实产物或命令退出码；需要审查则标 waiting_review；\n"
+                        "4. 验证通过后把该条标 completed，再把下一条 pending 标 in_progress；\n"
+                        "5. 长命令用后台任务并保留 in_progress，等待完成事件；失败时保留待办并报告错误。"
+                    )
+                elif not (_plan_p and os.path.isfile(_plan_p)):
                     # 2026-10-09 集群长任务修复：没有 task_plan 但**外部工作还在跑**（batch/集群）
                     # 时必须继续注入「检查外部工作」唤醒 —— 旧行为（2026-08-26 防空转守卫）在
                     # 没 plan 时一律静默 return，把 2026-08-07 的 batch 监督修复也一起挡掉了，
@@ -3421,6 +3555,17 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
             if _stall_diag:
                 wake_msg = _stall_diag + "\n\n" + wake_msg
             _force_prefix = "⛔ 强制工具调用（系统要求）：本轮必须先调用工具实际执行，禁止纯文本回复！\n\n" if force_tool else ""
+            # M3 唯一记账点：wake_msg 已确定、所有静默退出分支均已走完，
+            # 下一步就是真实 Agent 注入。跳过/旧计划退出/无任务目录均不扣预算。
+            try:
+                from webui.runtime.run_gate import admit_round
+                _rd_b = s.get("results_dir", "") or ""
+                if not _rd_b or not admit_round(_rd_b):
+                    logger.info(f"[SelfCheck] session {sid[:12]}: 轮数预算耗尽/无任务目录/任务退役，停止注入唤醒")
+                    return
+                s["_self_check_total"] = int(s.get("_self_check_total", 0) or 0) + 1
+            except Exception:
+                pass
             s.setdefault("messages", []).append(
                 {"role": "system", "content": _force_prefix + wake_msg + "\n\n⛔ 工具优先！直接调工具，禁止只说'马上查'而不行动！", "time": datetime.now().strftime("%H:%M:%S"), "source": "self_check"})
             s["last_active"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -3430,9 +3575,9 @@ def _schedule_self_check(session, agent, loop, trigger="turn_end"):
     
     # 使用传入的 event loop 调度，确保在正确的线程上执行
     if loop and loop.is_running():
-        asyncio.run_coroutine_threadsafe(_wakeup(), loop)
+        session["_self_check_future"] = asyncio.run_coroutine_threadsafe(_wakeup(), loop)
     else:
-        asyncio.ensure_future(_wakeup())
+        session["_self_check_future"] = asyncio.ensure_future(_wakeup())
 
 
 def _session_progress_signature(session):
@@ -3492,8 +3637,14 @@ def _calc_self_check_delay(session):
     for t in todos:
         if t.get("status") == "in_progress":
             est = t.get("estimated_minutes", 0)
-            if isinstance(est, (int, float)) and est > 1:
-                return max(30, min(900, int(est * 60 * 0.8)))  # 80% of estimate, 30s-15min
+            if isinstance(est, (int, float)) and not isinstance(est, bool):
+                try:
+                    import math as _math
+                    _est = float(est)
+                    if _math.isfinite(_est) and _est > 1:
+                        return max(30, min(900, int(_est * 60 * 0.8)))  # 80% of estimate, 30s-15min
+                except (OverflowError, TypeError, ValueError):
+                    continue
     return 300  # default 5 min
 
 
@@ -3639,7 +3790,11 @@ async def _trigger_agent_turn(session, message):
     except asyncio.TimeoutError:
         _session_emit(session, {"type": "timeout", "content": "自检超时(5分钟)", "session_id": session["id"]})
     except Exception as e:
-        pass
+        # 异常必须可见；finally 的重排会使用待办状态退避，不再静默高速重放。
+        logger.warning(f"[SelfCheck] Agent 回合执行失败: {type(e).__name__}: {e}")
+        _session_emit(session, {"type": "error", "code": "self_check_turn_failed",
+                                "content": f"自动续跑本轮失败：{type(e).__name__}。将按待办状态退避后重试。",
+                                "session_id": session.get("id", "")})
     finally:
         session["running_agent"] = None
         session["running_task"] = None
@@ -3662,6 +3817,9 @@ async def _trigger_agent_turn(session, message):
             _persist_token_usage(session, turn_kind="self_check")
         except Exception:
             pass
+        # 自检可能使用新建 Agent（只有 enforcement 回调），回合末必须确定性回读
+        # TodoStore，否则实际执行已改状态，UI/KV 却仍停留在旧清单。
+        _publish_agent_todos(session, agent)
         _schedule_self_check(session, agent, asyncio.get_event_loop(), trigger="turn_end")
         # 2026-08-25: 回合结束刷新产出资产索引（供 digest 跨轮复用）
         try:
@@ -8124,7 +8282,7 @@ When the user asks you to perform an analysis task, you MUST:
    - Expected output files
 
 2. **Create a todo checklist.** Break the skill's pipeline into concrete steps. Each step = one script execution + its review.
-   - Use the `todo` tool (action='create')
+   - Use the `todo` tool with `todos=[...]` (replace the plan with merge=false, or update by id with merge=true)
    - Set `estimated_minutes` for each step (your best guess based on data size)
    - Order steps as defined in the skill
 
@@ -9737,6 +9895,9 @@ def _create_agent(model_config=None, session_id=None, session=None):
     # 注：不注入 CPU/内存 Job 限制（方案 A，2026-08-13）：
     # windows_job.py 的 Job Object 限制因 task_id 断链从未生效，且用户要求
     # “不管 CPU”——单细胞多核任务（plan(multisession)）需要整机算力自由。
+    # 执行侧 TodoStore 从会话权威副本恢复；不能只靠已过滤 tool 消息的聊天历史。
+    if session:
+        _restore_agent_todos_from_session(session, agent)
     return agent
 
 @app.get("/api/sessions")
@@ -10166,14 +10327,6 @@ async def rename_results_dir(sid: str, body: dict = None):
     new_name = "_".join(parts) + "_" + short_id
     old_dir = _sessions[sid]["results_dir"]
     new_dir = os.path.join(RESULTS_DIR, new_name)
-    # Persist results_dir to state.db
-    try:
-        db = _get_session_db()
-        if db and hasattr(db, '_conn'):
-            db._conn.execute("UPDATE sessions SET cwd = ? WHERE id = ?", (new_dir, sid))
-            db._conn.commit()
-    except Exception:
-        pass
     
     # 问题3: 用户可指定 output_root（桌面等），同时 results/ 下保留备份
     output_root = body.get("output_root", "")  # 用户指定路径
@@ -10211,19 +10364,22 @@ async def rename_results_dir(sid: str, body: dict = None):
         except Exception:
             pass  # 备份失败不阻断主流程
     
-    # 同步更新会话标题 + 持久化 results_dir 到 state.db 的 cwd 字段
+    # results_dir 是会话可恢复的关键状态，独立于标题自动命名。即使用户
+    # 已经手动命名会话，仍必须写 cwd，不能因保留标题而丢失结果目录。
+    db = _get_session_db()
+    if db:
+        try:
+            db.update_session_cwd(sid, new_dir.replace("\\", "/"))
+        except Exception:
+            pass
+
+    # 自动生成的分析标题只在用户未手动命名时写入；由统一的事务助手保证
+    # title 和 title_source 同步，并向前端发送带 source 的事件。
     title_parts = [body.get(k, "") for k in ["species", "tissue", "direction"] if body.get(k)]
     if title_parts:
-        new_title = " ".join(title_parts)
-        _sessions[sid]["title"] = new_title
-        db = _get_session_db()
-        if db:
-            try:
-                db.set_session_title(sid, new_title)
-                # 把 results_dir 存到 cwd 字段，重启后可恢复
-                db.update_session_cwd(sid, new_dir.replace("\\", "/"))
-            except Exception:
-                pass
+        _set_session_title_with_source(
+            sid, " ".join(title_parts), "auto", allow_memory_fallback=True
+        )
     
     # 创建完整子目录结构（需求1d：分析log+辩证记录+运行记录强制保留）
     for sub in ["figures", "results", "scripts", "data", "log"]:
@@ -10287,17 +10443,224 @@ def _append_rename_event(sid, old_title, new_title, source="manual"):
 # 正在运行的自动标题总结线程（防重入：同一会话同时只跑一个）
 _title_summary_locks = set()
 
+# 标题同时被 WebSocket 首条消息、自动总结、结果目录命名和手动改名触发。
+# SessionDB 的事务可保护 SQLite，但内存中的 _sessions 还需要同一把按会话锁，
+# 否则慢速 LLM 返回可能在用户手动改名之后，把旧结果重新写回。
+# A fixed stripe pool avoids retaining a lock forever for every historical
+# session while still serializing all competing title writes for one sid.
+_TITLE_WRITE_LOCKS = tuple(_threading.RLock() for _ in range(64))
+
+
+def _title_write_lock(sid):
+    """返回 sid 对应的固定分片可重入锁；标题写入必须先取得它。"""
+    return _TITLE_WRITE_LOCKS[hash(str(sid)) % len(_TITLE_WRITE_LOCKS)]
+
+
+def _title_source_from_conn(conn, sid):
+    """在已有 DB 事务里读取标题来源，缺省为 auto。"""
+    row = conn.execute(
+        "SELECT value FROM kv WHERE key = ?", (f"title_source:{sid}",)
+    ).fetchone()
+    return row[0] if row and row[0] in ("auto", "manual") else "auto"
+
+
+def _manual_title_source_in_lineage(conn, db, sid):
+    """在已有 DB 上下文中检查 sid 及所有压缩续写祖先的手动命名。
+
+    不能只检查 root：用户可能在已压缩的中间 tip 手动改名，随后又继续压缩。
+    复用 SessionDB 的 compression-ancestor CTE 定义，避免把普通子代理或分支
+    错当作同一会话谱系。
+    """
+    # Keep this one recursive query aligned with SessionDB's
+    # _COMPRESSION_CHILD_SQL: only a child whose parent ended by compression
+    # participates in the continuation chain.  It includes sid itself, so an
+    # explicit manual marker on the current tip is caught too.
+    row = conn.execute(
+        """
+        WITH RECURSIVE ancestors(id) AS (
+            SELECT ?
+            UNION
+            SELECT parent.id
+            FROM ancestors a
+            JOIN sessions child ON child.id = a.id
+            JOIN sessions parent ON parent.id = child.parent_session_id
+            WHERE parent.end_reason = 'compression'
+        )
+        SELECT 1
+        FROM ancestors a
+        JOIN kv ON kv.key = ('title_source:' || a.id) AND kv.value = 'manual'
+        LIMIT 1
+        """,
+        (sid,),
+    ).fetchone()
+    return row is not None
+
+
+def _lineage_has_manual_title_source(sid):
+    """线程安全地查询完整压缩谱系是否已有手动标题来源。"""
+    db = _get_session_db()
+    if not db or not hasattr(db, "_conn"):
+        return _load_title_source(sid) == "manual"
+    try:
+        db_lock = getattr(db, "_lock", None)
+        if db_lock is None:
+            return _manual_title_source_in_lineage(db._conn, db, sid)
+        with db_lock:
+            return _manual_title_source_in_lineage(db._conn, db, sid)
+    except Exception:
+        return _load_title_source(sid) == "manual"
+
+
+def _set_session_title_with_source(sid, raw_title, source, *, allow_memory_fallback=False):
+    """原子写入会话标题和来源标记。
+
+    返回 ``{ok, title, source, blocked, error}``。手动改名必须成功落到
+    ``sessions`` 和 ``kv`` 同一事务后才更新内存；自动命名在数据库不可用时
+    可以静默保留旧的内存兼容行为，但绝不能越过已存在的 manual 标记。
+    """
+    if source not in ("auto", "manual"):
+        return {"ok": False, "title": None, "source": source, "blocked": False,
+                "error": "invalid title source"}
+
+    lock = _title_write_lock(sid)
+    with lock:
+        session = _sessions.get(sid)
+        if not session:
+            return {"ok": False, "title": None, "source": source, "blocked": False,
+                    "error": "session not found"}
+
+        db = _get_session_db()
+        try:
+            new_title = db.sanitize_title(raw_title) if db else str(raw_title or "").strip()
+        except ValueError as exc:
+            return {"ok": False, "title": None, "source": source, "blocked": False,
+                    "error": str(exc)}
+        if not new_title:
+            return {"ok": False, "title": None, "source": source, "blocked": False,
+                    "error": "名称无效（含非法字符）"}
+
+        # A manual name in memory is enough to stop automatic writers even
+        # before a legacy installation has a usable state.db.
+        if source == "auto" and session.get("title_source") == "manual":
+            return {"ok": False, "title": session.get("title"), "source": "manual",
+                    "blocked": True, "error": None}
+
+        if db and hasattr(db, "_execute_write") and hasattr(db, "_conn"):
+            try:
+                def _write(conn):
+                    if source == "auto":
+                        if _manual_title_source_in_lineage(conn, db, sid):
+                            # Persist the inherited guard on the current tip so
+                            # later checks remain O(1) after this first lookup.
+                            conn.execute(
+                                "INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)",
+                                (f"title_source:{sid}", "manual"),
+                            )
+                            return {"ok": False, "title": session.get("title"),
+                                    "source": "manual", "blocked": True, "error": None}
+
+                    # Preserve SessionDB's title uniqueness and compression-tip
+                    # transfer semantics while keeping this title + source write
+                    # within the same BEGIN IMMEDIATE transaction.
+                    conflict = conn.execute(
+                        "SELECT id FROM sessions WHERE title = ? AND id != ?",
+                        (new_title, sid),
+                    ).fetchone()
+                    final_title = new_title
+                    if conflict:
+                        conflict_id = conflict["id"]
+                        if db._is_compression_ancestor(
+                            conn, ancestor_id=conflict_id, descendant_id=sid
+                        ):
+                            conn.execute("UPDATE sessions SET title = NULL WHERE id = ?", (conflict_id,))
+                        elif source == "auto":
+                            # Auto titles should never interrupt a conversation
+                            # because an unrelated session has the same summary.
+                            base = re.sub(r" #\d+$", "", new_title)
+                            rows = conn.execute(
+                                "SELECT title FROM sessions WHERE title IS NOT NULL",
+                            ).fetchall()
+                            # Deliberately filter in Python rather than building
+                            # a SQL LIKE/GLOB pattern: session titles can contain
+                            # [, %, _, ?, or * and must be treated literally.
+                            used = {
+                                str(row[0]) for row in rows if row and row[0]
+                                and (str(row[0]) == base or str(row[0]).startswith(base + " #"))
+                            }
+                            n = 2
+                            final_title = f"{base} #{n}"
+                            while final_title in used:
+                                n += 1
+                                final_title = f"{base} #{n}"
+                        else:
+                            raise ValueError(
+                                f"Title '{new_title}' is already in use by session {conflict_id}"
+                            )
+
+                    cursor = conn.execute(
+                        "UPDATE sessions SET title = ? WHERE id = ?", (final_title, sid)
+                    )
+                    if not cursor.rowcount:
+                        return {"ok": False, "title": None, "source": source,
+                                "blocked": False, "error": "session not found"}
+                    conn.execute(
+                        "INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)",
+                        (f"title_source:{sid}", source),
+                    )
+                    return {"ok": True, "title": final_title, "source": source,
+                            "blocked": False, "error": None}
+
+                result = db._execute_write(_write)
+            except ValueError:
+                return {"ok": False, "title": None, "source": source, "blocked": False,
+                        "error": "该名称已被其他会话使用，请换一个"}
+            except Exception as exc:
+                return {"ok": False, "title": None, "source": source, "blocked": False,
+                        "error": f"写入失败: {exc}"}
+        elif source == "manual" or not allow_memory_fallback:
+            # A manual rename reported to the UI must survive restart.  Do not
+            # mutate the in-memory projection when its canonical write failed.
+            return {"ok": False, "title": None, "source": source, "blocked": False,
+                    "error": "会话数据库不可用，未修改名称"}
+        else:
+            # Older recovery paths can temporarily run without SessionDB. Keep
+            # auto naming non-fatal, but still make its source explicit.
+            if source == "auto" and _lineage_has_manual_title_source(sid):
+                return {"ok": False, "title": session.get("title"), "source": "manual",
+                        "blocked": True, "error": None}
+            result = {"ok": True, "title": new_title, "source": source,
+                      "blocked": False, "error": None}
+
+        if not result.get("ok"):
+            if result.get("blocked"):
+                session["title_source"] = "manual"
+            return result
+
+        old_title = session.get("title")
+        session["title"] = result["title"]
+        session["title_source"] = result["source"]
+        _sync_meta_display_name(session, result["title"])
+        _append_rename_event(sid, old_title, result["title"], source=result["source"])
+        _session_emit(session, {
+            "type": "session_title",
+            "title": result["title"],
+            "session_id": sid,
+            "source": result["source"],
+        })
+        return result
+
 
 def _persist_title_source(sid, source):
     """持久化标题来源标记（auto/manual）到 state.db kv 表。"""
     try:
         db = _get_session_db()
-        if db and hasattr(db, "_conn"):
-            db._conn.execute(
-                "INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)",
-                (f"title_source:{sid}", source),
-            )
-            db._conn.commit()
+        if db and hasattr(db, "_execute_write"):
+            def _write(conn):
+                conn.execute(
+                    "INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)",
+                    (f"title_source:{sid}", source),
+                )
+            db._execute_write(_write)
     except Exception:
         pass
 
@@ -10307,9 +10670,16 @@ def _load_title_source(sid):
     try:
         db = _get_session_db()
         if db and hasattr(db, "_conn"):
-            row = db._conn.execute(
-                "SELECT value FROM kv WHERE key = ?", (f"title_source:{sid}",)
-            ).fetchone()
+            db_lock = getattr(db, "_lock", None)
+            if db_lock is None:
+                row = db._conn.execute(
+                    "SELECT value FROM kv WHERE key = ?", (f"title_source:{sid}",)
+                ).fetchone()
+            else:
+                with db_lock:
+                    row = db._conn.execute(
+                        "SELECT value FROM kv WHERE key = ?", (f"title_source:{sid}",)
+                    ).fetchone()
             if row and row[0] in ("auto", "manual"):
                 return row[0]
     except Exception:
@@ -10328,7 +10698,7 @@ def _resolve_title_source(sid, lineage_root_id=""):
     if src == "manual":
         return src
     try:
-        if lineage_root_id and lineage_root_id != sid and _load_title_source(lineage_root_id) == "manual":
+        if _lineage_has_manual_title_source(sid):
             _persist_title_source(sid, "manual")  # 继承并落库，防后续自动覆盖
             return "manual"
     except Exception:
@@ -10343,24 +10713,25 @@ def _schedule_title_summary(sid):
     实际总结在后台线程执行，不阻塞消息响应。
     """
     try:
-        s = _sessions.get(sid)
-        if not s:
-            return
-        if s.get("title_source") == "manual":
-            return  # 用户手动改过名 → 尊重用户，永不自动覆盖
-        # 2026-10-27：压缩链上的手动改名同样生效（标记可能只落在根会话上）
-        _root_tid = s.get("_lineage_root_id")
-        if _root_tid and _root_tid != sid and _load_title_source(_root_tid) == "manual":
-            s["title_source"] = "manual"
-            _persist_title_source(sid, "manual")
-            return
-        if sid in _title_summary_locks:
-            return  # 已有总结线程在跑
-        # 防抖：距上次总结至少新增 4 条用户消息
-        user_msgs = [m for m in s.get("messages", []) if m.get("role") in ("user", "human")]
-        if len(user_msgs) - int(s.get("_title_summary_at_msg", 0)) < 4:
-            return
-        _title_summary_locks.add(sid)
+        with _title_write_lock(sid):
+            s = _sessions.get(sid)
+            if not s:
+                return
+            if s.get("title_source") == "manual" or _load_title_source(sid) == "manual":
+                s["title_source"] = "manual"
+                return  # 用户手动改过名 → 尊重用户，永不自动覆盖
+            # 中间压缩 tip 也可能是用户手动改名的位置，不能只看 root。
+            if _lineage_has_manual_title_source(sid):
+                s["title_source"] = "manual"
+                _persist_title_source(sid, "manual")
+                return
+            if sid in _title_summary_locks:
+                return  # 已有总结线程在跑
+            # 防抖：距上次总结至少新增 4 条用户消息
+            user_msgs = [m for m in s.get("messages", []) if m.get("role") in ("user", "human")]
+            if len(user_msgs) - int(s.get("_title_summary_at_msg", 0)) < 4:
+                return
+            _title_summary_locks.add(sid)
         _threading.Thread(target=_auto_summarize_title, args=(sid,), daemon=True).start()
     except Exception:
         pass
@@ -10375,19 +10746,23 @@ def _auto_summarize_title(sid):
     """
     try:
         import httpx
-        s = _sessions.get(sid)
-        if not s or s.get("title_source") == "manual":
-            return
-        # 收集用户消息（最多 20 条，每条截 120 字）
-        msgs = [
-            (m.get("content") or m.get("text") or "").replace("\n", " ").strip()
-            for m in s.get("messages", [])
-            if m.get("role") in ("user", "human") and (m.get("content") or m.get("text") or "").strip()
-        ][-20:]
+        # Snapshot only the inputs for the slow network call.  Do not keep the
+        # title lock while waiting for an LLM response.
+        with _title_write_lock(sid):
+            s = _sessions.get(sid)
+            if not s or s.get("title_source") == "manual" or _load_title_source(sid) == "manual":
+                return
+            if _lineage_has_manual_title_source(sid):
+                s["title_source"] = "manual"
+                return
+            msgs = [
+                (m.get("content") or m.get("text") or "").replace("\n", " ").strip()
+                for m in s.get("messages", [])
+                if m.get("role") in ("user", "human") and (m.get("content") or m.get("text") or "").strip()
+            ][-20:]
+            cfg = dict(s.get("model_config") or _current_model or {})
         if len(msgs) < 4:
             return  # 消息太少，总结没有意义
-        # 模型配置：会话级优先，全局兜底
-        cfg = s.get("model_config") or _current_model
         base_url = str(cfg.get("base_url", "")).rstrip("/")
         if not base_url or not cfg.get("api_key") or not cfg.get("model"):
             return
@@ -10421,42 +10796,28 @@ def _auto_summarize_title(sid):
         title = (title or "")[:30].strip()
         if len(title) < 2:
             return  # 输出无效，静默放弃
-        if title == s.get("title"):
-            return  # 与现名相同，不写
-        # 2026-10-27：LLM 总结期间用户可能刚改过名（或链上手改过，标记在根上）→ 放弃写回
-        if s.get("title_source") == "manual" or _load_title_source(sid) == "manual":
-            return
-        _root_tid2 = s.get("_lineage_root_id")
-        if _root_tid2 and _root_tid2 != sid and _load_title_source(_root_tid2) == "manual":
-            return
-        # 写回 state.db（title 唯一约束：撞名 → 自动续号 "xxx #2"）
-        new_title = title
-        db = _get_session_db()
-        if db:
-            try:
-                db.set_session_title(sid, title)
-            except ValueError:
-                try:
-                    new_title = db.get_next_title_in_lineage(title)
-                    db.set_session_title(sid, new_title)
-                except Exception:
-                    return
-            except Exception:
+
+        # Reacquire after the LLM call.  The sid may have been deleted/reused;
+        # only the exact session object that supplied the prompt may be updated.
+        with _title_write_lock(sid):
+            if _sessions.get(sid) is not s:
                 return
-        old_title = s.get("title")
-        s["title"] = new_title
-        s["title_source"] = "auto"
-        s["_title_summary_at_msg"] = len(
-            [m for m in s.get("messages", []) if m.get("role") in ("user", "human")]
-        )
-        _sync_meta_display_name(s, new_title)
-        _append_rename_event(sid, old_title, new_title, source="auto")
-        _session_emit(s, {"type": "session_title", "title": new_title, "session_id": sid})
-        logger.info(f"Session {sid}: auto title '{old_title}' -> '{new_title}'")
+            if title == s.get("title"):
+                return
+            result = _set_session_title_with_source(
+                sid, title, "auto", allow_memory_fallback=True
+            )
+            if not result.get("ok"):
+                return
+            s["_title_summary_at_msg"] = len(
+                [m for m in s.get("messages", []) if m.get("role") in ("user", "human")]
+            )
+            logger.info("Session %s: automatic title -> '%s'", sid, result["title"])
     except Exception as e:
         logger.debug(f"Session {sid}: auto title summary skipped: {e}")
     finally:
-        _title_summary_locks.discard(sid)
+        with _title_write_lock(sid):
+            _title_summary_locks.discard(sid)
 
 
 @app.post("/api/sessions/{sid}/rename")
@@ -10473,25 +10834,16 @@ async def rename_session(sid: str, body: dict = None):
     raw = (body.get("title") or "").strip()
     if not raw:
         return {"ok": False, "error": "名称不能为空"}
-    db = _get_session_db()
-    try:
-        new_title = db.sanitize_title(raw) if db else raw
-        if not new_title:
-            return {"ok": False, "error": "名称无效（含非法字符）"}
-        if db:
-            # title 在 sessions 表有唯一约束，同名抛 ValueError
-            db.set_session_title(sid, new_title)
-    except ValueError:
-        return {"ok": False, "error": "该名称已被其他会话使用，请换一个"}
-    except Exception as e:
-        return {"ok": False, "error": f"写入失败: {e}"}
-    old_title = _sessions[sid].get("title")
-    _sessions[sid]["title"] = new_title
-    _sessions[sid]["title_source"] = "manual"  # 用户手动改名 → 自动总结永不覆盖
-    _persist_title_source(sid, "manual")
-    _sync_meta_display_name(_sessions[sid], new_title)
-    _append_rename_event(sid, old_title, new_title, source="manual")
-    return {"ok": True, "title": new_title, "session_id": sid}
+    result = _set_session_title_with_source(sid, raw, "manual")
+    if not result.get("ok"):
+        return {"ok": False, "error": result.get("error") or "写入失败"}
+    return {
+        "ok": True,
+        "title": result["title"],
+        "session_id": sid,
+        "title_source": "manual",
+        "source": "manual",
+    }
 
 
 def _session_display_stats(sid, start_ua=0):
@@ -10916,6 +11268,14 @@ async def delete_session(sid: str):
         _session_metadata().delete_session_metadata(sid)
     except Exception as _metadata_exc:
         logger.warning("[projects] failed to delete metadata for %s: %s", sid, _metadata_exc)
+    # 2026-11-11：删会话必须连带清 kv 里的待办/目标副本。
+    # 否则删除后 kv 仍留着旧清单：任何按 sid 的恢复路径都可能把待办带回来，
+    # 而且这些行会永久堆积（实测删除后 memomics_todos:<sid> 仍在）。
+    for _kv_kind in ("todos", "goal"):
+        try:
+            _kv_set(_kv_ns(_kv_kind, sid), "")
+        except Exception:
+            pass
     # 会话删除 = 数据删除（用户要求 2026-09-13）：results/ 下该会话的目录连同全部
     # 分析产物（figures/results/scripts/data/log、token_usage.jsonl 等）物理删除。
     # 放在 agent 清理之后，避免「边写边删」把目录复活。
@@ -11098,8 +11458,14 @@ def _ctx_window_info(session, agent=None) -> dict:
             source = "config" if override else "agent"
         else:
             from agent.model_metadata import get_model_context_length
+            # 2026-11-11：这里原来没带 api_key，探测走不通时落到静态表 1,048,576，
+            # 而运行实例 comp.context_length 是通道 /models 的 1,000,000 —— 两源并存
+            # 会让百分比在切换时跳 4.8%。统一带上 api_key 与 config 覆盖值。
+            _cfg_win = (session or {}).get("model_config") or {}
             effective = int(get_model_context_length(
-                model, base_url=base_url, provider=provider, custom_providers=custom) or 0)
+                model, base_url=base_url, provider=provider, custom_providers=custom,
+                api_key=str(_cfg_win.get("api_key") or ""),
+                config_context_length=override) or 0)
             source = "config" if override else "auto"
     except Exception:
         effective = int(override or 0)
@@ -16843,13 +17209,12 @@ async def _process_weixin_agent_reply(sender_id: str, sender_name: str, text: st
     phone_icon = "\U0001f4f1"
     if session.get("title", "").startswith(phone_icon) and len(session["messages"]) <= 2:
         short_text = text[:30].replace("\n", " ").strip()
-        session["title"] = f"{phone_icon} {datetime.now().strftime('%m-%d')} {sender_name}: {short_text}"
-        try:
-            db = _get_session_db()
-            if db and hasattr(db, "set_session_title"):
-                db.set_session_title(sid, session["title"])
-        except Exception:
-            pass
+        _set_session_title_with_source(
+            sid,
+            f"{phone_icon} {datetime.now().strftime('%m-%d')} {sender_name}: {short_text}",
+            "auto",
+            allow_memory_fallback=True,
+        )
 
     # 标记会话为运行状态
     session["running_agent"] = True
@@ -17995,6 +18360,219 @@ async def file_open(req: FileOpenRequest):
                              "Handed to the system default application" if action == "system"
                              else "Revealed in the file manager")}
 
+
+_LIT_TR_CACHE: dict = {}
+_LIT_TR_LOCK = __import__("threading").Lock()
+
+
+@app.post("/api/lit/translate")
+def post_lit_translate(payload: dict = None):
+    """文献片段翻译（滑动翻译 / 划词翻译用）。
+
+    body: {texts: [str], to: "zh"}
+    返回: {ok, translations: [str], cached: n}
+    只做纯文本翻译：不落盘、不改批注、不碰知识库；结果按 (to,text) 进程内缓存。
+    """
+    import hashlib
+    import json as _json
+    from memomics.bio_tools.lit_translate import validate as _tr_validate
+    body = payload or {}
+    raw = body.get("texts") or []
+    if not isinstance(raw, list):
+        return JSONResponse({"ok": False, "error": "texts 必须是数组"}, status_code=400)
+    texts = [str(t or "").strip()[:1500] for t in raw][:40]
+    texts = [t for t in texts if t]
+    if not texts:
+        return JSONResponse({"ok": False, "error": "没有可翻译的文本"}, status_code=400)
+    if sum(len(t) for t in texts) > 12000:
+        return JSONResponse({"ok": False, "error": "单次翻译过长（上限 12000 字符）"}, status_code=400)
+    to = str(body.get("to") or "zh").strip().lower()
+    if to not in ("zh", "en"):
+        to = "zh"
+
+    global _LIT_TR_CACHE
+    out = [None] * len(texts)
+    todo = []
+    for i, t in enumerate(texts):
+        key = hashlib.sha1((to + "\x00" + t).encode("utf-8")).hexdigest()
+        hit = _LIT_TR_CACHE.get(key)
+        # 缓存里可能存着旧版本放行的元话术，读的时候也过一遍体检
+        if hit and _tr_validate(hit, t, to)[0]:
+            out[i] = hit
+        else:
+            todo.append((i, t, key))
+    if todo:
+        try:
+            from memomics.bio_tools.literature_library import _llm_content
+            target = "中文" if to == "zh" else "英文"
+
+            from memomics.bio_tools.lit_translate import translate_chunk
+
+            def _tr_chunk(chunk):
+                # 解析/体检/单段兜底都在 lit_translate 里，防止思考过程被当译文。
+                return translate_chunk(chunk, target, _llm_content)
+
+            # 分块并发：整页 30-40 段一次性塞给模型时容易截断/错位（实测解析失败），
+            # 8 段一块、最多 4 路并发，成功率高且总耗时更短。
+            chunks = [todo[i:i + 8] for i in range(0, len(todo), 8)]
+            results = []
+            try:
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=min(4, len(chunks))) as ex:
+                    for vals in ex.map(lambda ch: _tr_chunk([t for _, t, _ in ch]), chunks):
+                        results.append(vals)
+            except Exception:
+                results = [_tr_chunk([t for _, t, _ in ch]) for ch in chunks]
+            flat = [v for vals in results for v in vals]
+            with _LIT_TR_LOCK:
+                for (i, t, key), tr in zip(todo, flat):
+                    tr = str(tr or "").strip()
+                    out[i] = tr
+                    if tr:
+                        _LIT_TR_CACHE[key] = tr
+                while len(_LIT_TR_CACHE) > 3000:
+                    _LIT_TR_CACHE.pop(next(iter(_LIT_TR_CACHE)))
+        except Exception as e:
+            logger.warning("[lit-translate] failed: %s", e)
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=502)
+    return {"ok": True, "translations": [x or "" for x in out],
+            "cached": len(texts) - len(todo), "to": to}
+
+
+@app.get("/api/lit/layout")
+def get_lit_layout(path: str = ""):
+    """对照视图版面数据：原位置/行数/字号，供中文覆盖，不调用 LLM。"""
+    from webui import lit_marks, lit_layout
+    try:
+        return {"ok": True, **lit_layout.load(path)}
+    except lit_marks.MarksError as e:
+        return JSONResponse({"ok": False, "error": e.message, "code": e.code}, status_code=e.status)
+    except Exception as e:
+        logger.warning("[lit-layout] failed: %s", e)
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+@app.get("/api/lit/marks")
+async def get_lit_marks(path: str = ""):
+    """读取一篇文献的全部批注（文献库 2.0，2026-11-12）。
+
+    只读 `papers/.annotations/<stem>.json`，不动 PDF / .pdf_index.json / 知识库。
+    """
+    from webui import lit_marks
+    try:
+        data = lit_marks.load(path)
+        return {"ok": True, **data}
+    except lit_marks.MarksError as e:
+        return JSONResponse({"ok": False, "error": e.message, "code": e.code}, status_code=e.status)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+@app.post("/api/lit/marks")
+async def post_lit_marks(payload: dict = None):
+    """新增/修改/删除一条批注。body: {path, action, mark|id|patch, revision?}"""
+    from webui import lit_marks
+    body = payload or {}
+    path = body.get("path") or ""
+    action = str(body.get("action") or "").strip().lower()
+    rev = body.get("revision")
+    try:
+        if action == "add":
+            r = lit_marks.add(path, body.get("mark") or {}, rev)
+        elif action == "update":
+            r = lit_marks.update(path, body.get("id") or "", body.get("patch") or {}, rev)
+        elif action == "delete":
+            r = lit_marks.delete(path, body.get("id") or "", rev)
+        else:
+            return JSONResponse({"ok": False, "error": "action 必须是 add / update / delete"}, status_code=400)
+        return {"ok": True, **r}
+    except lit_marks.MarksError as e:
+        return JSONResponse({"ok": False, "error": e.message, "code": e.code, **e.extra},
+                            status_code=e.status)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+def _lit_compare_translate(texts):
+    """给对照任务复用片段翻译入口；错误响应要变成任务失败，而不是写入错误页。"""
+    result = post_lit_translate({"texts": texts, "to": "zh"})
+    if isinstance(result, JSONResponse):
+        detail = ""
+        try:
+            detail = result.body.decode("utf-8", "replace")
+        except Exception:
+            pass
+        raise RuntimeError("片段翻译失败: " + detail[:300])
+    return result
+
+
+@app.get("/api/lit/compare_job")
+def get_lit_compare_job(path: str = "", include_translations: int = 0):
+    """查询对照翻译任务；只有 done 且有译文 PDF 才允许前端打开对照。"""
+    from webui import lit_compare_job, lit_marks
+    try:
+        return lit_compare_job.status(path, bool(include_translations))
+    except lit_marks.MarksError as e:
+        return JSONResponse({"ok": False, "error": e.message, "code": e.code}, status_code=e.status)
+
+
+@app.post("/api/lit/compare_job")
+def post_lit_compare_job(payload: dict = None):
+    """启动整篇对照翻译；已有运行中/已完成任务时直接复用，不重复扣费。"""
+    from webui import lit_compare_job, lit_marks
+    body = payload or {}
+    try:
+        return lit_compare_job.start(str(body.get("path") or ""), _lit_compare_translate)
+    except lit_marks.MarksError as e:
+        return JSONResponse({"ok": False, "error": e.message, "code": e.code}, status_code=e.status)
+    except Exception as e:
+        logger.warning("[lit-compare-job] start failed: %s", e)
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+@app.post("/api/lit/translation_pdf")
+def post_lit_translation_pdf(payload: dict = None):
+    """把对照译文写回 PDF：右栏双 PDF + 导出下载（2026-11-16）。
+
+    body: {path, translations: {blockId: zh}, page?: 1-based}
+    坐标与原文以服务端 lit_layout 为准，前端只提供译文；缺省 page 导出整篇。
+    """
+    from urllib.parse import quote
+    from webui import lit_layout, lit_marks, lit_translation_pdf
+    from memomics.bio_tools.lit_translate import validate as _tr_validate
+    body = payload or {}
+    rel = str(body.get("path") or "").strip()
+    translations = body.get("translations") or {}
+    if not isinstance(translations, dict):
+        return JSONResponse({"ok": False, "error": "translations 必须是 {blockId: 译文}"}, status_code=400)
+    if len(translations) > 5000:
+        return JSONResponse({"ok": False, "error": "单次导出的段落过多"}, status_code=400)
+    raw_page = body.get("page")
+    try:
+        page = int(raw_page) if raw_page not in (None, "", 0, "0") else None
+    except Exception:
+        return JSONResponse({"ok": False, "error": "page 必须是页码"}, status_code=400)
+    clean = {}
+    for key, value in translations.items():
+        text = str(value or "").strip()
+        if not text:
+            continue
+        # 写进 PDF 前再过体检，防止思考过程/任务复述落盘
+        if _tr_validate(text, "", "zh")[0]:
+            clean[str(key)] = text[:12000]
+    if not clean:
+        return JSONResponse({"ok": False, "error": "没有通过体检的译文"}, status_code=400)
+    try:
+        layout = lit_layout.load(rel)
+        result = lit_translation_pdf.build(rel, layout, clean, page=page)
+        rel_url = quote(result["rel"])
+        return {"ok": True, **result,
+                "page_image": "/api/papers/page?path=" + rel_url + "&page=0&dpi=150",
+                "download": "/api/papers?path=" + rel_url}
+    except lit_marks.MarksError as e:
+        return JSONResponse({"ok": False, "error": e.message, "code": e.code}, status_code=e.status)
+    except Exception as e:
+        logger.warning("[lit-translation-pdf] failed: %s", e)
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 @app.get("/api/papers")
 async def serve_papers(path: str = ""):
@@ -20564,6 +21142,12 @@ def _kv_set(key, value):
         db = _get_session_db()
         if not db or not getattr(db, "_conn", None):
             return False
+        # 空值 = 键不存在：直接删行，避免"删了却留下空行"堆积
+        # （删会话时清 todos/goal 副本走的就是这条路径）。
+        if value is None or value == "":
+            db._conn.execute("DELETE FROM kv WHERE key = ?", (key,))
+            db._conn.commit()
+            return True
         db._conn.execute(
             "INSERT INTO kv (key, value) VALUES (?, ?) "
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
@@ -20574,6 +21158,119 @@ def _kv_set(key, value):
         return False
 
 
+def _restore_agent_todos_from_session(session, agent):
+    """从会话的持久化公共清单恢复执行侧 TodoStore。
+
+    WebUI 历史会过滤 tool 消息，Hermes 自带的 tool-result 水合因此覆盖不到
+    pipeline/debate/自检等来源。会话 KV 是重启后的权威副本；仅在 store 为空时
+    恢复，避免覆盖 Agent 本回合刚刚写入的新计划。
+    """
+    if not isinstance(session, dict) or agent is None:
+        return []
+    store = getattr(agent, "_todo_store", None)
+    if store is None:
+        return []
+    try:
+        if store.has_items():
+            return list(store.read())
+        canonical = _session_todos(session)
+        items = []
+        for i, td in enumerate(canonical):
+            if not isinstance(td, dict):
+                continue
+            item = {
+                "id": str(td.get("id") or f"restore_{i}"),
+                "content": str(td.get("title") or td.get("content") or ""),
+                "status": str(td.get("status") or "pending"),
+            }
+            if isinstance(td.get("estimated_minutes"), (int, float)):
+                item["estimated_minutes"] = td["estimated_minutes"]
+            items.append(item)
+        if items:
+            store.write(items, merge=False)
+        return list(store.read())
+    except Exception as exc:
+        logger.warning(f"[todos] 从会话恢复执行清单失败: {exc}")
+        return []
+
+
+def _publish_agent_todos(session, agent):
+    """把执行侧最新清单回写到会话/KV/WS；内容不变时不重复广播。
+
+    自检回合可能使用只装 enforcement 回调的新 Agent，因此不能只依赖用户回合的
+    tool_complete_cb。这里作为回合末的统一确定性回读。
+    """
+    store = getattr(agent, "_todo_store", None) if agent is not None else None
+    if store is None:
+        return []
+    try:
+        current = [dict(t) for t in store.read() if isinstance(t, dict)]
+        if not current:
+            # Agent 回合结束后的空 store 是明确的最新执行状态（例如 todo([])）。
+            # 若公共副本仍有旧清单，必须同步清空，而不是把旧清单再次保留/复活。
+            if _session_todos(session):
+                _session_emit(session, {"type": "todos_update", "todos": [],
+                                        "ts": datetime.now().strftime("%H:%M:%S"),
+                                        "session_id": session.get("id", "")})
+            return []
+        overrides = session.get("_todo_overrides") or {}
+        if overrides:
+            patch = []
+            for td in current:
+                tid = str(td.get("id") or "")
+                if tid in overrides:
+                    td["status"] = overrides[tid]
+                    patch.append({"id": tid, "status": overrides[tid]})
+            if patch:
+                store.write(patch, merge=True)
+        pub = _todos_public(current)
+        if pub != _session_todos(session):
+            _session_emit(session, {"type": "todos_update", "todos": pub,
+                                    "ts": datetime.now().strftime("%H:%M:%S"),
+                                    "session_id": session.get("id", "")})
+        return pub
+    except Exception as exc:
+        logger.warning(f"[todos] 回合末回读执行清单失败: {exc}")
+        return []
+
+
+def _consume_todo_overrides_after_agent_write(session, tool_name, args, result=None):
+    """只在真实写入后消费对应 id 的用户 override；只读动作保持取消状态。
+
+    todo(merge=false) 表示整单替换，可清空旧 override；merge/pipeline/create 只消费
+    本次实际写入的 id，避免一个无关步骤把其他已取消项恢复。
+    """
+    if not isinstance(args, dict):
+        return False
+    result_obj = result
+    if isinstance(result, str):
+        try:
+            result_obj = json.loads(result)
+        except Exception:
+            result_obj = None
+    if isinstance(result_obj, dict) and result_obj.get("error"):
+        return False
+    result_action = str((result_obj or {}).get("action") or "") if isinstance(result_obj, dict) else ""
+    wrote = (
+        (tool_name == "todo" and args.get("todos") is not None)
+        or (tool_name == "memomics_pipeline" and str(args.get("action") or result_action) == "todos")
+        or (tool_name in ("todo_manage", "memomics_todo_manage") and result_action == "create")
+    )
+    if not wrote:
+        return False
+    overrides = session.setdefault("_todo_overrides", {})
+    if tool_name == "todo" and not bool(args.get("merge", False)):
+        overrides.clear()
+        return True
+    written = args.get("todos")
+    if not isinstance(written, list) and isinstance(result_obj, dict):
+        written = result_obj.get("todos")
+    for td in written or []:
+        if isinstance(td, dict) and td.get("id") is not None:
+            overrides.pop(str(td.get("id")), None)
+    return True
+
+
 def _seed_agent_todos(agent, todos, id_prefix="auto"):
     """把一批待办写进 agent 的 TodoStore，返回实际写入的条目。
 
@@ -20581,7 +21278,7 @@ def _seed_agent_todos(agent, todos, id_prefix="auto"):
     这里原来调 _todo_store.add(...)，抛 AttributeError 又被 except 吞掉：待办只留在
     session["_pipeline_todos"] 里、进不了 store。前端读 store 为空 → 回落到那份原始清单
     （状态全是 pending）→ 完成状态再也不会更新，界面上的待办就一直挂着不划掉。
-    另外 TodoStore 只保留 {id, content, status} 三个字段，多给的会被 _validate 丢掉；
+    ⚠️ TodoStore 核心字段是 {id, content, status}，另支持可选 estimated_minutes；
     merge 模式还要求必须有 id（没 id 直接跳过），所以 id 必须兜底生成。
     """
     store = getattr(agent, "_todo_store", None)
@@ -20596,6 +21293,8 @@ def _seed_agent_todos(agent, todos, id_prefix="auto"):
             "id": str(td.get("id") or ("%s_%d" % (id_prefix, i))),
             "content": str(title),
         }
+        if isinstance(td.get("estimated_minutes"), (int, float)):
+            item["estimated_minutes"] = td["estimated_minutes"]
         # 状态是单调的：只有源里明确说「完成/取消」才写，pending 一律当「没意见」不写。
         # 理由：write(merge=True) 见到 status 就覆盖，所以只要把 pending 写进去，
         # 就等于把已经 completed 的条目打回未完成 —— pipeline 每推一次清单、裁决每跑一次，
@@ -20625,19 +21324,22 @@ def _should_emit_todos(todos, prev_todos):
 
 
 def _todos_public(todos):
-    """把任意来源的待办归一成前端认识的四项 {id,title,status,module}。"""
+    """把任意来源的待办归一成前端认识的 {id,title,status,module} + 可选预计时长。"""
     out = []
     if not isinstance(todos, list):
         return out
     for t in todos:
         if not isinstance(t, dict):
             continue
-        out.append({
+        item = {
             "id": str(t.get("id", "") or ""),
             "title": str(t.get("title") or t.get("content") or t.get("name") or ""),
             "status": str(t.get("status") or "pending"),
             "module": str(t.get("module", "") or ""),
-        })
+        }
+        if isinstance(t.get("estimated_minutes"), (int, float)):
+            item["estimated_minutes"] = t["estimated_minutes"]
+        out.append(item)
     return out
 
 
@@ -20802,8 +21504,8 @@ async def delete_session_goal(sid: str):
 async def delete_session_todos(sid: str):
     """P1-1(2026-09-24): 清空会话待办 —— 目标条上「清空」按钮的落点。
 
-    只清展示副本（session["todos"] + state.db 的 kv），**不动** agent 的
-    _todo_store：那本书是 agent 自己的执行状态，下次它推新待办时这里照样会出现。
+    同时清空展示副本（session/state.db）与执行侧 TodoStore；pipeline fallback
+    也一并清掉，防止旧清单在下一次读取时复活。已经在跑的外部进程不随清单删除。
     语义同 goal：[] = 显式清空（_sync_session_todos 会涨 revision 并广播）。
     """
     if sid not in _sessions:
@@ -20811,6 +21513,14 @@ async def delete_session_todos(sid: str):
     if sid not in _sessions:
         return JSONResponse({"error": "Session not found"}, status_code=404)
     session = _sessions[sid]
+    # 执行侧与展示侧一起清；外部进程本身不属于 TodoStore，不在此杀进程。
+    _ag = session.get("running_agent") or session.get("agent")
+    _store = getattr(_ag, "_todo_store", None) if _ag is not None else None
+    if _store is not None:
+        _store.write([], merge=False)
+    session["_todo_overrides"] = {}
+    # 展示侧 fallback 缓存也要清；否则下一次 todo 读取会把旧管线清单重新推回。
+    session["_pipeline_todos"] = []
     _sync_session_todos(session, [], persist=True)
     payload = {"todos": [], "revision": int(session.get("todos_revision", 0) or 0)}
     _session_emit(session, {"type": "todos_update", "todos": [],
@@ -20853,18 +21563,39 @@ async def api_todo_item_update(request: Request, sid: str):
     if not hit:
         return {"ok": False, "error": "没找到这条待办：%s" % tid}
     pub = _sync_session_todos(session, cur, persist=True)
-    # 在跑的 agent store 同步（不在跑也没事——回合末回读时有 override 盖）
+    # 空闲时也要更新缓存 Agent：running_agent 在回合末会置 None，而 session['agent']
+    # 才是下一轮复用的执行实例。恢复 pending 是明确的续跑指令，会进入真实调度器。
+    _ag = session.get("running_agent") or session.get("agent")
     try:
-        _ag = session.get("running_agent")
         _st = getattr(_ag, "_todo_store", None) if _ag is not None else None
-        if _st is not None and any(str(x.get("id")) == tid for x in _st.read()):
-            _st.write([{"id": tid, "status": status}], merge=True)
-    except Exception:
-        pass
+        if _st is not None:
+            if not _st.has_items():
+                _restore_agent_todos_from_session(session, _ag)
+            if any(str(x.get("id")) == tid for x in _st.read()):
+                _st.write([{"id": tid, "status": status}], merge=True)
+    except Exception as exc:
+        logger.warning(f"[todos] 单条状态同步执行侧失败: {exc}")
+    for _cached in session.get("_pipeline_todos") or []:
+        if isinstance(_cached, dict) and tid in (str(_cached.get("id") or ""),
+                                               str(_cached.get("title") or _cached.get("name") or "")):
+            _cached["status"] = status
     session.setdefault("_todo_overrides", {})[tid] = status
     _session_emit(session, {"type": "todos_update", "todos": pub,
                             "ts": datetime.now().strftime("%H:%M:%S"),
                             "session_id": session["id"]})
+    if status in ("pending", "in_progress") and not session.get("running_agent") \
+            and not session.get("running_task"):
+        try:
+            from webui.runtime.run_gate import load_state, save_state, arm, reset_rounds
+            _rd = session.get("results_dir", "") or ""
+            if _rd:
+                if load_state(_rd).get("state") in ("done", "cancelled"):
+                    save_state(_rd, "pending", "user restored todo")
+                arm(_rd, by="todo_restore")
+                reset_rounds(_rd)
+            _schedule_self_check(session, _ag, asyncio.get_running_loop(), trigger="turn_end")
+        except Exception as exc:
+            logger.warning(f"[todos] 恢复待办后的调度失败: {exc}")
     return {"ok": True, "todos": pub, "revision": int(session.get("todos_revision", 0) or 0)}
 
 
@@ -22483,19 +23214,12 @@ async def ws_endpoint(ws: WebSocket):
                 await ws.send_text(json.dumps({"type": "progress", "step": _pt(session, "thinking"), "status": "pending", "detail": _pt(session, "understanding"), "ts": datetime.now().strftime("%H:%M:%S"), "session_id": session["id"]}, ensure_ascii=False))
 
                 # 如果是第一条消息, 更新标题（自动命名：同名自动续号 "xxx #2"，
-                # 避免 set_session_title 唯一约束抛 ValueError 被吞导致仍叫"新会话"）
+                # 统一走来源感知的写入：用户若已经手动改名，不能被这里覆盖。）
                 if len(session["messages"]) == 1:
                     base_title = user_text[:30]
-                    db = _get_session_db()
-                    if db:
-                        try:
-                            next_title = db.get_next_title_in_lineage(base_title)
-                            db.set_session_title(session["id"], next_title)
-                            session["title"] = next_title
-                        except Exception:
-                            pass
-                    else:
-                        session["title"] = base_title
+                    _set_session_title_with_source(
+                        session["id"], base_title, "auto", allow_memory_fallback=True
+                    )
                 
                 # 自动标题总结：每 5 条用户消息触发一次（内容感知，后台异步，不阻塞）
                 _user_msg_count = sum(1 for m in session["messages"] if m.get("role") in ("user", "human"))
@@ -22620,6 +23344,10 @@ async def ws_endpoint(ws: WebSocket):
                         if _released_turn and _thread_state is not None:
                             _thread_state.mark_turn_end(session["id"])
                         continue
+
+                # 新建的 Agent 已在 _create_agent 内恢复；复用 Agent 也可能因上一轮清空
+                # 或外部重建而持有空 store，此时从会话权威副本补齐，且不覆盖非空新计划。
+                _restore_agent_todos_from_session(session, agent)
 
                 # 清除可能残留的中断标志（上一个 turn 完成后未正确重置会导致新 turn 立即退出）
                 if getattr(agent, "_interrupt_requested", False):
@@ -22933,9 +23661,10 @@ async def ws_endpoint(ws: WebSocket):
                             except Exception:
                                 pass
                         # 记录本回合是否有真实执行(被执行保护替换成占位打印的调用不算)
-                        if tool_name in _PRODUCING_TOOLS and isinstance(args, dict):
-                            if "[⛔ 执行保护]" not in str(args.get("command", args.get("code", ""))):
-                                _s["_real_exec_this_turn"] = True
+                        # 2026-11-11 P0：只读工具（read_file / ls / cat）不再算真实执行，
+                        # 详见模块级 _is_producing_call。
+                        if _is_producing_call(tool_name, args):
+                            _s["_real_exec_this_turn"] = True
                         _turn_tool_call_log.append({"tool": tool_name, "id": tool_id})
                         _s["_api_calls"] = int(_s.get("_api_calls", 0)) + 1
                         _s["_live_tool"] = tool_name
@@ -23033,8 +23762,8 @@ async def ws_endpoint(ws: WebSocket):
                                 _dt = list(getattr(_es_plan, "debate_todos", []) or [])
                                 _plan = dict(getattr(_es_plan, "debate_plan", {}) or {})
                                 if _dt:
-                                    # 注意：MemOmics TodoStore 只有 {id, content, status} 三字段，
-                                    # 且没有 add()（只有 write(merge=True)）——写错会静默丢失待办。
+                                    # 注意：MemOmics TodoStore 的核心字段是 {id, content, status}，
+                                    # 可选 estimated_minutes；没有 add()（只有 write(merge=True)）。
                                     if hasattr(_agent, "_todo_store") and _agent._todo_store is not None:
                                         # 别再把 status 无条件写成 pending：write(merge=True) 见到
                                         # status 就覆盖，于是每跑一次裁决就把 agent 已标记的
@@ -23138,9 +23867,9 @@ async def ws_endpoint(ws: WebSocket):
                         # todo/todo_manage/memomics_pipeline 完成后同步待办到前端
                         if tool_name in ("todo", "todo_manage", "memomics_todo_manage", "memomics_pipeline"):
                             try:
-                                # 2026-10-24：agent 自己写/改清单 = 它接管了计划，
-                                # 用户手动划掉的 override 以 agent 的新清单为准清零
-                                _s["_todo_overrides"] = {}
+                                # 只有成功且真实的写操作才消费对应 override；todo(todos=None)、
+                                # pipeline parse/summary、todo_manage 查询均保持用户取消状态。
+                                _consume_todo_overrides_after_agent_write(_s, tool_name, args, result_str)
                                 # memomics_pipeline 返回的 todos 写入 store
                                 if tool_name == "memomics_pipeline" and hasattr(_agent, "_todo_store"):
                                     try:
@@ -23209,13 +23938,16 @@ async def ws_endpoint(ws: WebSocket):
                                     elif isinstance(t, dict):
                                         # MemOmics TodoStore 格式: {id, content, status} → {title, status, skill, module}
                                         if "content" in t and "title" not in t:
-                                            store_todos.append({
+                                            _public_todo = {
                                                 "title": t.get("content", ""),
                                                 "status": t.get("status", "pending"),
                                                 "skill": t.get("skill", ""),
                                                 "module": t.get("module", t.get("module_id", "")),
                                                 "id": t.get("id", ""),
-                                            })
+                                            }
+                                            if isinstance(t.get("estimated_minutes"), (int, float)):
+                                                _public_todo["estimated_minutes"] = t["estimated_minutes"]
+                                            store_todos.append(_public_todo)
                                         else:
                                             store_todos.append(t)
                                 pipeline_todos = _s.get("_pipeline_todos", [])
@@ -23248,6 +23980,16 @@ async def ws_endpoint(ws: WebSocket):
                                                     if best:
                                                         st["skill"] = best.get("skill", "")
                                                         st["module"] = best.get("module", "")
+                                # 读取/重水合旧 store 时，用户显式状态仍是权威；先盖 override
+                                # 再决定推送，避免 cancelled → pending 的界面与调度复活。
+                                _ovr_live = _s.get("_todo_overrides") or {}
+                                if _ovr_live:
+                                    for _td_live in todos:
+                                        if not isinstance(_td_live, dict):
+                                            continue
+                                        _tid_live = str(_td_live.get("id") or "")
+                                        if _tid_live in _ovr_live:
+                                            _td_live["status"] = _ovr_live[_tid_live]
                                 # 空清单也要推（见 _should_emit_todos）：清空必须让前端知道
                                 if _should_emit_todos(todos, _s.get("todos")):
                                     # P2(2026-09-22): 裁决待办完成状态回写（blocks 硬约束据此解除）
@@ -23532,13 +24274,14 @@ async def ws_endpoint(ws: WebSocket):
                                                     _fname = _tf[1].lower()
                                                     for _i, _td in enumerate(_todos):
                                                         _title = (_td.get("title") or _td.get("content") or "").lower()
-                                                        # 模糊匹配：文件名关键词出现在待办标题中
+                                                        # 文件名匹配只代表发现候选产物：进入 waiting_review，
+                                                        # 仍需检查产物和审查证据，不再直接伪装成 completed。
                                                         _keywords = _fname.replace("_", " ").replace(".", " ").split()
                                                         if any(kw in _title for kw in _keywords if len(kw) > 2):
-                                                            if _td.get("status") not in ("completed", "cancelled"):
-                                                                _td["status"] = "completed"
+                                                            if _td.get("status") not in ("completed", "cancelled", "waiting_review"):
+                                                                _td["status"] = "waiting_review"
                                                                 _agent._todo_store._items[_i] = _td
-                                                                logger.info(f"[Heartbeat] todo matched: {_td.get('title','')[:40]} -> completed (file: {_tf[1]})")
+                                                                logger.info(f"[Heartbeat] todo candidate: {_td.get('title','')[:40]} -> waiting_review (file: {_tf[1]})")
                                                                 break
                                                 # 推送更新
                                                 _updated = [{"title": t.get("title", t.get("content", "")), "status": t.get("status", "pending")} 
@@ -24305,40 +25048,9 @@ async def ws_endpoint(ws: WebSocket):
                                     "content": "⚠️ 检测到虚假完成声明（本回合无真实执行、文件未变化）——系统将强制重新执行",
                                     "session_id": _session["id"]})
                                 logger.info("[MemOmics] 检测到虚假完成声明 → 强制自检重跑")
-                        # 2026-10-24（用户口径：待办 = task_plan，任务交付后即清理）：
-                        # 回合交付声称完成 + 本回合有真实执行 + 清单仍有未完成项 →
-                        # 未完成项先按 completed 落账（日志留痕），再整单清理（store 清空 +
-                        # 前端清单撤下，与 DELETE /api/sessions/{sid}/todos 同一清法）。
-                        # 护栏：① 无真实执行不碰（虚假完成由上面的检测管）；
-                        # ② 回复带「接着/下一步/继续/随后」等续跑意向 → 不清——
-                        # 多回合任务的中间汇报不动清单。
-                        try:
-                            _claim_done2 = ("已完成", "已生成", "已交付", "已保存", "结果如下", "全部完成", "跑完了")
-                            _continue_hint = ("接着", "下一步", "继续", "随后", "接下来", "下一回合", "待唤醒")
-                            if _agent is not None and _session.get("_real_exec_this_turn") \
-                                    and any(_w in (result or "") for _w in _claim_done2) \
-                                    and not any(_w in (result or "") for _w in _continue_hint):
-                                _ts2 = getattr(_agent, "_todo_store", None)
-                                if _ts2 is not None and _ts2.has_items():
-                                    _all_t = [t for t in _ts2.read() if isinstance(t, dict)]
-                                    _open = [t for t in _all_t
-                                             if str(t.get("status") or "pending") not in ("completed", "cancelled")]
-                                    # 不管 agent 有没有逐项勾完，交付即整单清理（清单就是 task_plan）
-                                    if _all_t:
-                                        if _open:
-                                            _close = [dict(t, status="completed") for t in _all_t]
-                                            _ts2.write(_close, merge=True)   # 未完成项按完成落账留痕
-                                        _ts2.write([], merge=False)          # 整单清理
-                                        _sync_session_todos(_session, [], persist=True)
-                                        _session_emit(_session, {"type": "todos_update", "todos": [],
-                                            "ts": datetime.now().strftime("%H:%M:%S"), "session_id": _session["id"]})
-                                        logger.info("[MemOmics] 任务交付 → 待办已收尾并清理（共 %d 项，其中 %d 项未勾）",
-                                                    len(_all_t), len(_open))
-                                        _session_emit(_session, {"type": "info",
-                                            "content": "📝 任务已交付：%d 项待办已收尾并清理" % len(_all_t),
-                                            "session_id": _session["id"]})
-                        except Exception:
-                            pass
+                        # 2026-11-10：待办完成只认逐项状态与真实验收证据。
+                        # 已移除旧的“回复含完成措辞 → 所有 open 项改 completed → 整单清空”
+                        # 捷径；终态清单由用户显式清空，未完成项继续交给调度器执行。
                         # 2026-08-22 产物终检（一次性，回合末）：本回合有真实执行 + 模型声称完成 →
                         # 检查结果目录是否有新产物且非空（存在+大小>0），不满足则提醒模型核实交付。
                         # 设计：不每次执行都查（省 token），只在回合交付前查一次；内容对错靠执行时
@@ -24346,7 +25058,9 @@ async def ws_endpoint(ws: WebSocket):
                         _claim_prod_words = ("完成", "已生成", "已保存", "已复制", "已写入",
                                              "已交付", "已导出", "已输出", "已合并", "已创建",
                                              "已写好", "已出", "产物", "结果如下", "文件已")
-                        _real_exec_this_turn = _session.get("_real_exec_this_turn") or bool(_turn_tool_call_log)
+                        # 2026-11-11 P0：只看真实产出标记，不再用「本轮调过任何工具」兜底
+                        # （只读复核轮因此不再触发「无新产物」误报）。
+                        _real_exec_this_turn = bool(_session.get("_real_exec_this_turn"))
                         if _real_exec_this_turn and any(_w in (result or "") for _w in _claim_prod_words):
                             try:
                                 # 用户目标路径产物可能不在 results_dir，一并检查
@@ -24498,6 +25212,13 @@ async def ws_endpoint(ws: WebSocket):
 
             elif msg_type == "get_context_usage":
                 # 返回当前会话的上下文窗口使用情况
+                # 2026-11-11：回复走 _session_emit（按 sid 找已注册连接）。页面自动选中
+                # 最新会话时可能**从没发过 switch_session**，于是请求进得来、回复发不出去，
+                # 面板一直停在"点击刷新"。这里幂等补一次挂载，保证刷新一定有回包。
+                try:
+                    _attach_ws(session, ws, asyncio.get_event_loop())
+                except Exception:
+                    pass
                 agent = session.get("agent")
                 if agent is None:
                     # agent 未初始化（重启/重连后还没发消息）：仍返回 DB 持久化的累计 token，
@@ -24507,16 +25228,27 @@ async def ws_endpoint(ws: WebSocket):
                     # 这样 1M / 128k 到底是通道差异还是兜底值，面板里能一眼看清。
                     _ss = _build_session_stats(session["id"])
                     _ss["last_turn"] = _last_turn_stats(session.get("results_dir") or "")
-                    _cumulative = (_ss.get("input_tokens", 0) or 0) + (_ss.get("output_tokens", 0) or 0)
+                    _cumulative = _billed_total_tokens(_ss)
                     _wi = _ctx_window_info(session)
-                    # 没有运行中的 agent 就没有"当前 prompt 大小"这个量：宁可显示 0，
-                    # 也不要把回合聚合的 billed_input_tokens 当上下文占用（会算出 130% 这种假数）。
-                    _used = 0
+                    # 2026-11-11：没有 agent 时不再写死 0 —— 用全量历史消息做估算，并明确标注
+                    # 这是估算（只含对话历史，不含系统提示/工具定义），避免"刚重启就显示 0%"。
+                    try:
+                        _hist = _load_context_estimate_messages(session["id"]) or session.get("messages") or []
+                    except Exception:
+                        _hist = session.get("messages") or []
+                    _used = _estimate_context_tokens_from_messages(_hist)
+                    _max = int(_wi["effective"] or 0)
+                    _pct = max(0, min(100, round(_used / _max * 100))) if _max > 0 and _used > 0 else 0
                     _session_emit(session, {"type": "context_usage", "data": {
-                        "categories": [],
-                        "context_max": _wi["effective"],
+                        "categories": ([{"color": "var(--context-usage-conversation)", "id": "conversation",
+                                         "label": "Conversation", "tokens": _used}] if _used > 0 else []),
+                        "context_max": _max,
                         "context_used": _used,
-                        "context_percent": 0,
+                        "context_percent": _pct,
+                        "estimated_total": _used,
+                        "used_is_estimate": True,
+                        "estimate_scope": "messages",
+                        "history_messages": len(_hist),
                         "cumulative_tokens": _cumulative,
                         "model": _wi["model"] or (session.get("model_config") or {}).get("model", ""),
                         "window_source": _wi["source"],
@@ -24530,7 +25262,19 @@ async def ws_endpoint(ws: WebSocket):
                 else:
                     try:
                         from agent.context_breakdown import compute_session_context_breakdown
-                        msgs = session.get("messages", [])
+                        # 2026-11-11：估算要用**含 tool 结果**的原始消息。session["messages"]
+                        # 只有 user/assistant（UI 视图），拿它估算会把工具输出这一大块漏掉。
+                        try:
+                            _ctx_msgs = _load_context_estimate_messages(session["id"], cap=2000)
+                        except Exception:
+                            _ctx_msgs = []
+                        if not _ctx_msgs:
+                            try:
+                                _ensure_session_messages_loaded(session)
+                            except Exception:
+                                pass
+                            _ctx_msgs = (session.get("messages") or [])[-2000:]
+                        msgs = _ctx_msgs
                         conv_msgs = [{"role": m.get("role", "user"), "content": m.get("content", "")} for m in msgs]
                         breakdown = compute_session_context_breakdown(agent, messages=conv_msgs)
                         # 累计 session 统计（优先内存，回退 DB 聚合）
@@ -24538,10 +25282,10 @@ async def ws_endpoint(ws: WebSocket):
                         breakdown["session_stats"]["last_turn"] = _last_turn_stats(session.get("results_dir") or "")
                         # headroom 压缩统计
                         breakdown["headroom_stats"] = _get_headroom_stats()
-                        # 累计 token 用于圆圈展示（全部输入+输出）
+                        # 2026-11-11：累计统一走计费口径（未缓存输入+缓存读+缓存写+输出），
+                        # 不再出现"圆圈 807K / 统计格 21.8M"的两套数字。
                         _ss = breakdown["session_stats"]
-                        _cumulative = (_ss.get("input_tokens", 0) or 0) + (_ss.get("output_tokens", 0) or 0)
-                        breakdown["cumulative_tokens"] = _cumulative
+                        breakdown["cumulative_tokens"] = _billed_total_tokens(_ss)
                         # 2026-10-17：把窗口「来源」带给前端（config 钉住 / 运行实例 / 自动探测）
                         _wi = _ctx_window_info(session, agent)
                         breakdown["window_source"] = _wi["source"]
@@ -24556,6 +25300,7 @@ async def ws_endpoint(ws: WebSocket):
                             breakdown["used_is_estimate"] = int(getattr(_comp, "last_prompt_tokens", 0) or 0) <= 0
                         except Exception:
                             breakdown["used_is_estimate"] = False
+                        breakdown["estimate_scope"] = "prompt" if not breakdown["used_is_estimate"] else "full"
                         _session_emit(session, {"type": "context_usage", "data": breakdown, "session_id": session["id"]})
                     except Exception as e:
                         # 降级：直接从 compressor 获取基础数据
@@ -24566,13 +25311,14 @@ async def ws_endpoint(ws: WebSocket):
                             ctx_pct = round(ctx_used / ctx_max * 100, 1) if ctx_max > 0 else 0
                             _ss = _build_session_stats(session["id"], agent)
                             _ss["last_turn"] = _last_turn_stats(session.get("results_dir") or "")
-                            _cumulative = (_ss.get("input_tokens", 0) or 0) + (_ss.get("output_tokens", 0) or 0)
+                            _cumulative = _billed_total_tokens(_ss)
                             _session_emit(session, {"type": "context_usage", "data": {
                                 "categories": [],
                                 "context_max": ctx_max,
                                 "context_used": ctx_used,
                                 "context_percent": ctx_pct,
                                 "cumulative_tokens": _cumulative,
+                                "used_is_estimate": ctx_used <= 0,
                                 "model": getattr(agent, "model", "") or "",
                                 "session_stats": _ss,
                                 "headroom_stats": _get_headroom_stats(),

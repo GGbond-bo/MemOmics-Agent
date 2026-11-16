@@ -1,0 +1,28 @@
+{
+ "id": "supplementary-table-assembly",
+ "name": "补充表组装（xlsx 交付规范）",
+ "category": "bioinformatics",
+ "language": "Python",
+ "description": "把策展基因集/打分表/注释表组装成可交付的补充表（xlsx/CSV）:按生物功能轴重排、统一英文标签、附加 legend 表、表↔图口径对账。触发:把表格分类排列/按分类重排/重命名导出/重出一张表/补充表/Supplementary Table/表格里不能有中文/表和图对不上/表格行序乱要排一下。",
+ "starting_prompt": "使用 补充表组装（xlsx 交付规范） 进行分析",
+ "source_dir": "skills/bioinformatics/supplementary-table-assembly",
+ "memomics_module": "",
+ "chains_from": [],
+ "chains_to": [],
+ "tags": [
+  "table",
+  "xlsx",
+  "openpyxl",
+  "supplementary",
+  "deliverable",
+  "gene-signature"
+ ],
+ "aliases": [],
+ "trigger_level": "YEL",
+ "trigger_keywords": [
+  "supplementary",
+  "table",
+  "assembly"
+ ],
+ "when_to_use": "把策展基因集/打分表/注释表组装成可交付的补充表（xlsx/CSV）:按生物功能轴重排、统一英文标签、附加 legend 表、表↔图口径对账。触发:把表格分类排列/按分类重排/重命名导出/重出一张表/补充表/Supplementary Table/表格里不能有中文/表和图对不上/表格行序乱要排一下。"
+}

@@ -6568,6 +6568,19 @@ class SessionDB:
                 "WHERE parent_session_id = ?",
                 (session_id,),
             )
+            # 2026-11-11：先清引用 sessions 的子表，再删主行。
+            # tool_calls_log.session_id 有 FK 且 on_delete=NO ACTION；旧实现先删
+            # sessions，开了 foreign_keys 的连接会抛 IntegrityError，而调用方把异常
+            # 吞掉 → 接口回 ok、内存与结果目录都删了，DB 行和消息却还在，
+            # 重启/切回会话时整条会话（连同旧待办）复活。
+            for child in ("tool_calls_log", "session_model_usage"):
+                try:
+                    conn.execute(
+                        f"DELETE FROM {child} WHERE session_id = ?", (session_id,)
+                    )
+                except Exception:
+                    # 表可能是旧库/裁剪库；缺表不阻塞主删除。
+                    pass
             conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
             conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
             return True

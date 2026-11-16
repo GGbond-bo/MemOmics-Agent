@@ -93,7 +93,8 @@ _KEYS = {
         "_narration _todo_overrides "
         "_intent_confirmed _code_edit_asked _dir_created _form_ans_marker "
         "_title_summary_at_msg _red_hits _task_count _partial_text "
-        "_self_check_total _artifact_sig_last _artifact_stall _final_nudge_used"
+        "_self_check_total _artifact_sig_last _artifact_stall _final_nudge_used "
+        "_self_check_future _todo_wake_sig _todo_wake_stall"
     ),
     "transport": "ws_ref ws_attached loop_ref",
     "domain": (

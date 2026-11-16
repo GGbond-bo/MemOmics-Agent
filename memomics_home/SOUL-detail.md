@@ -5,6 +5,26 @@
 
 ---
 
+## 触发索引（触发词 → skill 的唯一入口，2026-11-12）
+
+全局索引：`memomics_home/SKILLS_TRIGGERS.md`（自动生成，勿手改：`python -m webui.skill_trigger_index --build`）。
+它按 15 个分节列出 407 个技能的触发词与首选口径；`SKILLS_INDEX.md` 则是注入 system prompt 的机器目录。
+
+| 层级 | 数量 | 触发方式 |
+|---|---|---|
+| 🔴 RED 必触发 | 76 | 用户消息进 `server._match_red_skill_hits()` 自动匹配，命中即 `skill_view`，不等确认 |
+| 🟡 YEL 讨论触发 | 318 | 先在本文件/索引里按主题找候选 → 确认方案 → `skill_view` |
+| 🟢 GRN 按需 | 13 | 用户点名或 `skill_search` 才用 |
+
+**命中多个 RED 时**：查索引 §5「RED 歧义与首选」的**首选**列取一个，不要同时 `skill_view` 两个冲突技能；
+八个高频冲突簇（基金/标书、论文写作、审稿、LaTeX、Illustrator、去 AI 腔、统计、出图）在 §5 末尾有簇口径。
+
+**加/改触发词的唯一正确路径**：改 `skills/<cat>/<name>/skill.json#trigger_keywords`（只改 SKILL.md 不会生效）→
+`python -m webui.skills_registry --build` → `python -m webui.skill_trigger_index --build` →
+两个 `--check` 均返回 0 才算完成。RED 技能还必须出现在 `SOUL.md` 必触发表（索引 §6 会列出漏掉的）。
+
+---
+
 ## 讨论 vs 分析阶段判定
 
 | 阶段 | 标志 | 允许的操作 |

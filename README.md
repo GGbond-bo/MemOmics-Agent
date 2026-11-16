@@ -11,7 +11,7 @@
 
 ## 它是什么
 
-MemOmics-Agent 是一个以 [Hermes] Agent 框架的工具层为底座、专为组学数据分析打造的自主科研 Agent。本地的PC端支持远程集群，长程完成任务，你只需要给出**数据路径 + 科学问题**，它会自主完成：
+MemOmics-Agent 是一个以 [Hermes](https://github.com/NousResearch/hermes-agent) Agent 框架的工具层为底座、专为组学数据分析打造的自主科研 Agent（Hermes 官方页面：<https://hermes-agent.nousresearch.com/>，[官网](https://hermes-agent.nousresearch.com/) · [文档](https://hermes-agent.nousresearch.com/docs/)）。你只需要给出**数据路径 + 科学问题**，它会自主完成：
 
 ```
 加载技能 → 环境校验 → 执行前审查 →（必要时）多角色辩论
@@ -138,7 +138,6 @@ MemOmics-Agent/
 |---|---|
 | [@GGbond-bo](https://github.com/GGbond-bo) | 整体架构、WebUI 与运行逻辑、ImageJ 接入、知识库证据链、辩论与交付闸、打包发布 |
 | [@C814](https://github.com/C814)（XYC） | 项目多会话、多服务器密码 SSH 管理、集群目录与凭据管理，及配套界面与回归测试 —— 自 v2026-11-10 起的「多集群」「密码登录集群」能力 |
-
 ## License
 
 本仓库整体以 MIT 发布（见 [LICENSE](LICENSE)，© GGbond-bo）；`hermes-agent/` 与 `memomics/vendor/loopx` 等 vendor 组件分别遵循其原始许可，版权归各自作者所有。

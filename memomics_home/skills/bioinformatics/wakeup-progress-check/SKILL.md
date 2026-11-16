@@ -7,7 +7,8 @@ description: 系统唤醒/进度询问时的任务状态核查规程。定位活
 
 ## 何时触发
 
-- 🔴 **挂起项先「前提证伪」再追问**：登记「待用户给 DOI/篇名/路径」前先在本地确定性找一遍——有 PDF 时 `pymupdf` 读 `doc.metadata`（Springer 的 DOI 在 `subject`）即可自证；证伪后**仍禁**在回复里重列待决项；串扫描是**语义**规则不是词表（`等你一句话`/`二选一` 同属违规）。→ `references/pending-item-premise-audit.md`
+- 🔴 **唤醒源先查 `todo()`**：残留 `waiting_review`/`pending` 即真凶 → `references/stale-todo-wakeup-source.md`
+- 🔴 **零 delta tick ≥5 轮 → 自行暂停 LoopX**
   · ⛔ **证伪须「绑定校验」**：ID 要回绑到**目标条目本人**才算「输入已备」——只 grep 到一个 ID 就登记「已备」，会拿别的文档的 ID 冒充（实测把主论文 DOI 误记成缺件 DOI，错判存活 6+ 轮）。判据：「凭什么说这 ID 是它的？」→ §1-b
   · 🔴 **「第 N 个缺件」先反解编号**：`n` 常是池子列表位置 ⇒ 用**全部已确认条目**做「位置↔ID」校验，反解真身 + 判体裁（无 abstract/type、oa=N ⇒ 新闻稿，不做卡）+ 输出未做件全清单，把「补不补第 N 张」升级为「补哪几篇」。→ §5
 - 🔴 **零 delta tick ≥5 轮 → 自行暂停 LoopX**（同值判据 + registry 双改 `paused`+`quota.compute:0`；可逆不必等点头；⛔ 有 in_progress/后台进程/未核销回执不可停；`.loopx/` 须 `find`；task_plan 改前读全防缩进漂移）→ `references/loopx-noop-tick-escalation.md` · 🔴 **暂停后还有两件收尾**：① **验根** —— 读回 JSON ≠ 停成（`waiting`/`cleared` 会被放行），必须跑一次 `LoopXBridge.should_run()`，为 False 即判「暂停有效」（§3-b）；唤醒头 `📊 LoopX 状态` 块写 `goal: active`、或暂停后仍收到 tick，**都不是「没停成」的证据**（头字段是注入的渲染摘要）⇒ 回读 registry 复核即可，⛔ 不重复暂停；② **报告骨架里的 `【仍挂起】` 行已删除** —— 照它写就必然踩 `delegation-orchestration` 4-b 的「挂起项重列 + 邀约句」违规（本会话实测照此发出），待决项只进 `notes.md`，发前跑 `python scripts/replay_reply_lint.py --text-file <草稿>`（**脚本已落地**——此前 tick#22/#24/#27 三轮违规的根因之一就是 SKILL 写着要跑它、它却不存在）

@@ -84,6 +84,21 @@ _WRITE_SIGNALS = (" > ", ">>", "| tee ", "rm ", "rmdir", "del ", "move ", "copy 
                   "pdf(", "png(", "svg(", "open(", "write(")
 _READONLY_FORBIDDEN = ("rscript", "python", "pip ", "conda", "curl", "wget", "git clone", "npm", "node ")
 
+# 2026-11-11 P0：脚本级 record 去重。
+# 旧门禁「每个非只读 terminal 之后都必须 record_run」把轮次放大 2 倍（实测 19 次
+# terminal 配 15 次 record）。同一回合里重跑**已经 record 过的那个脚本**不需要再记一遍；
+# 换成新脚本仍然拦。
+_EXEC_SCRIPT_RE = __import__("re").compile(r"([\w./\\-]+\.(?:py|r|R|sh|m|jl|ipynb))\b")
+
+
+def _exec_script_key(cmd) -> str:
+    """从命令里取被执行脚本的 basename（小写）；取不到就返回空串。"""
+    try:
+        m = _EXEC_SCRIPT_RE.search(str(cmd or ""))
+        return os.path.basename(m.group(1)).lower() if m else ""
+    except Exception:
+        return ""
+
 
 def _is_readonly_terminal(cmd: str) -> bool:
     """判断 terminal 命令是否为纯观察（只读）命令。"""
@@ -1243,6 +1258,9 @@ class EnforcementState:
         self.risk_tier: str = ""
         self._pending_record: bool = False  # 上一步 terminal 完成后还没 record
         self._pending_record_warned: bool = False  # 2026-08-22: execute 门禁软拦截已提醒一次（不卡死）
+        # 2026-11-11 P0：本回合已 record 过的脚本（同脚本重跑不再要求再记一次）
+        self._last_terminal_script: str = ""
+        self._recorded_scripts: set = set()
         self._exec_error_hist: dict = {}  # 2026-08-22: 每个命令的报错指纹历史 {cmd_key: [fp,...]}
         self._exec_error_repeat: set = set()  # 已判定"连续相同报错"的 cmd_key（防重复提醒）
         self._exec_garbage_warned: set = set()  # 已提醒过"编码乱码"的 cmd_key
@@ -1370,6 +1388,8 @@ def clear_hard_block(session_id: str) -> bool:
     es._blocked_attempts = 0
     es._pending_record = False  # record_run 门禁同样只约束当轮
     es._pending_record_warned = False  # 2026-08-22: 软拦截计数随回合重置
+    es._last_terminal_script = ""  # 2026-11-11: 脚本级 record 去重按回合清空
+    es._recorded_scripts = set()
     # 2026-11-02：辩论拦截的"待履行要求"也只约束本轮。
     # 否则用户改口问别的事（"先别管 DEG，帮我改图"）时，上一轮的 required 会把
     # add_figure 也拦掉 —— 变成陈旧要求导致误拦。新一轮工具调用会重新判定，
@@ -1811,7 +1831,13 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
                 except Exception as _e_tint:
                     _log(f"[debate-intercept] terminal 判定异常（不阻塞执行）: {_e_tint}", "warn")
             # 🔧 自进化门禁：上一个 terminal 完成后还没 record_run → 硬阻断（P0-1 接线）
-            if es._pending_record and es.analysis_level != "chat" and not _ro:
+            # 2026-11-11 P0：同脚本重跑豁免 —— 若本次命令跑的脚本本回合已经 record 过，
+            # 不再要求重复沉淀（实测这是 "terminal→拦截→record" 多耗一轮的主要来源）。
+            es._last_terminal_script = _exec_script_key(_cmd)
+            _same_script_recorded = bool(es._last_terminal_script) and \
+                es._last_terminal_script in es._recorded_scripts
+            if es._pending_record and es.analysis_level != "chat" and not _ro \
+                    and not _same_script_recorded:
                 es.warnings.append(f"terminal#{es.terminal_count}: 上一步未完成 record_run")
                 _emit("enforcement", action="blocked",
                       message="⛔ 上一步 terminal 完成后未记录经验！请先调用 skill_evolution(action='record_run') 沉淀经验，再执行下一步。",
@@ -2259,8 +2285,21 @@ def create_enforcement_callbacks(session: dict, session_emit_fn, agent_ref: list
             try:
                 a = json.loads(str(args)) if isinstance(args, str) else args
                 if isinstance(a, dict) and a.get("action") in ("record_run", "record_success"):
-                    es._pending_record = False
-                    es._pending_record_warned = False  # 2026-08-22: 沉淀完成 → 软拦截计数重置
+                    # 2026-11-11：失败的 record（缺字段/报错）不得解锁门禁，否则
+                    # "未沉淀"被当成"已沉淀"，下一轮继续跑却没留下经验。
+                    _ok = True
+                    try:
+                        _res = json.loads(str(result)) if isinstance(result, str) else result
+                        if isinstance(_res, dict):
+                            _ok = bool(_res.get("success", not _res.get("error")))
+                    except Exception:
+                        _ok = True
+                    if _ok:
+                        es._pending_record = False
+                        es._pending_record_warned = False  # 2026-08-22: 沉淀完成 → 软拦截计数重置
+                        # 2026-11-11 P0：记住这次 record 对应的脚本，同脚本重跑不再拦
+                        if es._last_terminal_script:
+                            es._recorded_scripts.add(es._last_terminal_script)
             except Exception:
                 pass
     def tool_progress_cb(event_type: str, **kwargs):

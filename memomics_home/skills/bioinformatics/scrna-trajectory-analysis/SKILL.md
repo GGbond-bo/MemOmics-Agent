@@ -47,6 +47,46 @@ prerequisites:
 
 ---
 
+> 📚 **Monocle3 vs Slingshot 选型对比**（算法原理/拓扑假设/参数语义/适用场景/已核实 PMID+DOI 文献表/官方文档核实路径）：见 `references/monocle3-vs-slingshot.md`。做工具对比调研或写方法学部分时直接引用。
+
+> 📚 **Monocle 2 vs Monocle 3 代际差异 + RNA velocity 输入条件**（官方 updates 页逐字要点 / 两代函数序列 / 三模型假设 / 上游 unspliced 定量链 / PMID 台账 / 未核实项）：见 `references/monocle2-vs-monocle3-and-rna-velocity.md`。用户问"两代区别 / RNA 速率要什么输入"时直接引用。
+
+> 📚 **Monocle 2（DDRTree）官方流程跑通后的「结论验证门」+ 实测数值台账**（root_state 枚举表 / 核糖体混杂 ρ / DGT 信息回流 74% / 供体级 LMM / BLAS 超订 / 结论分档模板 / 交付双格式核对）：见 `references/monocle2-root-sensitivity-and-confound-gates.md`。**DDRTree 跑完准备写结论前必读**——不读就会写出被根节点选择左右的方向性结论。
+
+## 🔴 Monocle2（DDRTree）四道结论门：跑通 ≠ 能写结论
+
+官方默认 `orderCells()`（不加 `root_state`）挑的根**纯属拓扑偶然，不可解释为生物学起点**。跑完先过这四门，任一门不过则该类结论降档：
+
+| # | 门 | 判据（同一份数据的实测值） | 不过时怎么写 |
+|---|---|---|---|
+| 1 | **根敏感性** | 枚举端点 root 重算 ρ：root1（默认）基准 +1.000、**root5 ρ=−0.969 六组顺序完全反转**、root9 +0.795 组序改变 | 方向性结论（"某组在早期/晚期""衰老把细胞推向 X 端"）**禁止写入**；只写"root 自动选择，非生物学起点" |
+| 2 | **技术轴混杂** | 伪时间 vs 协变量 ρ：**核糖体基因占比 0.826** / nCount 0.261 / MT 0.127 | 不写"分化程度"，写"与翻译活性高度共线的排序"，并把 ρ 表放进交付 |
+| 3 | **信息回流** | `setOrderingFilter` 基因占 DGT top100 **74.0%**（全基因组基线 7.4%，≈10×）⇒ DGT 不是独立验证 | 必须同时给协变量校正版 DGT（实测 q<0.01 **11,659→7,971，−32%**；榜首 RPL22/RPS8→**IGFBP5/SPARCL1/CXCL14**） |
+| 4 | **伪重复** | 细胞级比较把 n 个细胞当独立样本；须供体级汇总 + LMM `~condition*exercise+(1|donor)` + ICC | 细胞级 p 值一律不报。实测交互 p=5e-89、ICC=0.361 ⇒ **ICC 高≠效应假**：效应在供体水平仍显著就可以写 |
+
+- **BEAM 稳健性**：80% 细胞重抽样 top200 重现率 94% → 头部可信；整体 −log10(q) 秩相关仅 0.567 → 中段排名别细究。
+- **耗时陷阱**：`orderCells(root_state=s)` 单次 10–13 min（1.5 万细胞），枚举 9 个根 ≈ 2 h ⇒ **每个根算完立即 `write.table(append=TRUE)` 落盘**（实测循环内不落盘 → 93 min 颗粒无收被迫 kill）。
+- **必配并行环境**：`OMP/OPENBLAS/MKL_NUM_THREADS=1` + `mclapply` 32 fork / 64 chunk（否则 16 进程 × 7 线程在 112 核互抢，DGT 62 min 零分块；锁线程后 3.3 min）。worker 进程名 **`workRSOCK`**，kill 主进程后须 `pkill -f workRSOCK` 清孤儿。
+- **结论分档交付**：A 可直接陈述 / B 仅假设 / C 禁止写 / D 未做待补（本数据 10/4/6/4 条），⛔ 不许把 C 档"软化"成 B 档后写出来。
+
+## 📌 代际差异：Monocle 2 vs Monocle 3（选型前必读）
+
+**一句话**：Monocle2 = DDRTree（reversed graph embedding）单主图；Monocle3 = UMAP 初始化 + principal graph + 自动 partition。
+**两者对象不兼容**（`CellDataSet` vs `cell_data_set`），⛔ 不能 `as()` 互转，换版本只能从 counts 重建。
+
+| 维度 | Monocle 2 | Monocle 3 |
+|---|---|---|
+| 内核 | DDRTree / reversed graph embedding（Qiu 2017, PMID 28825705） | UMAP 初始化 + 主图（Cao 2019, PMID 30787437） |
+| 入口 | `newCellDataSet()`，需 `expressionFamily` | `new_cell_data_set()` = counts + cell_metadata + gene_metadata（**必须含 `gene_short_name`**） |
+| 降维 | `reduceDimension(reduction_method="DDRTree")` | `preprocess_cds()` 拿 Size_Factor+PCA → UMAP（或注入 Seurat UMAP） |
+| 轨迹 | `orderCells()` 单根 | `cluster_cells()`（自动 partition）→ `learn_graph()` → `order_cells(root_pr_nodes=...)` |
+| 多根 / 环 / 汇聚点 | 无（单一主图） | 官方更新页明确新增 |
+| 轨迹依赖表达 | `differentialGeneTest()` / `BEAM()` | `graph_test(neighbor_graph="principal_graph")`（官方原话 replaces both） |
+| 跨数据集 | 无 | 可把 query 投射到 reference + 注释迁移 |
+| 规模 | 万级设计 | 官方称可上百万细胞（MOCA ~200 万）；**单机 `learn_graph` 仍 >6 万就慢** |
+
+- **什么时候仍用 Monocle2**：复现已发表老流程、审稿人点名要 DDRTree 树状图；否则优先 Monocle3 / Slingshot。
+- **装之前先确认**：本机 R 4.4.x 环境下 `requireNamespace("monocle")` 常为 FALSE（2.x 依赖老 Bioconductor）⇒ 别假定能直接跑，先探再决定。
 
 ## 📌 通用铁律（所有路径适用）
 
@@ -56,6 +96,7 @@ prerequisites:
 | **先用 Seurat UMAP 建轨迹** | Monocle3 的 `reduce_dimension()` 只有简单 PCA→UMAP，没有 SCTransform/Harmony |
 | **>100K 细胞先 subset** | `learn_graph()` 复杂度 O(n²)，>60K 细胞会卡死 |
 | **有大分支才做分支分析** | 衰老数据通常线性（Young→Old），不一定有分叉；发育数据（干细胞→多种终末细胞）才有明显分叉 |
+| **多 R 版本共存时先定位包的真身** | `check_env`/`rail_review` 报"已装"≠ execute_r 内核的库里有（实测：monocle3/slingshot 只在用户级 R-4.4.2 自带库，内核用的 `E:/R-libs/R-4.5.3` 没有）。先枚举所有 R 安装的 library 确认真身 → 在**有 monocle3 的 R** 跑轨迹、用**有 Seurat 的 R** 导出 counts/meta/UMAP 中转 → `references/multi-r-package-location.md` |
 
 ### 🔬 为什么绝不能用 Monocle3 UMAP？
 
@@ -165,6 +206,7 @@ plot_cells(cds, genes = c("MYH7", "MYH1", "TNNT1"),
 | `as.cell_data_set()` deprecated 警告 | 正常，忽略 |
 | PCA 缺失但 UMAP 存在 | `preprocess_cds(num_dim=50)` 再覆盖 UMAP |
 | 知乎代码的手动替换 UMAP | 仅 Monocle3 < 1.3 需要；v1.3+ 自动带 UMAP |
+| **cluster 是多起源混合群体（如 Specialized MF 含快慢肌两条路线）** | ⛔ 不能强行做单根 Monocle3。先 sub-cluster 拆开，或改用 scVelo/CellRank/条件间矢量场。详见 `references/composite-population-trajectory-pitfalls.md` |
 | `pseudotime(cds)` 报 **"No pseudotime calculated for reduction_method = UMAP"** | `saveRDS(cds)` 落盘点放错：必须在 `order_cells()` **之后**保存（存图骨架不存伪时间槽）；读回后补跑 `order_cells(cds, root_pr_nodes=...)` 亦可。monocle3 另建议 `save_monocle_objects()`（保留 annoy/hnsw 索引） |
 | 换一个端点当 root 后"方向整个反过来" | **root 镜像伪影，不是矛盾证据**：伪时间方向由 root 定义，对侧端点定根必然反号。跨方法/跨子集（如剔除某群后重跑）比较"方向是否一致"之前，必须先把两侧 root 校准到**同一生物学端**，否则会把镜像误读成分歧 |
 | `lm(pt ~ age + celltype)` 报 **找不到对象'celltype'**；`meta$col[cells]` 取子集得全 NA / `-Inf` | data.frame 列没有行名 → 必须 `meta[cells, "col"]`；公式变量先落局部向量（`celltype_v <- as.character(meta$celltype)`），不能直接写列名 |
@@ -176,6 +218,7 @@ plot_cells(cds, genes = c("MYH7", "MYH1", "TNNT1"),
 | 单一发育/分化过程，有明确根节点 | Monocle3 + 手动指定根节点 |
 | 多起源混合群体，子群体可拆分 | sub-cluster → 分别 Monocle3 |
 | 多起源混合群体，子群体不可拆分 | scVelo RNA velocity 或 CellRank |
+| 关心"运动/药物/衰老把群推向哪个方向"，而不是伪时间 | 条件间矢量场（PCA 箭头图）——见 `references/composite-population-trajectory-pitfalls.md` |
 
 ---
 
@@ -200,6 +243,29 @@ asso_res <- associationTest(sce)
 ---
 
 ## 路径 C: scVelo RNA velocity (Python)
+
+> 🔴 **前置条件不满足就别跑，改用拟时**；三模型假设与失效场景、Monocle 2 vs 3 代际差异、逐字官方原文与 PMID 台账
+> → `references/monocle2-vs-monocle3-and-rna-velocity.md`
+
+### 输入条件（硬要求，2026-11 官方文档核实）
+
+| 项目 | 要求 |
+|---|---|
+| 双计数矩阵 | **必须** spliced + unspliced（AnnData `layers["spliced"]`/`["unspliced"]`，或 velocyto `.loom`）。只在 exon 上计数的常规矩阵**做不了** |
+| 上游定量 | 要能读内含子：velocyto `run10x`（CellRanger 建议 `--include-introns`）、STARsolo 的 Velocyto 模式、kallisto\|bustools（`lamanno`/`nuclei`）、alevin-fry |
+| 参数 | `filter_and_normalize(min_shared_counts=20, n_top_genes=2000)` → `moments(n_pcs=30, n_neighbors=30)`；结果对这些值敏感 ⇒ 论文必须报参数 |
+| 已有嵌入 + 注释 | 箭头要投影到 UMAP/PCA；没有细胞类型注释只能得到"漂亮曲线"，无法解读 |
+| ⚠️ snRNA-seq（单核） | 核内转录本组成与胞质成熟过程不同，稳态/动力学假设更难成立 ⇒ velocity 只作**辅助证据**，措辞写"提示方向"不写"证明方向" |
+
+### 三种模型（选型，官方 About 页原文）
+
+| 模型 | 实现 | 核心假设 | 已知风险 |
+|---|---|---|---|
+| steady-state / deterministic | velocyto `mode="deterministic"` | 已达稳态 + **基因间共享剪接速率** | 官方明说两假设常被违反：**多亚群异质群体里速率与细胞状态估计会出错** |
+| stochastic | scVelo `mode="stochastic"`（默认） | 转录/剪接/降解当概率事件，用**二阶矩**近似 Markov 过程 | 仍需近似稳态 |
+| dynamical | scVelo `mode="dynamical"`（须先 `recover_dynamics`） | 似然解**完整转录动力学**，可估基因特异速率 + latent time | 计算最贵；对 unspliced 读数质量最敏感；可出 driver 基因 |
+
+**箭头 ≠ 因果**：官方 *Challenges and Perspectives* 页自曝多种动力学并存、转录 boost、**成熟 PBMC 上箭头被误导** ⇒ 交付一律写"提示方向"。
 
 ```python
 import scvelo as scv; import scanpy as sc
@@ -243,11 +309,18 @@ g.plot_fate_probabilities(same_plot=False, basis="umap")
 | `learn_graph()` 轨迹乱线 | resolution 太大 | `cluster_cells(1e-5)` |
 | 伪时间方向反向 | 根节点选错 | 改 `group_val` |
 | `graph_test()` 全不显著 | 细胞太少 | 每分支 ≥200 cells |
+| 想用 BEAM 做分支分析 | ⚠️ BEAM 是 Monocle2 的函数（Qiu 2017, PMID 28825705），Monocle3 没有 | 用 `graph_test(neighbor_graph="principal_graph")` + `choose_graph_segments()`（详见 `references/monocle3-vs-slingshot.md`） |
 | scVelo `recover_dynamics` 慢 | 基因太多 | `n_top_genes=2000` |
-| 查 Monocle3 官方文档 URL 404 | 旧 `/monocle3/reference/*.html` 已失效 | 新站为 `/monocle3/docs/{trajectories,clustering,differential,getting_started}/`（从页面 nav 链接找路径） |
+| 查 Monocle3 官方文档 URL 404 | 旧 `/monocle3/reference/*.html` 已失效 | 新站为 `/monocle3/docs/{trajectories,clustering,differential,getting_started}/`（从页面 nav 链接找路径）；**"Major updates" 页在 `/monocle3/docs/updates`**（猜 `major_updates` 会 404） |
+| 想把 Monocle2 的 `CellDataSet` 转成 Monocle3 的 `cell_data_set` | 两代对象**不兼容**，`as()` 转换不存在 | 从 counts + metadata + `gene_short_name` 用 `new_cell_data_set()` 重建；反向同理 |
+| 想引用 Monocle2 的确切参数（`expressionFamily=negbinomial.size()` 等） | Rd 渲染页正文由 JS 加载，静态 curl 只拿到骨架 | 本机装了包就 `Rscript -e 'print(args(monocle::newCellDataSet))'` 直读 formals；**没装就照实写"参数未逐字核实（只核实到函数存在）"**，⛔ 不用记忆补默认值 |
+| scVelo 报找不到 spliced/unspliced（`layers` 缺失） | 上游定量只做了 exon 计数 | 不是调参能修的：重跑 velocyto / STARsolo(Velocyto) / kallisto\|bustools 拿内含子读数，见 `references/monocle2-vs-monocle3-and-rna-velocity.md` §4 |
+| Windows 下 curl 抓 GitHub Pages 报 SSL error 35 | Schannel TLS 握手失败（`-k`/`--tlsv1.2` 无效，bioconductor.org 正常） | 改用 Python urllib + 关闭校验的 SSL context（OpenSSL 栈），见 `references/monocle3-vs-slingshot.md` |
+| 需核实论文方法细节/PMID | 凭记忆不可靠 | Europe PMC fullTextXML REST + NCBI efetch 摘要核实（命令见 `references/monocle3-vs-slingshot.md`） |
 
 ## 🔬 伪时间结论验证规程（必须做，否则结论不得升级）
 
+> 完整checklist + 实测数值范例：`references/pseudotime-validation-protocol.md`；多 R 版本下 monocle3/slingshot 装在哪、如何中转数据：`references/multi-r-package-location.md`
 
 | # | 检查 | 做法 | 判读 |
 |---|------|------|------|
@@ -297,3 +370,20 @@ results/trajectory_monocle3_{date}/
 
 ⛔ 未完成以上 5 步 = 禁止启动下一个分析步骤。
 ⛔ debate confidence=low → 调整参数重跑。
+
+## Proven Scripts
+
+> Auto-generated from actual analysis runs. Each row records a successful execution.
+
+| 物种 | 组织 | 方向 | 日期 | 脚本 | auto | user | ✔ |
+|------|------|------|------|------|------|------|----|
+| human | example_tissue | exercise+aging | 2026-11-16 | monocle2_stage3c_root_sensitivity.R | - | - |  |
+| human | example_tissue | exercise+aging | 2026-11-16 | verify_delivery_consistency.sh | - | - |  |
+| human | example_tissue | exercise+aging | 2026-11-16 | 终检（只读核验，无新增脚本） | - | - |  |
+| human | example_tissue | exercise+aging | 2026-11-16 | 终检-辩论归档核对 | - | - |  |
+| human | example_tissue | exercise+aging | 2026-11-16 | monocle2_musc_official.R + monocle2_musc_stage2_genetest.R + monocle2_stage3*_sensitivity.R | - | - |  |
+| human | example_tissue | exercise+aging | 2026-11-16 | monocle2_stage3b_dgt_beam.R | - | - |  |
+| human | example_tissue | exercise+aging | 2026-11-16 | monocle2_stage3b_dgt_beam.R | - | - |  |
+| human | example_tissue | exercise+aging | 2026-11-16 | monocle2_stage3b_dgt_beam.R | - | - |  |
+| human | example_tissue | exercise+aging | 2026-11-16 | ls 产物清点（只读） | - | - |  |
+| - | - | - | 2026-11-16 | - | - | - |  |

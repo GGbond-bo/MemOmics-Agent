@@ -208,6 +208,7 @@ def _extract_metadata(pdf_path: str, text: str, original_path: str) -> dict:
         doi = _clean_doi(m.group(0))
     meta = {"title": "", "journal": "", "authors": [], "year": "", "doi": doi,
             "volume": "", "issue": "", "pages": "", "pmid": "",
+            "journal_verified": False, "journal_source": "",
             "entry_type": "article", "url": f"https://doi.org/{doi}" if doi else ""}
     # 1. DOI → Crossref 反查
     if doi:
@@ -216,6 +217,9 @@ def _extract_metadata(pdf_path: str, text: str, original_path: str) -> dict:
             for k in ("title", "journal", "authors", "year", "volume", "issue", "pages", "pmid"):
                 if cr.get(k):
                     meta[k] = cr[k]
+            if meta.get("journal"):
+                meta["journal_verified"] = True
+                meta["journal_source"] = "crossref"
             return meta
         except Exception as e:
             logger.debug(f"crossref doi lookup failed: {e}")
@@ -246,6 +250,9 @@ def _extract_metadata(pdf_path: str, text: str, original_path: str) -> dict:
                     meta["title"] = (it.get("title") or [""])[0] or meta["title"]
                     ct = it.get("container-title") or []
                     meta["journal"] = ct[0] if ct else ""
+                    if meta["journal"]:
+                        meta["journal_verified"] = True
+                        meta["journal_source"] = "crossref"
                     meta["authors"] = [f"{a.get('given','')} {a.get('family','')}".strip()
                                        for a in it.get("author", [])][:20]
                     v = it.get("published", {}).get("date-parts", [[None]])[0]
@@ -261,6 +268,11 @@ def _extract_metadata(pdf_path: str, text: str, original_path: str) -> dict:
         except Exception as e:
             logger.debug(f"crossref bibliographic lookup failed: {e}")
     meta["title"] = meta["title"] or guess
+    # 期刊必须经在线书目源核实；没有命中或无法获取时明确写「待定」，不猜。
+    if not meta.get("journal"):
+        meta["journal"] = "待定"
+        meta["journal_verified"] = False
+        meta["journal_source"] = "unverified"
     return meta
 
 
@@ -870,7 +882,9 @@ def import_pdfs(paths, progress_cb=None, imported_by: str = "") -> str:
                 "sha256": sha,
                 "size": size,
                 "title": meta.get("title") or "",
-                "journal": meta.get("journal") or "",
+                "journal": meta.get("journal") or "待定",
+                "journal_verified": bool(meta.get("journal_verified")),
+                "journal_source": meta.get("journal_source") or "unverified",
                 "authors": meta.get("authors") or [],
                 "year": meta.get("year") or "",
                 "doi": meta.get("doi") or "",

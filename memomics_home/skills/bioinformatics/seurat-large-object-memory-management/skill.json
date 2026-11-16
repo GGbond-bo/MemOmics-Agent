@@ -1,0 +1,22 @@
+{
+  "id": "seurat-large-object-memory-management",
+  "name": "Seurat 大对象 / layer 内存管理",
+  "category": "bioinformatics",
+  "language": "Python",
+  "description": "Seurat v5 大对象/layer 内存管理:JoinLayers 爆内存与报错判读、手工 cbind 重建层、BPCells 磁盘层、sketch/降规模、2^31 非零元上限",
+  "starting_prompt": "使用 Seurat 大对象 / layer 内存管理 进行分析",
+  "source_dir": "skills/bioinformatics/seurat-large-object-memory-management",
+  "memomics_module": "",
+  "chains_from": [],
+  "chains_to": [],
+  "tags": [],
+  "aliases": [],
+  "trigger_level": "YEL",
+  "trigger_keywords": [
+    "seurat",
+    "large",
+    "object",
+    "memory"
+  ],
+  "when_to_use": "Seurat v5 大对象/layer 内存管理:JoinLayers 爆内存与报错判读、手工 cbind 重建层、BPCells 磁盘层、sketch/降规模、2^31 非零元上限"
+}

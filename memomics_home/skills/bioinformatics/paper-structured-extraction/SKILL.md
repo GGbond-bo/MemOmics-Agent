@@ -18,7 +18,6 @@ trigger_level: YEL 讨论触发
 2. **未报告项显式标注**「原文未报告」（而非留空或猜）。常见于：数据可用性链接、许可、代码规模、训练轮次、超参细节。
 3. **图轴读出的数字必须降级标注**。当数字只能从图的坐标轴/柱高目测得到（正文没有明确写），写入时标注「读自 Fig.X，建议核对原图」，不要当作正文事实陈述。
 4. **构建/来源元信息要带可核查锚点**：DOI、代码仓库 URL、HuggingFace/数据 Zenodo 链接、arXiv 号、许可、通信作者邮箱——照抄，不改写。
-5. **源文本自相矛盾时，如实并列、不擅自统一**。原文内部可能不一致——例如图注/摘要说"实现了 18 个工具"，而 Methods 逐条列出 19 项；或页首 DOI 与参考文献里的 DOI 不同（常见于 "Article in Press" 未编辑版）。处理口径：**报原文口径的数字**，把逐条清单/另一口径一并列出，并在脚注显式标注差异（"已如实标注，未强行统一"），**不要**悄悄挑一个数、也不要自己加减对齐。矛盾在同一篇论文里往往不止一处，**逐条扫**；常见类型见 `references/deep-structured-extraction.md` §F「矛盾类型学」。
 6. **每条数字后带原文行号出处**（最强可核查性）。源文本是 txt dump 时，交付里给每个数字/断言标 `（第 X–Y 行）`。这让用户（和自己复扫）能秒级回原文核对，把"禁止编造"从承诺变成可验证的机械事实。落盘文件与回复正文都带行号。
 7. **核对用户给定标题 vs 原文实际标题**。用户给的标题常是简称/描述性标题（如《paper2Agent: Automatic generation of AI agents from research papers》《CASSIA: A multi-agent framework for interpretable and consensus-based cell type annotation》），与原文实际标题（"Reimagining research papers as interactive and reliable AI agents" / "CASSIA: a multi-agent large language model for automated and interpretable cell annotation"）**不一致**。元信息里两个都写清并标注差异，**不要**默认题名就是原文名。
 
@@ -41,14 +40,12 @@ trigger_level: YEL 讨论触发
 
 （可选）全部写完后追加一段**跨篇对比速览表**——本类任务多篇同题材时非常有用；但每篇的独立分节不可省略。
 
-完整模板（含每节要点与变体：AI-agent 方法论文 vs 实验论文 vs 综述）见 `references/deep-structured-extraction.md`。
 
 **变体：组学论文精读报告（scRNA-seq / 空间转录组，QC 参数为重点）** —— 当用户要求「精读 N 篇文献 / 逐篇产出中文
 结构化精读报告」且对象是组学论文（scRNA-seq / snRNA-seq / Stereo-seq / Visium / 多组学），并带「含精确质控参数」
 「务必带英文原文引用作为证据」这类要求时，改用 **7 节模板**（研究问题与结论 / 样本与数据规模 / 生信分析全流程 /
 **质控参数（重点）** / 细胞类型注释与 marker / 下游分析 / 数据与代码可用性）+ 末尾「两篇对比表」与
 「空间 QC vs scRNA QC 差异」专节。该文件含 scRNA 与空间各自的 **QC 参数抽取清单**、QC 关键词机械核验 grep、
-空间/scRNA QC 差异知识库，以及 Stereo-seq / Visium 平台 QC 指纹。见 `references/omics-qc-reading-report.md`。
 
 **变体：四段式方法学对比（多篇 · 无固定 10 节）** —— 当用户要的是「**按文章分别讲**背景 / 用了什么测序方法 /
 用了什么质控标准 / 用了什么参考与分析标准」这类**横向对齐的方法学梳理**时，不要硬套 10 节或 7 节模板，
@@ -99,7 +96,6 @@ trigger_level: YEL 讨论触发
 
 > 何时**不要**用：只 1–2 篇（直接分块读完更省），或用户要的是叙事逻辑/写作策略解读
 > （走 `professional-paper-interpretation`，收敛会把论证链切碎）。
-> 完整配方、预算基线、判读表见 `references/multi-paper-qc-corpus-scan.md`。
 
 ## 四、Pitfalls
 
@@ -111,7 +107,6 @@ trigger_level: YEL 讨论触发
     同一通道下 `snRNA` 0 命中、`nucleus` 仅 3 处且全在抗体染色描述里 → 可下结论"7 篇无一为单核 RNA"。
     通道未验证就把 0 命中写成"原文未报告"＝**把工具缺陷当成论文事实**（本会话首轮 `nuclei|snRNA|...` 交替式返回 0，差点误判）。
   - **⑤ 否定性结论与正数阈值同等值钱，也要落盘**：如"这批文献里没有 snRNA""无人设 counts 下限"这类**排除性发现**，
-    下次同类提问可一次答完、不必重跑检索——写进对应 references（本主题见 `references/human-embryo-gastrulation-qc-bank.md` §七）。
 - **图轴数字是最容易造假的点**：作者把某几个数只放在图里（如各任务族 before/after），很容易"顺理成章"补一个数。凡是正文没明写、只能从图读的，必须标注「读自 Fig.X，建议核对原图」。
 - **多篇必须各自独立分节**：不要合并成对比表湮没每篇；用户要的是「每篇独立分节」。可在全部之后再附一段跨篇对比（可选）。
 - **别把论文自带的相关工作叙事当成已核实领域史**：这是论文的自我陈述，转述时要标明来源是"原文所述"。
@@ -123,7 +118,6 @@ trigger_level: YEL 讨论触发
 - **交付里没写行号 = 可核查性降级**：能用行号就用（见 §一 规则 6）。行号是"禁止编造"从承诺变成机械事实的最便宜手段。
 
 - **组学论文的关键 QC 阈值几乎只在 STAR Methods / Methods，且排在参考文献之后**：漏读文末 = 漏掉全部 QC 阈值，
-  这是组学精读最常见的失败模式。必须 read_file 分块读到**文件末尾**再动笔（详见 references/omics-qc-reading-report.md）。
 - **空间转录组的「原文未报告」是常态，不是你没找到**：空间 QC 阈值 / 过滤比例 / spot 总数经常整节缺失。
   先用 QC 关键词 grep（spot|percent.mt|min_gene|min_cells|MAPQ|bin50|retained|excluded）核验，
   再写「原文未报告」，并在交付里说明「grep 后确认原文未报告」——让「未报告」也是可核查结论。
@@ -134,7 +128,6 @@ trigger_level: YEL 讨论触发
   **同时**回复里给报告本体 + 一段「核心质控发现」浓缩段（含关键阈值数字）+ 文件路径。
   （用户要求只对话回答时改为：正文给全 + 末尾声明工作文件为非交付物，不写交付文件。）
 - **QC 阈值口径知识库（细胞 vs 核）**：判「这批数据是单细胞还是单核」、counts 在单核里**只作上限**
-  （约为细胞的一半）、下限交给 nFeature（200–600）——见 `references/snrna-vs-scrna-qc-conventions.md`。
   回答「这批文献有没有做 snRNA / 有没有设 counts 下限」类问题时同理（本主题见 §七）。
 
 ## 五、与相邻 skill 的分工

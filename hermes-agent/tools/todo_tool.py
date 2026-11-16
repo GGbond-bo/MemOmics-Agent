@@ -15,6 +15,7 @@ Design:
 """
 
 import json
+import math
 from typing import Dict, Any, List, Optional
 
 
@@ -49,18 +50,19 @@ class TodoStore:
     Items are ordered -- list position is priority. Each item has:
       - id: unique string identifier (agent-chosen)
       - content: task description
-      - status: pending | in_progress | completed | cancelled
+      - status: pending | in_progress | waiting_review | completed | cancelled
+      - estimated_minutes: optional positive, finite number
     """
 
     def __init__(self):
-        self._items: List[Dict[str, str]] = []
+        self._items: List[Dict[str, Any]] = []
 
-    def write(self, todos: List[Dict[str, Any]], merge: bool = False) -> List[Dict[str, str]]:
+    def write(self, todos: List[Dict[str, Any]], merge: bool = False) -> List[Dict[str, Any]]:
         """
         Write todos. Returns the full current list after writing.
 
         Args:
-            todos: list of {id, content, status} dicts
+            todos: list of {id, content, status, estimated_minutes?} dicts
             merge: if False, replace the entire list. If True, update
                    existing items by id and append new ones.
         """
@@ -83,6 +85,12 @@ class TodoStore:
                         status = str(t["status"]).strip().lower()
                         if status in VALID_STATUSES:
                             existing[item_id]["status"] = status
+                    if "estimated_minutes" in t:
+                        estimated_minutes = self._validate_estimated_minutes(
+                            t["estimated_minutes"]
+                        )
+                        if estimated_minutes is not None:
+                            existing[item_id]["estimated_minutes"] = estimated_minutes
                 else:
                     # New item -- validate fully and append to end
                     validated = self._validate(t)
@@ -104,7 +112,7 @@ class TodoStore:
             self._items = self._items[:MAX_TODO_ITEMS]
         return self.read()
 
-    def read(self) -> List[Dict[str, str]]:
+    def read(self) -> List[Dict[str, Any]]:
         """Return a copy of the current list."""
         return [item.copy() for item in self._items]
 
@@ -127,14 +135,16 @@ class TodoStore:
             "completed": "[x]",
             "in_progress": "[>]",
             "pending": "[ ]",
+            "waiting_review": "[review]",
             "cancelled": "[~]",
         }
 
-        # Only inject pending/in_progress items — completed/cancelled ones
-        # cause the model to re-do finished work after compression.
+        # Inject unfinished items, including work waiting for review.
+        # Completed/cancelled items would cause the model to re-do finished
+        # work after compression.
         active_items = [
             item for item in self._items
-            if item["status"] in {"pending", "in_progress"}
+            if item["status"] in {"pending", "in_progress", "waiting_review"}
         ]
         if not active_items:
             return None
@@ -160,12 +170,13 @@ class TodoStore:
         return content
 
     @staticmethod
-    def _validate(item: Dict[str, Any]) -> Dict[str, str]:
+    def _validate(item: Dict[str, Any]) -> Dict[str, Any]:
         """
         Validate and normalize a todo item.
 
         Ensures required fields exist and status is valid.
-        Returns a clean dict with only {id, content, status}.
+        Returns a clean dict with {id, content, status} and, only when
+        supplied and valid, estimated_minutes.
         """
         if not isinstance(item, dict):
             return {"id": "?", "content": "(invalid item)", "status": "pending"}
@@ -184,7 +195,31 @@ class TodoStore:
         if status not in VALID_STATUSES:
             status = "pending"
 
-        return {"id": item_id, "content": content, "status": status}
+        validated: Dict[str, Any] = {
+            "id": item_id,
+            "content": content,
+            "status": status,
+        }
+        if "estimated_minutes" in item:
+            estimated_minutes = TodoStore._validate_estimated_minutes(
+                item["estimated_minutes"]
+            )
+            if estimated_minutes is not None:
+                validated["estimated_minutes"] = estimated_minutes
+        return validated
+
+    @staticmethod
+    def _validate_estimated_minutes(value: Any) -> Optional[float]:
+        """Return a positive finite int/float, or None for invalid values."""
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        if value <= 0:
+            return None
+        # math.isfinite converts ints to float and can overflow on huge ints;
+        # integers are inherently finite, so only floats need this check.
+        if isinstance(value, float) and not math.isfinite(value):
+            return None
+        return value
 
     @staticmethod
     def _dedupe_by_id(todos: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -237,6 +272,7 @@ def todo_tool(
     # Build summary counts
     pending = sum(1 for i in items if i["status"] == "pending")
     in_progress = sum(1 for i in items if i["status"] == "in_progress")
+    waiting_review = sum(1 for i in items if i["status"] == "waiting_review")
     completed = sum(1 for i in items if i["status"] == "completed")
     cancelled = sum(1 for i in items if i["status"] == "cancelled")
 
@@ -246,6 +282,7 @@ def todo_tool(
             "total": len(items),
             "pending": pending,
             "in_progress": in_progress,
+            "waiting_review": waiting_review,
             "completed": completed,
             "cancelled": cancelled,
         },
@@ -274,10 +311,12 @@ TODO_SCHEMA = {
         "- merge=false (default): replace the entire list with a fresh plan\n"
         "- merge=true: update existing items by id, add any new ones\n\n"
         "Each item: {id: string, content: string, "
-        "status: pending|in_progress|completed|cancelled}\n"
+        "status: pending|in_progress|waiting_review|completed|cancelled, "
+        "estimated_minutes?: positive finite number}\n"
         "List order is priority. Only ONE item in_progress at a time.\n"
-        "Mark items completed immediately when done. If something fails, "
-        "cancel it and add a revised item.\n\n"
+        "Mark items completed immediately when done. Use waiting_review when "
+        "work is ready for review. If something fails, cancel it and add a "
+        "revised item.\n\n"
         "Always returns the full current list."
     ),
     "parameters": {
@@ -299,8 +338,22 @@ TODO_SCHEMA = {
                         },
                         "status": {
                             "type": "string",
-                            "enum": ["pending", "in_progress", "completed", "cancelled"],
+                            "enum": [
+                                "pending",
+                                "in_progress",
+                                "waiting_review",
+                                "completed",
+                                "cancelled",
+                            ],
                             "description": "Current status"
+                        },
+                        "estimated_minutes": {
+                            "type": "number",
+                            "description": (
+                                "Optional estimated effort in minutes; "
+                                "must be a positive, finite number"
+                            ),
+                            "exclusiveMinimum": 0
                         }
                     },
                     "required": ["id", "content", "status"]

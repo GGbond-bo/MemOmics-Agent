@@ -1,0 +1,36 @@
+{
+ "id": "cluster-identity-adjudication",
+ "name": "Cluster Identity Adjudication",
+ "category": "scRNA",
+ "language": "Python",
+ "description": "判定一个 cluster 是真实细胞类型还是污染/错注释/分辨率伪影，并裁决删、重新归类、还是保留。触发:某亚群 marker 与注释不符、要不要删掉某亚群、这个群是不是污染、分辨率该用哪档",
+ "starting_prompt": "使用 Cluster Identity Adjudication 进行分析",
+ "source_dir": "skills/bioinformatics/cluster-identity-adjudication",
+ "memomics_module": "",
+ "chains_from": [],
+ "chains_to": [],
+ "tags": [
+  "annotation",
+  "clustering",
+  "contamination",
+  "QC"
+ ],
+ "aliases": [],
+ "trigger_level": "YEL",
+ "trigger_keywords": [
+  "cluster",
+  "identity",
+  "adjudication"
+ ],
+ "when_to_use": "判定一个 cluster 是真实细胞类型还是污染/错注释/分辨率伪影，并裁决删、重新归类、还是保留。触发:某亚群 marker 与注释不符、要不要删掉某亚群、这个群是不是污染、分辨率该用哪档",
+ "debate_verdicts": [
+  {
+   "topic": "",
+   "verdict": "",
+   "recommended_params": "",
+   "confidence": 0.0,
+   "evidence": "三路证据一致（知识库裁决记录 annotate_celltype_scRNA_empirical 2026-11-02 + 技能案例 suspicious-cluster-adjudication.md + 本次实查 8 项）：RSS 13591 核 QC 正常，DEG 383 全上调，marker 交叉神经元7/心肌2/肌纤维1，sarcomeric 0.377/OxPhos 0.149 全表最低，衰老 Young 0.47%→Old 3.80% 卡方 p<1e-300。",
+   "date": "2026-11-02 17:43:27"
+  }
+ ]
+}
