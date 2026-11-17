@@ -1,0 +1,3 @@
+GitHub collaboration push test
+Date: 2026-11-05 (Asia/Shanghai)
+Purpose: Verify collaborator write access for C814.
